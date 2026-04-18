@@ -12,3 +12,4 @@ admin/node_modules/
 admin/dist/
 .pass3_backup_*/
 *.log
+.env

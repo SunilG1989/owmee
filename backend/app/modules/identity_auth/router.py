@@ -145,6 +145,34 @@ async def _verify_otp(phone: str, submitted_otp: str) -> None:
     await redis.delete(_otp_value_key(phone), _otp_attempts_key(phone))
 
 
+# ── Sprint 5b: OTP whitelist for test users (pre-real-SMS) ──────────────────
+def _is_whitelisted_phone(phone: str) -> bool:
+    """True if phone is in OTP_WHITELIST env var.
+
+    Whitelist entries are compared post-normalization so they can be listed
+    as 10-digit, +91..., or 91... and still match _normalise_phone output.
+    """
+    wl_raw = getattr(settings, "otp_whitelist", "") or ""
+    if not wl_raw:
+        return False
+    target = _normalise_phone(phone)
+    for entry in wl_raw.split(","):
+        entry = entry.strip()
+        if not entry:
+            continue
+        try:
+            if _normalise_phone(entry) == target:
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _whitelist_otp_code() -> str:
+    """The hardcoded OTP for whitelisted numbers (default 123456)."""
+    return str(getattr(settings, "otp_whitelist_code", "") or "123456")
+
+
 def _generate_otp() -> str:
     import random
     return f"{random.randint(0, 999999):06d}"
@@ -255,7 +283,12 @@ async def send_otp(body: SendOTPRequest, request: Request):
     """Send OTP to phone number. Rate limited to 3/hour."""
     phone = _normalise_phone(body.phone_number)
     await _check_rate_limit(phone)
-    otp = _generate_otp()
+    # Sprint 5b: whitelist override for test numbers
+    if _is_whitelisted_phone(phone):
+        otp = _whitelist_otp_code()
+        logger.info("otp.whitelisted", phone=phone, otp=otp)
+    else:
+        otp = _generate_otp()
     await _store_otp(phone, otp)
     await _send_sms(phone, otp)
     logger.info("otp.sent", phone_suffix=phone[-4:])

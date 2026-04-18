@@ -11,6 +11,12 @@ class Settings(BaseSettings):
 
     # ── Environment ────────────────────────────────────────────────────────
     env: str = "development"
+    # Sprint 5b: OTP whitelist for test numbers (pre-real-SMS)
+    # Comma-separated list of phone numbers (10-digit, +91..., or 91...).
+    # Whitelisted phones receive the hardcoded `otp_whitelist_code` instead
+    # of a random OTP. Empty string (default) = feature disabled.
+    otp_whitelist: str = ""
+    otp_whitelist_code: str = "123456"
 
     @property
     def is_production(self) -> bool:
