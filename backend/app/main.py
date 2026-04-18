@@ -53,6 +53,8 @@ def create_app() -> FastAPI:
     from app.modules.admin.seed import router as seed_router
     # ── Sprint 4 / Pass 3: admin auth ─────────────────────────────────────
     from app.modules.admin.auth_router import router as admin_auth_router
+    from app.modules.field_executive.earnings_router import router as fe_earnings_router
+    from app.modules.stuck_workflow import router as stuck_workflow_router
     # ── Sprint 4 / v3 ─────────────────────────────────────────────────────
     from app.modules.seller_tier.router import router as seller_tier_router
     # ── Sprint 4 / Pass 2: Field Executive ────────────────────────────────
@@ -73,6 +75,8 @@ def create_app() -> FastAPI:
     app.include_router(seed_router, prefix="/v1", tags=["admin-seed"])
     # ── Admin ─────────────────────────────────────────────────────────────
     app.include_router(admin_auth_router, prefix="/v1/admin/auth", tags=["admin-auth"])
+    app.include_router(fe_earnings_router, prefix="/v1/admin/fe-earnings")
+    app.include_router(stuck_workflow_router, prefix="/v1/admin/stuck-workflows")
     app.include_router(admin_kyc_router, prefix="/v1/admin/kyc", tags=["admin-kyc"])
     app.include_router(admin_listings_router, prefix="/v1/admin/listings", tags=["admin-listings"])
     # ── Sprint 4 / v3 ─────────────────────────────────────────────────────

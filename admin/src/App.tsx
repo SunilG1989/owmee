@@ -3,6 +3,8 @@ import { useAuth } from './auth';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import DispatchQueue from './pages/DispatchQueue';
+import StuckWorkflowsPage from './pages/StuckWorkflows';
+import FeEarningsPage from './pages/FeEarnings';
 import VisitDetail from './pages/VisitDetail';
 import FeList from './pages/FeList';
 import FeAssistedListings from './pages/FeAssistedListings';
@@ -31,7 +33,9 @@ export default function App() {
     <Layout>
       <Routes>
         <Route path="/" element={<Navigate to="/dispatch" replace />} />
-        <Route path="/dispatch" element={<DispatchQueue />} />
+        <Route path="/dispatch" element={<DispatchQueue />
+          <Route path="/stuck-workflows" element={<StuckWorkflowsPage />} />
+          <Route path="/fe-earnings" element={<FeEarningsPage />} />} />
         <Route path="/dispatch/:visitId" element={<VisitDetail />} />
         <Route path="/fes" element={<FeList />} />
         <Route path="/listings" element={<FeAssistedListings />} />

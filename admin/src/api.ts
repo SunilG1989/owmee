@@ -215,3 +215,27 @@ export const Dev = {
   makeFE: (phone: string, city = 'Bengaluru') =>
     req('POST', `/v1/dev/make-fe/${encodeURIComponent(phone)}?city=${encodeURIComponent(city)}`),
 };
+
+// ── Sprint 4 / Pass 4b: Stuck workflows ─────────────────────────────────────
+
+export const AdminStuckWorkflows = {
+  list: (filter: 'open' | 'resolved' | 'all' = 'open') =>
+    req('GET', `/v1/admin/stuck-workflows/?status_filter=${filter}&limit=100`),
+  summary: () => req('GET', '/v1/admin/stuck-workflows/summary'),
+  resolve: (alertId: string, note: string) =>
+    req('POST', `/v1/admin/stuck-workflows/${alertId}/resolve`, { note }),
+  devReport: (body: {
+    workflow_type: string; workflow_id: string; reason: string;
+    severity?: string; description?: string;
+    entity_type?: string; entity_id?: string;
+  }) => req('POST', '/v1/admin/stuck-workflows/dev/report', body),
+};
+
+// ── Sprint 4 / Pass 4c: FE earnings ─────────────────────────────────────────
+
+export const AdminFeEarnings = {
+  monthly: (month?: string) =>
+    req('GET', `/v1/admin/fe-earnings/monthly${month ? `?month=${month}` : ''}`),
+  feDetail: (feId: string, limit = 100) =>
+    req('GET', `/v1/admin/fe-earnings/fe/${feId}?limit=${limit}`),
+};

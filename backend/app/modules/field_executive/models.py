@@ -12,6 +12,7 @@ import uuid
 
 from sqlalchemy import (
     Boolean,
+    Integer,
     Column,
     DateTime,
     ForeignKey,
@@ -110,4 +111,44 @@ class FEVisit(Base, TimestampMixin):
         "FieldExecutive",
         back_populates="visits",
         foreign_keys=[fe_id],
+    )
+
+# ── Sprint 4 / Pass 4c: per-visit FE earnings ────────────────────────────────
+
+class FEEarning(Base):
+    __tablename__ = "fe_earnings"
+
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=text("uuid_generate_v4()"),
+    )
+    fe_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("field_executives.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    visit_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("fe_visits.id", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    amount_paise = Column(Integer, nullable=False)
+    outcome = Column(String(50), nullable=False)
+    earned_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+        index=True,
+    )
+    payout_id = Column(UUID(as_uuid=True), nullable=True)
+    payout_status = Column(String(30), nullable=False, server_default="pending")
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
     )
