@@ -1,0 +1,182 @@
+services:
+
+  # ── Postgres ───────────────────────────────────────────────────────────────
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: owmee_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: owmee
+      POSTGRES_USER: owmee
+      POSTGRES_PASSWORD: owmee_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U owmee -d owmee"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Redis ──────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7.2-alpine
+    container_name: owmee_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass owmee_redis_password --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "owmee_redis_password", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── Temporal ───────────────────────────────────────────────────────────────
+  temporal:
+    image: temporalio/auto-setup:1.24
+    container_name: owmee_temporal
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_USER: owmee
+      POSTGRES_PWD: owmee_dev_password
+      POSTGRES_SEEDS: postgres
+      DYNAMIC_CONFIG_FILE_PATH: /etc/temporal/dynamicconfig/development-sql.yaml
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CLI_ADDRESS: temporal:7233
+    ports:
+      - "7233:7233"
+    volumes:
+      - ./scripts/dynamicconfig:/etc/temporal/dynamicconfig
+    healthcheck:
+      test: ["CMD", "tctl", "--address", "temporal:7233", "cluster", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ── Temporal UI ────────────────────────────────────────────────────────────
+  temporal_ui:
+    image: temporalio/ui:2.28.0
+    container_name: owmee_temporal_ui
+    restart: unless-stopped
+    depends_on:
+      - temporal
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CORS_ORIGINS: http://localhost:3000
+    ports:
+      - "8080:8080"
+
+  # ── MinIO (local R2) ───────────────────────────────────────────────────────
+  minio:
+    image: minio/minio:latest
+    container_name: owmee_minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: owmee_minio_user
+      MINIO_ROOT_PASSWORD: owmee_minio_password
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ── FastAPI backend ────────────────────────────────────────────────────────
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: owmee_api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      ENV: development
+      DATABASE_URL: postgresql+asyncpg://owmee:owmee_dev_password@postgres:5432/owmee
+      SYNC_DATABASE_URL: postgresql://owmee:owmee_dev_password@postgres:5432/owmee
+      REDIS_URL: redis://:owmee_redis_password@redis:6379/0
+      TEMPORAL_HOST: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      # R2_ENDPOINT: internal Docker hostname for server-side S3 operations
+      R2_ENDPOINT: http://minio:9000
+      R2_BUCKET: owmee-media
+      R2_ACCESS_KEY: owmee_minio_user
+      R2_SECRET_KEY: owmee_minio_password
+      # R2_PUBLIC_ENDPOINT: your Mac's LAN IP — phones use this for presigned URLs
+      # Find IP: ifconfig | grep "inet " | grep -v 127.0.0.1
+      R2_PUBLIC_ENDPOINT: ${R2_PUBLIC_ENDPOINT:-http://192.168.0.8:9000}
+      JWT_PRIVATE_KEY_PATH: /app/keys/private.pem
+      JWT_PUBLIC_KEY_PATH: /app/keys/public.pem
+      SECRET_KEY: dev_secret_key_change_in_production
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - ./keys:/app/keys
+      - pip_cache:/root/.cache/pip
+
+  # ── Temporal worker ────────────────────────────────────────────────────────
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: owmee_worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+    environment:
+      ENV: development
+      DATABASE_URL: postgresql+asyncpg://owmee:owmee_dev_password@postgres:5432/owmee
+      SYNC_DATABASE_URL: postgresql://owmee:owmee_dev_password@postgres:5432/owmee
+      REDIS_URL: redis://:owmee_redis_password@redis:6379/0
+      TEMPORAL_HOST: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      R2_ENDPOINT: http://minio:9000
+      R2_BUCKET: owmee-media
+      R2_ACCESS_KEY: owmee_minio_user
+      R2_SECRET_KEY: owmee_minio_password
+      R2_PUBLIC_ENDPOINT: ${R2_PUBLIC_ENDPOINT:-http://192.168.0.8:9000}
+      JWT_PRIVATE_KEY_PATH: /app/keys/private.pem
+      JWT_PUBLIC_KEY_PATH: /app/keys/public.pem
+      SECRET_KEY: dev_secret_key_change_in_production
+    volumes:
+      - ./backend:/app
+      - ./keys:/app/keys
+      - pip_cache:/root/.cache/pip
+    command: >
+      sh -c "
+        echo 'Waiting for Temporal...' &&
+        sleep 20 &&
+        pip install --no-cache-dir -q -r requirements.txt &&
+        python -m app.workers.main
+      "
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  pip_cache:
