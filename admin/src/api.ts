@@ -1,14 +1,11 @@
 /**
- * Admin API client — Sprint 4 / Pass 4a
+ * Admin API client — Sprint 4 / Pass 4 (final)
  *
- * Changes from Pass 3:
- *   - Stores both access_token and refresh_token in localStorage
- *   - On any 401, attempts silent refresh ONCE before surfacing the error
- *   - Coalesces concurrent refreshes (if 3 requests 401 at once, we refresh
- *     exactly once and replay all 3)
- *   - If refresh itself returns 4xx, clears tokens and fires an event that
- *     auth.tsx listens to for redirect-to-login
- *   - Transient failures (5xx on refresh, network errors) do NOT log out
+ * Silent-refresh on 401 (Pass 4a):
+ *   - Stores access + refresh token in localStorage
+ *   - Coalesces concurrent refreshes
+ *   - On 4xx refresh failure, clears tokens and fires SESSION_EXPIRED_EVENT
+ *   - Transient failures (5xx, network) do NOT log out
  */
 
 const BASE = (import.meta.env.VITE_API_BASE as string) || '';
@@ -33,7 +30,6 @@ export function clearTokens(): void {
   localStorage.removeItem('ow_admin_session');
 }
 
-// ── Session-expired event (for AuthProvider to listen to) ───────────────────
 export const SESSION_EXPIRED_EVENT = 'ow-admin-session-expired';
 
 function fireSessionExpired() {
@@ -45,7 +41,6 @@ let refreshPromise: Promise<string | null> | null = null;
 
 async function refreshOnce(): Promise<string | null> {
   if (refreshPromise) return refreshPromise;
-
   const rt = refreshToken();
   if (!rt) return null;
 
@@ -57,12 +52,10 @@ async function refreshOnce(): Promise<string | null> {
         body: JSON.stringify({ refresh_token: rt }),
       });
       if (!res.ok) {
-        // 4xx means the refresh token is dead — session is really over
         if (res.status >= 400 && res.status < 500) {
           clearTokens();
           fireSessionExpired();
         }
-        // 5xx: transient. Keep tokens in case it works next time.
         return null;
       }
       const data = await res.json();
@@ -72,7 +65,6 @@ async function refreshOnce(): Promise<string | null> {
       }
       return null;
     } catch {
-      // Network failure: transient. Do not clear tokens.
       return null;
     } finally {
       refreshPromise = null;
@@ -102,13 +94,11 @@ async function req<T = any>(
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 
-  // 401 and we haven't already retried → attempt silent refresh once
   if (res.status === 401 && _retry && !path.startsWith('/v1/admin/auth/')) {
     const newToken = await refreshOnce();
     if (newToken) {
-      return req<T>(method, path, body, /* _retry */ false);
+      return req<T>(method, path, body, false);
     }
-    // Refresh failed; fall through to normal error handling
   }
 
   let data: any = null;
@@ -128,7 +118,15 @@ async function req<T = any>(
   return data as T;
 }
 
-// ── API surface (unchanged from Pass 3) ─────────────────────────────────────
+// ── Query-string builder ────────────────────────────────────────────────────
+function qs(params: Record<string, string | number | undefined | null>): string {
+  const pairs = Object.entries(params)
+    .filter(([, v]) => v !== '' && v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`);
+  return pairs.length ? '?' + pairs.join('&') : '';
+}
+
+// ── Auth ────────────────────────────────────────────────────────────────────
 
 export const AdminAuth = {
   login: async (email: string, password: string) => {
@@ -153,11 +151,13 @@ export const AdminAuth = {
     if (rt) {
       try {
         await req('POST', '/v1/admin/auth/logout', { refresh_token: rt });
-      } catch { /* ignore — we'll clear locally regardless */ }
+      } catch { /* ignore */ }
     }
     clearTokens();
   },
 };
+
+// ── Pass 3: FE + Listings ────────────────────────────────────────────────────
 
 export const AdminFE = {
   listVisits: (statusFilter?: string) =>
@@ -216,7 +216,7 @@ export const Dev = {
     req('POST', `/v1/dev/make-fe/${encodeURIComponent(phone)}?city=${encodeURIComponent(city)}`),
 };
 
-// ── Sprint 4 / Pass 4b: Stuck workflows ─────────────────────────────────────
+// ── Pass 4b: Stuck workflows ────────────────────────────────────────────────
 
 export const AdminStuckWorkflows = {
   list: (filter: 'open' | 'resolved' | 'all' = 'open') =>
@@ -231,11 +231,39 @@ export const AdminStuckWorkflows = {
   }) => req('POST', '/v1/admin/stuck-workflows/dev/report', body),
 };
 
-// ── Sprint 4 / Pass 4c: FE earnings ─────────────────────────────────────────
+// ── Pass 4c: FE earnings ────────────────────────────────────────────────────
 
 export const AdminFeEarnings = {
   monthly: (month?: string) =>
     req('GET', `/v1/admin/fe-earnings/monthly${month ? `?month=${month}` : ''}`),
   feDetail: (feId: string, limit = 100) =>
     req('GET', `/v1/admin/fe-earnings/fe/${feId}?limit=${limit}`),
+};
+
+// ── Pass 4e: Transaction snapshot ───────────────────────────────────────────
+
+export const AdminTransactionSnapshot = {
+  freeze: (txId: string) =>
+    req('POST', `/v1/admin/transactions/${txId}/freeze-snapshot`),
+  get: (txId: string) =>
+    req('GET', `/v1/admin/transactions/${txId}/snapshot`),
+};
+
+// ── Pass 4f: Audit log ──────────────────────────────────────────────────────
+
+export const AdminAuditLog = {
+  list: (params: Record<string, string | number> = {}) =>
+    req('GET', `/v1/admin/audit-log/${qs(params)}`),
+  actions: () => req('GET', '/v1/admin/audit-log/actions'),
+  devLog: (body: { action: string; entity_type?: string; entity_id?: string; reviewer_notes?: string }) =>
+    req('POST', '/v1/admin/audit-log/dev/log', body),
+};
+
+// ── Pass 4g: Analytics ──────────────────────────────────────────────────────
+
+export const AdminAnalytics = {
+  summary: (sinceDays: number = 7) =>
+    req('GET', `/v1/admin/analytics/summary?since_days=${sinceDays}`),
+  events: (params: Record<string, string | number> = {}) =>
+    req('GET', `/v1/admin/analytics/events${qs(params)}`),
 };

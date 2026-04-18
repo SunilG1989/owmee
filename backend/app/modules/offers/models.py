@@ -88,6 +88,10 @@ class Transaction(Base, TimestampMixin):
     # Rating gate — 2h delay
     rate_available_at = Column(DateTime(timezone=True))
 
+    # ── Sprint 4 / Pass 4e: frozen listing snapshot at reservation time ─────
+    listing_snapshot = Column(JSONB, nullable=True)
+    snapshot_frozen_at = Column(DateTime(timezone=True), nullable=True)
+
     reservation = relationship("Reservation", back_populates="transactions")
     payment_links = relationship("PaymentLink", back_populates="transaction")
 

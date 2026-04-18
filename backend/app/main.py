@@ -53,8 +53,16 @@ def create_app() -> FastAPI:
     from app.modules.admin.seed import router as seed_router
     # ── Sprint 4 / Pass 3: admin auth ─────────────────────────────────────
     from app.modules.admin.auth_router import router as admin_auth_router
+    # ── Sprint 4 / Pass 4 Batch 1: stuck workflows + FE earnings ──────────
     from app.modules.field_executive.earnings_router import router as fe_earnings_router
     from app.modules.stuck_workflow import router as stuck_workflow_router
+    # ── Sprint 4 / Pass 4 Batch 2: snapshot + audit log + analytics ───────
+    from app.modules.transactions.snapshot import router as tx_snapshot_router
+    from app.modules.admin.audit_log_router import router as admin_audit_log_router
+    from app.modules.analytics import (
+        client_router as analytics_client_router,
+        admin_router as analytics_admin_router,
+    )
     # ── Sprint 4 / v3 ─────────────────────────────────────────────────────
     from app.modules.seller_tier.router import router as seller_tier_router
     # ── Sprint 4 / Pass 2: Field Executive ────────────────────────────────
@@ -75,10 +83,16 @@ def create_app() -> FastAPI:
     app.include_router(seed_router, prefix="/v1", tags=["admin-seed"])
     # ── Admin ─────────────────────────────────────────────────────────────
     app.include_router(admin_auth_router, prefix="/v1/admin/auth", tags=["admin-auth"])
-    app.include_router(fe_earnings_router, prefix="/v1/admin/fe-earnings")
-    app.include_router(stuck_workflow_router, prefix="/v1/admin/stuck-workflows")
+    app.include_router(fe_earnings_router, prefix="/v1/admin/fe-earnings", tags=["admin-fe-earnings"])
+    app.include_router(stuck_workflow_router, prefix="/v1/admin/stuck-workflows", tags=["admin-stuck-workflows"])
     app.include_router(admin_kyc_router, prefix="/v1/admin/kyc", tags=["admin-kyc"])
     app.include_router(admin_listings_router, prefix="/v1/admin/listings", tags=["admin-listings"])
+    # ── Sprint 4 / Pass 4 Batch 2 admin mounts ────────────────────────────
+    app.include_router(tx_snapshot_router, prefix="/v1/admin/transactions", tags=["admin-transaction-snapshot"])
+    app.include_router(admin_audit_log_router, prefix="/v1/admin/audit-log", tags=["admin-audit-log"])
+    app.include_router(analytics_admin_router, prefix="/v1/admin/analytics", tags=["admin-analytics"])
+    # ── Sprint 4 / Pass 4 Batch 2 client mount ────────────────────────────
+    app.include_router(analytics_client_router, prefix="/v1/analytics", tags=["analytics-client"])
     # ── Sprint 4 / v3 ─────────────────────────────────────────────────────
     app.include_router(seller_tier_router, prefix="/v1/sellers/me", tags=["seller-tier"])
     # ── Sprint 4 / Pass 2 ─────────────────────────────────────────────────

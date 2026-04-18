@@ -18,10 +18,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <div className="font-bold text-lg text-honey-700 tracking-tight">
               Owmee <span className="text-ink3 font-normal">OPS6</span>
             </div>
-            <nav className="flex gap-1">
+            <nav className="flex gap-1 flex-wrap">
               <Tab to="/dispatch">Dispatch</Tab>
               <Tab to="/fes">Field executives</Tab>
               <Tab to="/listings">FE-assisted listings</Tab>
+              <Tab to="/stuck-workflows">Stuck workflows</Tab>
+              <Tab to="/fe-earnings">FE earnings</Tab>
+              <Tab to="/audit-log">Audit log</Tab>
+              <Tab to="/analytics">Analytics</Tab>
             </nav>
           </div>
           <div className="flex items-center gap-4">

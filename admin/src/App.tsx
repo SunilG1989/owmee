@@ -8,6 +8,8 @@ import FeEarningsPage from './pages/FeEarnings';
 import VisitDetail from './pages/VisitDetail';
 import FeList from './pages/FeList';
 import FeAssistedListings from './pages/FeAssistedListings';
+import AuditLogPage from './pages/AuditLog';
+import AnalyticsPage from './pages/Analytics';
 
 export default function App() {
   const { session, loading } = useAuth();
@@ -33,12 +35,15 @@ export default function App() {
     <Layout>
       <Routes>
         <Route path="/" element={<Navigate to="/dispatch" replace />} />
-        <Route path="/dispatch" element={<DispatchQueue />
-          <Route path="/stuck-workflows" element={<StuckWorkflowsPage />} />
-          <Route path="/fe-earnings" element={<FeEarningsPage />} />} />
+        <Route path="/dispatch" element={<DispatchQueue />} />
         <Route path="/dispatch/:visitId" element={<VisitDetail />} />
         <Route path="/fes" element={<FeList />} />
         <Route path="/listings" element={<FeAssistedListings />} />
+        {/* Sprint 4 / Pass 4 Batch 1 + 2 */}
+        <Route path="/stuck-workflows" element={<StuckWorkflowsPage />} />
+        <Route path="/fe-earnings" element={<FeEarningsPage />} />
+        <Route path="/audit-log" element={<AuditLogPage />} />
+        <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="*" element={<Navigate to="/dispatch" replace />} />
       </Routes>
     </Layout>
