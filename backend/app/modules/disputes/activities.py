@@ -58,7 +58,7 @@ async def act_apply_dispute_resolution(inp: ActivityDisputeResolutionInput) -> d
     """Apply full_refund / full_release / partial_refund to transaction."""
     from app.db.session import AsyncSessionLocal
     from app.modules.offers.models import Transaction
-    from app.modules.admin.models import Dispute
+    from app.modules.admin.reports_disputes import Dispute
     from app.modules.listings.models import Listing
     from sqlalchemy import select
     import uuid

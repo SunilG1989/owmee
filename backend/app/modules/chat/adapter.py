@@ -228,7 +228,7 @@ class _StreamChatAdapter:
         """Archive chat history to R2 evidence bucket."""
         messages = await self.get_history(channel_id, limit=1000)
 
-        from app.modules.media.r2 import get_r2_client
+        from app.core.storage import upload_bytes
         evidence = json.dumps({
             "channel_id": channel_id,
             "dispute_id": str(dispute_id),
@@ -238,12 +238,10 @@ class _StreamChatAdapter:
 
         key = f"evidence/{dispute_id}/{channel_id}.json"
         try:
-            r2 = get_r2_client()
-            r2.put_object(
-                Bucket=settings.r2_evidence_bucket,
-                Key=key,
-                Body=evidence.encode(),
-                ContentType="application/json",
+            upload_bytes(
+                key=key,
+                data=evidence.encode(),
+                content_type="application/json",
             )
             logger.info("chat.evidence_archived", dispute_id=str(dispute_id), key=key)
         except Exception as e:
