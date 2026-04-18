@@ -1,5 +1,5 @@
 """
-Admin listings moderation queue — Epic 3 + Sprint 4 Pass 3 (3g).
+Admin listings moderation queue — Epic 3 + Sprint 4 Pass 3 (3g) + Sprint 5a (audit hooks).
 
 Endpoints:
   GET  /v1/admin/listings/queue             — pending_moderation items, optional ?source filter
@@ -7,17 +7,15 @@ Endpoints:
   POST /v1/admin/listings/{id}/reject       — reject listing with flag, stamps ops review
   GET  /v1/admin/listings/fe-assisted       — all fe_assisted listings (any status)
 
-Pass 3 changes:
-  - Real AdminL2 dep (drops the kyc-queue-era stub)
-  - ?source filter supports self_prep | fe_assisted | all (default: all)
-  - approve/reject now stamp reviewed_by='fe_and_ops' (when approving an fe_assisted
-    listing), ops_reviewed_at=now(), ops_reviewer_id=current_admin.admin_id
+Sprint 5a changes:
+  - approve and reject now call log_admin_action() to append to admin_audit_log
+  - track() emits listing_approved_by_admin / listing_rejected_by_admin events
 """
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 from pydantic import BaseModel
 from sqlalchemy import select
 import structlog
@@ -26,6 +24,9 @@ from app.core.admin_dependencies import AdminAny, AdminL2
 from app.core.dependencies import DBSession
 from app.modules.listings.models import Listing
 from app.modules.listings.service import approve_listing, reject_listing
+# Sprint 5a: audit + analytics hooks
+from app.modules.admin.audit_log_router import log_admin_action
+from app.modules.analytics import track
 
 router = APIRouter()
 logger = structlog.get_logger()
@@ -103,8 +104,18 @@ async def approve(
     listing_id: UUID,
     current_admin: AdminL2,
     db: DBSession,
+    request: Request,
 ):
     """Approve a listing — moves it to active and stamps ops review."""
+    # Capture before state for audit
+    before_result = await db.execute(select(Listing).where(Listing.id == listing_id))
+    before_listing = before_result.scalar_one_or_none()
+    before_state = {
+        "status": before_listing.status if before_listing else None,
+        "moderation_status": before_listing.moderation_status if before_listing else None,
+        "reviewed_by": before_listing.reviewed_by if before_listing else None,
+    } if before_listing else {}
+
     try:
         listing = await approve_listing(db, listing_id)
     except ValueError as e:
@@ -118,6 +129,35 @@ async def approve(
         listing.reviewed_by = "ops"
     listing.ops_reviewed_at = datetime.now(timezone.utc)
     listing.ops_reviewer_id = current_admin.admin_id
+
+    # Sprint 5a: audit log
+    await log_admin_action(
+        db,
+        admin_id=current_admin.admin_id,
+        action="listing_approve",
+        entity_type="listing",
+        entity_id=str(listing_id),
+        before_state=before_state,
+        after_state={
+            "status": listing.status,
+            "reviewed_by": listing.reviewed_by,
+        },
+        ip_address=request.client.host if request.client else None,
+    )
+
+    # Sprint 5a: analytics event
+    await track(
+        db,
+        event_name="listing_approved_by_admin",
+        actor_user_id=current_admin.admin_id,
+        actor_type="admin",
+        entity_type="listing",
+        entity_id=str(listing_id),
+        properties={
+            "listing_source": listing.listing_source,
+            "prior_reviewed_by": prior_reviewed_by,
+        },
+    )
 
     await db.commit()
     logger.info(
@@ -143,8 +183,18 @@ async def reject(
     body: RejectRequest,
     current_admin: AdminL2,
     db: DBSession,
+    request: Request,
 ):
     """Reject a listing with a flag reason. Stamps ops review."""
+    # Capture before state for audit
+    before_result = await db.execute(select(Listing).where(Listing.id == listing_id))
+    before_listing = before_result.scalar_one_or_none()
+    before_state = {
+        "status": before_listing.status if before_listing else None,
+        "moderation_status": before_listing.moderation_status if before_listing else None,
+        "reviewed_by": before_listing.reviewed_by if before_listing else None,
+    } if before_listing else {}
+
     try:
         listing = await reject_listing(db, listing_id, body.flag)
     except ValueError as e:
@@ -157,6 +207,38 @@ async def reject(
         listing.reviewed_by = "ops"
     listing.ops_reviewed_at = datetime.now(timezone.utc)
     listing.ops_reviewer_id = current_admin.admin_id
+
+    # Sprint 5a: audit log
+    await log_admin_action(
+        db,
+        admin_id=current_admin.admin_id,
+        action="listing_reject",
+        entity_type="listing",
+        entity_id=str(listing_id),
+        before_state=before_state,
+        after_state={
+            "status": listing.status,
+            "flag": body.flag,
+            "reason": body.reason,
+            "reviewed_by": listing.reviewed_by,
+        },
+        reviewer_notes=body.reason,
+        ip_address=request.client.host if request.client else None,
+    )
+
+    # Sprint 5a: analytics event
+    await track(
+        db,
+        event_name="listing_rejected_by_admin",
+        actor_user_id=current_admin.admin_id,
+        actor_type="admin",
+        entity_type="listing",
+        entity_id=str(listing_id),
+        properties={
+            "flag": body.flag,
+            "listing_source": listing.listing_source,
+        },
+    )
 
     await db.commit()
     logger.info(

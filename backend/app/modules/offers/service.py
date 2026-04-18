@@ -36,6 +36,9 @@ from app.modules.offers.models import (
 from app.modules.listings.models import Listing
 from app.modules.listings.service import create_snapshot
 
+# Sprint 5a: analytics hook
+from app.modules.analytics import track
+
 logger = structlog.get_logger()
 
 # ── Tunable constants ──────────────────────────────────────────────────────────
@@ -268,6 +271,22 @@ async def accept_offer(
     )
     db.add(txn)
     await db.flush()
+
+    # Sprint 5a: analytics event — fires for both UPI and cash deals
+    await track(
+        db,
+        event_name="offer_accepted",
+        actor_user_id=seller_id,
+        actor_type="user",
+        entity_type="offer",
+        entity_id=str(offer.id),
+        properties={
+            "transaction_id": str(txn.id),
+            "listing_id": str(offer.listing_id),
+            "agreed_price": float(agreed_price),
+            "payment_method": payment_method,
+        },
+    )
 
     # Create payment link for UPI transactions
     payment_link = None

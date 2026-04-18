@@ -45,6 +45,9 @@ from app.modules.kyc.activities import (
 router = APIRouter()
 logger = structlog.get_logger()
 
+# Sprint 5a: analytics hook
+from app.modules.analytics import track
+
 
 # ── Schemas ────────────────────────────────────────────────────────────────────
 
@@ -335,6 +338,21 @@ async def payout_account_verify(
         await update_user_kyc_status(db, current_user.user_id, "verified")
         await db.commit()
         logger.info("kyc.completed", user_id=str(current_user.user_id))
+        # Sprint 5a: analytics event
+        await track(
+            db,
+            event_name="kyc_completed",
+            actor_user_id=current_user.user_id,
+            actor_type="user",
+            entity_type="user",
+            entity_id=str(current_user.user_id),
+            properties={
+                "aadhaar_verified": v.aadhaar_verified,
+                "pan_verified": v.pan_verified,
+                "liveness_verified": v.liveness_verified,
+                "payout_verified": v.payout_verified,
+            },
+        )
         return {
             "success": True,
             "kyc_status": "verified",
