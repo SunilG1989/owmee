@@ -49,3 +49,35 @@ class SuperAdminAction(Base):
     full_state_snapshot = Column(JSONB)
     mfa_verified = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+# ── Sprint 4 / Pass 4a: admin refresh tokens ─────────────────────────────────
+
+class AdminRefreshToken(Base):
+    __tablename__ = "admin_refresh_tokens"
+
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=text("uuid_generate_v4()"),
+    )
+    admin_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("admin_users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    token_hash = Column(String(128), nullable=False, unique=True, index=True)
+    issued_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+    rotated_to_id = Column(UUID(as_uuid=True), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
