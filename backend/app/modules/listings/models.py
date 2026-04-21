@@ -73,6 +73,10 @@ class Listing(Base, TimestampMixin):
     hygiene_status = Column(String(50))      # "Cleaned", "Sanitised", "Not cleaned"
     is_kids_item = Column(Boolean, nullable=False, default=False)
     is_negotiable = Column(Boolean, nullable=False, default=True)  # Indian bargaining culture — default open
+    # Sprint 6a: snapshot seller KYC state at listing creation
+    seller_kyc_verified_at_listing_time = Column(
+        Boolean, nullable=False, server_default='false', default=False
+    )
 
     # ── Sprint 4 / Pass 2: FE-assisted listings ──────────────────────────────
     listing_source = Column(String(32), nullable=False, default="self_prep")
