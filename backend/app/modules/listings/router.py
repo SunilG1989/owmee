@@ -265,6 +265,7 @@ async def search_listings(
         if cat:
             query = query.where(Listing.category_id == cat.id)
     query = query.order_by(
+        Listing.seller_kyc_verified_at_listing_time.desc(),  # Sprint 6a: verified sellers rank higher
         func.ts_rank(Listing.search_vector, ts_query).desc(),
         Listing.published_at.desc()
     ).limit(limit).offset(offset)
@@ -407,6 +408,10 @@ async def create_listing(body: CreateListingRequest, current_user: BasicUser, db
         listing.serial_number = body.serial_number
         # Sprint 4 / Pass 3
         listing.kids_safety_checklist = body.kids_safety_checklist
+        # Sprint 6a: snapshot seller KYC state at listing creation
+        listing.seller_kyc_verified_at_listing_time = (
+            getattr(current_user, "kyc_status", None) == "verified"
+        )
         await db.commit()
     except ValueError as e:
         raise HTTPException(status_code=400, detail={"error": str(e)})
