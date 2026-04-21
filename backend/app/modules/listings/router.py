@@ -125,6 +125,7 @@ def _fmt_card(listing: Listing, seller_verified: bool = False) -> dict:
         "age_suitability": listing.age_suitability,
         "published_at": listing.published_at.isoformat() if listing.published_at else None,
         "created_at": listing.created_at.isoformat() if listing.created_at else None,
+        "verified_by_owmee": seller_verified,  # Sprint 6a: mirror the badge signal
     }
 
 
