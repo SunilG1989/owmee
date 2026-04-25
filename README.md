@@ -1,167 +1,86 @@
-# Owmee — Backend
+# Owmee
 
-Trust-first C2C resale platform for India.
+Trust-first C2C resale platform for India. Photo-first listing flow powered by Gemini Vision. Built with React Native + FastAPI.
+
+## What this is
+
+Take photos of something to sell. AI fills in brand, model, condition, and price. You confirm and list. For phones, scan the IMEI for theft protection. Buyers transact through escrow with KYC verified at the gate.
 
 ## Stack
 
-| Layer | Local dev | Production |
-|-------|-----------|------------|
-| API | FastAPI (Docker) | Railway |
-| Database | Postgres + PostGIS (Docker) | Supabase |
-| Cache | Redis (Docker) | Upstash |
-| Workflows | Temporal (Docker) | Temporal Cloud |
-| Storage | MinIO (Docker) | Cloudflare R2 |
-| CI/CD | — | GitHub Actions |
+- Mobile: React Native 0.73 + TypeScript
+- Backend: FastAPI + Python 3.12
+- Database: PostgreSQL 15 + PostGIS
+- Cache: Redis 7
+- Workflows: Temporal
+- Object store: MinIO (dev), Cloudflare R2 (prod)
+- AI: Google Gemini (Vision + Text)
+- Infra: Docker Compose
 
 ## Quick start
 
 ```bash
-# 1. Clone and enter
-git clone https://github.com/your-org/owmee
+git clone https://github.com/<your-username>/owmee.git
 cd owmee
-
-# 2. Install Docker Desktop if not already installed
-# https://docs.docker.com/desktop/
-
-# 3. Run the bootstrap script (does everything)
-bash scripts/dev_setup.sh
+./scripts/setup.sh
 ```
 
-That's it. The script:
-- Generates RS256 JWT key pair
-- Copies `.env.example` → `.env`
-- Starts all Docker services
-- Runs Alembic migrations
-- Creates R2-compatible MinIO buckets
+Setup takes 15-20 minutes (most of it is npm install and gradle).
 
-## Services after setup
+For step-by-step details, read [docs/SETUP.md](docs/SETUP.md).
 
-| Service | URL |
-|---------|-----|
-| API | http://localhost:8000 |
-| Swagger docs | http://localhost:8000/docs |
-| Temporal UI | http://localhost:8080 |
-| MinIO console | http://localhost:9001 |
-| Postgres | localhost:5432 |
+## Prerequisites
 
-## Manual commands
+- macOS or Linux (Windows works via WSL2 but untested)
+- Docker Desktop (4GB+ allocated)
+- Node.js 18+ and npm
+- Java JDK 17 (RN 0.73 requires this exact version)
+- Android Studio with SDK 33+ (for mobile builds)
+- A Gemini API key — get a free one at https://aistudio.google.com/apikey
 
-```bash
-# Start all services
-docker compose up -d
+For installation commands, see [docs/SETUP.md](docs/SETUP.md).
 
-# Stop all services
-docker compose down
-
-# View API logs
-docker compose logs -f api
-
-# View worker logs
-docker compose logs -f worker
-
-# Run migrations
-docker compose exec api alembic upgrade head
-
-# Create a new migration
-docker compose exec api alembic revision --autogenerate -m "description"
-
-# Open a Postgres shell
-docker compose exec postgres psql -U owmee -d owmee
-
-# Open an API shell
-docker compose exec api python
-```
-
-## Project structure
+## Repo layout
 
 ```
 owmee/
+├── backend/        FastAPI app, migrations, tests
+├── mobile/         React Native app
+├── docs/           setup, architecture, troubleshooting
+├── scripts/        dev automation
 ├── docker-compose.yml
-├── .env.example
-├── keys/                   # JWT keys — never commit
-├── scripts/
-│   ├── dev_setup.sh        # one-command bootstrap
-│   ├── setup_keys.sh       # RSA key generation
-│   ├── create_buckets.sh   # MinIO bucket setup
-│   ├── init_db.sql         # Postgres extensions
-│   └── temporal_dynamic_config.yaml
-└── backend/
-    ├── Dockerfile.dev
-    ├── Dockerfile
-    ├── requirements.txt
-    ├── alembic.ini
-    └── app/
-        ├── main.py             # FastAPI app factory
-        ├── core/
-        │   ├── settings.py     # pydantic-settings
-        │   ├── dependencies.py # tier guards, DB session
-        │   ├── jwt.py          # RS256 sign/verify
-        │   ├── redis.py        # Redis singleton
-        │   └── storage.py      # Cloudflare R2 client
-        ├── db/
-        │   ├── session.py      # SQLAlchemy engine + Base
-        │   └── migrations/     # Alembic
-        ├── modules/
-        │   ├── identity_auth/  # Epic 1 — OTP, JWT, sessions
-        │   ├── kyc/            # Epic 2 — Aadhaar, PAN, liveness
-        │   ├── listings/       # Epic 3 — listings, images
-        │   ├── offers/         # Epic 4 — offers, reservations
-        │   ├── transactions/   # Epic 5 — local transactions
-        │   ├── payments/       # Razorpay PA integration
-        │   ├── chat/           # Stream chat adapter
-        │   ├── disputes/       # Dispute workflow
-        │   ├── risk/           # Trust score, fraud signals
-        │   ├── notifications/  # SMS, push
-        │   ├── admin/          # Admin console APIs
-        │   └── compliance/     # TDS, GST, DPDP
-        └── workers/
-            └── main.py         # Temporal worker entrypoint
+└── .env.example    copy to .env, fill in your values
 ```
 
-## Tier model
+## Daily dev
 
-| Tier | How | What |
-|------|-----|------|
-| Guest | No login | Browse only |
-| Basic | Mobile OTP | Browse + chat + wishlist + listing drafts |
-| Verified | OTP + Aadhaar + PAN + liveness + payout | Full transacting |
-
-## Environment variables
-
-All variables are documented in `.env.example`.
-Copy to `.env` and fill in real values for KYC partner, Razorpay, and SMS.
-
-## Production deployment (Railway)
+After setup, start the backend stack:
 
 ```bash
-# Install Railway CLI
-npm install -g @railway/cli
-
-# Login and init
-railway login
-railway init
-
-# Set environment variables
-railway variables set DATABASE_URL=...
-railway variables set REDIS_URL=...
-railway variables set TEMPORAL_HOST=...
-railway variables set R2_ENDPOINT=...
-# (set all variables from .env.example)
-
-# Deploy
-railway up
+./scripts/dev.sh
 ```
 
-## Phase 1 exit gate checklist
+To stop:
 
-- [ ] All Epic 1 stories (OWM-101–110) pass acceptance criteria
-- [ ] All Epic 2 stories (OWM-201–212) pass acceptance criteria
-- [ ] RBAC test matrix (13 cases) all pass in CI
-- [ ] Aadhaar audit query returns zero rows on staging DB
-- [ ] KYC gate middleware returns correct 403 for all tier × endpoint combinations
-- [ ] Post-KYC action resume works end-to-end
-- [ ] JWT `tier` claim present and correct for all test users
-- [ ] No KYC prompt shown at signup — user reaches home feed after mobile OTP only
-- [ ] CA sign-off on TDS questions T1–T6
-- [ ] Legal sign-off on Aadhaar-derived field allowlist
-- [ ] DLT registration initiated
+```bash
+docker compose down
+```
+
+## Things to know before changing core code
+
+- Postgres is the source of truth. Partner systems (KYC vendors, payment aggregator) are external sources for verification events.
+- UUID primary keys use `uuid.uuid4()` as Python defaults; migrations use `uuid_generate_v4()` (NOT `gen_random_uuid()`).
+- Async SQLAlchemy via `AsyncSession` — get the session from the `DBSession` type alias.
+- `metadata_` is the Python attribute name mapped to the `metadata` column.
+- `CurrentUser` is built from JWT claims, not DB rows.
+- `TimestampMixin` is imported from `app.db.session`.
+
+More in [docs/DEV_NOTES.md](docs/DEV_NOTES.md).
+
+## Troubleshooting
+
+If something's not working, [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) covers the issues we've actually hit — Docker port conflicts, MinIO presigned URL hostname, Metro cache, Java version, IP changes, Gemini API quota.
+
+## License
+
+[Your choice]

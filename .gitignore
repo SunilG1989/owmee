@@ -1,15 +1,60 @@
-node_modules/
-.venv/
-__pycache__/
-*.pyc
-.DS_Store
+# Secrets — NEVER commit
 .env
 .env.local
+.env.*.local
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# Node / React Native
+node_modules/
+.metro-*
+metro-cache/
+npm-debug.log*
+yarn-error.log*
+
+# Mobile build artifacts
 mobile/android/app/build/
-mobile/ios/Pods/
+mobile/android/build/
 mobile/android/.gradle/
-admin/node_modules/
-admin/dist/
-.pass3_backup_*/
+mobile/android/local.properties
+mobile/android/app/release/
+mobile/android/captures/
+mobile/android/app/src/main/assets/index.android.bundle
+mobile/ios/build/
+mobile/ios/Pods/
+mobile/ios/Podfile.lock
+mobile/ios/Podfile.backup
+mobile/ios/*.xcworkspace
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Patcher backups
+*.bak
+*.bak.*
+*.orig
+
+# Logs
 *.log
-.env
+logs/
+
+# Session artifacts (don't commit)
+sprint8_p2_backup/
+sprint8_p2_mobile_backup/
+=0.39.0
+*.tar.gz
+*.zip

@@ -86,8 +86,8 @@ services:
       MINIO_ROOT_USER: owmee_minio_user
       MINIO_ROOT_PASSWORD: owmee_minio_password
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "0.0.0.0:9000:9000"
+      - "0.0.0.0:9001:9001"
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data
@@ -130,7 +130,7 @@ services:
       JWT_PUBLIC_KEY_PATH: /app/keys/public.pem
       SECRET_KEY: dev_secret_key_change_in_production
     ports:
-      - "8000:8000"
+      - "0.0.0.0:8000:8000"
     volumes:
       - ./backend:/app
       - ./keys:/app/keys

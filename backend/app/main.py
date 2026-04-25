@@ -11,6 +11,7 @@ from app.db.session import engine
 from app.modules.geo import router as geo_router_mod  # SPRINT8_PHASE1_ROUTERS
 from app.modules.listings import feed_router as feed_router_mod  # SPRINT8_PHASE1_ROUTERS
 from app.modules.identity_auth import location_router as user_loc_router_mod  # SPRINT8_PHASE1_ROUTERS
+from app.modules.ai_assistant.router import router as ai_assistant_router  # SPRINT8_PHASE2_AI
 
 logger = structlog.get_logger()
 
@@ -117,6 +118,7 @@ def create_app() -> FastAPI:
     # Sprint 7 / Phase 1: Community module
     app.include_router(community_router, prefix="/v1/community", tags=["community"])
     app.include_router(community_admin_router, prefix="/v1/admin/community", tags=["admin-community"])
+    app.include_router(ai_assistant_router)  # SPRINT8_PHASE2_AI
 
     @app.get("/health", include_in_schema=False)
     async def health():

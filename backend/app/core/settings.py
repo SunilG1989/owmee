@@ -96,8 +96,10 @@ class Settings(BaseSettings):
     app_base_url: str = "http://localhost:8000"
     r2_public_endpoint: str = ""
     log_level: str = "INFO"
-
-
+    # ── Google Gemini AI (Sprint 8 Phase 2 — free tier) ─────────────────── SPRINT8_PHASE2_GEMINI
+    gemini_api_key: str = ""
+    gemini_vision_model: str = "gemini-2.5-flash"
+    gemini_text_model: str = "gemini-2.0-flash-lite"
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
