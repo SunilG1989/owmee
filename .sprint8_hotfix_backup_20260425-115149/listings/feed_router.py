@@ -1,0 +1,322 @@
+"""Feed router — blockbuster deals + explore feed.
+
+These endpoints were added in the home-page redesign sprint. Rather than
+modifying app/modules/listings/router.py directly (which is heavy and would
+risk breaking existing endpoints), we add them as their own router under
+/v1/feed/* that reuses listing models and schemas.
+
+Endpoints:
+
+GET /v1/feed/blockbuster-deals
+    Top 12 listings ranked by discount_pct DESC. Filtered by user's geographic
+    state. Cached in Redis for 60 minutes per state.
+
+GET /v1/feed/explore?page=N&cursor=...
+    Infinite explore feed with exponential geographic radius:
+        page 0 → 15km
+        page 1 → 50km
+        page 2 → 150km
+        page 3+ → 500km (capped at same state)
+    National shipping-eligible items appear regardless of distance if
+    seller has shipping_enabled = True.
+
+    Ranking score per listing:
+        score = 0.30 * freshness + 0.40 * proximity + 0.20 * deal + 0.10 * trust
+
+Notes for the implementer reading this:
+- This file makes structural assumptions about field names on Listing and User.
+  If field names differ in your schema, edit the queries below — there are
+  TODO markers to make this easy.
+- The serializer reuses ListingPublic from listings.schemas. We extend the
+  serialized payload with three computed fields (seller_name, is_owmee_verified,
+  distance_km) that don't live on the model but are derived per-request.
+"""
+from __future__ import annotations
+
+import base64
+import json
+import logging
+import math
+from datetime import datetime, timezone
+from typing import Any
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from app.core.redis import get_redis
+from app.core.dependencies import DBSession, BasicUser
+
+from app.modules.identity_auth.models import User
+from app.modules.listings.models import Listing
+
+router = APIRouter(prefix="/v1/feed", tags=["feed"])
+log = logging.getLogger(__name__)
+
+# ----- Geographic radius progression for explore feed -----
+RADIUS_BY_PAGE = {0: 15, 1: 50, 2: 150}
+RADIUS_DEFAULT = 500  # for page 3+, capped at same state
+EARTH_KM = 6371.0
+
+
+def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    """Distance between two coordinates in kilometers."""
+    if None in (lat1, lng1, lat2, lng2):
+        return float("inf")
+    rlat1, rlat2 = math.radians(lat1), math.radians(lat2)
+    dlat = math.radians(lat2 - lat1)
+    dlng = math.radians(lng2 - lng1)
+    a = math.sin(dlat / 2) ** 2 + math.cos(rlat1) * math.cos(rlat2) * math.sin(dlng / 2) ** 2
+    return 2 * EARTH_KM * math.asin(math.sqrt(a))
+
+
+def _radius_for_page(page: int) -> int:
+    return RADIUS_BY_PAGE.get(page, RADIUS_DEFAULT)
+
+
+def _seller_short_name(user: User) -> str:
+    """First name + last initial. Privacy-safe."""
+    if not user:
+        return "Seller"
+    full = (getattr(user, "name", None) or "").strip()
+    if not full:
+        return "Seller"
+    parts = full.split()
+    if len(parts) == 1:
+        return parts[0]
+    return f"{parts[0]} {parts[-1][0]}."
+
+
+def _time_ago_iso(dt: datetime | None) -> str | None:
+    """Backend can compute ISO; mobile renders relative. Keeping ISO is safer."""
+    if not dt:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
+
+
+def _serialize_listing(
+    listing: Listing,
+    user_lat: float | None,
+    user_lng: float | None,
+) -> dict[str, Any]:
+    """Reduce a Listing ORM row to the public API shape used by feed endpoints.
+
+    The three new fields (seller_name, is_owmee_verified, distance_km) are
+    computed per-request, not stored.
+    """
+    seller = getattr(listing, "seller", None)
+
+    # Distance — null if either user or listing lacks coords
+    distance_km: float | None = None
+    listing_lat = getattr(listing, "lat", None) or (seller and getattr(seller, "lat", None))
+    listing_lng = getattr(listing, "lng", None) or (seller and getattr(seller, "lng", None))
+    if user_lat is not None and user_lng is not None and listing_lat and listing_lng:
+        distance_km = round(_haversine_km(user_lat, user_lng, listing_lat, listing_lng), 1)
+
+    # Owmee Verified: KYC-verified now AND was verified at listing time
+    is_owmee_verified = bool(
+        seller
+        and getattr(seller, "kyc_status", None) == "verified"
+        and getattr(listing, "seller_kyc_verified_at_listing_time", None) is not None
+    )
+
+    # Image — first image url if list, or single field
+    images = getattr(listing, "image_urls", None) or getattr(listing, "images", None) or []
+    if isinstance(images, str):
+        images = [images]
+
+    # Numeric coercion — Decimal → float for JSON
+    price = float(listing.price) if listing.price is not None else 0.0
+    original_price = float(listing.original_price) if getattr(listing, "original_price", None) else None
+    discount_pct = float(getattr(listing, "discount_pct", None)) if getattr(listing, "discount_pct", None) is not None else None
+
+    return {
+        "id": str(listing.id),
+        "title": listing.title,
+        "price": price,
+        "original_price": original_price,
+        "discount_pct": discount_pct,
+        "image_urls": images,
+        "city": getattr(listing, "city", None) or (seller and getattr(seller, "city", None)),
+        "state": getattr(listing, "state_name", None) or (seller and getattr(seller, "state", None)),
+        "category_slug": getattr(listing, "category_slug", None),
+        "shipping_enabled": getattr(listing, "shipping_enabled", False),
+        "created_at": _time_ago_iso(getattr(listing, "created_at", None)),
+        # New fields:
+        "seller_name": _seller_short_name(seller) if seller else "Seller",
+        "is_owmee_verified": is_owmee_verified,
+        "distance_km": distance_km,
+    }
+
+
+# ====================================================================
+# GET /v1/feed/blockbuster-deals
+# ====================================================================
+@router.get("/blockbuster-deals")
+async def blockbuster_deals(
+    current_user: BasicUser,
+    db: DBSession,
+):
+    """Top 12 deals (>=15% off market) in user's state. Cached 1hr per state."""
+    user_state = getattr(current_user, "state", None) or "Karnataka"
+    cache_key = f"blockbuster:{user_state}"
+
+    # Try cache
+    try:
+        redis = await get_redis()
+        cached = await redis.get(cache_key)
+        if cached:
+            return json.loads(cached if isinstance(cached, str) else cached.decode())
+    except Exception as e:
+        log.warning("Redis read miss for %s: %s", cache_key, e)
+
+    # Query: 15%+ discount, active, in user's state.
+    # The state filter joins through the seller's address since listings
+    # don't carry their own state column. If your schema does store state on
+    # listing directly, swap the join for a column filter.
+    stmt = (
+        select(Listing)
+        .options(selectinload(Listing.seller))
+        .join(User, Listing.seller_id == User.id)
+        .where(Listing.status == "active")
+        .where(Listing.discount_pct.is_not(None))
+        .where(Listing.discount_pct >= 15)
+        .where(User.state == user_state)
+        .order_by(Listing.discount_pct.desc(), Listing.created_at.desc())
+        .limit(12)
+    )
+
+    result = await db.execute(stmt)
+    listings = result.scalars().all()
+
+    user_lat = getattr(current_user, "lat", None)
+    user_lng = getattr(current_user, "lng", None)
+    items = [_serialize_listing(l, user_lat, user_lng) for l in listings]
+
+    payload = {"items": items, "count": len(items)}
+
+    try:
+        redis = await get_redis()
+        await redis.set(cache_key, json.dumps(payload), ex=3600)
+    except Exception as e:
+        log.warning("Redis write miss for %s: %s", cache_key, e)
+
+    return payload
+
+
+# ====================================================================
+# GET /v1/feed/explore
+# ====================================================================
+@router.get("/explore")
+async def explore_feed(
+    current_user: BasicUser,
+    db: DBSession,
+    page: int = Query(0, ge=0, le=20),
+    cursor: str | None = Query(None),
+):
+    """Infinite explore feed with exponential geographic radius.
+
+    Pages out 20 listings at a time. Radius expands per page until it caps
+    at 500km (same-state limit). National shipping-eligible items appear
+    regardless of distance.
+    """
+    radius_km = _radius_for_page(page)
+    user_state = getattr(current_user, "state", None) or "Karnataka"
+    user_lat = getattr(current_user, "lat", None)
+    user_lng = getattr(current_user, "lng", None)
+
+    # Decode cursor if provided — base64 of "{score}:{listing_id}"
+    cursor_score: float | None = None
+    cursor_id: str | None = None
+    if cursor:
+        try:
+            decoded = base64.urlsafe_b64decode(cursor.encode()).decode()
+            score_str, id_str = decoded.split(":", 1)
+            cursor_score = float(score_str)
+            cursor_id = id_str
+        except Exception:
+            log.warning("Bad cursor: %s", cursor)
+            cursor = None  # ignore
+
+    # Fetch a generous candidate set, then score and filter in Python.
+    # Postgres can't compute haversine cheaply without postgis, so we
+    # over-fetch and filter. For scale, swap this for a postgis ST_DWithin
+    # query later.
+    stmt = (
+        select(Listing)
+        .options(selectinload(Listing.seller))
+        .join(User, Listing.seller_id == User.id)
+        .where(Listing.status == "active")
+        .where(User.state == user_state)
+        .order_by(Listing.created_at.desc())
+        .limit(200)  # candidate pool
+    )
+    result = await db.execute(stmt)
+    candidates = result.scalars().all()
+
+    # Score each candidate
+    now = datetime.now(timezone.utc)
+    scored: list[tuple[float, Listing, float | None]] = []
+
+    for listing in candidates:
+        seller = listing.seller
+        listing_lat = getattr(listing, "lat", None) or (seller and getattr(seller, "lat", None))
+        listing_lng = getattr(listing, "lng", None) or (seller and getattr(seller, "lng", None))
+
+        # Distance
+        distance_km: float | None = None
+        if user_lat is not None and user_lng is not None and listing_lat and listing_lng:
+            distance_km = _haversine_km(user_lat, user_lng, listing_lat, listing_lng)
+
+        # Filter: include if within radius, OR shipping_enabled, OR no user coords
+        ships = bool(getattr(listing, "shipping_enabled", False))
+        in_radius = distance_km is not None and distance_km <= radius_km
+        no_user_coords = user_lat is None or user_lng is None
+        if not (in_radius or ships or no_user_coords):
+            continue
+
+        # Score
+        created = listing.created_at or now
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        days_old = max(0.0, (now - created).total_seconds() / 86400.0)
+        freshness = 1.0 / (1.0 + days_old)
+
+        if distance_km is not None:
+            proximity = 1.0 / (1.0 + distance_km / max(radius_km, 1))
+        else:
+            proximity = 0.5  # neutral for shipping-only listings
+
+        deal = max(0.0, float(listing.discount_pct or 0) / 100.0)
+        trust = 1.0 if (seller and getattr(seller, "kyc_status", None) == "verified") else 0.0
+
+        score = 0.30 * freshness + 0.40 * proximity + 0.20 * deal + 0.10 * trust
+        scored.append((score, listing, distance_km))
+
+    # Sort by score desc, then by id for stable tiebreak
+    scored.sort(key=lambda t: (-t[0], str(t[1].id)))
+
+    # Apply cursor (skip past previously-served items)
+    if cursor_score is not None and cursor_id is not None:
+        scored = [t for t in scored if (t[0], str(t[1].id)) < (cursor_score, cursor_id)]
+
+    # Take 20
+    page_items = scored[:20]
+    next_cursor: str | None = None
+    if len(scored) > 20:
+        last_score, last_listing, _ = page_items[-1]
+        next_cursor_raw = f"{last_score}:{last_listing.id}"
+        next_cursor = base64.urlsafe_b64encode(next_cursor_raw.encode()).decode()
+
+    items = [_serialize_listing(l, user_lat, user_lng) for _, l, _ in page_items]
+
+    return {
+        "items": items,
+        "next_cursor": next_cursor,
+        "current_radius_km": radius_km,
+        "page": page,
+    }

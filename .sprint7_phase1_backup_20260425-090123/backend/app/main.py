@@ -8,9 +8,6 @@ from fastapi.responses import ORJSONResponse
 from app.core.settings import settings
 from app.core.redis import get_redis, close_redis
 from app.db.session import engine
-from app.modules.geo import router as geo_router_mod  # SPRINT8_PHASE1_ROUTERS
-from app.modules.listings import feed_router as feed_router_mod  # SPRINT8_PHASE1_ROUTERS
-from app.modules.identity_auth import location_router as user_loc_router_mod  # SPRINT8_PHASE1_ROUTERS
 
 logger = structlog.get_logger()
 
@@ -75,19 +72,8 @@ def create_app() -> FastAPI:
         admin_router as fe_admin_router,
     )
     from app.modules.field_executive.dev_router import router as fe_dev_router
-    # Sprint 7 / Phase 1: Community module
-    from app.modules.community.router import router as community_router
-    from app.modules.community.admin_router import router as community_admin_router
 
     app.include_router(auth_router, prefix="/v1/auth", tags=["auth"])
-
-    # SPRINT8_PHASE1_ROUTERS
-
-    app.include_router(geo_router_mod.router)
-
-    app.include_router(feed_router_mod.router)
-
-    app.include_router(user_loc_router_mod.router)
     app.include_router(kyc_router, prefix="/v1/kyc", tags=["kyc"])
     app.include_router(listings_router, prefix="/v1/listings", tags=["listings"])
     app.include_router(offers_router, prefix="/v1", tags=["offers"])
@@ -114,9 +100,6 @@ def create_app() -> FastAPI:
     app.include_router(fe_fe_router, prefix="/v1/fe/visits", tags=["fe-visits-fe"])
     app.include_router(fe_admin_router, prefix="/v1/admin/fe-visits", tags=["fe-visits-admin"])
     app.include_router(fe_dev_router, prefix="/v1", tags=["fe-dev"])
-    # Sprint 7 / Phase 1: Community module
-    app.include_router(community_router, prefix="/v1/community", tags=["community"])
-    app.include_router(community_admin_router, prefix="/v1/admin/community", tags=["admin-community"])
 
     @app.get("/health", include_in_schema=False)
     async def health():

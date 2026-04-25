@@ -91,6 +91,13 @@ class Listing(Base, TimestampMixin):
     ops_reviewed_at = Column(DateTime(timezone=True), nullable=True)
     ops_reviewer_id = Column(UUID(as_uuid=True), nullable=True)
 
+    # ── Sprint 7 / Phase 1: community scoping ─────────────────────────────────
+    community_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("communities.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
     # ── Sprint 4 / Pass 3: kids safety checklist ─────────────────────────────
     # JSONB of { item_key: bool }. Canonical keys (see docs/QA_CHECKLIST.md):
     #   cleaned, no_small_parts, no_loose_batteries, no_sharp_edges,

@@ -55,6 +55,22 @@ class User(Base, TimestampMixin):
     fy_cumulative_payout_fy_start = Column(Date, nullable=True)
     tier_upgrade_prompted_at = Column(DateTime(timezone=True), nullable=True)
 
+    # ── Sprint 7 / Phase 1: community membership ──────────────────────────────
+    community_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("communities.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    community_verified_at = Column(DateTime(timezone=True), nullable=True)
+    community_verified_by = Column(String(16), nullable=True)
+    # referral | manual | founder | null
+    referral_code = Column(String(8), nullable=True, unique=True)
+    referred_by_user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
     sessions = relationship("Session", back_populates="user", cascade="all, delete-orphan")
     devices = relationship("Device", back_populates="user", cascade="all, delete-orphan")
     auth_events = relationship("AuthEvent", back_populates="user", cascade="all, delete-orphan")

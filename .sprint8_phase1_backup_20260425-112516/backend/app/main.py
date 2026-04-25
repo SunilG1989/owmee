@@ -8,9 +8,6 @@ from fastapi.responses import ORJSONResponse
 from app.core.settings import settings
 from app.core.redis import get_redis, close_redis
 from app.db.session import engine
-from app.modules.geo import router as geo_router_mod  # SPRINT8_PHASE1_ROUTERS
-from app.modules.listings import feed_router as feed_router_mod  # SPRINT8_PHASE1_ROUTERS
-from app.modules.identity_auth import location_router as user_loc_router_mod  # SPRINT8_PHASE1_ROUTERS
 
 logger = structlog.get_logger()
 
@@ -80,14 +77,6 @@ def create_app() -> FastAPI:
     from app.modules.community.admin_router import router as community_admin_router
 
     app.include_router(auth_router, prefix="/v1/auth", tags=["auth"])
-
-    # SPRINT8_PHASE1_ROUTERS
-
-    app.include_router(geo_router_mod.router)
-
-    app.include_router(feed_router_mod.router)
-
-    app.include_router(user_loc_router_mod.router)
     app.include_router(kyc_router, prefix="/v1/kyc", tags=["kyc"])
     app.include_router(listings_router, prefix="/v1/listings", tags=["listings"])
     app.include_router(offers_router, prefix="/v1", tags=["offers"])

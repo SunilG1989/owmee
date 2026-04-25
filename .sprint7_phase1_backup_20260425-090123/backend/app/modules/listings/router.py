@@ -413,13 +413,6 @@ async def create_listing(body: CreateListingRequest, current_user: BasicUser, db
         listing.seller_kyc_verified_at_listing_time = (
             getattr(current_user, "kyc_status", None) == "verified"
         )
-        # Sprint 7 / Phase 1: snapshot seller's community_id onto the listing
-        # at create time. Denormalizes for fast feed filtering and locks the
-        # listing's community even if the seller later changes communities.
-        seller_res = await db.execute(select(User).where(User.id == current_user.user_id))
-        seller_user = seller_res.scalar_one_or_none()
-        if seller_user and seller_user.community_id:
-            listing.community_id = seller_user.community_id
         await db.commit()
     except ValueError as e:
         raise HTTPException(status_code=400, detail={"error": str(e)})
@@ -514,17 +507,10 @@ async def browse_listings(
     min_price: float | None = Query(None),
     max_price: float | None = Query(None),
     kids_only: bool = Query(False),
-    community_only: bool = Query(False),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ):
     query = select(Listing).where(Listing.status == "active")
-    # Sprint 7 / Phase 1: community-scoped browse
-    if current_user and community_only:
-        cu_res = await db.execute(select(User).where(User.id == current_user.user_id))
-        cu = cu_res.scalar_one_or_none()
-        if cu and cu.community_id:
-            query = query.where(Listing.community_id == cu.community_id)
     if city:
         query = query.where(Listing.city.ilike(f"%{city}%"))
     if condition:
