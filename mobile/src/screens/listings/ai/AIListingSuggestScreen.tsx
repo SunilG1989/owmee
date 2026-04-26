@@ -20,7 +20,7 @@
  *   - if smartphone + no IMEI yet, route to AIListingIdentifier
  *   - else, in-place success state
  */
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -76,6 +76,15 @@ export default function AIListingSuggestScreen({
   const [compsSheet, setCompsSheet] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState<{ listingId: string; price: number; title: string } | null>(null);
+
+  // Timer for the comparables → price sheet handoff. Tracked via ref so we
+  // can cancel on unmount and avoid setState-on-unmounted-component warnings.
+  const compsToPriceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (compsToPriceTimer.current) clearTimeout(compsToPriceTimer.current);
+    };
+  }, []);
 
   // Effective fields (overrides win over AI)
   const brand = overrides.brand ?? draft.detected.brand ?? '';
@@ -346,7 +355,8 @@ export default function AIListingSuggestScreen({
           comparables={draft.comparables}
           onSetMyPrice={() => {
             setCompsSheet(false);
-            setTimeout(() => setPriceSheet(true), 200);
+            if (compsToPriceTimer.current) clearTimeout(compsToPriceTimer.current);
+            compsToPriceTimer.current = setTimeout(() => setPriceSheet(true), 200);
           }}
           onClose={() => setCompsSheet(false)}
         />

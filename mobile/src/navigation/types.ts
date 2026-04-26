@@ -57,7 +57,6 @@ export type TabParams = {
   Home: undefined;
   Search: { category_slug?: string; isKids?: boolean } | undefined;
   Sell: undefined;
-  Deals: undefined;
   Profile: undefined;
 };
 

@@ -14,13 +14,13 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthStore } from '../store/authStore';
+import { LOCATION_KEY, ONBOARDING_SEEN_KEY } from '../utils/storageKeys';
 import { C, T, S, R, Shadow } from '../utils/tokens';
 
 // Consumer screens
 import HomeScreen from '../screens/HomeScreen';
 import SearchScreen from '../screens/SearchScreen';
 import CreateListingScreen from '../screens/listings/CreateListingScreen';
-import OffersScreen from '../screens/OffersScreen';
 import ProfileScreen from '../screens/profile/ProfileScreen';
 import ListingDetailScreen from '../screens/listings/ListingDetailScreen';
 import TransactionDetailScreen from '../screens/TransactionDetailScreen';
@@ -100,7 +100,6 @@ function MainTabs() {
     { key: 'Home', label: 'Home', icon: '⌂' },
     { key: 'Search', label: 'Search', icon: '🔍' },
     { key: 'Sell', label: 'Sell', icon: '+' },
-    { key: 'Deals', label: 'Deals', icon: '💬' },
     { key: 'Profile', label: 'Profile', icon: '👤' },
   ];
 
@@ -114,7 +113,7 @@ function MainTabs() {
               key={tab.key}
               style={st.tabTouch}
               onPress={() => {
-                if ((tab.key === 'Sell' || tab.key === 'Deals') && !isAuthenticated) {
+                if (tab.key === 'Sell' && !isAuthenticated) {
                   (tabNav as any).getParent()?.navigate('AuthFlow');
                   return;
                 }
@@ -158,8 +157,8 @@ export default function RootNavigator() {
     hydrate();
 
     Promise.all([
-      AsyncStorage.getItem('@ow_location'),
-      AsyncStorage.getItem('@ow_onboarding_seen'),
+      AsyncStorage.getItem(LOCATION_KEY),
+      AsyncStorage.getItem(ONBOARDING_SEEN_KEY),
     ]).then(async ([loc, onb]) => {
       setLocationSet(!!loc);
       setOnboardingSeen(!!onb);
@@ -176,7 +175,7 @@ export default function RootNavigator() {
               Geolocation.getCurrentPosition(
                 async (pos: any) => {
                   const { latitude, longitude } = pos.coords;
-                  await AsyncStorage.setItem('@ow_location', JSON.stringify({
+                  await AsyncStorage.setItem(LOCATION_KEY, JSON.stringify({
                     lat: latitude, lng: longitude, city: 'Detecting...', state: '',
                     fullAddress: 'Detecting address...',
                   }));
@@ -235,7 +234,7 @@ export default function RootNavigator() {
       <OnboardingScreen
         navigation={{
           navigate: () => {
-            AsyncStorage.setItem('@ow_onboarding_seen', 'true');
+            AsyncStorage.setItem(ONBOARDING_SEEN_KEY, 'true');
             setOnboardingSeen(true);
           },
         }}

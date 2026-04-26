@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Platform, PermissionsAndroid } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Geolocation from '@react-native-community/geolocation';
+import { LOCATION_KEY } from '../utils/storageKeys';
 
 export interface UserLocation { lat: number; lng: number; city: string; locality?: string; }
 
@@ -35,7 +36,7 @@ export function useLocation() {
 
   // T1-03 synergy: load cached location FIRST — instant, no flash
   useEffect(() => {
-    AsyncStorage.getItem('@ow_loc').then(s => {
+    AsyncStorage.getItem(LOCATION_KEY).then(s => {
       if (s) { try { setLocation(JSON.parse(s)); } catch {} }
       setLoading(false);
     }).catch(() => setLoading(false));
@@ -43,7 +44,7 @@ export function useLocation() {
 
   const save = async (loc: UserLocation) => {
     setLocation(loc);
-    AsyncStorage.setItem('@ow_loc', JSON.stringify(loc));
+    AsyncStorage.setItem(LOCATION_KEY, JSON.stringify(loc));
   };
 
   const request = useCallback(async () => {

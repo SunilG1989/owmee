@@ -21,15 +21,20 @@ export default function ProfileScreen({ navigation }: any) {
 
   useFocusEffect(useCallback(() => {
     if (!isAuthenticated) { setLoading(false); return; }
+    let cancelled = false;
     (async () => {
       try {
         const res = await Auth.me();
+        if (cancelled) return;
         setProfile(res.data);
         // Sync tier and kycStatus from backend (source of truth)
         if (res.data.tier && res.data.tier !== tier) setTier(res.data.tier as any);
         if (res.data.kyc_status && res.data.kyc_status !== kycStatus) setKycStatus(res.data.kyc_status as any);
-      } catch {} finally { setLoading(false); }
+      } catch {} finally {
+        if (!cancelled) setLoading(false);
+      }
     })();
+    return () => { cancelled = true; };
   }, [isAuthenticated]));
 
   if (!isAuthenticated) return (

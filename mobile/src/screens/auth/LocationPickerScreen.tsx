@@ -28,6 +28,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Profile } from '../../services/api'; // SPRINT8_LOCATION_BACKEND_SYNC
+import { LOCATION_KEY } from '../../utils/storageKeys';
 import Geolocation from '@react-native-community/geolocation';
 import { C, T, S, R, Shadow } from '../../utils/tokens';
 
@@ -313,7 +314,7 @@ export default function LocationPickerScreen({ onLocationSet }: Props) {
   const handleConfirm = async (final: OwmeeLocation) => {
     // SPRINT8_LOCATION_BACKEND_SYNC: Save to AsyncStorage first (fast-path),
     // then sync to backend so feed endpoints get user's coords.
-    await AsyncStorage.setItem('@ow_location', JSON.stringify(final));
+    await AsyncStorage.setItem(LOCATION_KEY, JSON.stringify(final));
     // Best-effort: don't block the user if backend is down or they're not
     // signed in (Profile.setLocation requires auth — guests can still use
     // the app with location stored only locally).

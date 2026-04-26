@@ -92,6 +92,18 @@ class ImageConfirmRequest(BaseModel):
 
 # ── Formatters ─────────────────────────────────────────────────────────────────
 
+def _seller_verified(listing: Listing, seller: User | None) -> bool:
+    """Sprint 6a badge formula. Mirrors feed_router._serialize_row exactly:
+    badge shows iff seller was verified at listing creation AND is still
+    currently verified. The snapshot column is NOT NULL (default FALSE,
+    backfilled from current state in migration 0024)."""
+    return bool(
+        listing.seller_kyc_verified_at_listing_time
+        and seller is not None
+        and seller.kyc_status == "verified"
+    )
+
+
 def _fmt_card(listing: Listing, seller_verified: bool = False) -> dict:
     """Minimal format for browse/search listing cards — includes seller_verified for UI badge."""
     return {
@@ -131,7 +143,8 @@ def _fmt_card(listing: Listing, seller_verified: bool = False) -> dict:
 
 def _fmt_detail(listing: Listing, seller: User | None, avg_rating: float | None, deal_count: int) -> dict:
     """Full format for listing detail page — all metadata visible above fold."""
-    base = _fmt_card(listing, seller_verified=(seller.kyc_status == "verified") if seller else False)
+    verified = _seller_verified(listing, seller)
+    base = _fmt_card(listing, seller_verified=verified)
     base.update({
         "description": listing.description,
         "state": listing.state,
@@ -150,8 +163,10 @@ def _fmt_detail(listing: Listing, seller: User | None, avg_rating: float | None,
         "seller": {
             "id": str(seller.id) if seller else None,
             "trust_score": seller.trust_score if seller else None,
-            "kyc_verified": seller.kyc_status == "verified" if seller else False,
-            "verified_by_owmee": seller.kyc_status == "verified" if seller else False,
+            # Sprint 6a: both fields use the snapshot+live formula so card
+            # and detail cannot disagree when KYC enters re_verification_required.
+            "kyc_verified": verified,
+            "verified_by_owmee": verified,
             "avg_rating": round(avg_rating, 1) if avg_rating else None,
             "deal_count": deal_count,
         } if seller else None,
@@ -283,7 +298,10 @@ async def search_listings(
 
     return {
         "query": q,
-        "listings": [_fmt_card(l, seller_verified=(sellers.get(l.seller_id, User()).kyc_status == "verified")) for l in listings],
+        "listings": [
+            _fmt_card(l, seller_verified=_seller_verified(l, sellers.get(l.seller_id)))
+            for l in listings
+        ],
         "count": len(listings),
         "offset": offset,
         "limit": limit,
@@ -553,7 +571,10 @@ async def browse_listings(
             sellers[s.id] = s
 
     return {
-        "listings": [_fmt_card(l, seller_verified=(sellers.get(l.seller_id, User()).kyc_status == "verified")) for l in listings],
+        "listings": [
+            _fmt_card(l, seller_verified=_seller_verified(l, sellers.get(l.seller_id)))
+            for l in listings
+        ],
         "count": len(listings),
         "offset": offset,
         "limit": limit,
@@ -639,10 +660,21 @@ async def new_since_last_visit(
     result = await db.execute(q)
     listings = result.scalars().all()
 
+    # Sprint 6a: batch-fetch sellers so the badge actually renders here too.
+    seller_ids = list({l.seller_id for l in listings})
+    sellers: dict = {}
+    if seller_ids:
+        sr = await db.execute(select(UserModel).where(UserModel.id.in_(seller_ids)))
+        for s in sr.scalars().all():
+            sellers[s.id] = s
+
     return {
         "since": last_seen.isoformat(),
         "count": len(listings),
-        "listings": [_fmt_card(l) for l in listings],
+        "listings": [
+            _fmt_card(l, seller_verified=_seller_verified(l, sellers.get(l.seller_id)))
+            for l in listings
+        ],
         "label": f"{len(listings)} new listing{'s' if len(listings) != 1 else ''} since your last visit" if listings else "You're all caught up",
     }
 
