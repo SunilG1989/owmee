@@ -25,10 +25,17 @@ class ActivityDisputeResolutionInput:
 
 @activity.defn(name="act_archive_chat_evidence")
 async def act_archive_chat_evidence(inp: ActivityDisputeInput) -> dict:
-    """Archive chat history to S3 evidence bucket under legal hold."""
-    # In production: fetch chat history from chat vendor, upload to R2 evidence bucket
-    logger.info("act_archive_chat_evidence.done", dispute_id=inp.dispute_id)
-    return {"success": True, "archived": True}
+    """Sprint 6b: chat was removed. The activity name is preserved so the
+    Temporal workflow signature stays stable, but the evidence we archive
+    is now the offer history (every price point, counter, accept/reject
+    timestamp) plus FE pickup/delivery photos — not chat messages.
+
+    Implementation of the offer-thread snapshot is deferred to the
+    dispute-flow rebuild (KNOWN_ISSUES Concern B / Sprint 6b followup).
+    For now this is a no-op success so existing workflows complete."""
+    logger.info("act_archive_chat_evidence.noop_post_sprint6b",
+                dispute_id=inp.dispute_id)
+    return {"success": True, "archived": False, "reason": "chat_removed_sprint6b"}
 
 
 @activity.defn(name="act_freeze_transaction_for_dispute")

@@ -22,6 +22,10 @@ class Offer(Base, TimestampMixin):
     expires_at = Column(DateTime(timezone=True), nullable=False)
     responded_at = Column(DateTime(timezone=True))
     reject_reason = Column(String(100))
+    # Sprint 6b — offer v2 mechanics
+    update_count = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    lockout_until = Column(DateTime(timezone=True))
+    counter_expires_at = Column(DateTime(timezone=True))
 
 
 class Reservation(Base, TimestampMixin):

@@ -89,3 +89,30 @@ Document the chosen behavior in the Sprint 6a amendment when fixed.
 
 **Priority:** low. Cosmetic; affects a small cohort. Worth tackling
 once there are real verified-after-listing sellers in the system.
+
+---
+
+## D. Alembic migration tree has two parallel heads
+
+**Where:** `backend/app/db/migrations/versions/`
+
+**What:** the migration history forks at 0018:
+- Chain A: `0018_community_launch → 0019_listing_sort_score → 0020_user_location → 0021_ai_phase2`
+- Chain B: `0018_fe_cat_kids_checklist → 0019_admin_refresh → 0020_stuck_workflows → 0021_fe_earnings → 0022_transaction_snapshot → 0023_analytics_events → 0024_kyc_to_badge → 0025_offer_v2`
+
+`alembic current` reports the dev DB at `0021_ai_phase2` (chain A's
+tip), but the schema actually contains chain B's column additions
+(e.g. `seller_kyc_verified_at_listing_time`) — meaning chain B was
+applied manually outside alembic at some point. `alembic upgrade head`
+fails with "Multiple head revisions are present."
+
+**End-user impact:** none in dev (schema is correct); fresh deploys
+would fail because alembic can't pick a single path.
+
+**Suggested fix:** create a merge migration with two `down_revision`s,
+or `alembic stamp 0025_offer_v2` after manually verifying schema
+parity. Don't do this without checking each chain-B migration's
+upgrade body against the live schema first.
+
+**Priority:** medium-high. Blocks any environment that bootstraps
+from migrations rather than a SQL dump.

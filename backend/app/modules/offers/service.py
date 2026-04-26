@@ -27,7 +27,6 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.notifications.service import push as push_notify
-from app.modules.chat.adapter import open_offer_channel
 from app.modules.risk.engine import check_offer_spam, adjust_trust_score, check_listing_risk
 from app.modules.offers.models import (
     NotificationEvent, NotificationPreference, Offer, PaymentLink,
@@ -345,9 +344,8 @@ async def accept_offer(
         f"Deal at ₹{agreed_price:,.0f}. Buyer will arrange meetup.",
         "transaction", str(txn.id),
     )
-    # Open chat channel for buyer-seller communication
-    import asyncio
-    asyncio.create_task(open_offer_channel(offer.id, txn.buyer_id, txn.seller_id))
+    # Sprint 6b: chat removed. All buyer-seller communication is now
+    # structured via offer mechanics + transaction status updates.
 
     return offer, reservation, txn, payment_link
 

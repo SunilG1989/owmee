@@ -20,7 +20,7 @@ from fastapi import APIRouter, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, select
 
-from app.core.dependencies import BasicUser, DBSession, VerifiedUser
+from app.core.dependencies import BasicUser, DBSession
 from app.core.settings import settings
 from app.modules.offers.models import (
     NotificationEvent, NotificationPreference, Offer, PaymentLink,
@@ -124,7 +124,7 @@ def _fmt_txn(t: Transaction) -> dict:
 # ── Offer endpoints ─────────────────────────────────────────────────────────────
 
 @router.post("/offers", status_code=status.HTTP_201_CREATED)
-async def make_offer_endpoint(body: MakeOfferRequest, current_user: VerifiedUser, db: DBSession):
+async def make_offer_endpoint(body: MakeOfferRequest, current_user: BasicUser, db: DBSession):
     try:
         offer = await make_offer(db, body.listing_id, current_user.user_id,
                                   body.offered_price, body.offer_note)
@@ -142,7 +142,7 @@ async def make_offer_endpoint(body: MakeOfferRequest, current_user: VerifiedUser
 
 
 @router.get("/offers/received")
-async def offers_received(current_user: VerifiedUser, db: DBSession,
+async def offers_received(current_user: BasicUser, db: DBSession,
                           status_filter: str | None = Query(None)):
     q = select(Offer).where(Offer.seller_id == current_user.user_id)
     if status_filter:
@@ -152,7 +152,7 @@ async def offers_received(current_user: VerifiedUser, db: DBSession,
 
 
 @router.get("/offers/sent")
-async def offers_sent(current_user: VerifiedUser, db: DBSession):
+async def offers_sent(current_user: BasicUser, db: DBSession):
     result = await db.execute(
         select(Offer).where(Offer.buyer_id == current_user.user_id).order_by(Offer.created_at.desc())
     )
@@ -161,7 +161,7 @@ async def offers_sent(current_user: VerifiedUser, db: DBSession):
 
 @router.post("/offers/{offer_id}/counter")
 async def counter_offer_endpoint(offer_id: UUID, body: CounterOfferRequest,
-                                  current_user: VerifiedUser, db: DBSession):
+                                  current_user: BasicUser, db: DBSession):
     try:
         offer = await counter_offer(db, offer_id, current_user.user_id, body.counter_price)
         await db.commit()
@@ -174,7 +174,7 @@ async def counter_offer_endpoint(offer_id: UUID, body: CounterOfferRequest,
 
 
 @router.post("/offers/{offer_id}/accept")
-async def accept_offer_endpoint(offer_id: UUID, current_user: VerifiedUser, db: DBSession):
+async def accept_offer_endpoint(offer_id: UUID, current_user: BasicUser, db: DBSession):
     try:
         offer, reservation, txn, payment_link = await accept_offer(db, offer_id, current_user.user_id)
         await db.commit()
@@ -200,7 +200,7 @@ async def accept_offer_endpoint(offer_id: UUID, current_user: VerifiedUser, db: 
 
 
 @router.post("/offers/{offer_id}/accept-cash")
-async def accept_offer_cash_endpoint(offer_id: UUID, current_user: VerifiedUser, db: DBSession):
+async def accept_offer_cash_endpoint(offer_id: UUID, current_user: BasicUser, db: DBSession):
     """Accept offer as cash-at-meetup deal. Skips payment link."""
     try:
         offer, reservation, txn = await accept_offer_cash(db, offer_id, current_user.user_id)
@@ -217,7 +217,7 @@ async def accept_offer_cash_endpoint(offer_id: UUID, current_user: VerifiedUser,
 
 @router.post("/offers/{offer_id}/reject")
 async def reject_offer_endpoint(offer_id: UUID, body: RejectOfferRequest,
-                                 current_user: VerifiedUser, db: DBSession):
+                                 current_user: BasicUser, db: DBSession):
     try:
         offer = await reject_offer(db, offer_id, current_user.user_id, body.reason)
         await db.commit()
@@ -227,7 +227,7 @@ async def reject_offer_endpoint(offer_id: UUID, body: RejectOfferRequest,
 
 
 @router.post("/offers/{offer_id}/withdraw")
-async def withdraw_offer_endpoint(offer_id: UUID, current_user: VerifiedUser, db: DBSession):
+async def withdraw_offer_endpoint(offer_id: UUID, current_user: BasicUser, db: DBSession):
     try:
         offer = await withdraw_offer(db, offer_id, current_user.user_id)
         await db.commit()
@@ -239,7 +239,7 @@ async def withdraw_offer_endpoint(offer_id: UUID, current_user: VerifiedUser, db
 # ── Transaction endpoints ───────────────────────────────────────────────────────
 
 @router.get("/transactions")
-async def my_transactions(current_user: VerifiedUser, db: DBSession):
+async def my_transactions(current_user: BasicUser, db: DBSession):
     result = await db.execute(
         select(Transaction).where(
             (Transaction.buyer_id == current_user.user_id) |
@@ -250,7 +250,7 @@ async def my_transactions(current_user: VerifiedUser, db: DBSession):
 
 
 @router.get("/transactions/{transaction_id}")
-async def get_transaction(transaction_id: UUID, current_user: VerifiedUser, db: DBSession):
+async def get_transaction(transaction_id: UUID, current_user: BasicUser, db: DBSession):
     result = await db.execute(select(Transaction).where(Transaction.id == transaction_id))
     txn = result.scalar_one_or_none()
     if not txn:
@@ -272,7 +272,7 @@ async def get_transaction(transaction_id: UUID, current_user: VerifiedUser, db: 
 
 @router.post("/transactions/{transaction_id}/meetup")
 async def confirm_meetup_endpoint(transaction_id: UUID, body: MeetupTimeRequest,
-                                   current_user: VerifiedUser, db: DBSession):
+                                   current_user: BasicUser, db: DBSession):
     """Seller confirms meetup time after payment. Starts the 30-min cancel window clock."""
     try:
         txn = await confirm_meetup_time(db, transaction_id, current_user.user_id, body.meetup_at)
@@ -289,7 +289,7 @@ async def confirm_meetup_endpoint(transaction_id: UUID, body: MeetupTimeRequest,
 
 @router.post("/transactions/{transaction_id}/cancel-meetup")
 async def cancel_at_meetup_endpoint(transaction_id: UUID, body: CancelAtMeetupRequest,
-                                     current_user: VerifiedUser, db: DBSession):
+                                     current_user: BasicUser, db: DBSession):
     """
     Buyer cancels deal at meetup — item doesn't match listing.
     Available within 30 minutes of agreed meetup time.
@@ -314,7 +314,7 @@ async def cancel_at_meetup_endpoint(transaction_id: UUID, body: CancelAtMeetupRe
 
 
 @router.post("/transactions/{transaction_id}/confirm")
-async def confirm_deal(transaction_id: UUID, current_user: VerifiedUser, db: DBSession):
+async def confirm_deal(transaction_id: UUID, current_user: BasicUser, db: DBSession):
     try:
         txn = await buyer_confirm_deal(db, transaction_id, current_user.user_id)
         await db.commit()
@@ -332,7 +332,7 @@ async def confirm_deal(transaction_id: UUID, current_user: VerifiedUser, db: DBS
 
 @router.post("/transactions/{transaction_id}/rate")
 async def rate_transaction(transaction_id: UUID, body: RateRequest,
-                            current_user: VerifiedUser, db: DBSession):
+                            current_user: BasicUser, db: DBSession):
     try:
         rating = await submit_rating(db, transaction_id, current_user.user_id,
                                       body.stars, body.comment, body.item_as_described)
@@ -359,7 +359,7 @@ async def rate_transaction(transaction_id: UUID, body: RateRequest,
 
 @router.put("/listings/{listing_id}/price")
 async def update_listing_price(listing_id: UUID, body: UpdatePriceRequest,
-                                current_user: VerifiedUser, db: DBSession):
+                                current_user: BasicUser, db: DBSession):
     """Update listing price. Notifies wishlisters if price drops."""
     result = await db.execute(select(Listing).where(
         Listing.id == listing_id, Listing.seller_id == current_user.user_id))
@@ -389,7 +389,7 @@ async def update_listing_price(listing_id: UUID, body: UpdatePriceRequest,
 
 @router.post("/listings/{listing_id}/mark-sold")
 async def mark_sold(listing_id: UUID, body: MarkSoldRequest,
-                    current_user: VerifiedUser, db: DBSession):
+                    current_user: BasicUser, db: DBSession):
     """
     Seller marks item as sold — on Owmee or elsewhere.
     Clears active offers, notifies buyers, reopens (sold_elsewhere) or closes (on_owmee).
@@ -435,7 +435,7 @@ async def mark_sold(listing_id: UUID, body: MarkSoldRequest,
 # ── Reputation ladder ───────────────────────────────────────────────────────────
 
 @router.get("/users/me/reputation")
-async def my_reputation(current_user: VerifiedUser, db: DBSession):
+async def my_reputation(current_user: BasicUser, db: DBSession):
     """
     Seller reputation ladder — shows progress toward Trusted Seller badge.
     India UX: gamified progress encourages first-time sellers to complete their first deal.
@@ -772,18 +772,9 @@ async def dev_pay(link_id: str, db: DBSession):
                     "transaction_status": txn.status}
     return {"status": "error"}
 
-# ── Chat token endpoint ────────────────────────────────────────────────────────
-
-@router.get("/chat/token")
-async def get_chat_token(current_user: BasicUser):
-    """Get a Stream Chat token for the mobile client."""
-    from app.modules.chat.adapter import get_chat_token
-    token = await get_chat_token(current_user.user_id)
-    return {
-        "token": token,
-        "user_id": str(current_user.user_id),
-        "api_key": settings.stream_api_key or "dev_api_key",
-    }
+# Sprint 6b — chat removed. The /chat/token endpoint and the entire
+# app.modules.chat module were deleted. Buyer-seller communication is
+# now exclusively via structured offer + transaction state.
 
 
 # ── FCM token registration ─────────────────────────────────────────────────────
@@ -861,7 +852,7 @@ class BuyNowRequest(BaseModel):
 
 
 @router.post("/orders/buy-now")
-async def buy_now(body: BuyNowRequest, current_user: VerifiedUser, db: DBSession):
+async def buy_now(body: BuyNowRequest, current_user: BasicUser, db: DBSession):
     """
     Buy Now — direct purchase at listed price.
     Creates offer at asking price + auto-accepts + creates transaction.
