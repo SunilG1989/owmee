@@ -1,0 +1,135 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- ═══════════════════════════════════════════════════════════
+         PERMISSIONS — matches OLX / Cashify / Meesho pattern
+         
+         Core principle: declare what we actually use, request at runtime,
+         never over-ask (rejected from Play Store).
+         ═══════════════════════════════════════════════════════════ -->
+
+    <!-- Network -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Location — GPS for nearby listings + meetup discovery -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!-- Camera — listing photos + KYC liveness (selfie) -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- Gallery access — split by Android version
+         Android 13+ (API 33): granular media permissions
+         Android 12 and below (API 32-): legacy READ_EXTERNAL_STORAGE -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
+    <!-- Writing to public storage only needed pre-Android 10 (API 28) -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+
+    <!-- Notifications — Android 13+ needs runtime grant -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Vibration for haptics (Paytm / PhonePe pattern) -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- ═══════════════════════════════════════════════════════════
+         HARDWARE FEATURES — required="false" so the app still
+         installs on devices without a camera (tablets, emulators).
+         Play Store filters accordingly.
+         ═══════════════════════════════════════════════════════════ -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.front" android:required="false" />
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+    <uses-feature android:name="android.hardware.location.network" android:required="false" />
+
+    <!-- ═══════════════════════════════════════════════════════════
+         QUERIES — Android 11+ (API 30) requires declaring which
+         external apps we intend to launch via intents.
+         Without this, startActivity() silently fails on Android 11+.
+         ═══════════════════════════════════════════════════════════ -->
+    <queries>
+        <!-- Camera app -->
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
+        <!-- Gallery / photo picker -->
+        <intent>
+            <action android:name="android.intent.action.GET_CONTENT" />
+            <data android:mimeType="image/*" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.PICK" />
+            <data android:mimeType="image/*" />
+        </intent>
+        <!-- UPI apps (GPay, PhonePe, Paytm) — required for local transactions -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="upi" />
+        </intent>
+        <!-- Browser for opening listings / policy links -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+        <!-- Dialer for calling support -->
+        <intent>
+            <action android:name="android.intent.action.DIAL" />
+        </intent>
+        <!-- Share sheet -->
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="text/plain" />
+        </intent>
+    </queries>
+
+    <application
+        android:name=".MainApplication"
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:allowBackup="false"
+        android:theme="@style/AppTheme"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:usesCleartextTraffic="true"
+        android:requestLegacyExternalStorage="true">
+
+        <activity
+            android:name=".MainActivity"
+            android:label="@string/app_name"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- ═══════════════════════════════════════════════════════
+             FileProvider — required for react-native-image-picker
+             camera captures to work on Android 7+ (API 24).
+             
+             Without this: camera opens, user captures, result is NULL
+             because Android refuses to expose file:// URIs across
+             process boundaries after Nougat.
+             
+             With this: camera captures stored in app cache, exposed
+             via content:// URI to our own process. Safe + sandboxed.
+             ═══════════════════════════════════════════════════════ -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_provider_paths" />
+        </provider>
+    </application>
+</manifest>

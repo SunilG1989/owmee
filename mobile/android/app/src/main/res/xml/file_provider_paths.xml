@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FileProvider paths for react-native-image-picker.
+
+  These paths let the FileProvider expose specific directories via
+  content:// URIs. The camera intent writes captured photos into
+  cache/, which we then expose here.
+
+  Without file-paths matching the library's expected location,
+  camera captures return with no URI or a FileUriExposedException.
+-->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- App-internal cache: where react-native-image-picker writes camera captures -->
+    <cache-path name="cache" path="." />
+    <!-- App-internal files -->
+    <files-path name="files" path="." />
+    <!-- External cache (SD card / emulated storage) — used on some devices -->
+    <external-cache-path name="external_cache" path="." />
+    <!-- External files — legacy location for camera temp files -->
+    <external-files-path name="external_files" path="." />
+    <!-- Legacy external storage paths — for Android 6 / 7 devices -->
+    <external-path name="external" path="." />
+</paths>
