@@ -32,29 +32,12 @@ edge case but is now user-visible.
 
 ---
 
-## B. No UI to view your own offers (Sprint 6b deliverable never landed)
+## B. ~~No UI to view your own offers~~ — RESOLVED
 
-**Where:** product gap. `mobile/src/screens/OffersScreen.tsx` exists
-but is unreachable — no `Tab.Screen`, no `navigate('Offers')` caller.
-
-**What:** Sprint 6 brief §3 (Deliverable 6b) specified renaming the
-"Deals" tab to "My Offers" with a new `MyOffersScreen` and the offer
-v2 mechanics (3-update limit, counter flow, cooldown). Sprint 6b was
-never shipped — only Sprint 6a (KYC inversion) and Sprint 8 (home
-redesign + AI listing flow) landed.
-
-**End-user impact:** buyers and sellers cannot see their own offer
-history or pending counter-offers anywhere in the app. The offer
-endpoints exist on the backend but no mobile screen consumes them.
-
-**Suggested fix:** ship Sprint 6b. At minimum: a `MyOffersScreen`
-reachable from Profile that lists active/countered/rejected/accepted
-offers per the brief. Offer v2 backend (update_count, lockout_until,
-counter_price, counter_expires_at) is also unshipped per the same
-sprint brief.
-
-**Priority:** high (core marketplace feature missing). Tracking as a
-sprint, not a hotfix.
+Sprint 6b shipped on 2026-04-30. `OffersScreen` is now reachable via
+the `MyOffers` route from the Profile menu, and exposes the v2
+mechanics (update-price with 3-revision lock, counter accept/decline,
+48h counter clock, 7-day cooldown).
 
 ---
 

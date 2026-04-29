@@ -42,3 +42,17 @@ gemini-1.5-flash in .env (separate quota pool).
 README.md plus docs/SETUP.md, docs/DEV_NOTES.md, docs/TROUBLESHOOTING.md.
 Sprint briefs at the repo root (SPRINT_6_*.md, ARCHITECTURE_AMENDMENT_V3.md).
 KNOWN_ISSUES.md tracks pre-existing gaps surfaced post-fix.
+
+## Sprint 6b (shipped)
+
+Sprint 6b shipped on 2026-04-30. It removed the chat module entirely
+and replaced free-form negotiation with structured offer mechanics:
+- POST /v1/offers/{id}/update-price (capped at 3 revisions; then locked)
+- 48h counter window (counter_expires_at) when seller counters
+- 7-day cooldown (lockout_until) on rejection or counter-expiry
+- Offer-thread is now the dispute evidence (chat-archive Temporal
+  activity is a named no-op pending the snapshot rebuild)
+
+Migration: 0025_offer_v2. Mobile: OffersScreen now reachable as the
+MyOffers route from Profile, with update-price + counter accept/decline
++ cooldown rendering on the Sent tab.
