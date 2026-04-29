@@ -106,6 +106,9 @@ export default function ProfileScreen({ navigation }: any) {
         <TouchableOpacity style={s.menuRow} onPress={() => navigation.navigate('MyListings')}>
           <Text style={{ fontSize: 16 }}>📦</Text><Text style={s.menuLabel}>My listings</Text><Text style={s.menuArrow}>›</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={s.menuRow} onPress={() => navigation.navigate('MyOffers')}>
+          <Text style={{ fontSize: 16 }}>✉️</Text><Text style={s.menuLabel}>My offers</Text><Text style={s.menuArrow}>›</Text>
+        </TouchableOpacity>
             <TouchableOpacity style={s.menuRow} onPress={() => navigation.navigate('MyFeVisits')}>
           <Text style={{ fontSize: 16 }}>📦</Text><Text style={s.menuLabel}>Your FE visits</Text><Text style={s.menuArrow}>›</Text>
         </TouchableOpacity>

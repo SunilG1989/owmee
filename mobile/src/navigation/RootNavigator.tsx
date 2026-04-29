@@ -21,6 +21,7 @@ import { C, T, S, R, Shadow } from '../utils/tokens';
 import HomeScreen from '../screens/HomeScreen';
 import SearchScreen from '../screens/SearchScreen';
 import CreateListingScreen from '../screens/listings/CreateListingScreen';
+import OffersScreen from '../screens/OffersScreen';
 import ProfileScreen from '../screens/profile/ProfileScreen';
 import ListingDetailScreen from '../screens/listings/ListingDetailScreen';
 import TransactionDetailScreen from '../screens/TransactionDetailScreen';
@@ -275,6 +276,8 @@ export default function RootNavigator() {
           component={LocationPickerRoute}
           options={{ animation: 'slide_from_bottom', presentation: 'modal' }}
         />
+        {/* Sprint 6b: My Offers (Received / Sent / Deals) */}
+        <RootStack.Screen name="MyOffers" component={OffersScreen} options={{ animation: 'slide_from_right' }} />
         {/* Sprint 8 / Phase 2: AI-Assisted Listing — SPRINT8_PHASE2_AI */}
         <RootStack.Screen name="AIListingCamera" component={AIListingCameraScreen} options={{ animation: 'slide_from_bottom', presentation: 'fullScreenModal' }} />
         <RootStack.Screen name="AIListingSuggest" component={AIListingSuggestScreen} options={{ animation: 'slide_from_right' }} />

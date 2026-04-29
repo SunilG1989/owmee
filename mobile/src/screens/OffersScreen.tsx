@@ -20,13 +20,58 @@ export default function OffersScreen({ navigation }: any) {
   const load = useCallback(async()=>{if(!refreshing)setLoading(true);try{if(tab==='deals'){const r=await Transactions.list();setDeals(r.data.transactions||r.data||[]);}else{const r=tab==='received'?await Offers.received():await Offers.sent();setOffers(r.data.offers||r.data||[]);}}catch{}finally{setLoading(false);setRefreshing(false);}}, [tab,refreshing]);
   useFocusEffect(useCallback(()=>{load();},[tab]));
 
-  const renderOffer=({item}:{item:Offer})=>{const exp=item.expires_at&&new Date(item.expires_at)<new Date();const rem=item.expires_at?Math.max(0,Math.floor((new Date(item.expires_at).getTime()-Date.now())/60000)):null;
+  // Sprint 6b: prompt the buyer for a new offer price and call update-price.
+  // Falls back to a noop alert on Android where Alert.prompt isn't available.
+  const promptUpdatePrice=(o:Offer)=>{
+    if(!Alert.prompt){Alert.alert('Update price','Available on iOS only — Android update-price UI in followup');return;}
+    Alert.prompt('Update your offer',`Current: ${formatPrice(o.amount)}\nUpdates left: ${o.updates_remaining ?? Math.max(0,3-(o.update_count??0))}`,(val:string)=>{
+      const p=parseFloat(val);
+      if(!val||isNaN(p)||p<=0)return;
+      Offers.updatePrice(o.id,p).then(()=>load()).catch((e:any)=>{
+        const code=(e?.response?.data?.detail?.error||'').toString();
+        if(code==='UPDATE_LIMIT_REACHED')Alert.alert('No updates left','You\'ve used all 3 price updates. Wait for the seller to respond.');
+        else Alert.alert('Error','Could not update price');
+      });
+    },undefined,String(o.amount),'number-pad');
+  };
+
+  const renderOffer=({item}:{item:Offer})=>{
+    const exp=item.expires_at&&new Date(item.expires_at)<new Date();
+    const rem=item.expires_at?Math.max(0,Math.floor((new Date(item.expires_at).getTime()-Date.now())/60000)):null;
+    // Sprint 6b — counter window + update-price affordances on the Sent tab.
+    const counterRem=item.counter_expires_at?Math.max(0,Math.floor((new Date(item.counter_expires_at).getTime()-Date.now())/60000)):null;
+    const updatesLeft=item.updates_remaining ?? Math.max(0,3-(item.update_count??0));
+    const lockoutActive=item.lockout_until?new Date(item.lockout_until)>new Date():false;
     return(<TouchableOpacity style={s.card} onPress={()=>navigation.navigate('ListingDetail',{listingId:item.listing_id})}>
       <View style={s.row}>{item.listing_thumbnail?<Image source={{uri:item.listing_thumbnail}} style={s.thumb} resizeMode={"cover"}/>:<View style={[s.thumb,s.tp]}><Text style={{fontSize:20}}>📦</Text></View>}
         <View style={{flex:1}}><Text style={s.title} numberOfLines={1}>{item.listing_title}</Text><View style={{flexDirection:'row',gap:8,alignItems:'center'}}><Text style={s.amt}>{formatPrice(item.amount)}</Text><Text style={s.lp}>{formatPrice(item.listing_price)}</Text></View>
           {item.note&&<Text style={s.note} numberOfLines={1}>"{item.note}"</Text>}
-          <View style={{flexDirection:'row',gap:8,marginTop:4}}><Text style={s.time}>{timeAgo(item.created_at)}</Text>{rem!==null&&!exp&&<Text style={[s.exp,rem<60&&{color:C.red}]}>{rem<60?`${rem}m left`:`${Math.floor(rem/60)}h left`}</Text>}{exp&&<Text style={[s.exp,{color:C.red}]}>Expired</Text>}</View></View></View>
+          <View style={{flexDirection:'row',gap:8,marginTop:4,flexWrap:'wrap'}}>
+            <Text style={s.time}>{timeAgo(item.created_at)}</Text>
+            {rem!==null&&!exp&&<Text style={[s.exp,rem<60&&{color:C.red}]}>{rem<60?`${rem}m left`:`${Math.floor(rem/60)}h left`}</Text>}
+            {exp&&<Text style={[s.exp,{color:C.red}]}>Expired</Text>}
+            {tab==='sent'&&item.status==='pending'&&!exp&&<Text style={[s.exp,updatesLeft===0&&{color:C.text3}]}>{updatesLeft} update{updatesLeft===1?'':'s'} left</Text>}
+            {item.status==='countered'&&counterRem!==null&&counterRem>0&&<Text style={[s.exp,{color:C.honey}]}>Counter: {counterRem<60?`${counterRem}m`:`${Math.floor(counterRem/60)}h`} to respond</Text>}
+          </View>
+        </View></View>
       {tab==='received'&&item.status==='pending'&&!exp&&(<View style={s.acts}><TouchableOpacity style={s.accBtn} onPress={async()=>{try{const r=await Offers.accept(item.id);const txnId=r.data?.transaction_id;load();if(txnId)navigation.navigate('TransactionDetail',{transactionId:txnId});}catch{Alert.alert('Error','Failed');}}}><Text style={{fontSize:13,color:'#fff',fontWeight:'600'}}>Accept</Text></TouchableOpacity><TouchableOpacity style={s.ctrBtn} onPress={()=>{Alert.prompt?Alert.prompt('Counter offer','Enter your price (₹)',(val:string)=>{if(val&&parseFloat(val)>0){Offers.counter(item.id,parseFloat(val)).then(()=>load()).catch(()=>Alert.alert('Error','Failed'));}},undefined,undefined,'number-pad'):Alert.alert('Counter','Counter-offer coming soon')}}><Text style={{fontSize:13,color:C.honey,fontWeight:'600'}}>Counter</Text></TouchableOpacity><TouchableOpacity style={s.rejBtn} onPress={async()=>{try{await Offers.reject(item.id);load();}catch{Alert.alert('Error','Failed');}}}><Text style={{fontSize:13,color:C.text3}}>Decline</Text></TouchableOpacity></View>)}
+      {tab==='sent'&&item.status==='pending'&&!exp&&(<View style={s.acts}>
+        <TouchableOpacity disabled={updatesLeft===0} style={[s.ctrBtn,updatesLeft===0&&{borderColor:C.border,opacity:0.5}]} onPress={()=>promptUpdatePrice(item)}>
+          <Text style={{fontSize:13,color:updatesLeft===0?C.text4:C.honey,fontWeight:'600'}}>{updatesLeft===0?'Locked — seller decides':'Update price'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.rejBtn} onPress={async()=>{try{await Offers.withdraw(item.id);load();}catch{Alert.alert('Error','Failed');}}}>
+          <Text style={{fontSize:13,color:C.text3}}>Withdraw</Text>
+        </TouchableOpacity>
+      </View>)}
+      {tab==='sent'&&item.status==='countered'&&!exp&&(<View style={s.acts}>
+        <TouchableOpacity style={s.accBtn} onPress={async()=>{try{const r=await Offers.accept(item.id);const txnId=r.data?.transaction_id;load();if(txnId)navigation.navigate('TransactionDetail',{transactionId:txnId});}catch{Alert.alert('Error','Failed');}}}>
+          <Text style={{fontSize:13,color:'#fff',fontWeight:'600'}}>Accept counter {item.counter_price?`(${formatPrice(item.counter_price)})`:''}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.rejBtn} onPress={async()=>{try{await Offers.reject(item.id);load();}catch{Alert.alert('Error','Failed');}}}>
+          <Text style={{fontSize:13,color:C.text3}}>Decline</Text>
+        </TouchableOpacity>
+      </View>)}
+      {tab==='sent'&&lockoutActive&&item.status!=='accepted'&&<View style={s.stBar}><Text style={s.stText}>Cooldown until {new Date(item.lockout_until!).toLocaleDateString()}</Text></View>}
       {item.status==='accepted'&&<View style={s.stBar}><Text style={s.stText}>✓ Accepted</Text></View>}
     </TouchableOpacity>);};
 

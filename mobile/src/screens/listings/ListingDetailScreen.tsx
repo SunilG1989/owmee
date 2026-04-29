@@ -72,14 +72,36 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
   const makeOffer = async () => {
     if (!isAuthenticated) { navigation.navigate('AuthFlow'); return; }
     try {
-      // FIX: Offers.create now sends offered_price (matches backend schema)
       await Offers.create(listingId, parseFloat(offerAmt), offerNote || undefined);
       setShowOffer(false);
       setOfferAmt('');
       setOfferNote('');
-      Alert.alert('Offer sent!', 'The seller will respond within 48 hours.');
+      Alert.alert(
+        'Offer sent!',
+        'The seller will respond within 48 hours. You can update your price up to 3 times before the seller decides.',
+      );
     } catch (e: any) {
-      // FIX: use parseApiError instead of accessing detail.error directly
+      // Sprint 6b: 409 from server means OFFER_ALREADY_EXISTS or LOCKOUT_ACTIVE.
+      // Steer the buyer to "My offers" instead of generic-error-Alert.
+      const code = (e?.response?.data?.detail?.error || '').toString();
+      if (code === 'OFFER_ALREADY_EXISTS') {
+        Alert.alert(
+          'You already have an offer here',
+          'Open My Offers to update your price (up to 3 times) or wait for the seller.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'My Offers', onPress: () => { setShowOffer(false); navigation.navigate('MyOffers' as never); } },
+          ],
+        );
+        return;
+      }
+      if (code === 'LOCKOUT_ACTIVE') {
+        Alert.alert(
+          'Cooldown active',
+          'Your last offer on this listing was rejected. You can offer again in 7 days.',
+        );
+        return;
+      }
       Alert.alert('Error', parseApiError(e, 'Could not send offer'));
     }
   };
@@ -239,6 +261,9 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
         <View style={s.modalBg}><View style={s.modal}>
           <Text style={{ fontSize: 18, fontWeight: '600', color: C.text }}>Make an offer</Text>
           <Text style={{ fontSize: 13, color: C.text3, marginTop: 2 }}>Asking: {formatPrice(listing.price)}</Text>
+          <Text style={{ fontSize: 11, color: C.text4, marginTop: 6, lineHeight: 16 }}>
+            This is a binding offer. You can update your price up to 3 times. After that, the seller decides.
+          </Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 16 }}>
             <Text style={{ fontSize: 22, fontWeight: '600', color: C.text }}>₹</Text>
             <TextInput style={s.modalInput} placeholder="Your offer" placeholderTextColor={C.text4} keyboardType="numeric" value={offerAmt} onChangeText={setOfferAmt} autoFocus />

@@ -35,6 +35,9 @@ export type RootStackParams = {
   // Sprint 8 / Phase 1: Location picker re-entry (modal)
   LocationPicker: undefined;
 
+  // Sprint 6b: Buyer/seller offers list with v2 mechanics
+  MyOffers: undefined;
+
   // Sprint 7 / Phase 1: Community proof screen
   CommunityProof: undefined;
 

@@ -169,6 +169,12 @@ export interface Offer {
   listing_thumbnail?: string; offered_price?: number; amount: number;
   note?: string; status: string; counter_price?: number;
   expires_at?: string; created_at: string;
+  // Sprint 6b — offer v2 mechanics. Optional because older API responses
+  // (or older transactions returned alongside) may not include them.
+  update_count?: number;
+  updates_remaining?: number;
+  counter_expires_at?: string | null;
+  lockout_until?: string | null;
 }
 
 export interface Transaction {
@@ -296,6 +302,9 @@ export const Offers = {
   withdraw: (id: string) => api.post(`/v1/offers/${id}/withdraw`),
   received: () => api.get('/v1/offers/received'),
   sent: () => api.get('/v1/offers/sent'),
+  // Sprint 6b — buyer revises their own offer. Capped at 3 updates server-side.
+  updatePrice: (id: string, newPrice: number) =>
+    api.post(`/v1/offers/${id}/update-price`, { new_price: newPrice }),
 };
 
 // ── Transactions ─────────────────────────────────────────────────────────────
