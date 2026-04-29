@@ -30,7 +30,7 @@ from app.modules.offers.service import (
     accept_offer, accept_offer_cash, add_to_wishlist, buyer_confirm_deal,
     cancel_at_meetup, confirm_meetup_time, counter_offer, make_offer,
     notify_price_drop, process_payment_paid, reject_offer,
-    remove_from_wishlist, submit_rating, withdraw_offer,
+    remove_from_wishlist, submit_rating, update_offer_price, withdraw_offer,
 )
 from app.modules.listings.models import Listing
 
@@ -52,6 +52,11 @@ class CounterOfferRequest(BaseModel):
 
 class RejectOfferRequest(BaseModel):
     reason: str = ""
+
+
+# Sprint 6b — buyer revises their offer price (capped at 3 revisions).
+class UpdateOfferPriceRequest(BaseModel):
+    new_price: Decimal = Field(..., gt=0, le=10000000)
 
 
 class RateRequest(BaseModel):
@@ -96,6 +101,12 @@ def _fmt_offer(o: Offer) -> dict:
         "status": o.status,
         "expires_at": o.expires_at.isoformat() if o.expires_at else None,
         "created_at": o.created_at.isoformat() if o.created_at else None,
+        # Sprint 6b — offer v2 mechanics surfaced so mobile can disable
+        # the update-price button at 3 and show the counter countdown.
+        "update_count": o.update_count,
+        "updates_remaining": max(0, 3 - o.update_count),
+        "counter_expires_at": o.counter_expires_at.isoformat() if o.counter_expires_at else None,
+        "lockout_until": o.lockout_until.isoformat() if o.lockout_until else None,
     }
 
 
@@ -134,10 +145,44 @@ async def make_offer_endpoint(body: MakeOfferRequest, current_user: BasicUser, d
         msgs = {
             "LISTING_NOT_AVAILABLE": "This listing is no longer available.",
             "CANNOT_OFFER_OWN_LISTING": "You cannot make an offer on your own listing.",
-            "OFFER_ALREADY_EXISTS": "You already have an active offer on this listing.",
+            "OFFER_ALREADY_EXISTS": "You already have an active offer on this listing. Update your existing offer instead.",
             "INVALID_PRICE": "Offer price must be greater than zero.",
+            "LOCKOUT_ACTIVE": "Your last offer on this listing was rejected. You can offer again in 7 days.",
         }
-        raise HTTPException(status_code=400, detail={"error": code, "message": msgs.get(code, code)})
+        # Sprint 6b: 409 Conflict for LOCKOUT_ACTIVE / OFFER_ALREADY_EXISTS so
+        # the mobile client can branch (steer the buyer to the existing offer
+        # or surface the cooldown). Other validation errors stay 400.
+        status_code = 409 if code in ("OFFER_ALREADY_EXISTS", "LOCKOUT_ACTIVE") else 400
+        raise HTTPException(status_code=status_code, detail={"error": code, "message": msgs.get(code, code)})
+    return {"offer": _fmt_offer(offer)}
+
+
+@router.post("/offers/{offer_id}/update-price")
+async def update_offer_price_endpoint(
+    offer_id: UUID,
+    body: UpdateOfferPriceRequest,
+    current_user: BasicUser,
+    db: DBSession,
+):
+    """Sprint 6b — buyer revises the price on their existing offer.
+    Capped at 3 revisions; afterwards the offer is locked and seller must respond."""
+    try:
+        offer = await update_offer_price(db, offer_id, current_user.user_id, body.new_price)
+        await db.commit()
+    except ValueError as e:
+        code = str(e)
+        msgs = {
+            "OFFER_NOT_FOUND": "Offer not found or not yours.",
+            "UPDATE_LIMIT_REACHED": "You've used all 3 price updates. Wait for the seller to respond.",
+            "INVALID_PRICE": "New price must be greater than zero.",
+        }
+        if code.startswith("INVALID_STATUS:"):
+            raise HTTPException(status_code=409, detail={
+                "error": "INVALID_STATUS",
+                "message": "This offer can no longer be updated.",
+            })
+        status_code = 404 if code == "OFFER_NOT_FOUND" else (409 if code == "UPDATE_LIMIT_REACHED" else 400)
+        raise HTTPException(status_code=status_code, detail={"error": code, "message": msgs.get(code, code)})
     return {"offer": _fmt_offer(offer)}
 
 

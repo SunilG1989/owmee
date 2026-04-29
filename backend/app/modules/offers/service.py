@@ -138,6 +138,20 @@ async def make_offer(
     if offered_price <= 0:
         raise ValueError("INVALID_PRICE")
 
+    # Sprint 6b: 7-day cooldown after rejection/counter-expiry. The
+    # lockout_until column is set on the prior offer when it terminates
+    # negatively; we just need to honor any future-dated value here.
+    now = datetime.now(timezone.utc)
+    lockout_result = await db.execute(
+        select(func.max(Offer.lockout_until)).where(and_(
+            Offer.buyer_id == buyer_id,
+            Offer.listing_id == listing_id,
+        ))
+    )
+    lockout = lockout_result.scalar_one_or_none()
+    if lockout and lockout > now:
+        raise ValueError("LOCKOUT_ACTIVE")
+
     existing = await db.execute(
         select(Offer).where(and_(
             Offer.listing_id == listing_id,
@@ -196,16 +210,63 @@ async def counter_offer(
     if counter_price <= 0 or counter_price >= offer.offered_price:
         raise ValueError("COUNTER_MUST_BE_LESS_THAN_OFFER")
 
+    now = datetime.now(timezone.utc)
     offer.status = "countered"
     offer.counter_price = counter_price
-    offer.counter_offered_at = datetime.now(timezone.utc)
-    offer.expires_at = datetime.now(timezone.utc) + timedelta(hours=_offer_expiry_hours(counter_price))
+    offer.counter_offered_at = now
+    # Sprint 6b: counter has its own 48h clock. Buyer accepts/rejects within
+    # this window, otherwise the offer expires and the 7-day lockout kicks in.
+    offer.counter_expires_at = now + timedelta(hours=48)
+    # Predictive lockout: if buyer never responds, this date is already
+    # set. accept_offer clears it; rejection paths overwrite to a 7-day
+    # window starting now.
+    offer.lockout_until = offer.counter_expires_at + timedelta(days=7)
+    offer.expires_at = offer.counter_expires_at
 
     await _notify(
         db, offer.buyer_id,
         "offer_countered",
         "Counter-offer received",
         f"Seller countered at ₹{counter_price:,.0f} — accept or let it expire",
+        "offer", str(offer.id), bucket="message",
+    )
+    return offer
+
+
+# Sprint 6b — buyer revises their offer price. Capped at 3 revisions.
+async def update_offer_price(
+    db: AsyncSession,
+    offer_id: UUID,
+    buyer_id: UUID,
+    new_price: Decimal,
+) -> Offer:
+    result = await db.execute(select(Offer).where(Offer.id == offer_id))
+    offer = result.scalar_one_or_none()
+    if not offer or offer.buyer_id != buyer_id:
+        raise ValueError("OFFER_NOT_FOUND")
+    if offer.status != "pending":
+        # Once seller has countered, only accept/reject is allowed; once
+        # accepted/rejected, it's terminal.
+        raise ValueError(f"INVALID_STATUS:{offer.status}")
+    if offer.update_count >= 3:
+        raise ValueError("UPDATE_LIMIT_REACHED")
+    if new_price <= 0:
+        raise ValueError("INVALID_PRICE")
+
+    offer.offered_price = new_price
+    offer.update_count += 1
+    # Refresh expiry to the tier appropriate for the new price.
+    offer.expires_at = datetime.now(timezone.utc) + timedelta(
+        hours=_offer_expiry_hours(new_price)
+    )
+
+    remaining = 3 - offer.update_count
+    rem_text = f" ({remaining} update{'s' if remaining != 1 else ''} left)" if remaining > 0 else " (locked — seller must respond)"
+    await _notify(
+        db, offer.seller_id,
+        "offer_updated",
+        "Buyer updated their offer",
+        f"New price: ₹{new_price:,.0f}{rem_text}",
         "offer", str(offer.id), bucket="message",
     )
     return offer
@@ -235,6 +296,9 @@ async def accept_offer(
     now = datetime.now(timezone.utc)
     offer.status = "accepted"
     offer.responded_at = now
+    # Sprint 6b: clear the predictive lockout that counter_offer set —
+    # accepted offers don't trigger a cooldown.
+    offer.lockout_until = None
     listing.status = "reserved"
 
     reservation = Reservation(
@@ -407,12 +471,15 @@ async def reject_offer(db, offer_id, seller_id, reason=""):
         raise ValueError("OFFER_NOT_FOUND")
     if offer.status not in ("pending",):
         raise ValueError(f"INVALID_STATUS:{offer.status}")
+    now = datetime.now(timezone.utc)
     offer.status = "rejected"
-    offer.responded_at = datetime.now(timezone.utc)
+    offer.responded_at = now
     offer.reject_reason = reason[:100] if reason else None
+    # Sprint 6b: 7-day cooldown on the (buyer, listing) pair.
+    offer.lockout_until = now + timedelta(days=7)
     await _notify(db, offer.buyer_id, "offer_rejected",
         "Offer not accepted",
-        "The seller passed on your offer. Make a new offer or browse more listings.",
+        "The seller passed on your offer. You can offer again on this listing in 7 days.",
         "offer", str(offer.id), bucket="message")
     return offer
 
