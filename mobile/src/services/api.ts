@@ -314,18 +314,6 @@ export const Offers = {
     api.post(`/v1/offers/${id}/update-price`, { new_price: newPrice }),
 };
 
-// ── Disputes ─────────────────────────────────────────────────────────────────
-// Buyer-initiated post-delivery. Backend enforces VerifiedUser; mobile
-// gates on KYC before calling so the user gets the KycRequiredForAction
-// modal instead of a generic 403.
-export const Disputes = {
-  raise: (transactionId: string, reason: string, description: string) =>
-    api.post('/v1/disputes', {
-      transaction_id: transactionId, reason, description,
-    }),
-  get: (id: string) => api.get(`/v1/disputes/${id}`),
-};
-
 // ── Transactions ─────────────────────────────────────────────────────────────
 // Sprint 6c: meetup endpoints removed (confirmMeetup, cancelAtMeetup);
 // logistics is fully managed. Tracking endpoint added for the new flow.
@@ -390,14 +378,6 @@ export const Disputes = {
   raise: (transactionId: string, reason: string, description: string) =>
     api.post('/v1/disputes', { transaction_id: transactionId, reason, description }),
   get: (disputeId: string) => api.get(`/v1/disputes/${disputeId}`),
-};
-
-// ── Returns ──────────────────────────────────────────────────────────
-export const Returns = {
-  initiate: (transactionId: string, reason: string) =>
-    api.post(`/v1/transactions/${transactionId}/return`, { reason }),
-  getStatus: (transactionId: string) =>
-    api.get(`/v1/transactions/${transactionId}/return`),
 };
 
 // ── Reports & Block ──────────────────────────────────────────────────
