@@ -1,48 +1,51 @@
 /**
- * Sprint 8 Phase 1 — additional color tokens for the new home page.
- * Imports the existing palette from tokens.ts and adds:
- *   - Blockbuster deals strip (amber gradient)
- *   - Sell block (sky blue gradient)
- *   - Owmee Verified badge (forest green)
- *   - Ship indicator (info blue)
+ * theme8 — accent palette for home-page-specific surfaces.
  *
- * Kept separate from tokens.ts to avoid touching the existing palette
- * that's used across 30+ screens. Import from here in new components.
+ * Originally Sprint 8 Phase 1 added off-brand colors here (sky blue Sell
+ * block, candy-pink card backgrounds, etc) that clashed with the warm-
+ * trust v4 palette in tokens.ts. v4 update: every color here is now drawn
+ * from the same warm-amber + sage-emerald + parchment family — variety
+ * without violating brand cohesion.
+ *
+ * Card-bg palette is intentionally muted so the listing photos pop
+ * against them, not compete.
  */
 export const C8 = {
-  // Blockbuster deals strip
-  dealsAmberStart: '#FFF3D9',
-  dealsAmberEnd: '#F5E0B8',
-  dealsAccent: '#BA7517',
-  dealsTitleText: '#5A3508',
-  dealsSubtitle: '#854F0B',
-  dealsBadgeBg: '#BA7517',
+  // Blockbuster deals strip — saffron/honey gradient, matches v4 honey
+  dealsAmberStart: '#FBF1DC',     // honeyLight — same as tokens.honeyLight
+  dealsAmberEnd: '#F5E0B8',       // slightly deeper toward gold
+  dealsAccent: '#A56B22',         // honeyDeep
+  dealsTitleText: '#6E4716',      // honeyText (deepest, AA-readable)
+  dealsSubtitle: '#A56B22',       // honeyDeep
+  dealsBadgeBg: '#A56B22',
   dealsBadgeText: '#FFFFFF',
-  dealsCardShadow: 'rgba(186, 117, 23, 0.18)',
+  dealsCardShadow: 'rgba(122, 90, 53, 0.18)',  // matches Shadow.card tint
 
-  // Standalone sell block
-  sellBgStart: '#DCEBFB',
-  sellBgEnd: '#E6F1FB',
-  sellAccent: '#185FA5',
-  sellTitle: '#0C447C',
-  sellCtaBg: '#185FA5',
+  // Sell block — was sky blue (off-brand). Now warm forest, signals
+  // "trust + grow" without breaking palette unity.
+  sellBgStart: '#E5EFE9',         // forestLight
+  sellBgEnd: '#D6E5DA',           // slightly deeper
+  sellAccent: '#3D7A5C',          // forest
+  sellTitle: '#2C5E45',           // forestText
+  sellCtaBg: '#3D7A5C',
   sellCtaText: '#FFFFFF',
 
-  // Owmee Verified badge
-  verifiedBg: '#E1F5EE',
-  verifiedText: '#0F6E56',
-  verifiedDot: '#1D9E75',
+  // Owmee Verified badge — refined sage, paired with v4 forest
+  verifiedBg: '#E5EFE9',          // forestLight
+  verifiedText: '#2C5E45',        // forestText
+  verifiedDot: '#4F9272',         // forestVivid
 
-  // Ship indicator
-  shipText: '#185FA5',
+  // Ship indicator — was sky blue, now forest to keep palette cohesive
+  shipText: '#3D7A5C',
 
-  // Card image gradient backgrounds (subtle, varying per card type)
-  cardBgGray: '#F0F0F0',
-  cardBgPurple: '#F0F0FF',
-  cardBgGreen: '#E4F2EA',
-  cardBgPink: '#FFE8F0',
-  cardBgAmber: '#FFF8EB',
-  cardBgStone: '#F1EFE8',
+  // Card image gradient backgrounds — warm palette only. Variety from
+  // hue-shifts within parchment+sage+amber, NOT pink/purple/blue.
+  cardBgGray: '#F0E8D5',          // sand
+  cardBgPurple: '#EFE3DC',        // warm dusty mauve (in family)
+  cardBgGreen: '#E5EFE9',         // forestLight
+  cardBgPink: '#F5E5D8',          // warm peach (replaces candy-pink)
+  cardBgAmber: '#FBF1DC',         // honeyLight
+  cardBgStone: '#F0E9D9',         // warmer than v3
 };
 
 /**

@@ -402,7 +402,7 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
 // ── Styles ───────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f5f5f5' },
+  safe: { flex: 1, backgroundColor: C.cream },
 
   // Header
   hdr: {
@@ -412,7 +412,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 4,
-    backgroundColor: '#fff',
+    backgroundColor: C.cream,
   },
   hdrLeft: {
     flexDirection: 'row',
@@ -447,19 +447,24 @@ const s = StyleSheet.create({
     marginHorizontal: 16,
     marginTop: 6,
     marginBottom: 4,
-    paddingVertical: 9,
+    paddingVertical: 10,
     paddingHorizontal: 12,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 8,
+    // Sand-tinted instead of generic gray — matches the warm palette
+    // and reads as "input affordance" without competing with the trust
+    // strip directly below.
+    backgroundColor: C.sand,
+    borderRadius: 10,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    borderWidth: 1,
+    borderColor: C.border2,
   },
   searchIcon: { fontSize: 14 },
   searchPh: {
     flex: 1,
     fontSize: 13,
-    color: C.text4 || '#888',
+    color: C.text3,  // bumped from text4 — was failing AA on sand
   },
   searchMic: { fontSize: 14 },
 
@@ -567,13 +572,13 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    backgroundColor: C.ink || '#1a1a1a',
+    backgroundColor: C.ink,
     paddingVertical: 14,
     paddingHorizontal: 16,
   },
   guestText: {
     fontSize: 13,
-    color: '#fff',
+    color: C.white,
     fontWeight: '500',
   },
   guestArrow: { fontSize: 14, color: C.honey },

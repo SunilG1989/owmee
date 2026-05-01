@@ -465,25 +465,27 @@ const s = StyleSheet.create({
   title: { fontSize: 18, fontWeight: '700', color: C.text },
 
   banner: { marginHorizontal: 16, padding: 16, borderRadius: 10, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
-  bannerOK: { backgroundColor: '#dcfce7' },
-  bannerWarn: { backgroundColor: '#fef3c7' },
-  bannerErr: { backgroundColor: '#fee2e2' },
+  bannerOK: { backgroundColor: C.greenLight, borderColor: C.green },
+  bannerWarn: { backgroundColor: C.yellowLight, borderColor: C.yellow },
+  bannerErr: { backgroundColor: C.redLight, borderColor: C.red },
   bannerText: { fontSize: 14, color: C.text, lineHeight: 20 },
 
-  ackBox: { margin: 16, padding: 20, borderRadius: 12, backgroundColor: '#fef3c7', borderWidth: 2, borderColor: C.honey, alignItems: 'center' },
-  ackLabel: { fontSize: 12, color: C.text3, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 },
-  ackCode: { fontSize: 36, fontWeight: '800', color: C.text, letterSpacing: 8 },
-  ackHint: { fontSize: 12, color: C.text3, marginTop: 8, textAlign: 'center', lineHeight: 18 },
+  ackBox: { margin: 16, padding: 20, borderRadius: 12, backgroundColor: C.honeyLight, borderWidth: 2, borderColor: C.honey, alignItems: 'center' },
+  ackLabel: { fontSize: 12, color: C.honeyText, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1, fontWeight: '600' },
+  ackCode: { fontSize: 36, fontWeight: '800', color: C.honeyText, letterSpacing: 8 },
+  ackHint: { fontSize: 12, color: C.honeyDeep, marginTop: 8, textAlign: 'center', lineHeight: 18 },
 
-  courierBox: { marginHorizontal: 16, marginBottom: 12, padding: 12, borderRadius: 8, borderWidth: 1, borderColor: C.honey },
-  courierText: { fontSize: 14, color: C.honey, fontWeight: '600', textAlign: 'center' },
+  courierBox: { marginHorizontal: 16, marginBottom: 12, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: C.honey, backgroundColor: C.honeyLight },
+  courierText: { fontSize: 14, color: C.honeyDeep, fontWeight: '600', textAlign: 'center' },
 
   timeline: { paddingHorizontal: 24, paddingVertical: 16 },
   tlRow: { flexDirection: 'row', alignItems: 'flex-start' },
   tlGutter: { width: 18, alignItems: 'center' },
-  tlDot: { width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: C.text4, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', marginTop: 2 },
+  // Timeline dot uses surface (white) when inactive so it stands out against
+  // the cream canvas; honey when active. Color is the same regardless of theme.
+  tlDot: { width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: C.text4, backgroundColor: C.surface, alignItems: 'center', justifyContent: 'center', marginTop: 2 },
   tlDotDone: { backgroundColor: C.honey, borderColor: C.honey },
-  tlTick: { fontSize: 11, color: '#fff', fontWeight: '700' },
+  tlTick: { fontSize: 11, color: C.white, fontWeight: '700' },
   tlBar: { flex: 1, width: 2, backgroundColor: C.text4, marginTop: 2 },
   tlBarDone: { backgroundColor: C.honey },
   tlBody: { flex: 1, marginLeft: 12, paddingBottom: 20 },
@@ -498,14 +500,18 @@ const s = StyleSheet.create({
 
   actions: { paddingHorizontal: 16, gap: 12 },
   btnPrimary: { backgroundColor: C.honey, borderRadius: 10, paddingVertical: 14, alignItems: 'center' },
-  btnPrimaryText: { color: '#fff', fontSize: 15, fontWeight: '700' },
-  btnSecondary: { borderWidth: 1, borderColor: C.border, borderRadius: 10, paddingVertical: 14, alignItems: 'center' },
-  btnSecondaryText: { color: C.text3, fontSize: 14 },
+  btnPrimaryText: { color: C.white, fontSize: 15, fontWeight: '700' },
+  btnSecondary: { borderWidth: 1, borderColor: C.border, borderRadius: 10, paddingVertical: 14, alignItems: 'center', backgroundColor: C.surface },
+  btnSecondaryText: { color: C.text2, fontSize: 14, fontWeight: '500' },
   btnDisabled: { opacity: 0.5 },
 
-  refundBox: { margin: 16, padding: 16, borderRadius: 10, backgroundColor: '#fef3c7', borderWidth: 1, borderColor: '#fcd34d' },
-  refundOK: { backgroundColor: '#dcfce7', borderColor: '#86efac' },
-  refundErr: { backgroundColor: '#fee2e2', borderColor: '#fca5a5' },
+  // Refund box: amber while in-flight (matches "in progress" semantic in
+  // the rest of the app), green on completion, red on failure. Uses the
+  // v4 palette tokens — earlier these were Tailwind-default hex literals
+  // that didn't match the warm-trust aesthetic.
+  refundBox: { margin: 16, padding: 16, borderRadius: 10, backgroundColor: C.yellowLight, borderWidth: 1, borderColor: C.yellow },
+  refundOK: { backgroundColor: C.greenLight, borderColor: C.green },
+  refundErr: { backgroundColor: C.redLight, borderColor: C.red },
   refundLabel: { fontSize: 13, fontWeight: '700', color: C.text, textTransform: 'uppercase', letterSpacing: 0.5 },
   refundAmount: { fontSize: 20, fontWeight: '800', color: C.text, marginVertical: 4 },
   refundHint: { fontSize: 12, color: C.text3, lineHeight: 18 },
