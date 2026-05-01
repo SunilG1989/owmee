@@ -16,6 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthStore } from '../store/authStore';
 import { LOCATION_KEY, ONBOARDING_SEEN_KEY } from '../utils/storageKeys';
 import { C, T, S, R, Shadow } from '../utils/tokens';
+import SplashScreen from '../components/SplashScreen';
 
 // Consumer screens
 import HomeScreen from '../screens/HomeScreen';
@@ -156,6 +157,15 @@ export default function RootNavigator() {
   const { hydrate, hydrated, isAuthenticated, role } = useAuthStore();
   const [locationSet, setLocationSet] = useState<boolean | null>(null);
   const [onboardingSeen, setOnboardingSeen] = useState<boolean | null>(null);
+  // Minimum-display floor so the splash doesn't flash on fast devices —
+  // same 700ms guard Amazon / Meesho use to keep brand perception
+  // consistent regardless of cold-start speed.
+  const [splashMinElapsed, setSplashMinElapsed] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setSplashMinElapsed(true), 700);
+    return () => clearTimeout(t);
+  }, []);
 
   useEffect(() => {
     hydrate();
@@ -216,8 +226,8 @@ export default function RootNavigator() {
     }
   }, []);
 
-  if (!hydrated || locationSet === null || onboardingSeen === null) {
-    return <View style={{ flex: 1, backgroundColor: C.cream }} />;
+  if (!hydrated || locationSet === null || onboardingSeen === null || !splashMinElapsed) {
+    return <SplashScreen />;
   }
 
   // ── FE branch: if logged-in user has FE role, show the FE app ──────────────

@@ -497,9 +497,20 @@ async def txn_courier_status(
     return RedirectResponse(url=f"/admin/txn/{transaction_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
-# ── Auth-error handler: redirect to login instead of JSON 401 ─────────────────
+# ── Auth-error handler: redirect /admin/* 401s to login, fall through everywhere else ─
 # (mounted at create_app() level alongside the router include)
+#
+# Because this is registered as the *global* HTTPException handler, every
+# HTTPException raised anywhere in the app passes through here. The previous
+# version re-raised on the else branch, which bypassed FastAPI's default
+# JSON renderer and ended up at the catch-all 500 handler. Now we delegate
+# to Starlette's stock http_exception_handler so non-/admin 401s (and any
+# other HTTPException) render as proper JSON with the original status code.
+from starlette.exceptions import HTTPException as _StarletteHTTPException
+from fastapi.exception_handlers import http_exception_handler as _default_http_exception_handler
+
+
 async def admin_login_redirect_handler(request: Request, exc: HTTPException):
     if exc.status_code == 401 and request.url.path.startswith("/admin"):
         return _redirect_to_login()
-    raise exc
+    return await _default_http_exception_handler(request, exc)

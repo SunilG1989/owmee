@@ -19,10 +19,10 @@ from app.modules.kyc.service import update_user_kyc_status, record_kyc_event
 router = APIRouter()
 logger = structlog.get_logger()
 
-# TODO: replace with proper admin JWT middleware (Phase 1 exit gate)
-# For now: stub dependency that accepts any request in dev
-async def require_l2_reviewer():
-    pass
+# Admin JWT verification (KYC L2 sign-off + super-admin only).
+# Earlier this was a stub `pass` that accepted every request in dev.
+# Real implementation lives in app.modules.admin.admin_auth.
+from app.modules.admin.admin_auth import require_l2_reviewer  # noqa: F401
 
 
 class KYCDecisionRequest(BaseModel):

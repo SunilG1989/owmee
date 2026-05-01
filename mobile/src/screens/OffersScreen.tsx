@@ -74,11 +74,29 @@ export default function OffersScreen({ navigation }: any) {
 
   useFocusEffect(useCallback(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [tab]));
 
+  const canGoBack = navigation?.canGoBack?.() ?? false;
+  const renderHeader = () => (
+    <View style={s.headerRow}>
+      {canGoBack ? (
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={s.backBtn}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+        >
+          <Text style={s.backGlyph}>‹</Text>
+        </TouchableOpacity>
+      ) : null}
+      <Text style={s.hdr}>Offers</Text>
+    </View>
+  );
+
   // ── Sign-in gate ─────────────────────────────────────────────────────────
   if (!isAuthenticated) {
     return (
       <SafeAreaView style={s.safe} edges={['top']}>
-        <Text style={s.hdr}>Offers</Text>
+        {renderHeader()}
         <EmptyState
           icon="✉️"
           title="Sign in to see your offers"
@@ -280,7 +298,7 @@ export default function OffersScreen({ navigation }: any) {
 
   // ── Main ────────────────────────────────────────────────────────────────
 
-  const data = tab === 'inprogress' ? deals : offers;
+  const data: any[] = tab === 'inprogress' ? deals : offers;
   const renderItem = tab === 'inprogress' ? renderDeal as any : renderOffer as any;
   const emptyForTab = tab === 'received'
     ? { icon: '✉️', title: 'No offers received', body: 'When buyers offer on your listings, they\'ll show up here.' }
@@ -290,7 +308,7 @@ export default function OffersScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
-      <Text style={s.hdr}>Offers</Text>
+      {renderHeader()}
 
       <View style={s.tabs}>
         {TABS.map(t => (
@@ -339,9 +357,29 @@ export default function OffersScreen({ navigation }: any) {
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.cream },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: S.md,
+    paddingTop: S.sm,
+    paddingBottom: S.xs,
+    gap: S.xs,
+  },
+  backBtn: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 18,
+  },
+  backGlyph: {
+    fontSize: 30,
+    color: C.text,
+    lineHeight: 30,
+    marginTop: -3,
+  },
   hdr: {
     fontSize: T.size.xxl, fontWeight: T.weight.bold, color: C.text,
-    paddingHorizontal: S.lg, paddingTop: S.sm,
   },
   loading: { textAlign: 'center', color: C.text3, fontSize: T.size.base },
 

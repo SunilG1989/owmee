@@ -115,9 +115,9 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
             <FlatList horizontal pagingEnabled showsHorizontalScrollIndicator={false}
               data={images} keyExtractor={(_, i) => String(i)}
               onMomentumScrollEnd={e => setImgIdx(Math.round(e.nativeEvent.contentOffset.x / width))}
-              renderItem={({ item: uri, index: i }) => (
+              renderItem={({ item: uri }) => (
                 <Image
-                  source={{ uri, priority: i === 0 ? undefined : undefined }}
+                  source={{ uri }}
                   style={{ width, height: imgH }} resizeMode={"cover"}
                 />
               )}

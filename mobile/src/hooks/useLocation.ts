@@ -4,7 +4,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Geolocation from '@react-native-community/geolocation';
 import { LOCATION_KEY } from '../utils/storageKeys';
 
-export interface UserLocation { lat: number; lng: number; city: string; locality?: string; }
+export interface UserLocation {
+  lat: number;
+  lng: number;
+  city: string;
+  locality?: string;
+  state?: string;       // populated by LocationPicker after reverse geocode
+  pincode?: string;
+  fullAddress?: string;
+}
 
 export const INDIAN_CITIES = [
   { name: 'Bengaluru', lat: 12.9716, lng: 77.5946 },

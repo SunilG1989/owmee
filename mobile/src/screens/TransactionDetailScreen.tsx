@@ -312,9 +312,9 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
                   } catch (e: any) {
                     if (e?.response?.status === 403) {
                       // KYC not done — point them at the KYC-for-action screen.
-                      navigation.navigate('KycRequiredForAction' as never, {
+                      (navigation as any).navigate('KycRequiredForAction', {
                         actionLabel: 'open this dispute', returnTo: 'TransactionDetail',
-                      } as never);
+                      });
                     } else {
                       Alert.alert('Could not open dispute', parseApiError(e, 'Try again.'));
                     }
@@ -375,9 +375,9 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
                     await reload();
                   } catch (e: any) {
                     if (e?.response?.status === 403) {
-                      navigation.navigate('KycRequiredForAction' as never, {
+                      (navigation as any).navigate('KycRequiredForAction', {
                         actionLabel: 'request a return', returnTo: 'TransactionDetail',
-                      } as never);
+                      });
                     } else {
                       Alert.alert('Could not request return', parseApiError(e, 'Try again.'));
                     }
@@ -517,6 +517,10 @@ const s = StyleSheet.create({
   refundHint: { fontSize: 12, color: C.text3, lineHeight: 18 },
   refundReason: { fontSize: 11, color: C.text4, marginTop: 6, fontStyle: 'italic' },
 
+  // rowLabel is the label-above-input style used inside the Dispute /
+  // Return modals. Matches sheetTitle's weight but smaller, so a label
+  // and the input it precedes feel like one component.
+  rowLabel: { fontSize: 13, fontWeight: '600', color: C.text2, marginTop: 8, marginBottom: 6 },
   disputeHint: { fontSize: 13, color: C.text3, marginBottom: 16, lineHeight: 18 },
   reasonRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, gap: 10 },
   reasonRowOn: {},

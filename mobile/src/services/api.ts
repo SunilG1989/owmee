@@ -113,6 +113,11 @@ export interface Listing {
   listing_source?: 'self_prep' | 'fe_assisted';
   fe_visit_id?: string;
   reviewed_by?: 'none' | 'fe' | 'ops' | 'fe_and_ops';
+  // Returned by Sprint 8 ai_assistant flow when an IMEI passes CEIR check
+  imei_verified?: boolean;
+  // Sprint 4 / Pass 3 — set on listings published through the kids
+  // category. Renders the safety checklist on detail.
+  kids_safety_checklist?: { age_range?: string; cleaned?: boolean; sanitized?: boolean; defects?: string[] } | null;
   seller?: { kyc_verified?: boolean; avg_rating?: number; deal_count?: number; name?: string };
 }
 
@@ -188,6 +193,13 @@ export interface Transaction {
   id: string; listing_id: string; listing_title: string; buyer_id: string; seller_id: string;
   amount: number; status: string; created_at: string;
   payment_link?: string; payment_link_status?: string;
+  // gross_amount is what the buyer actually paid (= amount + delivery_fee
+  // if the category has a delivery fee — see Sprint pricing-rewrite).
+  // Returned by /v1/transactions/{id} but legacy code reads `amount`.
+  gross_amount?: number;
+  delivery_fee?: number;
+  net_payout?: number;
+  tds_withheld?: number;
 }
 
 export interface BrowseParams {

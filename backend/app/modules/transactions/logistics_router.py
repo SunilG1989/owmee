@@ -47,11 +47,9 @@ router = APIRouter(tags=["logistics"])
 
 # ── Auth helpers ──────────────────────────────────────────────────────────────
 
-# TODO pre-launch: wire real admin JWT verification (admin_users +
-# admin_refresh_tokens are seeded but never enforced at request time).
-# Matches the existing stub at admin/kyc_queue.require_l2_reviewer.
-async def require_admin() -> None:
-    return None
+# Admin JWT verification — see app/modules/admin/admin_auth.py.
+# Earlier this was a permissive `return None` stub.
+from app.modules.admin.admin_auth import require_admin  # noqa: F401
 
 
 async def require_fe(current_user: BasicUser) -> CurrentUser:

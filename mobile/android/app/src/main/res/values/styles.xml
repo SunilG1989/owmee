@@ -1,9 +1,21 @@
 <resources>
 
-    <!-- Base application theme. -->
+    <!-- Base application theme — what the React root view runs under. -->
     <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
-        <!-- Customize your theme here. -->
         <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
+    </style>
+
+    <!--
+        Cold-start launch theme. Applied on the launcher activity in
+        AndroidManifest.xml; MainActivity swaps to AppTheme in onCreate
+        so the splash window background is dropped before React mounts.
+        The status/nav bars match the splash bg so there's no seam.
+    -->
+    <style name="LaunchTheme" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="android:windowBackground">@drawable/launch_screen</item>
+        <item name="android:statusBarColor">@color/splash_bg</item>
+        <item name="android:navigationBarColor">@color/splash_bg</item>
+        <item name="android:windowLightStatusBar">true</item>
     </style>
 
 </resources>

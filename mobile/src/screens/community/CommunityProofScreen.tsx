@@ -236,6 +236,17 @@ export default function CommunityProofScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      {navigation?.canGoBack?.() ? (
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={styles.topBackBtn}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+        >
+          <Text style={styles.topBackGlyph}>‹</Text>
+        </TouchableOpacity>
+      ) : null}
       <ScrollView
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingBottom: 40 }}
@@ -433,18 +444,34 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: C.bg,
   },
+  topBackBtn: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  topBackGlyph: {
+    fontSize: 32,
+    color: C.text,
+    lineHeight: 32,
+    marginTop: -4,
+  },
   headerWrap: {
     paddingHorizontal: S.lg,
     paddingTop: S.lg,
     paddingBottom: S.md,
   },
   title: {
-    ...T.h1,
+    fontSize: T.h1,
     color: C.text,
     marginBottom: S.xs,
   },
   subtitle: {
-    ...T.body,
+    fontSize: T.body,
     color: C.muted,
     lineHeight: 22,
   },
@@ -465,7 +492,7 @@ const styles = StyleSheet.create({
     borderBottomColor: C.primary,
   },
   tabLabel: {
-    ...T.body,
+    fontSize: T.body,
     color: C.muted,
     fontWeight: '600',
   },
@@ -477,12 +504,12 @@ const styles = StyleSheet.create({
     paddingTop: S.md,
   },
   sectionTitle: {
-    ...T.h3,
+    fontSize: T.h3,
     color: C.text,
     marginBottom: 4,
   },
   sectionHelp: {
-    ...T.body,
+    fontSize: T.body,
     color: C.muted,
     marginBottom: S.sm,
     lineHeight: 20,
@@ -511,13 +538,13 @@ const styles = StyleSheet.create({
     marginVertical: S.sm,
   },
   statusLine: {
-    ...T.body,
+    fontSize: T.body,
     color: C.muted,
     textAlign: 'center',
     marginTop: 4,
   },
   errorLine: {
-    ...T.body,
+    fontSize: T.body,
     color: C.danger,
     textAlign: 'center',
     marginTop: 4,
@@ -531,12 +558,12 @@ const styles = StyleSheet.create({
     borderLeftColor: C.success,
   },
   validTitle: {
-    ...T.h3,
+    fontSize: T.h3,
     color: C.text,
     marginBottom: 2,
   },
   validSubtitle: {
-    ...T.body,
+    fontSize: T.body,
     color: C.muted,
   },
   primaryBtn: {
@@ -551,10 +578,9 @@ const styles = StyleSheet.create({
     backgroundColor: C.border,
   },
   primaryBtnLabel: {
-    ...T.body,
+    fontSize: 16,
     color: C.white,
     fontWeight: '700',
-    fontSize: 16,
   },
   primaryBtnLabelDisabled: {
     color: C.muted,
@@ -574,12 +600,12 @@ const styles = StyleSheet.create({
     backgroundColor: C.surfaceMuted,
   },
   communityName: {
-    ...T.body,
+    fontSize: T.body,
     color: C.text,
     fontWeight: '600',
   },
   communityMeta: {
-    ...T.caption,
+    fontSize: T.caption,
     color: C.muted,
     marginTop: 2,
   },
@@ -601,7 +627,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   uploadLabel: {
-    ...T.body,
+    fontSize: T.body,
     color: C.muted,
   },
   previewImg: {
@@ -615,7 +641,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: S.lg,
   },
   skipLabel: {
-    ...T.body,
+    fontSize: T.body,
     color: C.muted,
     textDecorationLine: 'underline',
   },

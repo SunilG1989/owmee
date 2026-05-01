@@ -106,7 +106,7 @@ export default function FeVisitConfirmationScreen({
             setCancelling(true);
             try {
               await FEVisits.cancel(visitId);
-              navigation.navigate('MainTabs');
+              navigation.navigate('MainTabs' as never);
             } catch (e: any) {
               Alert.alert(
                 'Failed',
@@ -202,7 +202,7 @@ export default function FeVisitConfirmationScreen({
 
         <TouchableOpacity
           style={st.primaryBtn}
-          onPress={() => navigation.navigate('MainTabs')}
+          onPress={() => navigation.navigate('MainTabs' as never)}
         >
           <Text style={st.primaryBtnText}>Back to home</Text>
         </TouchableOpacity>

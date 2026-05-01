@@ -57,21 +57,58 @@ export const C = {
   yellowLight: '#FBF4DD',
 
   white: '#FFFFFF',
+
+  // ── Legacy semantic aliases ──────────────────────────────────────────
+  // v3-and-earlier screens used C.primary / C.muted / C.danger /
+  // C.success / C.successBg / C.bg / C.surfaceMuted. The v4 redesign
+  // moved to honey/red/green/cream/sand vocabulary. Aliases below keep
+  // those legacy callsites compiling without forcing a screen-by-screen
+  // migration. Marked as legacy so future contributors prefer the
+  // primary names.
+  primary: '#D88A36',         // → honey
+  muted: '#8A7E6B',           // → text3
+  danger: '#B85454',          // → red
+  success: '#3E8460',         // → green
+  successBg: '#E7F1EB',       // → greenLight
+  bg: '#FAF6EE',              // → cream
+  surfaceMuted: '#F0E8D5',    // → sand
+  amber: '#D88A36',           // → honey (older Sprint 4 alias)
+  amberLight: '#FBF1DC',      // → honeyLight
 } as const;
 
 export const T = {
   size: { xs: 10, sm: 11, base: 13, md: 15, lg: 17, xl: 20, xxl: 24, display: 30 },
   weight: { regular: '400' as const, medium: '500' as const, semi: '600' as const, bold: '700' as const, heavy: '800' as const },
+
+  // ── Legacy aliases ────────────────────────────────────────────────────
+  // v3-and-earlier screens reference T.h1 / T.h2 / T.h3 / T.body / T.small /
+  // T.caption directly. The v4 redesign moved to T.size.* / T.weight.* but
+  // touching every callsite is more risk than this 8-line shim. Numeric
+  // aliases mirror the prior visual scale so screen layouts stay identical.
+  h1: 24,         // matches T.size.xxl
+  h2: 20,         // matches T.size.xl
+  h3: 17,         // matches T.size.lg
+  body: 15,       // matches T.size.md
+  small: 13,      // matches T.size.base
+  caption: 11,    // matches T.size.sm
 } as const;
 
 export const S = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24, xxxl: 32 } as const;
 export const R = { xs: 6, sm: 10, md: 14, lg: 16, xl: 20, pill: 999 } as const;
 
+// Shadow alias — older screens reference Shadow.sm. Maps to the v4 subtle.
+// (Defined after the Shadow object further down, so we extend it via
+// re-export — see end of file.)
+
+const _SUBTLE_SHADOW = { shadowColor: '#7A5A35', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1 };
+
 export const Shadow = {
   // Warmer shadow tint (#7A5A35 instead of #8B7355) so cards on cream
   // feel like the surface is actually casting a soft amber-tinted shadow,
   // not floating on a generic gray plane.
-  subtle: { shadowColor: '#7A5A35', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1 },
+  subtle: _SUBTLE_SHADOW,
+  // Legacy alias: pre-v4 code used Shadow.sm. Same value as subtle.
+  sm: _SUBTLE_SHADOW,
   card:   { shadowColor: '#7A5A35', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 10, elevation: 3 },
   lifted: { shadowColor: '#7A5A35', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.12, shadowRadius: 18, elevation: 6 },
   // glow inherits the new honey, slightly less opacity for refinement

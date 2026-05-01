@@ -5,6 +5,36 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"]
-    }
-  }
+    },
+    // Allow dynamic import() — used for lazy-loaded modules in
+    // RootNavigator and SellerProfileScreen. The RN runtime handles
+    // them; the parent tsconfig left module="commonjs" which rejects.
+    "module": "esnext",
+    // Bundler resolution mirrors how Metro/Webpack actually resolves
+    // imports. "node" would fight customConditions in the parent config.
+    "moduleResolution": "bundler",
+    // Surface NodeJS.Timeout / Buffer / atob as ambient globals — they
+    // exist in the RN runtime but the parent tsconfig doesn't ship the
+    // libs for them.
+    "lib": ["es2022", "dom"]
+  },
+  "include": ["src/**/*"],
+  "exclude": [
+    "node_modules",
+    "babel.config.js",
+    "metro.config.js",
+    "jest.config.js",
+    // We don't run tests yet; __tests__ relies on @jest/globals +
+    // react-test-renderer that aren't installed. Re-include when the
+    // test infra is set up properly.
+    "__tests__",
+    // Old timestamped backups left by patcher tooling. They reference
+    // modules that have since moved/renamed; checking them just produces
+    // noise and blocks `tsc --noEmit` from being useful.
+    "src_old",
+    "**/sprint4_pass2_backup_*",
+    "**/sprint4_hf1_backup",
+    "**/sprint4_p1_backup",
+    "**/*.preunpatch*"
+  ]
 }

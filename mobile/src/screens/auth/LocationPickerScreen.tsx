@@ -124,6 +124,8 @@ async function reverseGeocode(lat: number, lng: number): Promise<OwmeeLocation |
       summary: city.name,
       lat,
       lng,
+      fullAddress: city.name,
+      state: '',
     } as OwmeeLocation;
   }
 }

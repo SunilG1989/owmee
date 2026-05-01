@@ -67,7 +67,7 @@ export default function VerificationWallScreen({
     if (navigation.canGoBack()) {
       navigation.goBack();
     } else {
-      navigation.navigate('MainTabs');
+      navigation.navigate('MainTabs' as never);
     }
   };
 
