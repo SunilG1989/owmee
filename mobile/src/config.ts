@@ -21,7 +21,7 @@ import { Platform } from 'react-native';
 //  Railway:       'https://owmee-api.up.railway.app'
 //  Production:    'https://api.owmee.in'
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-const OVERRIDE_URL = 'http://192.168.0.4:8000';
+const OVERRIDE_URL = 'http://10.0.2.2:8000';
 
 function getBaseUrl(): string {
   if (OVERRIDE_URL) return OVERRIDE_URL;
