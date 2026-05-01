@@ -135,6 +135,10 @@ def create_app() -> FastAPI:
     app.include_router(community_router, prefix="/v1/community", tags=["community"])
     app.include_router(community_admin_router, prefix="/v1/admin/community", tags=["admin-community"])
     app.include_router(ai_assistant_router)  # SPRINT8_PHASE2_AI
+    # Sprint 6c: hybrid logistics — mounts admin + FE + buyer endpoints
+    # under their respective prefixes (paths embedded in the router itself).
+    from app.modules.transactions.logistics_router import router as logistics_router
+    app.include_router(logistics_router, tags=["logistics"])
 
     @app.get("/health", include_in_schema=False)
     async def health():
