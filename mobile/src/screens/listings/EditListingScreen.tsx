@@ -27,6 +27,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { C, T, S, R, Shadow, formatPrice } from '../../utils/tokens';
 import { Listings, AIListing } from '../../services/api';
+import { BackButton } from '../../components/ui';
 import { parseApiError } from '../../utils/errors';
 import type { RootScreen } from '../../navigation/types';
 
@@ -135,9 +136,7 @@ export default function EditListingScreen({ route, navigation }: RootScreen<'Edi
   return (
     <SafeAreaView style={st.root}>
       <View style={st.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={st.headerBtn}>
-          <Text style={st.headerBtnText}>←</Text>
-        </TouchableOpacity>
+        <BackButton />
         <Text style={st.headerTitle}>Edit listing</Text>
         <View style={st.headerBtn} />
       </View>

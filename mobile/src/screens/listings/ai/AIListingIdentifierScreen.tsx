@@ -34,6 +34,7 @@ import { launchCamera } from 'react-native-image-picker';
 
 import { C, T, S, R, Shadow, formatPrice } from '../../../utils/tokens';
 import { AIListing } from '../../../services/api';
+import { BackButton } from '../../../components/ui';
 import { parseApiError } from '../../../utils/errors';
 import type { RootScreen } from '../../../navigation/types';
 
@@ -204,9 +205,7 @@ export default function AIListingIdentifierScreen({
   return (
     <SafeAreaView style={st.root}>
       <View style={st.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={st.headerBtn}>
-          <Text style={st.headerBtnText}>←</Text>
-        </TouchableOpacity>
+        <BackButton />
         <Text style={st.headerTitle}>{isSmartphone ? 'Capture IMEI' : 'Capture serial number'}</Text>
         <View style={st.headerBtn} />
       </View>

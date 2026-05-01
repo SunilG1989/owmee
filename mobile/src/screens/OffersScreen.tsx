@@ -31,7 +31,7 @@ import { useFocusEffect } from '@react-navigation/native';
 
 import { Offers, Transactions, type Offer, type Transaction } from '../services/api';
 import { useAuthStore } from '../store/authStore';
-import { Button, Card, EmptyState, ErrorState, StatusBadge } from '../components/ui';
+import { BackButton, Button, Card, EmptyState, ErrorState, StatusBadge } from '../components/ui';
 import { confirmDestructive } from '../utils/confirm';
 import { parseApiError } from '../utils/errors';
 import { C, I, MIN_TAP, R, S, T, formatPrice, timeAgo } from '../utils/tokens';
@@ -74,20 +74,9 @@ export default function OffersScreen({ navigation }: any) {
 
   useFocusEffect(useCallback(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [tab]));
 
-  const canGoBack = navigation?.canGoBack?.() ?? false;
   const renderHeader = () => (
     <View style={s.headerRow}>
-      {canGoBack ? (
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={s.backBtn}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          accessibilityRole="button"
-          accessibilityLabel="Back"
-        >
-          <Text style={s.backGlyph}>‹</Text>
-        </TouchableOpacity>
-      ) : null}
+      <BackButton />
       <Text style={s.hdr}>Offers</Text>
     </View>
   );
@@ -361,22 +350,9 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: S.md,
-    paddingTop: S.sm,
+    paddingTop: S.xs,
     paddingBottom: S.xs,
     gap: S.xs,
-  },
-  backBtn: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 18,
-  },
-  backGlyph: {
-    fontSize: 30,
-    color: C.text,
-    lineHeight: 30,
-    marginTop: -3,
   },
   hdr: {
     fontSize: T.size.xxl, fontWeight: T.weight.bold, color: C.text,

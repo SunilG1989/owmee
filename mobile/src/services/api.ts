@@ -80,13 +80,18 @@ api.interceptors.response.use(
       orig.headers.Authorization = `Bearer ${access_token}`;
       return api(orig);
     } catch (refreshErr) {
-      // Refresh token is dead → tokens in AsyncStorage are now garbage.
-      // Without an explicit logout, hydrate() on next app launch reads the
-      // stale tokens, sets isAuthenticated=true, and the user lands on a
-      // logged-in shell whose every API call 401s. They had to re-register
-      // to recover. Clear the tokens here so the next launch shows the
-      // auth flow cleanly.
-      try { useAuthStore.getState().logout(); } catch {}
+      // Only wipe the session for *definitive* auth failures (401/403 from
+      // the refresh endpoint = the refresh token is genuinely dead).
+      // Network errors, timeouts, 5xx, or "API restarting" must NOT log
+      // the user out — they'd be forced through OTP again on the next
+      // launch despite holding valid credentials. This bug was reported
+      // by the user: close + reopen during a backend hot-reload window
+      // would silently log them out.
+      const status = (refreshErr as AxiosError)?.response?.status;
+      const refreshTokenIsDead = status === 401 || status === 403;
+      if (refreshTokenIsDead) {
+        try { useAuthStore.getState().logout(); } catch {}
+      }
       processQueue(refreshErr, null);
       return Promise.reject(refreshErr);
     } finally {

@@ -25,6 +25,7 @@ import { C, T, S, R, formatPrice } from '../utils/tokens';
 import type { RootScreen } from '../navigation/types';
 import { Transactions, Disputes, Returns, type TrackingResponse, type Transaction } from '../services/api';
 import { useAuthStore } from '../store/authStore';
+import { BackButton } from '../components/ui';
 import { parseApiError } from '../utils/errors';
 
 const DISPUTE_REASONS: { key: string; label: string }[] = [
@@ -114,9 +115,7 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
     <SafeAreaView style={s.safe} edges={['top']}>
       <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
         <View style={s.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Text style={s.back}>← Back</Text>
-          </TouchableOpacity>
+          <BackButton />
           <Text style={s.title}>Order tracking</Text>
         </View>
 

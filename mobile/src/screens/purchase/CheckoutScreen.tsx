@@ -9,6 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { C, T, S, R, Shadow, formatPrice } from '../../utils/tokens';
 import { Listings, Orders, type Listing } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
+import { BackButton } from '../../components/ui';
 import { parseApiError } from '../../utils/errors';
 import type { RootScreen } from '../../navigation/types';
 
@@ -75,7 +76,7 @@ export default function CheckoutScreen({ navigation, route }: any) {
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}><Text style={{ fontSize: 20, color: C.text2 }}>←</Text></TouchableOpacity>
+        <BackButton />
         <Text style={s.headerTitle}>Checkout</Text>
         <View style={{ width: 24 }} />
       </View>

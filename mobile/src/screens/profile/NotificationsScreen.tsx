@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { BackButton } from '../../components/ui';
 import { useFocusEffect } from '@react-navigation/native';
 import { C, T, S, R, timeAgo } from '../../utils/tokens';
 import { Notifications } from '../../services/api';
@@ -62,7 +63,7 @@ export default function NotificationsScreen({ navigation }: any) {
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}><Text style={{ fontSize: 20, color: C.text2 }}>←</Text></TouchableOpacity>
+        <BackButton />
         <Text style={s.headerTitle}>Notifications</Text>
         <View style={{ width: 24 }} />
       </View>

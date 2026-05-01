@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, ActivityIndicator, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { BackButton } from '../../components/ui';
 import { useFocusEffect } from '@react-navigation/native';
 import { C, T, S, R } from '../../utils/tokens';
 import { Wishlist, Listings, type Listing } from '../../services/api';
@@ -35,7 +36,7 @@ export default function WishlistScreen({ navigation }: any) {
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}><Text style={{ fontSize: 20, color: C.text2 }}>←</Text></TouchableOpacity>
+        <BackButton />
         <Text style={s.headerTitle}>Saved Items</Text>
         <View style={{ width: 24 }} />
       </View>

@@ -10,12 +10,26 @@
         AndroidManifest.xml; MainActivity swaps to AppTheme in onCreate
         so the splash window background is dropped before React mounts.
         The status/nav bars match the splash bg so there's no seam.
+
+        Android 12+ has a separate "system splash" rendered by the
+        framework BEFORE the activity window appears. Its background is
+        controlled by android:windowSplashScreenBackground — without
+        this, the user sees the default theme color (white) for ~150ms
+        on cold start, which is exactly the flash the user reported.
+        Pinning it to splash_bg makes the system splash, the activity
+        window background, and the JS SplashScreen all the same cream.
     -->
     <style name="LaunchTheme" parent="Theme.AppCompat.Light.NoActionBar">
         <item name="android:windowBackground">@drawable/launch_screen</item>
         <item name="android:statusBarColor">@color/splash_bg</item>
         <item name="android:navigationBarColor">@color/splash_bg</item>
         <item name="android:windowLightStatusBar">true</item>
+        <!-- Android 12+ system splash: cream all the way through. -->
+        <item name="android:windowSplashScreenBackground">@color/splash_bg</item>
+        <!-- Suppress the legacy "preview window" that fills with the
+             default windowBackground on older API levels — we already
+             draw the cream drawable so the preview is redundant. -->
+        <item name="android:windowDisablePreview">false</item>
     </style>
 
 </resources>

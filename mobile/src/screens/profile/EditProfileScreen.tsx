@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ActivityIndicator, ScrollView, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { BackButton } from '../../components/ui';
 import { C, T, S, R } from '../../utils/tokens';
 import { Auth } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
@@ -41,7 +42,7 @@ export default function EditProfileScreen({ navigation }: any) {
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}><Text style={{ fontSize: 20, color: C.text2 }}>←</Text></TouchableOpacity>
+        <BackButton />
         <Text style={s.headerTitle}>Edit Profile</Text>
         <TouchableOpacity onPress={save} disabled={saving}>
           <Text style={[s.saveText, saving && { opacity: 0.4 }]}>{saving ? 'Saving...' : 'Save'}</Text>

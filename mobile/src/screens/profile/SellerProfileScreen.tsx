@@ -5,6 +5,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, useWindowDimensions, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { BackButton } from '../../components/ui';
 import { C, T, S, R, Shadow, formatPrice, timeAgo } from '../../utils/tokens';
 import { Listings, type Listing } from '../../services/api';
 import { ListingCard, calcCardWidth } from '../../components/listing/ListingCard';
@@ -81,7 +82,7 @@ export default function SellerProfileScreen({ navigation, route }: any) {
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.headerBar}>
-        <TouchableOpacity onPress={() => navigation.goBack()}><Text style={{ fontSize: 20, color: C.text2 }}>←</Text></TouchableOpacity>
+        <BackButton />
         <Text style={s.headerTitle}>Seller profile</Text>
         <TouchableOpacity onPress={() => Alert.alert('Actions', '', [
           { text: 'Report user', onPress: () => {

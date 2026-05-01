@@ -17,6 +17,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { FEVisits } from '../../services/api';
+import { BackButton } from '../../components/ui';
 import { C, S, R, T, Shadow } from '../../utils/tokens';
 import type { RootScreen } from '../../navigation/types';
 
@@ -91,9 +92,7 @@ export default function MyFeVisitsScreen({ navigation }: RootScreen<'MyFeVisits'
   return (
     <SafeAreaView style={st.root} edges={['top']}>
       <View style={st.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={st.backBtn}>
-          <Text style={st.backGlyph}>‹</Text>
-        </TouchableOpacity>
+        <BackButton />
         <View>
           <Text style={st.h1}>Your FE visits</Text>
           <Text style={st.subtitle}>

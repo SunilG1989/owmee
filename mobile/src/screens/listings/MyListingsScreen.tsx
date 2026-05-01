@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, ActivityIndicator, Alert, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { BackButton } from '../../components/ui';
 import { useFocusEffect } from '@react-navigation/native';
 import { C, T, S, R, Shadow, formatPrice, timeAgo } from '../../utils/tokens';
 import { Listings, type Listing } from '../../services/api';
@@ -96,7 +97,7 @@ export default function MyListingsScreen({ navigation }: any) {
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}><Text style={{ fontSize: 20, color: C.text2 }}>←</Text></TouchableOpacity>
+        <BackButton />
         <Text style={s.headerTitle}>My Listings</Text>
         <TouchableOpacity onPress={() => navigation.navigate('Sell')}><Text style={{ fontSize: 24, color: C.honey }}>+</Text></TouchableOpacity>
       </View>

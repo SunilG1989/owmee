@@ -27,6 +27,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Community } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
+import { BackButton } from '../../components/ui';
 import { C, T, S, R, Shadow } from '../../utils/tokens';
 import { parseApiError } from '../../utils/errors';
 
@@ -236,17 +237,9 @@ export default function CommunityProofScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      {navigation?.canGoBack?.() ? (
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={styles.topBackBtn}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          accessibilityRole="button"
-          accessibilityLabel="Back"
-        >
-          <Text style={styles.topBackGlyph}>‹</Text>
-        </TouchableOpacity>
-      ) : null}
+      <View style={styles.topBackWrap}>
+        <BackButton />
+      </View>
       <ScrollView
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingBottom: 40 }}
@@ -444,21 +437,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: C.bg,
   },
-  topBackBtn: {
-    position: 'absolute',
-    top: 8,
-    left: 8,
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 10,
-  },
-  topBackGlyph: {
-    fontSize: 32,
-    color: C.text,
-    lineHeight: 32,
-    marginTop: -4,
+  topBackWrap: {
+    paddingTop: 4,
+    paddingLeft: 4,
   },
   headerWrap: {
     paddingHorizontal: S.lg,

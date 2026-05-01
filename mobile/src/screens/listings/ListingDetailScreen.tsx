@@ -6,6 +6,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { C, T, S, R, Shadow, formatPrice, formatDistance, timeAgo, percentOff, condStyle } from '../../utils/tokens';
 import { Listings, Offers, Wishlist, type Listing } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
+import { BackButton } from '../../components/ui';
 import { parseApiError } from '../../utils/errors';
 import type { RootScreen } from '../../navigation/types';
 
@@ -126,7 +127,7 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
             />
           ) : <View style={{ width, height: imgH, backgroundColor: C.sand, alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 56 }}>📦</Text></View>}
           {images.length > 1 && <View style={s.dots}>{images.map((_, i) => <View key={i} style={[s.dot, i === imgIdx && s.dotOn]} />)}</View>}
-          <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}><Text style={{ fontSize: 18, color: C.white }}>←</Text></TouchableOpacity>
+          <View style={s.backBtnWrap}><BackButton variant="floating" /></View>
           <TouchableOpacity style={s.shareBtn} onPress={() => Share.share({ message: `Check out ${listing.title} on Owmee for ${formatPrice(listing.price)}! https://owmee.in/listing/${listingId}` }).catch(() => {})}><Text style={{ fontSize: 16 }}>↗</Text></TouchableOpacity>
           {!isOwn && <TouchableOpacity style={s.wishBtn} onPress={toggleWish}><Text style={{ fontSize: 18, color: wishlisted ? C.red : C.text3 }}>{wishlisted ? '♥' : '♡'}</Text></TouchableOpacity>}
         </View>
@@ -285,7 +286,7 @@ const s = StyleSheet.create({
   dots: { position: 'absolute', bottom: 12, alignSelf: 'center', flexDirection: 'row', gap: 6 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.4)' },
   dotOn: { backgroundColor: C.white, width: 18, borderRadius: 3 },
-  backBtn: { position: 'absolute', top: 12, left: 16, width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.3)', alignItems: 'center', justifyContent: 'center' },
+  backBtnWrap: { position: 'absolute', top: 12, left: 12 },
   shareBtn: { position: 'absolute', top: 12, right: 64, width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.9)', alignItems: 'center', justifyContent: 'center' },
   wishBtn: { position: 'absolute', top: 12, right: 16, width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.9)', alignItems: 'center', justifyContent: 'center' },
   trustStrip: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: S.xl, paddingVertical: 10, backgroundColor: C.forestLight, borderBottomWidth: 1, borderBottomColor: C.border },

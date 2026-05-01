@@ -36,6 +36,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { C, T, S, R, Shadow, formatPrice, condStyle } from '../../../utils/tokens';
 import { C8 } from '../../../components/theme8';
 import { AIListing } from '../../../services/api';
+import { BackButton } from '../../../components/ui';
 import type { AIDraftResponse } from '../../../services/api';
 import { parseApiError } from '../../../utils/errors';
 import type { RootScreen } from '../../../navigation/types';
@@ -210,9 +211,7 @@ export default function AIListingSuggestScreen({
     <SafeAreaView style={st.root}>
       {/* Header */}
       <View style={st.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={st.headerBtn}>
-          <Text style={st.headerBtnText}>←</Text>
-        </TouchableOpacity>
+        <BackButton />
         <Text style={st.headerTitle}>Review listing</Text>
         <View style={st.headerBtn} />
       </View>
