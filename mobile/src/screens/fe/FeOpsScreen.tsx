@@ -370,7 +370,7 @@ const s = StyleSheet.create({
   tab: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: R.pill, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
   tabOn: { backgroundColor: C.honey, borderColor: C.honey },
   tabText: { fontSize: 13, color: C.text3 },
-  tabTextOn: { color: '#fff', fontWeight: '700' },
+  tabTextOn: { color: C.white, fontWeight: '700' },
 
   card: { backgroundColor: C.surface, borderRadius: 10, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: C.border },
   cardTitle: { fontSize: 15, fontWeight: '600', color: C.text },
@@ -391,7 +391,7 @@ const s = StyleSheet.create({
   input: { borderWidth: 1, borderColor: C.border, borderRadius: 8, padding: 12, color: C.text, minHeight: 44 },
 
   btnPrimary: { backgroundColor: C.honey, borderRadius: 10, paddingVertical: 14, alignItems: 'center' },
-  btnPrimaryText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  btnPrimaryText: { color: C.white, fontSize: 14, fontWeight: '700' },
   btnSecondary: { borderWidth: 1, borderColor: C.honey, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
   btnSecondaryText: { color: C.honey, fontSize: 14, fontWeight: '600' },
   btnGhost: { borderWidth: 1, borderColor: C.border, borderRadius: 10, paddingVertical: 14, alignItems: 'center' },

@@ -327,5 +327,5 @@ const st = StyleSheet.create({
     marginBottom: -4,
     ...Shadow.glow,
   },
-  fabIcon: { fontSize: 28, fontWeight: '200', color: '#fff', marginTop: -2 },
+  fabIcon: { fontSize: 28, fontWeight: '200', color: C.white, marginTop: -2 },
 });

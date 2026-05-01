@@ -35,7 +35,7 @@ const SLIDES = [
     emoji: '📱',
     title: 'Phones, laptops & more',
     sub: 'Thousands of pre-owned items near you.\nSmartphones, laptops, appliances, kids items.',
-    bg: '#F0F0FF',
+    bg: C.cream,
     accent: C.ink,
   },
 ];
@@ -155,7 +155,7 @@ const s = StyleSheet.create({
     backgroundColor: C.honey, borderRadius: R.sm, paddingVertical: 16,
     alignItems: 'center', ...Shadow.glow,
   },
-  btnText: { fontSize: 16, color: '#fff', fontWeight: '700' },
+  btnText: { fontSize: 16, color: C.white, fontWeight: '700' },
 
   note: {
     fontSize: 12, color: C.text4, textAlign: 'center', marginTop: 16, lineHeight: 18,

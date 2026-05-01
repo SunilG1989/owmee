@@ -632,7 +632,7 @@ function ConfirmAddressScreen({
             activeOpacity={0.85}
           >
             {saving ? (
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color=C.white />
             ) : (
               <Text style={s.saveBtnText}>Save and continue →</Text>
             )}
@@ -716,7 +716,7 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: C.honey, marginBottom: S.xl,
   },
   detectedIcon: {
-    width: 36, height: 36, borderRadius: 18, backgroundColor: '#fff',
+    width: 36, height: 36, borderRadius: 18, backgroundColor: C.white,
     alignItems: 'center', justifyContent: 'center',
   },
   detectedLabel: { fontSize: T.size.xs, fontWeight: '700', color: C.honeyDeep, textTransform: 'uppercase', letterSpacing: 0.5 },
@@ -742,5 +742,5 @@ const s = StyleSheet.create({
     backgroundColor: C.honey, borderRadius: R.sm, paddingVertical: 16,
     alignItems: 'center', ...Shadow.glow,
   },
-  saveBtnText: { fontSize: T.size.md, fontWeight: '700', color: '#fff' },
+  saveBtnText: { fontSize: T.size.md, fontWeight: '700', color: C.white },
 });

@@ -188,13 +188,13 @@ const s = StyleSheet.create({
   // deal variant
   dealCard: {
     width: 152,
-    backgroundColor: '#fff',
+    backgroundColor: C.white,
     borderRadius: 10,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(186,117,23,0.15)',
     marginRight: 10,
-    shadowColor: '#000',
+    shadowColor: C.ink,
     shadowOpacity: 0.08,
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 1 },
@@ -244,7 +244,7 @@ const s = StyleSheet.create({
   },
   dealStrike: {
     fontSize: 11,
-    color: C.text3 || '#999',
+    color: C.text3 || C.text3,
     textDecorationLine: 'line-through',
   },
   dealSave: {
@@ -255,11 +255,11 @@ const s = StyleSheet.create({
 
   // feed variant
   feedCard: {
-    backgroundColor: '#fff',
+    backgroundColor: C.white,
     borderRadius: 8,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#eee',
+    borderColor: C.border,
     marginBottom: 6,
   },
   feedImgWrap: {
@@ -302,7 +302,7 @@ const s = StyleSheet.create({
   },
   feedMetaLine: {
     fontSize: 10,
-    color: C.text3 || '#888',
+    color: C.text3 || C.text3,
   },
   shipText: {
     fontSize: 10,

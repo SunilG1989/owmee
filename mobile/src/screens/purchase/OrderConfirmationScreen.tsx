@@ -50,7 +50,7 @@ export default function OrderConfirmationScreen({ navigation, route }: any) {
           ].map((item, i) => (
             <View key={i} style={s.stepRow}>
               <View style={[s.stepDot, item.done && { backgroundColor: C.forest }]}>
-                <Text style={{ fontSize: 10, color: item.done ? '#fff' : C.text4, fontWeight: '700' }}>{item.step}</Text>
+                <Text style={{ fontSize: 10, color: item.done ? C.white : C.text4, fontWeight: '700' }}>{item.step}</Text>
               </View>
               {i < 4 && <View style={s.stepLine} />}
               <View style={s.stepContent}>
@@ -108,7 +108,7 @@ const s = StyleSheet.create({
   guarantee: { flexDirection: 'row', alignItems: 'center', gap: 10, width: '100%', backgroundColor: C.forestLight, borderRadius: R.sm, paddingHorizontal: 16, paddingVertical: 12, marginBottom: S.xl },
   guaranteeText: { flex: 1, fontSize: 12, color: C.forestText, fontWeight: '500', lineHeight: 17 },
   primaryBtn: { width: '100%', backgroundColor: C.honey, borderRadius: R.sm, paddingVertical: 16, alignItems: 'center', marginBottom: S.sm },
-  primaryBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  primaryBtnText: { fontSize: 15, fontWeight: '700', color: C.white },
   secondaryBtn: { width: '100%', borderRadius: R.sm, paddingVertical: 14, alignItems: 'center', borderWidth: 1, borderColor: C.honey },
   secondaryBtnText: { fontSize: 14, fontWeight: '600', color: C.honey },
 });

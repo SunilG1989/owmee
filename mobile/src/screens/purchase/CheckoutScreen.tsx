@@ -158,7 +158,7 @@ export default function CheckoutScreen({ navigation, route }: any) {
           <Text style={s.bottomSub}>Total amount</Text>
         </View>
         <TouchableOpacity style={s.payBtn} onPress={handlePay} disabled={paying} activeOpacity={0.85}>
-          {paying ? <ActivityIndicator color="#fff" /> : <Text style={s.payBtnText}>Pay {formatPrice(total)} →</Text>}
+          {paying ? <ActivityIndicator color=C.white /> : <Text style={s.payBtnText}>Pay {formatPrice(total)} →</Text>}
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -196,14 +196,14 @@ const s = StyleSheet.create({
   priceDivider: { height: 1, backgroundColor: C.border, marginVertical: 8 },
   totalLabel: { fontSize: 15, fontWeight: '700', color: C.ink },
   totalValue: { fontSize: 15, fontWeight: '700', color: C.honey },
-  guarantee: { flexDirection: 'row', gap: 12, backgroundColor: C.forestLight, borderRadius: R.lg, padding: 16, marginTop: S.xl, borderWidth: 1, borderColor: '#cde9dc' },
+  guarantee: { flexDirection: 'row', gap: 12, backgroundColor: C.forestLight, borderRadius: R.lg, padding: 16, marginTop: S.xl, borderWidth: 1, borderColor: C.border },
   guaranteeTitle: { fontSize: 14, fontWeight: '700', color: C.forest },
   guaranteeSub: { fontSize: 12, color: C.forestText, lineHeight: 17, marginTop: 2 },
   bottomBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: C.surface, borderTopWidth: 1, borderTopColor: C.border },
   bottomTotal: { fontSize: 18, fontWeight: '800', color: C.ink },
   bottomSub: { fontSize: 11, color: C.text3 },
   payBtn: { backgroundColor: C.honey, borderRadius: R.sm, paddingHorizontal: 28, paddingVertical: 14, ...Shadow.glow },
-  payBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  payBtnText: { fontSize: 15, fontWeight: '700', color: C.white },
   gate: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
   gateTitle: { fontSize: 20, fontWeight: '700', color: C.ink, marginBottom: 8 },
   gateSub: { fontSize: 13, color: C.text3, textAlign: 'center', lineHeight: 19, marginBottom: 20 },

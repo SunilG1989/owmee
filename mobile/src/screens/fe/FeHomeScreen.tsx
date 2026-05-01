@@ -45,11 +45,11 @@ function StatusPill({ status }: { status: FEVisit['status'] }) {
   const map: Record<FEVisit['status'], { bg: string; fg: string; label: string }> = {
     requested: { bg: C.sand, fg: C.text2, label: 'Requested' },
     scheduled: { bg: C.honeyLight, fg: C.honeyText, label: 'Scheduled' },
-    in_progress: { bg: '#E6F5EC', fg: '#1F6B3A', label: 'Active' },
-    completed: { bg: '#E6F0FB', fg: '#1F4E8F', label: 'Completed' },
+    in_progress: { bg: C.forestLight, fg: C.forestText, label: 'Active' },
+    completed: { bg: C.forestLight, fg: C.forest, label: 'Completed' },
     postponed: { bg: C.sand, fg: C.text2, label: 'Postponed' },
-    cancelled: { bg: '#FBE6E6', fg: '#8F1F1F', label: 'Cancelled' },
-    no_show: { bg: '#FBE6E6', fg: '#8F1F1F', label: 'No show' },
+    cancelled: { bg: C.redLight, fg: C.red, label: 'Cancelled' },
+    no_show: { bg: C.redLight, fg: C.red, label: 'No show' },
   };
   const m = map[status];
   return (
@@ -210,7 +210,7 @@ const st = StyleSheet.create({
   },
   tabActive: { backgroundColor: C.honey, borderColor: C.honey },
   tabText: { fontSize: T.body, color: C.text2, fontWeight: '500' },
-  tabTextActive: { color: '#fff', fontWeight: '600' },
+  tabTextActive: { color: C.white, fontWeight: '600' },
   card: {
     backgroundColor: C.surface, borderRadius: R.lg, padding: S.lg, marginBottom: S.md,
     ...Shadow.glow,
@@ -225,7 +225,7 @@ const st = StyleSheet.create({
   centerFill: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: S.xl },
   err: { fontSize: T.body, color: C.text2, textAlign: 'center' },
   retryBtn: { marginTop: S.md, paddingHorizontal: S.lg, paddingVertical: S.sm, backgroundColor: C.honey, borderRadius: R.md },
-  retryBtnText: { color: '#fff', fontWeight: '600' },
+  retryBtnText: { color: C.white, fontWeight: '600' },
   empty: { fontSize: T.body, color: C.text3 },
   logout: { alignSelf: 'center', padding: S.md, marginBottom: S.md },
   logoutText: { color: C.text3, fontSize: T.small },

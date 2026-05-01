@@ -24,5 +24,5 @@ const s = StyleSheet.create({
   e: { fontSize: 48, marginBottom: 16 },
   t: { fontSize: 18, fontWeight: '600', color: C.text, marginBottom: 24 },
   b: { backgroundColor: C.honey, borderRadius: R.sm, paddingHorizontal: 24, paddingVertical: 12 },
-  bt: { fontSize: 15, color: '#fff', fontWeight: '600' },
+  bt: { fontSize: 15, color: C.white, fontWeight: '600' },
 });

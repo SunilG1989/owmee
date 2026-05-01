@@ -43,19 +43,19 @@ function fmtSlot(iso: string | undefined | null): string {
 function statusMeta(status: string): { label: string; color: string; bg: string } {
   switch (status) {
     case 'requested':
-      return { label: 'Looking for a field executive', color: '#8B5A06', bg: '#FFF1D4' };
+      return { label: 'Looking for a field executive', color: C.honeyText, bg: C.honeyLight };
     case 'scheduled':
-      return { label: 'Scheduled', color: '#1F6B3A', bg: '#E6F5EC' };
+      return { label: 'Scheduled', color: C.forestText, bg: C.forestLight };
     case 'in_progress':
-      return { label: 'In progress', color: '#1F4E8C', bg: '#E4EEFB' };
+      return { label: 'In progress', color: C.forest, bg: C.forestLight };
     case 'completed':
-      return { label: 'Completed', color: '#1F6B3A', bg: '#E6F5EC' };
+      return { label: 'Completed', color: C.forestText, bg: C.forestLight };
     case 'cancelled':
-      return { label: 'Cancelled', color: '#8C2B1F', bg: '#FBE5E1' };
+      return { label: 'Cancelled', color: C.red, bg: C.redLight };
     case 'no_show':
-      return { label: 'No-show', color: '#8C2B1F', bg: '#FBE5E1' };
+      return { label: 'No-show', color: C.red, bg: C.redLight };
     case 'postponed':
-      return { label: 'Postponed', color: '#8B5A06', bg: '#FFF1D4' };
+      return { label: 'Postponed', color: C.honeyText, bg: C.honeyLight };
     default:
       return { label: status, color: C.text3, bg: C.sand };
   }
@@ -228,13 +228,13 @@ const st = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   check: {
     width: 72, height: 72, borderRadius: 36,
-    backgroundColor: '#E6F5EC',
+    backgroundColor: C.forestLight,
     alignSelf: 'center',
     alignItems: 'center', justifyContent: 'center',
     marginBottom: S.xl,
     ...Shadow.glow,
   },
-  checkIcon: { fontSize: 36, color: '#1F6B3A', fontWeight: '700' },
+  checkIcon: { fontSize: 36, color: C.forestText, fontWeight: '700' },
   h1: { fontSize: T.h1, fontWeight: '700', color: C.text, textAlign: 'center', marginBottom: 6 },
   sub: { fontSize: T.body, color: C.text3, textAlign: 'center', marginBottom: S.lg },
   statusPill: {
@@ -264,7 +264,7 @@ const st = StyleSheet.create({
     borderRadius: R.md, alignItems: 'center',
     ...Shadow.glow,
   },
-  primaryBtnText: { color: '#fff', fontSize: T.body, fontWeight: '700' },
+  primaryBtnText: { color: C.white, fontSize: T.body, fontWeight: '700' },
   cancelBtn: { paddingVertical: S.md, alignItems: 'center', marginTop: S.sm },
-  cancelBtnText: { color: '#8C2B1F', fontSize: T.small, textDecorationLine: 'underline' },
+  cancelBtnText: { color: C.red, fontSize: T.small, textDecorationLine: 'underline' },
 });

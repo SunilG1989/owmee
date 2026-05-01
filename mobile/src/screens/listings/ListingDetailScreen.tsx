@@ -126,7 +126,7 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
             />
           ) : <View style={{ width, height: imgH, backgroundColor: C.sand, alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 56 }}>📦</Text></View>}
           {images.length > 1 && <View style={s.dots}>{images.map((_, i) => <View key={i} style={[s.dot, i === imgIdx && s.dotOn]} />)}</View>}
-          <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}><Text style={{ fontSize: 18, color: '#fff' }}>←</Text></TouchableOpacity>
+          <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}><Text style={{ fontSize: 18, color: C.white }}>←</Text></TouchableOpacity>
           <TouchableOpacity style={s.shareBtn} onPress={() => Share.share({ message: `Check out ${listing.title} on Owmee for ${formatPrice(listing.price)}! https://owmee.in/listing/${listingId}` }).catch(() => {})}><Text style={{ fontSize: 16 }}>↗</Text></TouchableOpacity>
           {!isOwn && <TouchableOpacity style={s.wishBtn} onPress={toggleWish}><Text style={{ fontSize: 18, color: wishlisted ? C.red : C.text3 }}>{wishlisted ? '♥' : '♡'}</Text></TouchableOpacity>}
         </View>
@@ -203,7 +203,7 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
               const checked = !!(listing.kids_safety_checklist as any)?.[key];
               return (
                 <View key={key} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 5 }}>
-                  <Text style={{ fontSize: 16, marginRight: 8, color: checked ? '#1F6B3A' : C.text4 }}>
+                  <Text style={{ fontSize: 16, marginRight: 8, color: checked ? C.forestText : C.text4 }}>
                     {checked ? '✓' : '○'}
                   </Text>
                   <Text style={{ flex: 1, fontSize: 13, color: checked ? C.text2 : C.text4 }}>
@@ -284,13 +284,13 @@ const s = StyleSheet.create({
   imgWrap: { position: 'relative' },
   dots: { position: 'absolute', bottom: 12, alignSelf: 'center', flexDirection: 'row', gap: 6 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.4)' },
-  dotOn: { backgroundColor: '#fff', width: 18, borderRadius: 3 },
+  dotOn: { backgroundColor: C.white, width: 18, borderRadius: 3 },
   backBtn: { position: 'absolute', top: 12, left: 16, width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.3)', alignItems: 'center', justifyContent: 'center' },
   shareBtn: { position: 'absolute', top: 12, right: 64, width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.9)', alignItems: 'center', justifyContent: 'center' },
   wishBtn: { position: 'absolute', top: 12, right: 16, width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.9)', alignItems: 'center', justifyContent: 'center' },
-  trustStrip: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: S.xl, paddingVertical: 10, backgroundColor: C.forestLight, borderBottomWidth: 1, borderBottomColor: '#cde9dc' },
+  trustStrip: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: S.xl, paddingVertical: 10, backgroundColor: C.forestLight, borderBottomWidth: 1, borderBottomColor: C.border },
   trustStripText: { fontSize: T.size.sm, fontWeight: '700', color: C.forestText, flex: 1 },
-  trustScore: { backgroundColor: '#fff', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  trustScore: { backgroundColor: C.white, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   trustScoreText: { fontSize: T.size.sm, fontWeight: '700', color: C.forest },
   info: { paddingHorizontal: S.xl, paddingTop: S.lg },
   title: { fontSize: 19, fontWeight: '700', color: C.ink, lineHeight: 25, letterSpacing: -0.3 },
@@ -323,7 +323,7 @@ const s = StyleSheet.create({
   chatBtn: { flex: 1, paddingVertical: 14, borderRadius: R.sm, borderWidth: 1.5, borderColor: C.honey, alignItems: 'center' },
   chatBtnText: { fontSize: 14, fontWeight: '700', color: C.honey },
   offerBtn: { flex: 2, paddingVertical: 14, borderRadius: R.sm, backgroundColor: C.honey, alignItems: 'center', ...Shadow.glow },
-  offerBtnText: { fontSize: 14, fontWeight: '700', color: '#fff' },
+  offerBtnText: { fontSize: 14, fontWeight: '700', color: C.white },
   modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   modal: { backgroundColor: C.surface, borderTopLeftRadius: R.xl, borderTopRightRadius: R.xl, padding: S.xl },
   modalInput: { borderWidth: 0.5, borderColor: C.border, borderRadius: R.sm, paddingHorizontal: 12, paddingVertical: 12, fontSize: 16, color: C.text, backgroundColor: C.cream },

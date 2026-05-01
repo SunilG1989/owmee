@@ -88,7 +88,7 @@ export default function OtpVerifyScreen({ navigation, route }: AuthScreen<'OtpVe
           keyboardType="number-pad" maxLength={6} value={code} onChangeText={setCode} autoFocus />
         <TouchableOpacity style={[s.btn, code.length !== 6 && { opacity: 0.4 }]}
           disabled={code.length !== 6 || loading} onPress={verify}>
-          {loading ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>Verify</Text>}
+          {loading ? <ActivityIndicator color=C.white /> : <Text style={s.btnText}>Verify</Text>}
         </TouchableOpacity>
         <TouchableOpacity disabled={countdown > 0}
           onPress={async () => { try { await Auth.requestOtp(phone); setCountdown(30); } catch {} }}
@@ -111,5 +111,5 @@ const s = StyleSheet.create({
     fontSize: 24, letterSpacing: 8, color: C.text, textAlign: 'center',
     borderWidth: 0.5, borderColor: C.border, marginBottom: 24 },
   btn: { backgroundColor: C.honey, borderRadius: R.sm, paddingVertical: 14, alignItems: 'center' },
-  btnText: { fontSize: 14, color: '#fff', fontWeight: '600' },
+  btnText: { fontSize: 14, color: C.white, fontWeight: '600' },
 });

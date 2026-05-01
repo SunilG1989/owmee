@@ -107,7 +107,7 @@ const s = StyleSheet.create({
   primaryText: {
     fontSize: T.size.base,
     fontWeight: T.weight.bold,
-    color: '#fff',
+    color: C.white,
   },
   secondary: {
     paddingVertical: 12,

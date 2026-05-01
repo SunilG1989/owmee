@@ -140,7 +140,7 @@ export default function CreateListingScreen({ navigation }: any) {
         <Text style={{ fontSize: 48, marginBottom: 16 }}>🔐</Text>
         <Text style={st.gateH}>Sign in to sell</Text>
         <TouchableOpacity style={st.gateBtn} onPress={() => navigation.getParent()?.navigate('AuthFlow')}>
-          <Text style={{ fontSize: 14, color: '#fff', fontWeight: '600' }}>Sign in</Text>
+          <Text style={{ fontSize: 14, color: C.white, fontWeight: '600' }}>Sign in</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -420,7 +420,7 @@ export default function CreateListingScreen({ navigation }: any) {
                 {u ? (
                   <>
                     <Image source={{ uri: u }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
-                    <View style={st.px}><Text style={{ fontSize: 10, color: '#fff' }}>✕</Text></View>
+                    <View style={st.px}><Text style={{ fontSize: 10, color: C.white }}>✕</Text></View>
                   </>
                 ) : (
                   <View style={st.pe}>
@@ -574,7 +574,7 @@ export default function CreateListingScreen({ navigation }: any) {
               {DEFECT_OPTIONS.map(d => (
                 <TouchableOpacity key={d.key} style={[st.defectRow, defects.includes(d.key) && st.defectActive]} onPress={() => toggleDefect(d.key)}>
                   <View style={[st.checkbox, defects.includes(d.key) && st.checkboxActive]}>
-                    {defects.includes(d.key) && <Text style={{ color: '#fff', fontSize: 12 }}>✓</Text>}
+                    {defects.includes(d.key) && <Text style={{ color: C.white, fontSize: 12 }}>✓</Text>}
                   </View>
                   <Text style={st.defectLabel}>{d.label}</Text>
                 </TouchableOpacity>
@@ -673,7 +673,7 @@ export default function CreateListingScreen({ navigation }: any) {
             disabled={busy || !canProceed()}
             onPress={submit}
           >
-            {busy ? <ActivityIndicator color="#fff" /> : <Text style={st.btnT}>Publish listing</Text>}
+            {busy ? <ActivityIndicator color=C.white /> : <Text style={st.btnT}>Publish listing</Text>}
           </TouchableOpacity>
         )}
       </View>
@@ -704,7 +704,7 @@ const st = StyleSheet.create({
   catCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, marginBottom: 8, borderRadius: R.md, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface },
   catCardActive: { borderColor: C.honey, backgroundColor: C.honeyLight },
   catName: { fontSize: 16, fontWeight: '600', color: C.text },
-  catTag: { fontSize: 10, color: C.amber, fontWeight: '600', backgroundColor: C.amberLight || '#FFF8E7', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
+  catTag: { fontSize: 10, color: C.amber, fontWeight: '600', backgroundColor: C.amberLight, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
   // Condition cards
   condCard: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, marginBottom: 8, borderRadius: R.md, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface },
   condCardActive: { borderColor: C.honey, backgroundColor: C.honeyLight },
@@ -720,7 +720,7 @@ const st = StyleSheet.create({
   miniDesc: { fontSize: 11, color: C.text3, marginTop: 2 },
   // Defects
   defectRow: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, marginBottom: 4, borderRadius: R.sm },
-  defectActive: { backgroundColor: '#FFF3E0' },
+  defectActive: { backgroundColor: C.honeyLight },
   defectLabel: { fontSize: 13, color: C.text },
   checkbox: { width: 20, height: 20, borderRadius: 4, borderWidth: 1.5, borderColor: C.border, alignItems: 'center', justifyContent: 'center' },
   checkboxActive: { backgroundColor: C.honey, borderColor: C.honey },
@@ -731,11 +731,11 @@ const st = StyleSheet.create({
   px: { position: 'absolute', top: 4, right: 4, width: 20, height: 20, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
   // Toggle
   toggle: { width: 44, height: 24, borderRadius: 12, backgroundColor: C.border, justifyContent: 'center', padding: 2 },
-  toggleThumb: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#fff' },
+  toggleThumb: { width: 20, height: 20, borderRadius: 10, backgroundColor: C.white },
   // Bottom bar
   bar: { paddingHorizontal: 16, paddingVertical: 12, backgroundColor: C.surface, borderTopWidth: 0.5, borderTopColor: C.border },
   btn: { backgroundColor: C.honey, borderRadius: R.sm, paddingVertical: 14, alignItems: 'center' },
-  btnT: { fontSize: 15, color: '#fff', fontWeight: '600' },
+  btnT: { fontSize: 15, color: C.white, fontWeight: '600' },
   // Gate
   gate: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
   gateH: { fontSize: 18, fontWeight: '600', color: C.text, marginBottom: 16 },

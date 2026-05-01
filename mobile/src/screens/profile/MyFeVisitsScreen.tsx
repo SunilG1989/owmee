@@ -48,11 +48,11 @@ function StatusPill({ status }: { status: string }) {
   const map: Record<string, { bg: string; fg: string; label: string }> = {
     requested:   { bg: C.sand,        fg: C.text2,     label: 'Requested' },
     scheduled:   { bg: C.honeyLight,  fg: C.honeyText, label: 'Scheduled' },
-    in_progress: { bg: '#E6F5EC',     fg: '#1F6B3A',   label: 'In progress' },
-    completed:   { bg: '#E6F0FB',     fg: '#1F4E8F',   label: 'Completed' },
+    in_progress: { bg: C.forestLight,     fg: C.forestText,   label: 'In progress' },
+    completed:   { bg: C.forestLight,     fg: C.forest,   label: 'Completed' },
     postponed:   { bg: C.sand,        fg: C.text2,     label: 'Postponed' },
-    cancelled:   { bg: '#FBE6E6',     fg: '#8F1F1F',   label: 'Cancelled' },
-    no_show:     { bg: '#FBE6E6',     fg: '#8F1F1F',   label: 'No show' },
+    cancelled:   { bg: C.redLight,     fg: C.red,   label: 'Cancelled' },
+    no_show:     { bg: C.redLight,     fg: C.red,   label: 'No show' },
   };
   const m = map[status] || { bg: C.sand, fg: C.text2, label: status };
   return (
@@ -194,7 +194,7 @@ const st = StyleSheet.create({
     marginTop: S.md, paddingHorizontal: S.lg, paddingVertical: S.sm,
     backgroundColor: C.honey, borderRadius: R.md,
   },
-  retryBtnText: { color: '#fff', fontWeight: '600' },
+  retryBtnText: { color: C.white, fontWeight: '600' },
   empty: { fontSize: T.h3, color: C.text, fontWeight: '600' },
   emptyHint: { fontSize: T.body, color: C.text3, marginTop: S.sm, textAlign: 'center' },
 });

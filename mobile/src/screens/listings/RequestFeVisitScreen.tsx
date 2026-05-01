@@ -258,7 +258,7 @@ const st = StyleSheet.create({
   chip: { paddingHorizontal: S.md, paddingVertical: S.sm, borderRadius: R.pill, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, marginRight: S.sm, marginBottom: S.sm },
   chipActive: { backgroundColor: C.honey, borderColor: C.honey },
   chipText: { color: C.text2, fontSize: T.body, fontWeight: '500' },
-  chipTextActive: { color: '#fff', fontWeight: '600' },
+  chipTextActive: { color: C.white, fontWeight: '600' },
   inputLabel: { fontSize: T.small, color: C.text3, fontWeight: '600', marginBottom: 4 },
   input: { backgroundColor: C.surface, borderRadius: R.md, padding: S.md, fontSize: T.body, color: C.text, borderWidth: 1, borderColor: C.border },
   slot: { padding: S.md, backgroundColor: C.surface, borderRadius: R.md, borderWidth: 1, borderColor: C.border, marginBottom: S.sm },
@@ -267,5 +267,5 @@ const st = StyleSheet.create({
   slotTextActive: { color: C.honeyText, fontWeight: '600' },
   footer: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: S.lg, backgroundColor: C.cream, borderTopWidth: 1, borderTopColor: C.border },
   primaryBtn: { backgroundColor: C.honey, paddingVertical: S.md, borderRadius: R.md, alignItems: 'center', ...Shadow.glow },
-  primaryBtnText: { color: '#fff', fontSize: T.body, fontWeight: '700' },
+  primaryBtnText: { color: C.white, fontSize: T.body, fontWeight: '700' },
 });

@@ -7,6 +7,7 @@
  */
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { C } from '../utils/tokens';
 import { C8 } from './theme8';
 
 interface Props {
@@ -55,13 +56,15 @@ const s = StyleSheet.create({
     alignItems: 'center',
     gap: 14,
     borderWidth: 1,
-    borderColor: 'rgba(55, 138, 221, 0.15)',
+    // v4: was a sky-blue tint to match the old SellBlock palette; now a
+    // soft warm border that matches the v4 forest-tinted background.
+    borderColor: C.border,
   },
   iconCircle: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#fff',
+    backgroundColor: C.white,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: C8.sellAccent,

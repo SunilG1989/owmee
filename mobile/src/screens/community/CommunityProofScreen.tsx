@@ -523,12 +523,12 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   validCard: {
-    backgroundColor: C.successBg || '#E8F5E9',
+    backgroundColor: C.successBg,
     borderRadius: R.md,
     padding: 14,
     marginTop: S.sm,
     borderLeftWidth: 4,
-    borderLeftColor: C.success || '#2E7D32',
+    borderLeftColor: C.success,
   },
   validTitle: {
     ...T.h3,
@@ -552,7 +552,7 @@ const styles = StyleSheet.create({
   },
   primaryBtnLabel: {
     ...T.body,
-    color: '#fff',
+    color: C.white,
     fontWeight: '700',
     fontSize: 16,
   },
@@ -571,7 +571,7 @@ const styles = StyleSheet.create({
   },
   communityRowActive: {
     borderColor: C.primary,
-    backgroundColor: C.surfaceMuted || '#F0F7FF',
+    backgroundColor: C.surfaceMuted,
   },
   communityName: {
     ...T.body,

@@ -104,7 +104,7 @@ export default function RegisterScreen({ navigation }: any) {
             activeOpacity={0.85}
           >
             {loading ? (
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color=C.white />
             ) : (
               <Text style={s.btnText}>Send OTP</Text>
             )}
@@ -168,7 +168,7 @@ const s = StyleSheet.create({
     backgroundColor: C.honey, borderRadius: R.sm, paddingVertical: 16,
     alignItems: 'center', ...Shadow.glow,
   },
-  btnText: { fontSize: T.size.md, color: '#fff', fontWeight: '700' },
+  btnText: { fontSize: T.size.md, color: C.white, fontWeight: '700' },
 
   infoCard: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 10,

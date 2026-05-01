@@ -211,11 +211,11 @@ const st = StyleSheet.create({
     backgroundColor: C.honey, paddingVertical: S.md, borderRadius: R.md,
     alignItems: 'center', ...Shadow.glow,
   },
-  primaryBtnText: { color: '#fff', fontSize: T.body, fontWeight: '700' },
+  primaryBtnText: { color: C.white, fontSize: T.body, fontWeight: '700' },
   infoBox: { backgroundColor: C.sand, padding: S.md, borderRadius: R.md },
   infoText: { color: C.text2, textAlign: 'center' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: S.xl },
   err: { fontSize: T.body, color: C.text2, textAlign: 'center' },
   retryBtn: { marginTop: S.md, paddingHorizontal: S.lg, paddingVertical: S.sm, backgroundColor: C.honey, borderRadius: R.md },
-  retryBtnText: { color: '#fff', fontWeight: '600' },
+  retryBtnText: { color: C.white, fontWeight: '600' },
 });

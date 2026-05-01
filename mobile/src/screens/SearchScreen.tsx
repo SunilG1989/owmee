@@ -135,7 +135,7 @@ export default function SearchScreen({ navigation, route }: TabScreen<'Search'>)
               <Text style={{ fontSize: T.size.md, color: C.text2 }}>Clear all</Text>
             </TouchableOpacity>
             <TouchableOpacity style={s.applyBtn} onPress={() => { setShowFilters(false); doSearch(query, condition, category, sort); }}>
-              <Text style={{ fontSize: T.size.md, color: '#fff', fontWeight: '600' }}>Apply filters</Text>
+              <Text style={{ fontSize: T.size.md, color: C.white, fontWeight: '600' }}>Apply filters</Text>
             </TouchableOpacity>
           </View>
         </View></View>
@@ -151,7 +151,7 @@ const s = StyleSheet.create({
   input: { flex: 1, fontSize: T.size.md, color: C.text, paddingVertical: 0 },
   filterBtn: { padding: 4, position: 'relative' },
   filterBadge: { position: 'absolute', top: -4, right: -4, width: 16, height: 16, borderRadius: 8, backgroundColor: C.honey, alignItems: 'center', justifyContent: 'center' },
-  filterBadgeText: { fontSize:10, color: '#fff', fontWeight: '700' },
+  filterBadgeText: { fontSize:10, color: C.white, fontWeight: '700' },
   chips: { paddingHorizontal: S.xl, paddingVertical: S.sm, gap: 6 },
   chip: { paddingHorizontal: S.md, paddingVertical: 6, borderRadius: R.pill, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface },
   chipOn: { backgroundColor: C.honeyLight, borderColor: C.honey },

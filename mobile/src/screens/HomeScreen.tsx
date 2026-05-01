@@ -439,7 +439,7 @@ const s = StyleSheet.create({
     color: C.ink || C.text,
     flex: 1,
   },
-  locArrow: { fontSize: 11, color: C.text3 || '#999' },
+  locArrow: { fontSize: 11, color: C.text3 || C.text3 },
   bell: { fontSize: 18 },
 
   // Search
@@ -514,7 +514,7 @@ const s = StyleSheet.create({
   },
   sectionSub: {
     fontSize: 11,
-    color: C.text3 || '#888',
+    color: C.text3 || C.text3,
     marginTop: 2,
   },
 
@@ -538,7 +538,7 @@ const s = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: 16,
     paddingBottom: 24,
-    color: C.text4 || '#999',
+    color: C.text4 || C.text3,
     fontSize: 11,
   },
 
@@ -557,7 +557,7 @@ const s = StyleSheet.create({
   },
   emptySub: {
     fontSize: 13,
-    color: C.text3 || '#888',
+    color: C.text3 || C.text3,
     textAlign: 'center',
     lineHeight: 18,
   },

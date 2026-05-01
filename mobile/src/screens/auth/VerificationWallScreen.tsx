@@ -180,7 +180,7 @@ const st = StyleSheet.create({
     alignItems: 'center',
     ...Shadow.glow,
   },
-  primaryBtnText: { color: '#fff', fontSize: T.body, fontWeight: '700' },
+  primaryBtnText: { color: C.white, fontSize: T.body, fontWeight: '700' },
   orRow: {
     flexDirection: 'row',
     alignItems: 'center',

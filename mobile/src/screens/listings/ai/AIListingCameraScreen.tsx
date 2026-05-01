@@ -317,7 +317,7 @@ const st = StyleSheet.create({
     paddingVertical: S.xs,
     borderRadius: R.pill,
   },
-  heroBadgeText: { color: '#fff', fontSize: T.size.sm, fontWeight: T.weight.semi },
+  heroBadgeText: { color: C.white, fontSize: T.size.sm, fontWeight: T.weight.semi },
   thumbsRow: { paddingTop: S.md, paddingBottom: S.sm, gap: S.sm },
   thumbWrap: { position: 'relative', marginRight: S.sm },
   thumb: { width: 64, height: 64, borderRadius: R.md, backgroundColor: C.sand },
@@ -332,7 +332,7 @@ const st = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  thumbXText: { color: '#fff', fontSize: 14, lineHeight: 14 },
+  thumbXText: { color: C.white, fontSize: 14, lineHeight: 14 },
   thumbAdd: {
     width: 64,
     height: 64,

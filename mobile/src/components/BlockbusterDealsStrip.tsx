@@ -127,7 +127,7 @@ const s = StyleSheet.create({
   countText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#fff',
+    color: C.white,
   },
   cardsWrap: {
     paddingHorizontal: 16,

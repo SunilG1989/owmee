@@ -112,7 +112,7 @@ export default function MyListingsScreen({ navigation }: any) {
             <Text style={s.emptyTitle}>No listings yet</Text>
             <Text style={s.emptySub}>Tap + to list your first item</Text>
             <TouchableOpacity style={s.emptyBtn} onPress={() => navigation.navigate('Sell')}>
-              <Text style={{ fontSize: 14, color: '#fff', fontWeight: '600' }}>Create listing</Text>
+              <Text style={{ fontSize: 14, color: C.white, fontWeight: '600' }}>Create listing</Text>
             </TouchableOpacity>
           </View>
         }

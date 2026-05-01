@@ -60,7 +60,7 @@ export default function TransactionListScreen({ navigation }: any) {
       <View style={{flexDirection:'row',marginBottom:12,gap:8}}>
           {(['buying','selling','completed'] as const).map(tab => (
             <TouchableOpacity key={tab} style={{flex:1,paddingVertical:10,borderRadius:R.sm,backgroundColor:activeTab===tab?C.honey:C.surface,borderWidth:activeTab===tab?0:0.5,borderColor:C.border,alignItems:'center'}} onPress={()=>setActiveTab(tab)}>
-              <Text style={{fontSize:12,fontWeight:'600',color:activeTab===tab?'#fff':C.text3,textTransform:'capitalize'}}>{tab}</Text>
+              <Text style={{fontSize:12,fontWeight:'600',color:activeTab===tab?C.white:C.text3,textTransform:'capitalize'}}>{tab}</Text>
             </TouchableOpacity>
           ))}
         </View>

@@ -44,7 +44,7 @@ export default function ProfileScreen({ navigation }: any) {
         <Text style={s.gateH}>Your profile</Text>
         <Text style={s.gateSub}>Sign in to manage listings, track deals, and build your reputation.</Text>
         <TouchableOpacity style={s.gateBtn} onPress={() => navigation.getParent()?.navigate('AuthFlow')}>
-          <Text style={{ fontSize: 14, color: '#fff', fontWeight: '600' }}>Sign in</Text>
+          <Text style={{ fontSize: 14, color: C.white, fontWeight: '600' }}>Sign in</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -151,7 +151,7 @@ const s = StyleSheet.create({
   trustBadge: { backgroundColor: C.sand, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   trustText: { fontSize: 11, color: C.text3, fontWeight: '600' },
   kycBanner: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.honeyLight, borderRadius: R.lg, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: C.honey },
-  kycIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
+  kycIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: C.white, alignItems: 'center', justifyContent: 'center' },
   kycTitle: { fontSize: 15, fontWeight: '600', color: C.honeyDeep },
   statsGrid: { flexDirection: 'row', gap: 8, marginBottom: 16 },
   statCard: { flex: 1, backgroundColor: C.surface, borderRadius: R.sm, padding: 12, borderWidth: 1, borderColor: C.border, alignItems: 'center' },
