@@ -436,7 +436,40 @@ export const FE = {
     api.post(`/v1/fe/visits/${visitId}/images/request`, { content_type: contentType, sort_order: sortOrder }),
   confirmVisitImage: (visitId: string, r2Key: string, sortOrder: number = 0) =>
     api.post(`/v1/fe/visits/${visitId}/images/confirm`, { r2_key: r2Key, sort_order: sortOrder }),
+
+  // ── Sprint 6c: post-purchase logistics (pickups + deliveries) ──────────
+  myPickups: () => api.get<{ pickups: FePickup[] }>('/v1/fe/pickups'),
+  completePickup: (txnId: string, payload: {
+    inspection_passed: boolean;
+    inspection_notes: string;
+    inspection_photo_keys: string[];
+  }) => api.post(`/v1/fe/pickups/${txnId}/complete`, payload),
+  myDeliveries: () => api.get<{ deliveries: FePickup[] }>('/v1/fe/deliveries'),
+  completeDelivery: (txnId: string, payload: {
+    handover_photo_key: string;
+    ack_code: string;
+  }) => api.post(`/v1/fe/deliveries/${txnId}/complete`, payload),
 };
+
+export interface FePickup {
+  transaction_id: string;
+  status: string;
+  listing_title: string | null;
+  gross_amount: string;
+  delivery_fee: string;
+  delivery_mode: 'fe' | 'courier' | null;
+  pickup_fe_id: string | null;
+  delivery_fe_id: string | null;
+  courier_name: string | null;
+  courier_booking_id: string | null;
+  courier_tracking_url: string | null;
+  pickup_inspection_passed: boolean | null;
+  pickup_inspection_notes: string | null;
+  delivery_handover_photo_key: string | null;
+  at_hub_at: string | null;
+  routed_at: string | null;
+  delivered_at: string | null;
+}
 
 // Stubs for endpoints not yet in backend (Phase 3+)
 export const SellerDashboard = { stats: async () => ({ data: null }) };

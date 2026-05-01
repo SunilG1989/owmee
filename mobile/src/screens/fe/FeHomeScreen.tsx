@@ -103,13 +103,22 @@ export default function FeHomeScreen({ navigation }: RootScreen<'FeHome'>) {
           <Text style={st.h1}>Field visits</Text>
           <Text style={st.subtitle}>{counts.active} active · {counts.scheduled} upcoming</Text>
         </View>
-        <TouchableOpacity
-          onPress={() => navigation.navigate('FeVisitHistory')}
-          style={st.iconBtn}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Text style={st.iconGlyph}>⌕</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('FeOps')}
+            style={st.iconBtn}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={st.iconGlyph}>📦</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('FeVisitHistory')}
+            style={st.iconBtn}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={st.iconGlyph}>⌕</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={st.tabs}>

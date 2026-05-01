@@ -47,6 +47,8 @@ import OrderConfirmationScreen from '../screens/purchase/OrderConfirmationScreen
 import FeHomeScreen from '../screens/fe/FeHomeScreen';
 import FeVisitDetailScreen from '../screens/fe/FeVisitDetailScreen';
 import FeCaptureScreen from '../screens/fe/FeCaptureScreen';
+// Sprint 6c: post-purchase pickups + deliveries
+import FeOpsScreen from '../screens/fe/FeOpsScreen';
 import FeVisitHistoryScreen from '../screens/fe/FeVisitHistoryScreen';
 import RequestFeVisitScreen from '../screens/listings/RequestFeVisitScreen';
 import CommunityProofScreen from '../screens/community/CommunityProofScreen';
@@ -141,6 +143,7 @@ function FeRootStack() {
     <NavigationContainer>
       <FeStack.Navigator screenOptions={{ headerShown: false }} initialRouteName="FeHome">
         <FeStack.Screen name="FeHome" component={FeHomeScreen} />
+        <FeStack.Screen name="FeOps" component={FeOpsScreen} options={{ animation: 'slide_from_right' }} />
         <FeStack.Screen name="FeVisitDetail" component={FeVisitDetailScreen} options={{ animation: 'slide_from_right' }} />
         <FeStack.Screen name="FeCapture" component={FeCaptureScreen} options={{ animation: 'slide_from_right' }} />
         <FeStack.Screen name="FeVisitHistory" component={FeVisitHistoryScreen} options={{ animation: 'slide_from_right' }} />

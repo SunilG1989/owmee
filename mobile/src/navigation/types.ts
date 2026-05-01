@@ -28,6 +28,7 @@ export type RootStackParams = {
   VerificationWall: { intent?: 'buy' | 'sell' | 'publish' } | undefined;
   // FE-role screens
   FeHome: undefined;
+  FeOps: undefined;  // Sprint 6c: post-purchase pickups + deliveries
   FeVisitDetail: { visitId: string };
   FeCapture: { visitId: string };
   FeVisitHistory: undefined;
