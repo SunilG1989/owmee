@@ -36,7 +36,13 @@ export default function SearchScreen({ navigation, route }: TabScreen<'Search'>)
   const [showFilters, setShowFilters] = useState(false);
   const debounce = useRef<NodeJS.Timeout | null>(null);
 
-  useEffect(() => { if (initCat) doSearch('', condition, initCat, sort); }, [initCat]);
+  // Re-run the category-prefilled search when filters change too. Without
+  // condition/sort in deps, changing those filters did nothing until the
+  // user typed in the search box.
+  useEffect(() => {
+    if (initCat) doSearch('', condition, initCat, sort);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initCat, condition, sort]);
 
   // T2-10: cleanup debounce on unmount
   useEffect(() => { return () => { if (debounce.current) clearTimeout(debounce.current); }; }, []);

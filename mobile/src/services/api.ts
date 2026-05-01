@@ -80,6 +80,13 @@ api.interceptors.response.use(
       orig.headers.Authorization = `Bearer ${access_token}`;
       return api(orig);
     } catch (refreshErr) {
+      // Refresh token is dead → tokens in AsyncStorage are now garbage.
+      // Without an explicit logout, hydrate() on next app launch reads the
+      // stale tokens, sets isAuthenticated=true, and the user lands on a
+      // logged-in shell whose every API call 401s. They had to re-register
+      // to recover. Clear the tokens here so the next launch shows the
+      // auth flow cleanly.
+      try { useAuthStore.getState().logout(); } catch {}
       processQueue(refreshErr, null);
       return Promise.reject(refreshErr);
     } finally {

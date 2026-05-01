@@ -159,14 +159,9 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
       navigation.navigate('AuthFlow');
       return;
     }
-    if (kycStatus !== 'verified') {
-      navigation.navigate('KycRequiredForAction', {
-        actionLabel: 'List an item',
-        returnTo: 'Home',
-      });
-      return;
-    }
-    // Verified — go to Sell tab
+    // Sprint 6a: phone OTP is sufficient to list. KYC is the badge, not a
+    // gate. The earlier kycStatus === 'verified' check here was a regression
+    // that blocked the entire listing funnel for new sellers.
     (navigation as any).navigate('Sell');
   };
 

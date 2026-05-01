@@ -15,13 +15,15 @@
 import { Platform } from 'react-native';
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  CHANGE THIS LINE PER ENVIRONMENT
-//  Empty string '' = use platform auto-detect (recommended for dev)
+//  KEEP THIS AS '' IN GIT.
+//  Empty string '' = use platform auto-detect (correct for prod + dev).
+//  For local-only override, change in your working tree and run:
+//    git update-index --skip-worktree mobile/src/config.ts
 //  Real device:   'http://192.168.x.x:8000'
 //  Railway:       'https://owmee-api.up.railway.app'
 //  Production:    'https://api.owmee.in'
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-const OVERRIDE_URL = 'http://10.0.2.2:8000';
+const OVERRIDE_URL = '';
 
 function getBaseUrl(): string {
   if (OVERRIDE_URL) return OVERRIDE_URL;
