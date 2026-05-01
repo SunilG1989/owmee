@@ -25,14 +25,47 @@ class Comparable(BaseModel):
 
 
 class AIDetected(BaseModel):
-    """Structured output from Claude vision."""
+    """Structured output from Gemini vision.
+
+    Mirrors the listing schema 1:1 — every field here corresponds to a
+    column we'll populate on the Listing row when the seller publishes.
+    Earlier versions had only 6 fields and the seller had to fill the
+    other 8 manually; that was the dominant cause of "AI didn't fill
+    anything" complaints.
+    """
+    # Core identification
     category_slug: str | None = None
     category_confidence: float = 0.0
     brand: str | None = None
     model: str | None = None
-    storage: str | None = None
-    color: str | None = None
+
+    # Specs (electronics only; null for non-electronics)
+    storage: str | None = None              # "128GB" | "1TB"
+    ram: str | None = None                  # "8GB" | "16GB"
+    processor: str | None = None            # "Apple A15" | "Snapdragon 8 Gen 2"
+    screen_size: str | None = None          # "6.1\"" | "13\""
+
+    # Cosmetic
+    color: str | None = None                # "Midnight Black"
+    purchase_year: int | None = None        # extracted from box/receipt if visible
+
+    # Condition (guess + per-surface detail)
     condition_guess: str | None = None      # like_new | good | fair
+    screen_condition: str | None = None     # flawless | minor_scratches | cracked
+    body_condition: str | None = None       # flawless | minor_dents | major_damage
+    defects: list[str] = Field(default_factory=list)  # short bullets ("hairline crack on top edge")
+    battery_health: int | None = None       # 0-100, only if Settings → Battery screen visible
+
+    # Extras seller can verify
+    accessories: str | None = None          # "box, charger, original earphones" (free text)
+    warranty_status: str | None = None      # "expired" | "active till YYYY-MM"
+
+    # Pricing (integrated into vision so the model sees the photos)
+    suggested_price_inr: int | None = None
+    price_confidence: float = 0.0
+    price_reasoning: str | None = None
+
+    # Authoring
     title_suggestion: str | None = None
     description_suggestion: str | None = None
     flags: list[str] = Field(default_factory=list)  # nsfw, multiple_items, etc.

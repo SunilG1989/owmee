@@ -68,14 +68,36 @@ log = logging.getLogger(__name__)
 
 
 class _GeminiVisionOut(BaseModel):
-    """Schema we ask Gemini to fill. Matches AIDetected loosely."""
+    """Schema we ask Gemini to fill. Mirrors AIDetected — every field
+    here corresponds to a Listing column we want populated end-to-end
+    so the seller doesn't have to type."""
+    # Identification
     category_slug: str | None = None
     category_confidence: float = 0.0
     brand: str | None = None
     model: str | None = None
+    # Specs
     storage: str | None = None
+    ram: str | None = None
+    processor: str | None = None
+    screen_size: str | None = None
+    # Cosmetic
     color: str | None = None
+    purchase_year: int | None = None
+    # Condition detail
     condition_guess: str | None = None
+    screen_condition: str | None = None
+    body_condition: str | None = None
+    defects: list[str] = []
+    battery_health: int | None = None
+    # Extras
+    accessories: str | None = None
+    warranty_status: str | None = None
+    # Pricing — integrated so the model uses the photos when valuing
+    suggested_price_inr: int | None = None
+    price_confidence: float = 0.0
+    price_reasoning: str | None = None
+    # Authoring
     title_suggestion: str | None = None
     description_suggestion: str | None = None
     flags: list[str] = []
@@ -241,16 +263,40 @@ async def detect_from_images(
             )
             return _failed("parse_failed")
 
-    # Translate Gemini's output to the AIDetected domain type.
+    # Translate Gemini's output to the AIDetected domain type. Numeric
+    # fields are coerced defensively because Gemini occasionally returns
+    # numbers as strings ("128GB" comes back fine, but "8" for ram once
+    # came back as 8 instead of "8GB" — we accept both shapes).
     flags = parsed.flags if isinstance(parsed.flags, list) else []
+    defects = parsed.defects if isinstance(parsed.defects, list) else []
     return AIDetected(
+        # Identification
         category_slug=parsed.category_slug,
         category_confidence=float(parsed.category_confidence or 0.0),
         brand=parsed.brand,
         model=parsed.model,
+        # Specs
         storage=parsed.storage,
+        ram=parsed.ram,
+        processor=parsed.processor,
+        screen_size=parsed.screen_size,
+        # Cosmetic
         color=parsed.color,
+        purchase_year=parsed.purchase_year,
+        # Condition detail
         condition_guess=parsed.condition_guess,
+        screen_condition=parsed.screen_condition,
+        body_condition=parsed.body_condition,
+        defects=[str(d)[:120] for d in defects][:8],  # cap length + count
+        battery_health=parsed.battery_health,
+        # Extras
+        accessories=parsed.accessories,
+        warranty_status=parsed.warranty_status,
+        # Pricing
+        suggested_price_inr=int(parsed.suggested_price_inr) if parsed.suggested_price_inr else None,
+        price_confidence=float(parsed.price_confidence or 0.0),
+        price_reasoning=parsed.price_reasoning,
+        # Authoring
         title_suggestion=parsed.title_suggestion,
         description_suggestion=parsed.description_suggestion,
         flags=[str(f) for f in flags],

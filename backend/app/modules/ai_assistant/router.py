@@ -153,7 +153,10 @@ async def draft_from_image(
     s = state_row.scalar()
     user_state = s if s else "Karnataka"
 
-    # Price estimate (best-effort — empty result is fine)
+    # Price estimate priority order (best signal first):
+    #   1. Comparables (real recent sales in the seller's region) — gold standard
+    #   2. Vision-suggested price (model saw the photos + condition + defects)
+    #   3. Text-only AI price (degenerate fallback, no photo signal)
     fallback_reason = None
     price_result = await price_estimator.estimate_price(
         db,
@@ -165,7 +168,17 @@ async def draft_from_image(
         category_slug=detected.category_slug,
     )
 
-    if price_result["source"] == "none":
+    # If comparables didn't yield a price but vision did, use vision's
+    # number (it factored in the actual photos, including defects we
+    # don't otherwise transmit to the text price estimator).
+    if price_result["source"] in ("none", "ai") and detected.suggested_price_inr:
+        price_result = {
+            "price": float(detected.suggested_price_inr),
+            "source": "vision",
+            "reasoning": detected.price_reasoning or "Inferred from photos",
+            "comparables": price_result.get("comparables", []),
+        }
+    elif price_result["source"] == "none":
         fallback_reason = price_result.get("reasoning")
 
     # Persist the draft. ai_response is JSONB; pass JSON string and CAST.
@@ -766,7 +779,8 @@ async def draft_from_images(
     s = state_row.scalar()
     user_state = s if s else "Karnataka"
 
-    # Price estimate (best-effort)
+    # Price estimate (same priority order as the single-image draft path:
+    # comparables > vision > text-only AI fallback)
     price_result = await price_estimator.estimate_price(
         db,
         brand=detected.brand,
@@ -777,7 +791,14 @@ async def draft_from_images(
         category_slug=detected.category_slug,
     )
 
-    if price_result["source"] == "none" and fallback_reason is None:
+    if price_result["source"] in ("none", "ai") and detected.suggested_price_inr:
+        price_result = {
+            "price": float(detected.suggested_price_inr),
+            "source": "vision",
+            "reasoning": detected.price_reasoning or "Inferred from photos",
+            "comparables": price_result.get("comparables", []),
+        }
+    elif price_result["source"] == "none" and fallback_reason is None:
         fallback_reason = price_result.get("reasoning")
 
     # Persist draft
