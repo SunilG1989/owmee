@@ -45,6 +45,16 @@ def _img_url(key: str | None) -> str | None:
         return generate_presigned_download_url(key, expires_in=60 * 60 * 6)
     except Exception:
         return None
+
+
+def _fe_inspection_required(price) -> bool:
+    """Mirror of offers.service.requires_fe_inspection — kept here so the
+    listings router doesn't need to import the offers service just for this
+    one boolean."""
+    from decimal import Decimal as _D
+    if price is None:
+        return False
+    return (price if isinstance(price, _D) else _D(str(price))) > _D("1000")
 from app.modules.listings.models import Category, Listing, ListingImage
 from app.modules.listings.service import (
     add_image_record, create_draft, get_all_categories, publish_listing,
@@ -155,6 +165,9 @@ def _fmt_card(listing: Listing, seller_verified: bool = False) -> dict:
         "published_at": listing.published_at.isoformat() if listing.published_at else None,
         "created_at": listing.created_at.isoformat() if listing.created_at else None,
         "verified_by_owmee": seller_verified,  # Sprint 6a: mirror the badge signal
+        # Sprint trust pillar: items >₹1000 get FE inspection at pickup;
+        # mobile uses this flag to show the right copy on listing detail.
+        "fe_inspection_required": _fe_inspection_required(listing.price),
     }
 
 
@@ -412,6 +425,14 @@ async def create_listing(body: CreateListingRequest, current_user: BasicUser, db
             "error": "IMEI_REQUIRED",
             "message": f"IMEI is required for {category.name} listings.",
         })
+
+    # Sprint trust pillar: enforce hyperlocal pilot zones. Without lat/lng
+    # we can't route an FE; without the address being inside a zone, FE
+    # economics break. Block at create time with a friendly out-of-service
+    # message rather than silently degrade later.
+    from app.core.zones import is_in_service_area, out_of_service_message
+    if not is_in_service_area(body.lat, body.lng):
+        raise HTTPException(status_code=400, detail=out_of_service_message())
     try:
         listing = await create_draft(
             db=db, seller_id=current_user.user_id,

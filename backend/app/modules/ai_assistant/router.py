@@ -314,6 +314,31 @@ async def create_from_draft(
                 detail={"error": "IMEI_LUHN_FAILED", "imei": imei},
             )
 
+    # Sprint trust pillar: block re-listing of an IMEI that's already on a
+    # live listing (active / reserved / sold). The DB has a unique partial
+    # index as the backstop, but pre-checking returns a friendlier error.
+    for imei in (payload.imei_1, payload.imei_2):
+        if not imei:
+            continue
+        dup = await db.execute(
+            text("""
+                SELECT id FROM listings
+                WHERE (imei_1 = :imei OR imei_2 = :imei)
+                  AND status IN ('active','reserved','sold')
+                LIMIT 1
+            """),
+            {"imei": imei},
+        )
+        if dup.scalar() is not None:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "error": "IMEI_ALREADY_LISTED",
+                    "imei": imei,
+                    "message": "This IMEI is already on an active Owmee listing.",
+                },
+            )
+
     # Resolve category_id from slug
     cat_row = await db.execute(
         text("SELECT id FROM categories WHERE slug = :slug AND is_active = true"),
@@ -344,6 +369,12 @@ async def create_from_draft(
     seller_lng = loc.lng if loc else None
     seller_city = loc.city if loc else None
     seller_state = loc.state if loc else None
+
+    # Sprint trust pillar: hyperlocal-pilot geo-fence. Same gate as the
+    # non-AI listing path — mirrored here so the AI flow can't bypass.
+    from app.core.zones import is_in_service_area, out_of_service_message
+    if not is_in_service_area(seller_lat, seller_lng):
+        raise HTTPException(status_code=400, detail=out_of_service_message())
 
     # Combine draft photo URLs with any extra image URLs from the mobile client
     photo_urls = list(rec.photo_urls or [])
