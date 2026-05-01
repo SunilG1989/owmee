@@ -12,7 +12,9 @@
  *   danger    red tinted (refund failed, dispute open)
  */
 import React from 'react';
-import { StyleSheet, View, ViewProps, ViewStyle } from 'react-native';
+import {
+  StyleSheet, TouchableOpacity, View, ViewProps, ViewStyle,
+} from 'react-native';
 import { C, R, S, Shadow } from '../../utils/tokens';
 
 export type CardVariant = 'default' | 'tinted' | 'accent' | 'warning' | 'success' | 'danger';
@@ -23,6 +25,8 @@ interface Props extends ViewProps {
   elevation?: CardElevation;
   /** Override default S.md padding. */
   padding?: number;
+  /** When set, the card is tappable (TouchableOpacity wrapper). */
+  onPress?: () => void;
   style?: ViewStyle;
 }
 
@@ -30,23 +34,30 @@ export default function Card({
   variant = 'default',
   elevation = 'flat',
   padding,
+  onPress,
   style,
   children,
   ...rest
 }: Props) {
   const v = variantStyles[variant];
   const elev = elevation === 'card' ? Shadow.card : elevation === 'subtle' ? Shadow.subtle : null;
+  const composed = [
+    styles.base,
+    v,
+    padding != null ? { padding } : { padding: S.md },
+    elev as any,
+    style,
+  ];
+
+  if (onPress) {
+    return (
+      <TouchableOpacity onPress={onPress} activeOpacity={0.85} style={composed} {...(rest as any)}>
+        {children}
+      </TouchableOpacity>
+    );
+  }
   return (
-    <View
-      style={[
-        styles.base,
-        v,
-        padding != null ? { padding } : { padding: S.md },
-        elev as any,
-        style,
-      ]}
-      {...rest}
-    >
+    <View style={composed} {...rest}>
       {children}
     </View>
   );

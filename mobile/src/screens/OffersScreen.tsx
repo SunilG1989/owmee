@@ -1,12 +1,49 @@
-import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, RefreshControl, Alert, ActivityIndicator , Image} from 'react-native';
+/**
+ * OffersScreen — Sprint 6c UX rewrite.
+ *
+ * Three tabs (Received / Sent / In progress). Each row is the same
+ * info density: thumbnail, title, amount, status pills. Action buttons
+ * are full-size (MIN_TAP) and use the design-system Button primitives
+ * instead of the seven distinct styles the previous iteration grew.
+ *
+ * UX fixes from the audit:
+ *   - Generic "Error / Failed" replaced with parseApiError + actionable
+ *     messages for each kind of failure
+ *   - Withdraw + decline now confirm via confirmDestructive (used to
+ *     fire on the first tap with no recovery)
+ *   - Empty states use the new EmptyState component (icon + heading +
+ *     body + optional action) instead of bare emoji + text
+ *   - Errored fetch now shows ErrorState with a "Try again" button
+ *     instead of silently leaving the user staring at an empty screen
+ *   - Buttons are full-size (MIN_TAP), single-tap-confirm hardened
+ *   - Strikethrough listing price moved off C.text4 (was failing
+ *     contrast on sand backgrounds)
+ *   - Header copy: "Deals" → "Offers" (we have "In progress" tab so
+ *     the screen header doesn't need to be a synonym)
+ */
+import React, { useCallback, useState } from 'react';
+import {
+  Alert, FlatList, Image, RefreshControl, StyleSheet, Text,
+  TouchableOpacity, View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { C, T, S, R, formatPrice, timeAgo } from '../utils/tokens';
+
 import { Offers, Transactions, type Offer, type Transaction } from '../services/api';
 import { useAuthStore } from '../store/authStore';
+import { Button, Card, EmptyState, ErrorState, StatusBadge } from '../components/ui';
+import { confirmDestructive } from '../utils/confirm';
+import { parseApiError } from '../utils/errors';
+import { C, I, MIN_TAP, R, S, T, formatPrice, timeAgo } from '../utils/tokens';
 
-type Tab = 'received' | 'sent' | 'deals';
+type Tab = 'received' | 'sent' | 'inprogress';
+
+const TABS: { key: Tab; label: string }[] = [
+  { key: 'received', label: 'Received' },
+  { key: 'sent', label: 'Sent' },
+  { key: 'inprogress', label: 'In progress' },
+];
+
 export default function OffersScreen({ navigation }: any) {
   const { isAuthenticated } = useAuthStore();
   const [tab, setTab] = useState<Tab>('received');
@@ -14,75 +51,336 @@ export default function OffersScreen({ navigation }: any) {
   const [deals, setDeals] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  if (!isAuthenticated) return (<SafeAreaView style={s.safe} edges={['top']}><View style={s.gate}><Text style={{fontSize:48,marginBottom:16}}>✉️</Text><Text style={s.gateH}>Sign in to see deals</Text><TouchableOpacity style={s.gateBtn} onPress={()=>navigation.getParent()?.navigate('AuthFlow')}><Text style={{fontSize:14,color:'#fff',fontWeight:'600'}}>Sign in</Text></TouchableOpacity></View></SafeAreaView>);
+  const load = useCallback(async () => {
+    if (!refreshing) setLoading(true);
+    setError(null);
+    try {
+      if (tab === 'inprogress') {
+        const r = await Transactions.list();
+        setDeals(r.data.transactions || r.data || []);
+      } else {
+        const r = tab === 'received' ? await Offers.received() : await Offers.sent();
+        setOffers(r.data.offers || r.data || []);
+      }
+    } catch (e) {
+      setError(parseApiError(e, "Couldn't load. Pull down to retry."));
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [tab, refreshing]);
 
-  const load = useCallback(async()=>{if(!refreshing)setLoading(true);try{if(tab==='deals'){const r=await Transactions.list();setDeals(r.data.transactions||r.data||[]);}else{const r=tab==='received'?await Offers.received():await Offers.sent();setOffers(r.data.offers||r.data||[]);}}catch{}finally{setLoading(false);setRefreshing(false);}}, [tab,refreshing]);
-  useFocusEffect(useCallback(()=>{load();},[tab]));
+  useFocusEffect(useCallback(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [tab]));
 
-  // Sprint 6b: prompt the buyer for a new offer price and call update-price.
-  // Falls back to a noop alert on Android where Alert.prompt isn't available.
-  const promptUpdatePrice=(o:Offer)=>{
-    if(!Alert.prompt){Alert.alert('Update price','Available on iOS only — Android update-price UI in followup');return;}
-    Alert.prompt('Update your offer',`Current: ${formatPrice(o.amount)}\nUpdates left: ${o.updates_remaining ?? Math.max(0,3-(o.update_count??0))}`,(val:string)=>{
-      const p=parseFloat(val);
-      if(!val||isNaN(p)||p<=0)return;
-      Offers.updatePrice(o.id,p).then(()=>load()).catch((e:any)=>{
-        const code=(e?.response?.data?.detail?.error||'').toString();
-        if(code==='UPDATE_LIMIT_REACHED')Alert.alert('No updates left','You\'ve used all 3 price updates. Wait for the seller to respond.');
-        else Alert.alert('Error','Could not update price');
-      });
-    },undefined,String(o.amount),'number-pad');
+  // ── Sign-in gate ─────────────────────────────────────────────────────────
+  if (!isAuthenticated) {
+    return (
+      <SafeAreaView style={s.safe} edges={['top']}>
+        <Text style={s.hdr}>Offers</Text>
+        <EmptyState
+          icon="✉️"
+          title="Sign in to see your offers"
+          body="Make and receive offers, track deals — all in one place."
+          actionLabel="Sign in"
+          onAction={() => navigation.getParent()?.navigate('AuthFlow')}
+        />
+      </SafeAreaView>
+    );
+  }
+
+  // ── Action handlers (used in card actions) ──────────────────────────────
+
+  const handleAccept = async (offerId: string) => {
+    try {
+      const r = await Offers.accept(offerId);
+      load();
+      const txnId = r.data?.transaction_id;
+      if (txnId) navigation.navigate('TransactionDetail', { transactionId: txnId });
+    } catch (e) {
+      Alert.alert("Couldn't accept offer", parseApiError(e, 'Try again in a moment.'));
+    }
   };
 
-  const renderOffer=({item}:{item:Offer})=>{
-    const exp=item.expires_at&&new Date(item.expires_at)<new Date();
-    const rem=item.expires_at?Math.max(0,Math.floor((new Date(item.expires_at).getTime()-Date.now())/60000)):null;
-    // Sprint 6b — counter window + update-price affordances on the Sent tab.
-    const counterRem=item.counter_expires_at?Math.max(0,Math.floor((new Date(item.counter_expires_at).getTime()-Date.now())/60000)):null;
-    const updatesLeft=item.updates_remaining ?? Math.max(0,3-(item.update_count??0));
-    const lockoutActive=item.lockout_until?new Date(item.lockout_until)>new Date():false;
-    return(<TouchableOpacity style={s.card} onPress={()=>navigation.navigate('ListingDetail',{listingId:item.listing_id})}>
-      <View style={s.row}>{item.listing_thumbnail?<Image source={{uri:item.listing_thumbnail}} style={s.thumb} resizeMode={"cover"}/>:<View style={[s.thumb,s.tp]}><Text style={{fontSize:20}}>📦</Text></View>}
-        <View style={{flex:1}}><Text style={s.title} numberOfLines={1}>{item.listing_title}</Text><View style={{flexDirection:'row',gap:8,alignItems:'center'}}><Text style={s.amt}>{formatPrice(item.amount)}</Text><Text style={s.lp}>{formatPrice(item.listing_price)}</Text></View>
-          {item.note&&<Text style={s.note} numberOfLines={1}>"{item.note}"</Text>}
-          <View style={{flexDirection:'row',gap:8,marginTop:4,flexWrap:'wrap'}}>
-            <Text style={s.time}>{timeAgo(item.created_at)}</Text>
-            {rem!==null&&!exp&&<Text style={[s.exp,rem<60&&{color:C.red}]}>{rem<60?`${rem}m left`:`${Math.floor(rem/60)}h left`}</Text>}
-            {exp&&<Text style={[s.exp,{color:C.red}]}>Expired</Text>}
-            {tab==='sent'&&item.status==='pending'&&!exp&&<Text style={[s.exp,updatesLeft===0&&{color:C.text3}]}>{updatesLeft} update{updatesLeft===1?'':'s'} left</Text>}
-            {item.status==='countered'&&counterRem!==null&&counterRem>0&&<Text style={[s.exp,{color:C.honey}]}>Counter: {counterRem<60?`${counterRem}m`:`${Math.floor(counterRem/60)}h`} to respond</Text>}
+  const handleCounter = (offerId: string) => {
+    if (!Alert.prompt) {
+      Alert.alert('Coming soon', 'Counter-offers from Android are landing in the next update.');
+      return;
+    }
+    Alert.prompt('Counter offer', 'Enter the price you\'d accept (₹)', (val: string) => {
+      const p = parseFloat(val);
+      if (!val || isNaN(p) || p <= 0) return;
+      Offers.counter(offerId, p)
+        .then(() => load())
+        .catch((e) => Alert.alert("Couldn't send counter", parseApiError(e, 'Try again.')));
+    }, undefined, undefined, 'number-pad');
+  };
+
+  const handleReject = async (offerId: string) => {
+    if (!await confirmDestructive('Decline this offer?', 'The buyer will be notified. They can\'t offer again on this listing for 7 days.', 'Decline')) return;
+    try {
+      await Offers.reject(offerId);
+      load();
+    } catch (e) {
+      Alert.alert("Couldn't decline offer", parseApiError(e, 'Try again.'));
+    }
+  };
+
+  const handleWithdraw = async (offerId: string) => {
+    if (!await confirmDestructive('Withdraw your offer?', 'You can offer again later.', 'Withdraw')) return;
+    try {
+      await Offers.withdraw(offerId);
+      load();
+    } catch (e) {
+      Alert.alert("Couldn't withdraw offer", parseApiError(e, 'Try again.'));
+    }
+  };
+
+  const handleUpdatePrice = (o: Offer) => {
+    if (!Alert.prompt) {
+      Alert.alert('Coming soon', 'Price updates from Android are landing in the next update.');
+      return;
+    }
+    const left = o.updates_remaining ?? Math.max(0, 3 - (o.update_count ?? 0));
+    Alert.prompt(
+      'Update your offer',
+      `Current: ${formatPrice(o.amount)}\n${left} update${left === 1 ? '' : 's'} left.`,
+      (val: string) => {
+        const p = parseFloat(val);
+        if (!val || isNaN(p) || p <= 0) return;
+        Offers.updatePrice(o.id, p).then(() => load()).catch((e: any) => {
+          const code = e?.response?.data?.detail?.error;
+          if (code === 'UPDATE_LIMIT_REACHED') {
+            Alert.alert('No updates left', "You've used all 3 price updates. The seller has to respond next.");
+          } else {
+            Alert.alert("Couldn't update price", parseApiError(e, 'Try again.'));
+          }
+        });
+      },
+      undefined, String(o.amount), 'number-pad',
+    );
+  };
+
+  // ── Row renderers ───────────────────────────────────────────────────────
+
+  const renderOffer = ({ item }: { item: Offer }) => {
+    const expired = item.expires_at && new Date(item.expires_at) < new Date();
+    const minsToExpire = item.expires_at
+      ? Math.max(0, Math.floor((new Date(item.expires_at).getTime() - Date.now()) / 60000))
+      : null;
+    const counterMins = item.counter_expires_at
+      ? Math.max(0, Math.floor((new Date(item.counter_expires_at).getTime() - Date.now()) / 60000))
+      : null;
+    const updatesLeft = item.updates_remaining ?? Math.max(0, 3 - (item.update_count ?? 0));
+    const lockoutActive = item.lockout_until ? new Date(item.lockout_until) > new Date() : false;
+
+    return (
+      <Card style={s.cardSpacing}>
+        <View style={s.row}>
+          {item.listing_thumbnail
+            ? <Image source={{ uri: item.listing_thumbnail }} style={s.thumb} resizeMode="cover" />
+            : <View style={[s.thumb, s.thumbPlaceholder]}><Text style={s.thumbIcon}>📦</Text></View>}
+          <View style={{ flex: 1 }}>
+            <Text style={s.title} numberOfLines={1}>{item.listing_title}</Text>
+            <View style={s.priceRow}>
+              <Text style={s.amount}>{formatPrice(item.amount)}</Text>
+              {item.listing_price !== item.amount && (
+                <Text style={s.listed}>{formatPrice(item.listing_price)} listed</Text>
+              )}
+            </View>
+            {item.note && <Text style={s.note} numberOfLines={1}>"{item.note}"</Text>}
+            <View style={s.metaRow}>
+              <Text style={s.time}>{timeAgo(item.created_at)}</Text>
+              {minsToExpire !== null && !expired && (
+                <Text style={[s.exp, minsToExpire < 60 && { color: C.red }]}>
+                  {minsToExpire < 60 ? `${minsToExpire}m left` : `${Math.floor(minsToExpire / 60)}h left`}
+                </Text>
+              )}
+              {expired && <Text style={[s.exp, { color: C.red }]}>Expired</Text>}
+              {tab === 'sent' && item.status === 'pending' && !expired && (
+                <Text style={[s.exp, updatesLeft === 0 && { color: C.text3 }]}>
+                  {updatesLeft} update{updatesLeft === 1 ? '' : 's'} left
+                </Text>
+              )}
+              {item.status === 'countered' && counterMins !== null && counterMins > 0 && (
+                <Text style={[s.exp, { color: C.honey }]}>
+                  Counter: {counterMins < 60 ? `${counterMins}m` : `${Math.floor(counterMins / 60)}h`} to respond
+                </Text>
+              )}
+            </View>
           </View>
-        </View></View>
-      {tab==='received'&&item.status==='pending'&&!exp&&(<View style={s.acts}><TouchableOpacity style={s.accBtn} onPress={async()=>{try{const r=await Offers.accept(item.id);const txnId=r.data?.transaction_id;load();if(txnId)navigation.navigate('TransactionDetail',{transactionId:txnId});}catch{Alert.alert('Error','Failed');}}}><Text style={{fontSize:13,color:'#fff',fontWeight:'600'}}>Accept</Text></TouchableOpacity><TouchableOpacity style={s.ctrBtn} onPress={()=>{Alert.prompt?Alert.prompt('Counter offer','Enter your price (₹)',(val:string)=>{if(val&&parseFloat(val)>0){Offers.counter(item.id,parseFloat(val)).then(()=>load()).catch(()=>Alert.alert('Error','Failed'));}},undefined,undefined,'number-pad'):Alert.alert('Counter','Counter-offer coming soon')}}><Text style={{fontSize:13,color:C.honey,fontWeight:'600'}}>Counter</Text></TouchableOpacity><TouchableOpacity style={s.rejBtn} onPress={async()=>{try{await Offers.reject(item.id);load();}catch{Alert.alert('Error','Failed');}}}><Text style={{fontSize:13,color:C.text3}}>Decline</Text></TouchableOpacity></View>)}
-      {tab==='sent'&&item.status==='pending'&&!exp&&(<View style={s.acts}>
-        <TouchableOpacity disabled={updatesLeft===0} style={[s.ctrBtn,updatesLeft===0&&{borderColor:C.border,opacity:0.5}]} onPress={()=>promptUpdatePrice(item)}>
-          <Text style={{fontSize:13,color:updatesLeft===0?C.text4:C.honey,fontWeight:'600'}}>{updatesLeft===0?'Locked — seller decides':'Update price'}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={s.rejBtn} onPress={async()=>{try{await Offers.withdraw(item.id);load();}catch{Alert.alert('Error','Failed');}}}>
-          <Text style={{fontSize:13,color:C.text3}}>Withdraw</Text>
-        </TouchableOpacity>
-      </View>)}
-      {tab==='sent'&&item.status==='countered'&&!exp&&(<View style={s.acts}>
-        <TouchableOpacity style={s.accBtn} onPress={async()=>{try{const r=await Offers.accept(item.id);const txnId=r.data?.transaction_id;load();if(txnId)navigation.navigate('TransactionDetail',{transactionId:txnId});}catch{Alert.alert('Error','Failed');}}}>
-          <Text style={{fontSize:13,color:'#fff',fontWeight:'600'}}>Accept counter {item.counter_price?`(${formatPrice(item.counter_price)})`:''}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={s.rejBtn} onPress={async()=>{try{await Offers.reject(item.id);load();}catch{Alert.alert('Error','Failed');}}}>
-          <Text style={{fontSize:13,color:C.text3}}>Decline</Text>
-        </TouchableOpacity>
-      </View>)}
-      {tab==='sent'&&lockoutActive&&item.status!=='accepted'&&<View style={s.stBar}><Text style={s.stText}>Cooldown until {new Date(item.lockout_until!).toLocaleDateString()}</Text></View>}
-      {item.status==='accepted'&&<View style={s.stBar}><Text style={s.stText}>✓ Accepted</Text></View>}
-    </TouchableOpacity>);};
+        </View>
 
-  const renderDeal=({item}:{item:Transaction})=>(<TouchableOpacity style={s.card} onPress={()=>navigation.navigate('TransactionDetail',{transactionId:item.id})}>
-    <View style={s.row}><View style={[s.thumb,s.tp]}><Text style={{fontSize:20}}>🤝</Text></View><View style={{flex:1}}><Text style={s.title} numberOfLines={1}>{item.listing_title||'Deal'}</Text><Text style={s.amt}>{formatPrice(item.amount)}</Text><View style={{flexDirection:'row',alignItems:'center',gap:4,marginTop:4}}><View style={[s.dot,{backgroundColor:item.status==='completed'?C.green:item.status==='cancelled'?C.red:C.honey}]}/><Text style={{fontSize:11,color:C.text3,textTransform:'capitalize'}}>{item.status.replace(/_/g,' ')}</Text></View></View></View></TouchableOpacity>);
+        {/* Action rows — sized to MIN_TAP via Button size="sm" */}
+        {tab === 'received' && item.status === 'pending' && !expired && (
+          <View style={s.actions}>
+            <Button label="Accept" size="sm" variant="primary" onPress={() => handleAccept(item.id)} style={{ flex: 1 }} />
+            <Button label="Counter" size="sm" variant="secondary" onPress={() => handleCounter(item.id)} style={{ flex: 1 }} />
+            <Button label="Decline" size="sm" variant="ghost" onPress={() => handleReject(item.id)} style={{ flex: 1 }} />
+          </View>
+        )}
+        {tab === 'sent' && item.status === 'pending' && !expired && (
+          <View style={s.actions}>
+            <Button
+              label={updatesLeft === 0 ? 'Locked — seller decides' : 'Update price'}
+              size="sm"
+              variant="secondary"
+              onPress={() => handleUpdatePrice(item)}
+              disabled={updatesLeft === 0}
+              style={{ flex: 2 }}
+            />
+            <Button label="Withdraw" size="sm" variant="ghost" onPress={() => handleWithdraw(item.id)} style={{ flex: 1 }} />
+          </View>
+        )}
+        {tab === 'sent' && item.status === 'countered' && !expired && (
+          <View style={s.actions}>
+            <Button
+              label={`Accept counter${item.counter_price ? ` (${formatPrice(item.counter_price)})` : ''}`}
+              size="sm" variant="primary"
+              onPress={() => handleAccept(item.id)}
+              style={{ flex: 2 }}
+            />
+            <Button label="Decline" size="sm" variant="ghost" onPress={() => handleReject(item.id)} style={{ flex: 1 }} />
+          </View>
+        )}
 
-  return(<SafeAreaView style={s.safe} edges={['top']}><Text style={s.hdr}>Deals</Text>
-    <View style={s.tabs}>{(['received','sent','deals'] as Tab[]).map(t=>(<TouchableOpacity key={t} style={[s.tab,tab===t&&s.tabOn]} onPress={()=>setTab(t)}><Text style={[s.tabT,tab===t&&{color:C.honeyDeep,fontWeight:'600'}]}>{t==='deals'?'In progress':t==='received'?'Received':'Sent'}</Text></TouchableOpacity>))}</View>
-    {loading?<ActivityIndicator color={C.honey} style={{marginTop:40}}/>:tab==='deals'?
-      <FlatList data={deals} keyExtractor={i=>i.id} renderItem={renderDeal} contentContainerStyle={s.list} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={()=>{setRefreshing(true);load();}} tintColor={C.honey}/>} ListEmptyComponent={<View style={s.empty}><Text style={{fontSize:40,marginBottom:12}}>🤝</Text><Text style={s.emptyT}>No deals yet</Text></View>} removeClippedSubviews maxToRenderPerBatch={8} windowSize={5}/>:
-      <FlatList data={offers} keyExtractor={i=>i.id} renderItem={renderOffer} contentContainerStyle={s.list} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={()=>{setRefreshing(true);load();}} tintColor={C.honey}/>} ListEmptyComponent={<View style={s.empty}><Text style={{fontSize:40,marginBottom:12}}>✉️</Text><Text style={s.emptyT}>{tab==='received'?'No offers received':'No offers sent'}</Text></View>} removeClippedSubviews maxToRenderPerBatch={8} windowSize={5}/>}
-  </SafeAreaView>);
+        {/* Status footers */}
+        {tab === 'sent' && lockoutActive && item.status !== 'accepted' && (
+          <View style={s.statusFooter}>
+            <StatusBadge tone="warning" label={`Cooldown until ${new Date(item.lockout_until!).toLocaleDateString('en-IN')}`} />
+          </View>
+        )}
+        {item.status === 'accepted' && (
+          <View style={s.statusFooter}>
+            <StatusBadge tone="positive" label="✓ Accepted" />
+          </View>
+        )}
+      </Card>
+    );
+  };
+
+  const renderDeal = ({ item }: { item: Transaction }) => (
+    <Card
+      style={s.cardSpacing}
+      onPress={() => navigation.navigate('TransactionDetail', { transactionId: item.id })}
+    >
+      <View style={s.row}>
+        <View style={[s.thumb, s.thumbPlaceholder]}><Text style={s.thumbIcon}>🤝</Text></View>
+        <View style={{ flex: 1 }}>
+          <Text style={s.title} numberOfLines={1}>{item.listing_title || 'Deal'}</Text>
+          <Text style={s.amount}>{formatPrice(item.amount)}</Text>
+          <View style={{ marginTop: S.xs }}>
+            <StatusBadge status={item.status} />
+          </View>
+        </View>
+      </View>
+    </Card>
+  );
+
+  // ── Main ────────────────────────────────────────────────────────────────
+
+  const data = tab === 'inprogress' ? deals : offers;
+  const renderItem = tab === 'inprogress' ? renderDeal as any : renderOffer as any;
+  const emptyForTab = tab === 'received'
+    ? { icon: '✉️', title: 'No offers received', body: 'When buyers offer on your listings, they\'ll show up here.' }
+    : tab === 'sent'
+      ? { icon: '✋', title: 'No offers sent', body: 'Find an item you like, hit Make Offer, and it\'ll appear here.' }
+      : { icon: '🤝', title: 'No deals in progress', body: 'Once an offer is accepted, the deal lives here until completion.' };
+
+  return (
+    <SafeAreaView style={s.safe} edges={['top']}>
+      <Text style={s.hdr}>Offers</Text>
+
+      <View style={s.tabs}>
+        {TABS.map(t => (
+          <TouchableOpacity
+            key={t.key}
+            style={[s.tab, tab === t.key && s.tabOn]}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: tab === t.key }}
+            accessibilityLabel={`${t.label} tab`}
+            onPress={() => setTab(t.key)}
+            activeOpacity={0.85}
+          >
+            <Text style={[s.tabText, tab === t.key && s.tabTextOn]}>{t.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {loading ? (
+        <View style={{ paddingTop: S.xxxl }}>
+          <Text style={s.loading}>Loading…</Text>
+        </View>
+      ) : error ? (
+        <ErrorState body={error} onRetry={load} />
+      ) : (
+        <FlatList
+          data={data}
+          keyExtractor={i => i.id}
+          renderItem={renderItem}
+          contentContainerStyle={s.list}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => { setRefreshing(true); load(); }}
+              tintColor={C.honey}
+            />
+          }
+          ListEmptyComponent={<EmptyState {...emptyForTab} />}
+          removeClippedSubviews
+          maxToRenderPerBatch={8}
+          windowSize={5}
+        />
+      )}
+    </SafeAreaView>
+  );
 }
-const s=StyleSheet.create({safe:{flex:1,backgroundColor:C.cream},hdr:{fontSize:22,fontWeight:'700',color:C.text,paddingHorizontal:16,paddingTop:8},tabs:{flexDirection:'row',paddingHorizontal:16,marginTop:12,gap:4},tab:{paddingHorizontal:14,paddingVertical:8,borderRadius:R.pill,backgroundColor:C.surface,borderWidth:1,borderColor:C.border},tabOn:{backgroundColor:C.honeyLight,borderColor:C.honey},tabT:{fontSize:12,color:C.text3},list:{padding:16},card:{backgroundColor:C.surface,borderRadius:R.lg,marginBottom:10,padding:12,borderWidth:1,borderColor:C.border},row:{flexDirection:'row',gap:12},thumb:{width:60,height:60,borderRadius:R.sm},tp:{backgroundColor:C.sand,alignItems:'center',justifyContent:'center'},title:{fontSize:14,fontWeight:'600',color:C.text,marginBottom:2},amt:{fontSize:16,fontWeight:'700',color:C.honey},lp:{fontSize:12,color:C.text4,textDecorationLine:'line-through'},note:{fontSize:11,color:C.text3,fontStyle:'italic',marginTop:2},time:{fontSize:10,color:C.text4},exp:{fontSize:10,color:C.honey,fontWeight:'600'},acts:{flexDirection:'row',gap:8,marginTop:10,borderTopWidth:0.5,borderTopColor:C.border,paddingTop:10},accBtn:{flex:1,backgroundColor:C.honey,borderRadius:R.sm,paddingVertical:8,alignItems:'center'},ctrBtn:{flex:1,borderRadius:R.sm,paddingVertical:8,alignItems:'center',borderWidth:1,borderColor:C.honey},rejBtn:{flex:1,borderRadius:R.sm,paddingVertical:8,alignItems:'center',borderWidth:0.5,borderColor:C.border},stBar:{marginTop:8,backgroundColor:C.forestLight,borderRadius:6,paddingVertical:6,paddingHorizontal:10},stText:{fontSize:11,color:C.forest,fontWeight:'600'},dot:{width:6,height:6,borderRadius:3},empty:{alignItems:'center',paddingTop:60},emptyT:{fontSize:14,color:C.text3},gate:{flex:1,alignItems:'center',justifyContent:'center',padding:40},gateH:{fontSize:18,fontWeight:'600',color:C.text,marginBottom:16},gateBtn:{backgroundColor:C.honey,borderRadius:R.sm,paddingHorizontal:24,paddingVertical:12}});
+
+const s = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: C.cream },
+  hdr: {
+    fontSize: T.size.xxl, fontWeight: T.weight.bold, color: C.text,
+    paddingHorizontal: S.lg, paddingTop: S.sm,
+  },
+  loading: { textAlign: 'center', color: C.text3, fontSize: T.size.base },
+
+  tabs: { flexDirection: 'row', paddingHorizontal: S.lg, marginTop: S.md, gap: S.sm },
+  tab: {
+    paddingHorizontal: S.lg, paddingVertical: S.sm,
+    borderRadius: R.pill,
+    backgroundColor: C.surface,
+    borderWidth: 1, borderColor: C.border,
+    minHeight: MIN_TAP / 1.4,  // tabs don't need full MIN_TAP
+    justifyContent: 'center',
+  },
+  tabOn: { backgroundColor: C.honeyLight, borderColor: C.honey },
+  tabText: { fontSize: T.size.base, color: C.text2 },
+  tabTextOn: { color: C.honeyDeep, fontWeight: T.weight.semi },
+
+  list: { padding: S.lg },
+  cardSpacing: { marginBottom: S.md },
+
+  row: { flexDirection: 'row', gap: S.md },
+  thumb: { width: 64, height: 64, borderRadius: R.sm },
+  thumbPlaceholder: { backgroundColor: C.sand, alignItems: 'center', justifyContent: 'center' },
+  thumbIcon: { fontSize: I.md },
+
+  title: { fontSize: T.size.md, fontWeight: T.weight.semi, color: C.text, marginBottom: 2 },
+  priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: S.sm },
+  amount: { fontSize: T.size.lg, fontWeight: T.weight.bold, color: C.honey },
+  // Was C.text4 + line-through; bumped to text3 for contrast on cream/sand backgrounds
+  // and removed strike to avoid the price-confusion ambiguity ("Is it ₹X or ₹Y?").
+  listed: { fontSize: T.size.sm, color: C.text3 },
+  note: { fontSize: T.size.sm, color: C.text2, fontStyle: 'italic', marginTop: 2 },
+  metaRow: { flexDirection: 'row', gap: S.md, marginTop: S.xs, flexWrap: 'wrap' },
+  time: { fontSize: T.size.xs, color: C.text3 },
+  exp: { fontSize: T.size.xs, color: C.honey, fontWeight: T.weight.semi },
+
+  actions: {
+    flexDirection: 'row', gap: S.sm, marginTop: S.md,
+    paddingTop: S.md, borderTopWidth: 1, borderTopColor: C.border2,
+  },
+
+  statusFooter: { marginTop: S.md, alignItems: 'flex-start' },
+});

@@ -215,6 +215,26 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
         <Text style={s.searchMic}>🎤</Text>
       </TouchableOpacity>
 
+      {/* Trust strip — Owmee's whole story is "FE-inspected + escrow +
+          no meetups". Surfacing it here means buyers see WHY Owmee is
+          different the moment they open the app, not three taps in. */}
+      <View style={s.trustStrip}>
+        <View style={s.trustPill}>
+          <Text style={s.trustIcon}>🛡️</Text>
+          <Text style={s.trustText}>FE-inspected</Text>
+        </View>
+        <View style={s.trustDot} />
+        <View style={s.trustPill}>
+          <Text style={s.trustIcon}>🔒</Text>
+          <Text style={s.trustText}>Escrow</Text>
+        </View>
+        <View style={s.trustDot} />
+        <View style={s.trustPill}>
+          <Text style={s.trustIcon}>🚚</Text>
+          <Text style={s.trustText}>Doorstep</Text>
+        </View>
+      </View>
+
       {/* Blockbuster deals strip */}
       <BlockbusterDealsStrip
         deals={deals}
@@ -442,6 +462,36 @@ const s = StyleSheet.create({
     color: C.text4 || '#888',
   },
   searchMic: { fontSize: 14 },
+
+  // Trust strip — single-line tag below search. Subtle so it doesn't compete
+  // with the deals strip / feed for visual weight, but always-visible so
+  // the trust story registers on every session.
+  trustStrip: {
+    marginHorizontal: 16,
+    marginTop: 6,
+    marginBottom: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: C.honeyLight,
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  trustPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  trustIcon: { fontSize: 12 },
+  trustText: { fontSize: 11, color: C.honeyDeep, fontWeight: '600' },
+  trustDot: {
+    width: 3, height: 3, borderRadius: 1.5,
+    backgroundColor: C.honeyDeep,
+    opacity: 0.4,
+    marginHorizontal: 2,
+  },
 
   // Section header (between sell block and feed)
   sectionHdr: {
