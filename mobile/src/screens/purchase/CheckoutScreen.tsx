@@ -158,7 +158,7 @@ export default function CheckoutScreen({ navigation, route }: any) {
           <Text style={s.bottomSub}>Total amount</Text>
         </View>
         <TouchableOpacity style={s.payBtn} onPress={handlePay} disabled={paying} activeOpacity={0.85}>
-          {paying ? <ActivityIndicator color=C.white /> : <Text style={s.payBtnText}>Pay {formatPrice(total)} →</Text>}
+          {paying ? <ActivityIndicator color={C.white} /> : <Text style={s.payBtnText}>Pay {formatPrice(total)} →</Text>}
         </TouchableOpacity>
       </View>
     </SafeAreaView>

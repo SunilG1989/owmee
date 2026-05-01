@@ -673,7 +673,7 @@ export default function CreateListingScreen({ navigation }: any) {
             disabled={busy || !canProceed()}
             onPress={submit}
           >
-            {busy ? <ActivityIndicator color=C.white /> : <Text style={st.btnT}>Publish listing</Text>}
+            {busy ? <ActivityIndicator color={C.white} /> : <Text style={st.btnT}>Publish listing</Text>}
           </TouchableOpacity>
         )}
       </View>

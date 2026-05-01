@@ -26,7 +26,7 @@ export default function OtpPhoneScreen({ navigation }: any) {
           <TextInput style={s.input} placeholder="98XXXXXXXX" placeholderTextColor={C.text4} keyboardType="phone-pad" maxLength={10} value={phone} onChangeText={setPhone} autoFocus />
         </View>
         <TouchableOpacity style={[s.btn,phone.replace(/\D/g,'').length!==10&&{opacity:0.4}]} disabled={phone.replace(/\D/g,'').length!==10||loading} onPress={submit}>
-          {loading?<ActivityIndicator color=C.white/>:<Text style={s.btnText}>Send OTP</Text>}
+          {loading?<ActivityIndicator color={C.white}/>:<Text style={s.btnText}>Send OTP</Text>}
         </TouchableOpacity>
         <Text style={s.terms}>By continuing, you agree to our{' '}
           <Text style={s.termsLink}>Terms of Service</Text> and{' '}

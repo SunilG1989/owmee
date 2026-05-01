@@ -632,7 +632,7 @@ function ConfirmAddressScreen({
             activeOpacity={0.85}
           >
             {saving ? (
-              <ActivityIndicator color=C.white />
+              <ActivityIndicator color={C.white} />
             ) : (
               <Text style={s.saveBtnText}>Save and continue →</Text>
             )}

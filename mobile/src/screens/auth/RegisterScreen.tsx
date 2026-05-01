@@ -104,7 +104,7 @@ export default function RegisterScreen({ navigation }: any) {
             activeOpacity={0.85}
           >
             {loading ? (
-              <ActivityIndicator color=C.white />
+              <ActivityIndicator color={C.white} />
             ) : (
               <Text style={s.btnText}>Send OTP</Text>
             )}

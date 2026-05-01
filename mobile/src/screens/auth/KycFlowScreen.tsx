@@ -199,7 +199,7 @@ export default function KycFlowScreen({ navigation }: any) {
                 </Text>
                 {!requestId ? (
                   <TouchableOpacity style={s.btn} onPress={initAadhaar} disabled={loading}>
-                    {loading ? <ActivityIndicator color=C.white /> : <Text style={s.btnT}>Send Aadhaar OTP</Text>}
+                    {loading ? <ActivityIndicator color={C.white} /> : <Text style={s.btnT}>Send Aadhaar OTP</Text>}
                   </TouchableOpacity>
                 ) : (
                   <>
@@ -207,7 +207,7 @@ export default function KycFlowScreen({ navigation }: any) {
                       keyboardType="number-pad" maxLength={6} value={otp} onChangeText={setOtp} autoFocus />
                     <TouchableOpacity style={[s.btn, otp.length < 6 && { opacity: 0.4 }]}
                       onPress={verAadhaar} disabled={otp.length < 6 || loading}>
-                      {loading ? <ActivityIndicator color=C.white /> : <Text style={s.btnT}>Verify</Text>}
+                      {loading ? <ActivityIndicator color={C.white} /> : <Text style={s.btnT}>Verify</Text>}
                     </TouchableOpacity>
                   </>
                 )}
@@ -255,7 +255,7 @@ export default function KycFlowScreen({ navigation }: any) {
                 </View>
                 <TouchableOpacity style={[s.btn, !addrValid && { opacity: 0.4 }]}
                   onPress={confirmAddress} disabled={!addrValid || loading}>
-                  {loading ? <ActivityIndicator color=C.white /> : <Text style={s.btnT}>Confirm address</Text>}
+                  {loading ? <ActivityIndicator color={C.white} /> : <Text style={s.btnT}>Confirm address</Text>}
                 </TouchableOpacity>
               </>
             )}
@@ -273,7 +273,7 @@ export default function KycFlowScreen({ navigation }: any) {
                   maxLength={10} autoCapitalize="characters" value={pan} onChangeText={setPan} autoFocus />
                 <TouchableOpacity style={[s.btn, pan.length < 10 && { opacity: 0.4 }]}
                   onPress={verPan} disabled={pan.length < 10 || loading}>
-                  {loading ? <ActivityIndicator color=C.white /> : <Text style={s.btnT}>Verify PAN</Text>}
+                  {loading ? <ActivityIndicator color={C.white} /> : <Text style={s.btnT}>Verify PAN</Text>}
                 </TouchableOpacity>
               </>
             )}
@@ -288,7 +288,7 @@ export default function KycFlowScreen({ navigation }: any) {
                   Take it in a well-lit area.
                 </Text>
                 <TouchableOpacity style={s.btn} onPress={doLiveness} disabled={loading}>
-                  {loading ? <ActivityIndicator color=C.white /> : <Text style={s.btnT}>Take selfie</Text>}
+                  {loading ? <ActivityIndicator color={C.white} /> : <Text style={s.btnT}>Take selfie</Text>}
                 </TouchableOpacity>
               </>
             )}
@@ -306,7 +306,7 @@ export default function KycFlowScreen({ navigation }: any) {
                   value={upi} onChangeText={setUpi} autoCapitalize="none" autoFocus />
                 <TouchableOpacity style={[s.btn, !upi.includes('@') && { opacity: 0.4 }]}
                   onPress={verPayout} disabled={!upi.includes('@') || loading}>
-                  {loading ? <ActivityIndicator color=C.white /> : <Text style={s.btnT}>Verify & complete</Text>}
+                  {loading ? <ActivityIndicator color={C.white} /> : <Text style={s.btnT}>Verify & complete</Text>}
                 </TouchableOpacity>
               </>
             )}
