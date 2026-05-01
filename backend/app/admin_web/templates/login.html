@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Sign in — Owmee Admin{% endblock %}
+{% block content %}
+<div class="min-h-[80vh] flex items-center justify-center">
+  <form method="post" action="/admin/login" class="w-full max-w-sm bg-white rounded-lg shadow p-8 border border-stone-200">
+    <h1 class="text-xl font-bold mb-6 text-amber-700">Owmee Admin</h1>
+    {% if error %}
+    <div class="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">{{ error }}</div>
+    {% endif %}
+    <label class="block text-sm font-medium mb-1">Email</label>
+    <input type="email" name="email" required autofocus
+           class="w-full mb-4 px-3 py-2 border border-stone-300 rounded focus:outline-none focus:ring-2 focus:ring-amber-500">
+    <label class="block text-sm font-medium mb-1">Password</label>
+    <input type="password" name="password" required
+           class="w-full mb-6 px-3 py-2 border border-stone-300 rounded focus:outline-none focus:ring-2 focus:ring-amber-500">
+    <button class="w-full bg-amber-600 hover:bg-amber-700 text-white font-medium rounded py-2">Sign in</button>
+  </form>
+</div>
+{% endblock %}

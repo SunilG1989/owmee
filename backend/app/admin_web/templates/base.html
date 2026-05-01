@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{% block title %}Owmee Admin{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>body { font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif; }</style>
+</head>
+<body class="bg-stone-50 text-stone-900">
+{% if admin %}
+<nav class="bg-white border-b border-stone-200 px-6 py-3 flex items-center justify-between">
+  <div class="flex items-center gap-6">
+    <a href="/admin" class="font-bold text-amber-700">Owmee Admin</a>
+    <a href="/admin/pickups" class="text-sm hover:text-amber-700">Pickups</a>
+    <a href="/admin/hub" class="text-sm hover:text-amber-700">Hub Dispatch</a>
+  </div>
+  <form method="post" action="/admin/logout" class="text-sm">
+    <span class="text-stone-500 mr-3">{{ admin.email }}</span>
+    <button class="text-stone-500 hover:text-stone-900">Sign out</button>
+  </form>
+</nav>
+{% endif %}
+<main class="max-w-6xl mx-auto px-6 py-6">
+  {% block content %}{% endblock %}
+</main>
+</body>
+</html>

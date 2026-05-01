@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Owmee Admin{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-6">Dashboard</h1>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+  <a href="/admin/pickups" class="bg-white rounded-lg border border-stone-200 p-6 hover:border-amber-500 transition">
+    <div class="text-sm text-stone-500 mb-1">Pickups pending</div>
+    <div class="text-3xl font-bold {{ 'text-amber-700' if pickup_count else 'text-stone-300' }}">{{ pickup_count }}</div>
+    <div class="text-xs text-stone-500 mt-2">Buyer paid; assign an FE for pickup</div>
+  </a>
+  <a href="/admin/hub" class="bg-white rounded-lg border border-stone-200 p-6 hover:border-amber-500 transition">
+    <div class="text-sm text-stone-500 mb-1">Hub dispatch</div>
+    <div class="text-3xl font-bold {{ 'text-amber-700' if hub_count else 'text-stone-300' }}">{{ hub_count }}</div>
+    <div class="text-xs text-stone-500 mt-2">Item at hub; choose FE delivery or courier</div>
+  </a>
+  <div class="bg-white rounded-lg border border-stone-200 p-6">
+    <div class="text-sm text-stone-500 mb-1">In delivery</div>
+    <div class="text-3xl font-bold text-stone-700">{{ in_progress_count }}</div>
+    <div class="text-xs text-stone-500 mt-2">FE / courier en route to buyer</div>
+  </div>
+</div>
+{% endblock %}

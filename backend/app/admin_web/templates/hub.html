@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Hub dispatch — Owmee Admin{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-6">Hub dispatch ({{ rows|length }})</h1>
+{% if not rows %}
+<div class="bg-white rounded-lg border border-stone-200 p-8 text-center text-stone-500">
+  Hub is empty. Items show up here once an FE has picked + inspected them.
+</div>
+{% else %}
+<div class="space-y-4">
+  {% for txn, title, buyer_phone in rows %}
+  <div class="bg-white rounded-lg border border-stone-200 p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div class="flex-1">
+      <a href="/admin/txn/{{ txn.id }}" class="text-amber-700 font-medium hover:underline">{{ title }}</a>
+      <div class="text-xs text-stone-500 mt-1">
+        Buyer {{ buyer_phone }} · ₹{{ txn.gross_amount }}
+        {% if txn.at_hub_at %} · at hub since {{ txn.at_hub_at.strftime('%d %b %H:%M') }}{% endif %}
+      </div>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 md:w-1/2">
+      <form method="post" action="/admin/hub/{{ txn.id }}/route-fe" class="flex gap-2">
+        <select name="fe_user_id" required class="text-xs border border-stone-300 rounded px-2 py-1 flex-1">
+          {% for fe_user_id, name, phone, code, city in fes %}
+          <option value="{{ fe_user_id }}">{{ code }} — {{ name or phone }}</option>
+          {% endfor %}
+        </select>
+        <button class="text-xs bg-amber-600 hover:bg-amber-700 text-white rounded px-3 py-1 whitespace-nowrap">FE deliver</button>
+      </form>
+      <form method="post" action="/admin/hub/{{ txn.id }}/route-courier" class="flex flex-col gap-1">
+        <div class="flex gap-1">
+          <select name="courier_name" required class="text-xs border border-stone-300 rounded px-2 py-1 w-24">
+            <option value="porter">Porter</option>
+            <option value="delhivery">Delhivery</option>
+            <option value="self_delivered">Self</option>
+          </select>
+          <input name="booking_id" placeholder="Booking ID / AWB" required
+                 class="text-xs border border-stone-300 rounded px-2 py-1 flex-1">
+          <button class="text-xs bg-stone-700 hover:bg-stone-900 text-white rounded px-3 py-1 whitespace-nowrap">Courier</button>
+        </div>
+        <input name="tracking_url" placeholder="Tracking URL (optional)"
+               class="text-xs border border-stone-200 rounded px-2 py-1">
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

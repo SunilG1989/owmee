@@ -139,6 +139,13 @@ def create_app() -> FastAPI:
     # under their respective prefixes (paths embedded in the router itself).
     from app.modules.transactions.logistics_router import router as logistics_router
     app.include_router(logistics_router, tags=["logistics"])
+    # Sprint 6c: server-rendered admin web UI (Jinja2 + Tailwind CDN)
+    from app.admin_web.router import router as admin_web_router, admin_login_redirect_handler
+    app.include_router(admin_web_router, tags=["admin-web"])
+    # Redirect /admin/* unauthenticated requests to /admin/login (so the
+    # browser actually lands on a login page instead of seeing JSON 401).
+    from fastapi import HTTPException as _HE
+    app.add_exception_handler(_HE, admin_login_redirect_handler)
 
     @app.get("/health", include_in_schema=False)
     async def health():
