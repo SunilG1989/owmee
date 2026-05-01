@@ -357,6 +357,11 @@ export interface TrackingResponse {
   refund_amount: string | null;
   refund_reason: string | null;
   refund_completed_at: string | null;
+  return_eligible: boolean;
+  return_status: 'none' | 'requested' | 'approved' | 'rejected' | 'pickup_scheduled' | 'picked_up' | 'completed';
+  return_reason: string | null;
+  return_decision_note: string | null;
+  return_requested_at: string | null;
 }
 
 // ── Wishlist ─────────────────────────────────────────────────────────────────
@@ -465,6 +470,17 @@ export const FE = {
     handover_photo_key: string;
     ack_code: string;
   }) => api.post(`/v1/fe/deliveries/${txnId}/complete`, payload),
+  // Sprint return flow — FE picks up returned items
+  myReturnPickups: () => api.get<{ return_pickups: FePickup[] }>('/v1/fe/return-pickups'),
+  completeReturnPickup: (txnId: string) =>
+    api.post(`/v1/fe/return-pickups/${txnId}/complete`),
+};
+
+// ── Returns ──────────────────────────────────────────────────────────────────
+// KYC-gated server-side. Mobile catches 403 and routes to KycRequiredForAction.
+export const Returns = {
+  request: (transactionId: string, reason: string, description: string) =>
+    api.post(`/v1/transactions/${transactionId}/return`, { reason, description }),
 };
 
 export interface FePickup {

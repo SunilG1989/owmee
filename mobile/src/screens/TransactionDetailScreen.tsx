@@ -23,7 +23,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { C, T, S, R, formatPrice } from '../utils/tokens';
 import type { RootScreen } from '../navigation/types';
-import { Transactions, Disputes, type TrackingResponse, type Transaction } from '../services/api';
+import { Transactions, Disputes, Returns, type TrackingResponse, type Transaction } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import { parseApiError } from '../utils/errors';
 
@@ -31,6 +31,13 @@ const DISPUTE_REASONS: { key: string; label: string }[] = [
   { key: 'item_not_received', label: 'I never received the item' },
   { key: 'item_not_as_described', label: "Item doesn't match the listing" },
   { key: 'payment_issue', label: 'Payment problem' },
+  { key: 'other', label: 'Something else' },
+];
+
+const RETURN_REASONS: { key: string; label: string }[] = [
+  { key: 'item_not_as_described', label: "Item doesn't match the listing" },
+  { key: 'damaged_in_transit', label: 'Item arrived damaged' },
+  { key: 'wrong_item', label: 'I received the wrong item' },
   { key: 'other', label: 'Something else' },
 ];
 
@@ -47,6 +54,9 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
   const [showDispute, setShowDispute] = useState(false);
   const [disputeReason, setDisputeReason] = useState<string>('item_not_as_described');
   const [disputeDesc, setDisputeDesc] = useState('');
+  const [showReturn, setShowReturn] = useState(false);
+  const [returnReason, setReturnReason] = useState<string>('item_not_as_described');
+  const [returnDesc, setReturnDesc] = useState('');
 
   const reload = useCallback(async () => {
     try {
@@ -213,6 +223,45 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
             </TouchableOpacity>
           </View>
         )}
+
+        {/* Return — only buyer, only inside 7-day window, only if no
+            return already in flight. Eligibility computed server-side. */}
+        {isBuyer && tracking.return_eligible && (
+          <View style={s.actions}>
+            <TouchableOpacity style={s.btnSecondary} onPress={() => setShowReturn(true)}>
+              <Text style={s.btnSecondaryText}>Return this item</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Return-status box (visible while a return is in flight or
+            after rejection so the buyer can see why). */}
+        {tracking.return_status && tracking.return_status !== 'none' && (
+          <View style={[s.refundBox,
+            tracking.return_status === 'completed' && s.refundOK,
+            tracking.return_status === 'rejected' && s.refundErr,
+          ]}>
+            <Text style={s.refundLabel}>Return — {tracking.return_status.replace(/_/g, ' ')}</Text>
+            {tracking.return_status === 'requested' && (
+              <Text style={s.refundHint}>We're reviewing your request. You'll get a decision within 24 hours.</Text>
+            )}
+            {tracking.return_status === 'approved' && (
+              <Text style={s.refundHint}>Approved. Owmee FE will pick the item up from you soon.</Text>
+            )}
+            {tracking.return_status === 'pickup_scheduled' && (
+              <Text style={s.refundHint}>FE assigned. They'll contact you shortly.</Text>
+            )}
+            {tracking.return_status === 'picked_up' && (
+              <Text style={s.refundHint}>Item collected. Refund processing.</Text>
+            )}
+            {tracking.return_status === 'completed' && (
+              <Text style={s.refundHint}>Return complete. Refund initiated to your original payment method.</Text>
+            )}
+            {tracking.return_status === 'rejected' && tracking.return_decision_note && (
+              <Text style={s.refundReason}>{tracking.return_decision_note}</Text>
+            )}
+          </View>
+        )}
       </ScrollView>
 
       {/* Dispute modal — KYC-gated server-side; on 403 we route the
@@ -275,6 +324,69 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
                 }}
               >
                 <Text style={s.btnPrimaryText}>Open dispute</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showReturn} animationType="slide" transparent onRequestClose={() => setShowReturn(false)}>
+        <View style={s.modalBg}>
+          <View style={s.modal}>
+            <Text style={s.modalTitle}>Return this item</Text>
+            <Text style={s.disputeHint}>
+              Owmee FE will pick the item up from you and refund your original payment.
+              You have 7 days from delivery to request a return.
+            </Text>
+            <Text style={s.rowLabel}>Why are you returning?</Text>
+            {RETURN_REASONS.map(opt => (
+              <TouchableOpacity
+                key={opt.key}
+                style={[s.reasonRow, returnReason === opt.key && s.reasonRowOn]}
+                onPress={() => setReturnReason(opt.key)}
+              >
+                <View style={[s.radio, returnReason === opt.key && s.radioOn]} />
+                <Text style={s.reasonLabel}>{opt.label}</Text>
+              </TouchableOpacity>
+            ))}
+            <Text style={[s.rowLabel, { marginTop: 12 }]}>Tell us more</Text>
+            <TextInput
+              style={[s.input, { minHeight: 100 }]}
+              placeholder="What's wrong with it? Be specific."
+              placeholderTextColor={C.text4}
+              value={returnDesc}
+              onChangeText={setReturnDesc}
+              multiline
+              maxLength={1000}
+            />
+            <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+              <TouchableOpacity style={[s.btnSecondary, { flex: 1 }]} onPress={() => setShowReturn(false)}>
+                <Text style={s.btnSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.btnPrimary, { flex: 2 }, (returnDesc.length < 10 || acting) && s.btnDisabled]}
+                disabled={returnDesc.length < 10 || acting}
+                onPress={async () => {
+                  setShowReturn(false);
+                  setActing(true);
+                  try {
+                    await Returns.request(transactionId, returnReason, returnDesc);
+                    Alert.alert('Return requested', 'We\'ll review and decide within 24 hours.');
+                    await reload();
+                  } catch (e: any) {
+                    if (e?.response?.status === 403) {
+                      navigation.navigate('KycRequiredForAction' as never, {
+                        actionLabel: 'request a return', returnTo: 'TransactionDetail',
+                      } as never);
+                    } else {
+                      Alert.alert('Could not request return', parseApiError(e, 'Try again.'));
+                    }
+                  } finally {
+                    setActing(false);
+                  }
+                }}
+              >
+                <Text style={s.btnPrimaryText}>Request return</Text>
               </TouchableOpacity>
             </View>
           </View>

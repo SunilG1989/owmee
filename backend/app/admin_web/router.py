@@ -295,6 +295,81 @@ async def txn_detail(
     })
 
 
+@router.get("/admin/returns", response_class=HTMLResponse)
+async def returns_page(
+    request: Request, db: DBSession,
+    admin: AdminUserModel = Depends(require_admin_cookie),
+):
+    rows = (await db.execute(
+        select(Transaction, Listing.title, User.phone_number)
+        .join(Listing, Listing.id == Transaction.listing_id)
+        .join(User, User.id == Transaction.buyer_id)
+        .where(Transaction.return_status.in_(["requested", "approved", "pickup_scheduled"]))
+        .order_by(Transaction.return_requested_at.desc())
+    )).all()
+    fes = (await db.execute(
+        text("""
+            SELECT fe.user_id, u.name, u.phone_number, fe.fe_code
+            FROM field_executives fe JOIN users u ON u.id = fe.user_id
+            WHERE fe.active = true
+            ORDER BY fe.fe_code
+        """)
+    )).all()
+    return templates.TemplateResponse("returns.html", {
+        "request": request, "admin": admin, "rows": rows, "fes": fes,
+    })
+
+
+@router.post("/admin/returns/{transaction_id}/decision")
+async def returns_decision(
+    transaction_id: UUID, db: DBSession,
+    decision: str = Form(...),  # 'approve' | 'reject'
+    note: str = Form(""),
+    admin: AdminUserModel = Depends(require_admin_cookie),
+):
+    from app.modules.transactions import return_service
+    txn = await db.get(Transaction, transaction_id)
+    if not txn:
+        raise HTTPException(404)
+    try:
+        if decision == "approve":
+            await return_service.admin_approve_return(db, txn, admin_id=admin.id, note=note)
+        elif decision == "reject":
+            await return_service.admin_reject_return(db, txn, admin_id=admin.id, note=note)
+        else:
+            raise HTTPException(400, "bad_decision")
+        await db.commit()
+    except ValueError as e:
+        logger.warning("admin.return_decision_failed",
+                       transaction_id=str(transaction_id), error=str(e))
+    logger.info("admin.return_decision", transaction_id=str(transaction_id),
+                decision=decision, admin_id=str(admin.id))
+    return RedirectResponse(url="/admin/returns", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/admin/returns/{transaction_id}/assign-pickup")
+async def returns_assign_pickup(
+    transaction_id: UUID, db: DBSession,
+    fe_user_id: str = Form(...),
+    admin: AdminUserModel = Depends(require_admin_cookie),
+):
+    from app.modules.transactions import return_service
+    txn = await db.get(Transaction, transaction_id)
+    if not txn:
+        raise HTTPException(404)
+    try:
+        await return_service.admin_assign_return_pickup(
+            db, txn, admin_id=admin.id, fe_user_id=UUID(fe_user_id),
+        )
+        await db.commit()
+    except ValueError as e:
+        logger.warning("admin.return_assign_failed",
+                       transaction_id=str(transaction_id), error=str(e))
+    logger.info("admin.return_assign_pickup", transaction_id=str(transaction_id),
+                fe_user_id=fe_user_id, admin_id=str(admin.id))
+    return RedirectResponse(url="/admin/returns", status_code=status.HTTP_303_SEE_OTHER)
+
+
 @router.get("/admin/disputes", response_class=HTMLResponse)
 async def disputes_page(
     request: Request, db: DBSession,

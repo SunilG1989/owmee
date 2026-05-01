@@ -24,21 +24,25 @@ import { FE, type FePickup } from '../../services/api';
 import { C, R, S, T } from '../../utils/tokens';
 import type { RootScreen } from '../../navigation/types';
 
-type Tab = 'pickups' | 'deliveries';
+type Tab = 'pickups' | 'deliveries' | 'returns';
 
 export default function FeOpsScreen({ navigation }: RootScreen<'FeOps'>) {
   const [tab, setTab] = useState<Tab>('pickups');
   const [pickups, setPickups] = useState<FePickup[]>([]);
   const [deliveries, setDeliveries] = useState<FePickup[]>([]);
+  const [returns, setReturns] = useState<FePickup[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [active, setActive] = useState<{ kind: Tab; item: FePickup } | null>(null);
 
   const reload = useCallback(async () => {
     try {
-      const [p, d] = await Promise.all([FE.myPickups(), FE.myDeliveries()]);
+      const [p, d, r] = await Promise.all([
+        FE.myPickups(), FE.myDeliveries(), FE.myReturnPickups(),
+      ]);
       setPickups(p.data.pickups);
       setDeliveries(d.data.deliveries);
+      setReturns(r.data.return_pickups);
     } catch {
       // Surface on next iteration; keep silent so the screen still mounts
     } finally {
@@ -49,10 +53,12 @@ export default function FeOpsScreen({ navigation }: RootScreen<'FeOps'>) {
 
   React.useEffect(() => { reload(); }, [reload]);
 
-  const list = tab === 'pickups' ? pickups : deliveries;
+  const list = tab === 'pickups' ? pickups : tab === 'deliveries' ? deliveries : returns;
   const empty = tab === 'pickups'
     ? 'No pickups assigned to you right now.'
-    : 'No deliveries assigned to you right now.';
+    : tab === 'deliveries'
+      ? 'No deliveries assigned to you right now.'
+      : 'No return pickups assigned to you right now.';
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
@@ -78,6 +84,14 @@ export default function FeOpsScreen({ navigation }: RootScreen<'FeOps'>) {
         >
           <Text style={[s.tabText, tab === 'deliveries' && s.tabTextOn]}>
             Deliveries ({deliveries.length})
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[s.tab, tab === 'returns' && s.tabOn]}
+          onPress={() => setTab('returns')}
+        >
+          <Text style={[s.tabText, tab === 'returns' && s.tabTextOn]}>
+            Returns ({returns.length})
           </Text>
         </TouchableOpacity>
       </View>
@@ -115,7 +129,56 @@ export default function FeOpsScreen({ navigation }: RootScreen<'FeOps'>) {
       {active && active.kind === 'deliveries' && (
         <DeliverySheet item={active.item} onClose={() => setActive(null)} onDone={() => { setActive(null); reload(); }} />
       )}
+      {active && active.kind === 'returns' && (
+        <ReturnPickupSheet item={active.item} onClose={() => setActive(null)} onDone={() => { setActive(null); reload(); }} />
+      )}
     </SafeAreaView>
+  );
+}
+
+// ── Return pickup detail + complete ──────────────────────────────────────────
+// Simpler than the original pickup: no inspection (item is being returned,
+// inspection already happened at original pickup), no buyer ack code (the
+// buyer is just handing the item back). FE confirms collection → refund auto-fires.
+
+function ReturnPickupSheet({ item, onClose, onDone }: { item: FePickup; onClose: () => void; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    setBusy(true);
+    try {
+      await FE.completeReturnPickup(item.transaction_id);
+      onDone();
+    } catch (e: any) {
+      Alert.alert('Could not complete', String(e?.response?.data?.detail?.error || 'Try again.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal animationType="slide" transparent onRequestClose={onClose}>
+      <View style={s.sheetBg}>
+        <View style={s.sheet}>
+          <Text style={s.sheetTitle}>{item.listing_title || 'Return pickup'}</Text>
+          <Text style={s.sheetSub}>₹{item.gross_amount} · returning to Owmee</Text>
+
+          <Text style={s.rowLabel}>Confirm collection from buyer</Text>
+          <Text style={s.hint}>
+            Confirm only after you have the item in hand. The buyer's refund fires automatically.
+          </Text>
+
+          <View style={{ flexDirection: 'row', gap: 12, marginTop: 24 }}>
+            <TouchableOpacity style={[s.btnGhost, { flex: 1 }]} onPress={onClose}>
+              <Text style={s.btnGhostText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[s.btnPrimary, { flex: 2 }, busy && s.btnDisabled]} disabled={busy} onPress={submit}>
+              <Text style={s.btnPrimaryText}>Item collected → refund buyer</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 

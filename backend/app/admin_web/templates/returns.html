@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Returns — Owmee Admin{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-6">Returns ({{ rows|length }})</h1>
+{% if not rows %}
+<div class="bg-white rounded-lg border border-stone-200 p-8 text-center text-stone-500">
+  No active return requests.
+</div>
+{% else %}
+<div class="space-y-4">
+  {% for txn, title, buyer_phone in rows %}
+  <div class="bg-white rounded-lg border border-stone-200 p-4">
+    <div class="flex justify-between items-start mb-2">
+      <div>
+        <a href="/admin/txn/{{ txn.id }}" class="text-amber-700 font-medium hover:underline">{{ title }}</a>
+        <div class="text-xs text-stone-500 mt-1">
+          Buyer {{ buyer_phone }} · ₹{{ txn.gross_amount }} · reason
+          <span class="font-mono">{{ txn.return_reason }}</span>
+          {% if txn.return_requested_at %} · raised {{ txn.return_requested_at.strftime('%d %b %H:%M') }}{% endif %}
+        </div>
+      </div>
+      <div class="text-xs">
+        {% if txn.return_status == 'requested' %}
+          <span class="px-2 py-0.5 bg-red-100 text-red-700 rounded font-medium">PENDING</span>
+        {% elif txn.return_status == 'approved' %}
+          <span class="px-2 py-0.5 bg-amber-100 text-amber-700 rounded font-medium">APPROVED</span>
+        {% else %}
+          <span class="px-2 py-0.5 bg-stone-100 text-stone-700 rounded font-medium">{{ txn.return_status }}</span>
+        {% endif %}
+      </div>
+    </div>
+    {% if txn.return_description %}
+    <div class="text-sm text-stone-700 bg-stone-50 rounded p-3 mb-3">{{ txn.return_description }}</div>
+    {% endif %}
+
+    {% if txn.return_status == 'requested' %}
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <form method="post" action="/admin/returns/{{ txn.id }}/decision" class="flex gap-2">
+        <input name="decision" value="approve" hidden>
+        <input name="note" placeholder="Note (optional, visible to buyer)"
+               class="text-xs border border-stone-300 rounded px-2 py-1 flex-1">
+        <button class="text-xs bg-green-600 hover:bg-green-700 text-white rounded px-3 py-1 whitespace-nowrap">Approve</button>
+      </form>
+      <form method="post" action="/admin/returns/{{ txn.id }}/decision" class="flex gap-2">
+        <input name="decision" value="reject" hidden>
+        <input name="note" required placeholder="Reason for rejection (visible to buyer)"
+               class="text-xs border border-stone-300 rounded px-2 py-1 flex-1" minlength="5">
+        <button class="text-xs bg-red-600 hover:bg-red-700 text-white rounded px-3 py-1 whitespace-nowrap">Reject</button>
+      </form>
+    </div>
+    {% elif txn.return_status == 'approved' %}
+    <form method="post" action="/admin/returns/{{ txn.id }}/assign-pickup" class="flex gap-2">
+      <select name="fe_user_id" required class="text-xs border border-stone-300 rounded px-2 py-1 flex-1">
+        {% for fe_user_id, name, phone, code in fes %}
+        <option value="{{ fe_user_id }}">{{ code }} — {{ name or phone }}</option>
+        {% endfor %}
+      </select>
+      <button class="text-xs bg-amber-600 hover:bg-amber-700 text-white rounded px-3 py-1 whitespace-nowrap">Assign FE for return pickup</button>
+    </form>
+    {% else %}
+    <div class="text-xs text-stone-500">FE pickup scheduled. Awaiting collection from buyer.</div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

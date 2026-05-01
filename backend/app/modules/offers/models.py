@@ -123,6 +123,20 @@ class Transaction(Base, TimestampMixin):
     refund_initiated_by = Column(String(20))                       # system_pickup_rejected | admin | buyer
     razorpay_refund_id = Column(String(120))
 
+    # ── Sprint return flow (migration 0031) ────────────────────────────────
+    # return_status: 'none' | 'requested' | 'approved' | 'rejected'
+    #              | 'pickup_scheduled' | 'picked_up' | 'completed'
+    return_status = Column(String(20), nullable=False, default="none", server_default=text("'none'"))
+    return_reason = Column(String(50))
+    return_description = Column(String(1000))
+    return_requested_at = Column(DateTime(timezone=True))
+    return_decision_at = Column(DateTime(timezone=True))
+    return_decision_by = Column(UUID(as_uuid=True))
+    return_decision_note = Column(String(500))
+    return_pickup_fe_id = Column(UUID(as_uuid=True))
+    return_picked_up_at = Column(DateTime(timezone=True))
+    return_completed_at = Column(DateTime(timezone=True))
+
     # ── Sprint 4 / Pass 4e: frozen listing snapshot at reservation time ─────
     listing_snapshot = Column(JSONB, nullable=True)
     snapshot_frozen_at = Column(DateTime(timezone=True), nullable=True)

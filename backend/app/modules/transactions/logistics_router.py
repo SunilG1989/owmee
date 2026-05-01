@@ -30,7 +30,7 @@ from fastapi import APIRouter, Depends, HTTPException, status as http_status
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, select, text
 
-from app.core.dependencies import BasicUser, CurrentUser, DBSession, require_basic
+from app.core.dependencies import BasicUser, CurrentUser, DBSession, VerifiedUser, require_basic
 from app.modules.identity_auth.models import User
 from app.modules.listings.models import Listing
 from app.modules.offers.models import PaymentLink, Transaction
@@ -39,6 +39,7 @@ from app.modules.transactions.logistics_state import (
     PAYMENT_CAPTURED, PICKUP_REJECTED,
     assert_legal_transition,
 )
+from app.modules.transactions import return_service
 
 logger = structlog.get_logger()
 router = APIRouter(tags=["logistics"])
@@ -285,6 +286,159 @@ async def admin_initiate_refund(
     return _fmt_logistics(txn)
 
 
+# ── Returns: buyer + admin + FE ───────────────────────────────────────────────
+
+class _RequestReturnRequest(BaseModel):
+    reason: str = Field(..., min_length=2, max_length=50)
+    description: str = Field(..., min_length=10, max_length=1000)
+
+
+class _AdminReturnDecisionRequest(BaseModel):
+    note: str = Field("", max_length=500)
+
+
+class _AdminAssignReturnPickupRequest(BaseModel):
+    fe_user_id: UUID
+
+
+@router.post("/v1/transactions/{transaction_id}/return")
+async def buyer_request_return(
+    transaction_id: UUID, body: _RequestReturnRequest,
+    current_user: VerifiedUser, db: DBSession,
+):
+    """Buyer initiates a return. KYC-gated (VerifiedUser) per Sprint 6
+    brief — refund/return/dispute are the only things that need KYC."""
+    txn = await db.get(Transaction, transaction_id)
+    if not txn:
+        raise HTTPException(404, {"error": "NOT_FOUND"})
+    try:
+        await return_service.request_return(
+            db, txn, current_user.user_id,
+            reason=body.reason, description=body.description,
+        )
+        await db.commit()
+    except ValueError as e:
+        code = str(e)
+        msgs = {
+            "NOT_YOUR_TRANSACTION": "This isn't your order.",
+            "RETURN_ALREADY_OPEN": "A return request is already open on this order.",
+            "RETURN_WINDOW_EXPIRED": "Returns can only be requested within 7 days of delivery.",
+        }
+        msg = msgs.get(code.split(":")[0], code)
+        raise HTTPException(400, {"error": code.split(":")[0], "message": msg})
+    return _fmt_logistics(txn)
+
+
+@router.get("/v1/admin/logistics/returns", dependencies=[Depends(require_admin)])
+async def admin_returns_queue(db: DBSession):
+    rows = (await db.execute(
+        select(Transaction, Listing.title)
+        .join(Listing, Listing.id == Transaction.listing_id)
+        .where(Transaction.return_status.in_(["requested", "approved", "pickup_scheduled"]))
+        .order_by(Transaction.return_requested_at.desc())
+    )).all()
+    out = []
+    for t, title in rows:
+        d = _fmt_logistics(t, title)
+        d["return_status"] = t.return_status
+        d["return_reason"] = t.return_reason
+        d["return_description"] = t.return_description
+        d["return_requested_at"] = t.return_requested_at.isoformat() if t.return_requested_at else None
+        d["return_pickup_fe_id"] = str(t.return_pickup_fe_id) if t.return_pickup_fe_id else None
+        out.append(d)
+    return {"returns": out}
+
+
+@router.post(
+    "/v1/admin/logistics/returns/{transaction_id}/approve",
+    dependencies=[Depends(require_admin)],
+)
+async def admin_approve_return(
+    transaction_id: UUID, body: _AdminReturnDecisionRequest, db: DBSession,
+):
+    txn = await db.get(Transaction, transaction_id)
+    if not txn:
+        raise HTTPException(404, {"error": "NOT_FOUND"})
+    try:
+        # admin_id is unknown at this stub-auth layer — pass the seller_id
+        # as a placeholder so the audit trail isn't NULL. Real admin id
+        # plumbs in when require_admin is wired to admin_users.
+        await return_service.admin_approve_return(db, txn, admin_id=txn.seller_id, note=body.note)
+        await db.commit()
+    except ValueError as e:
+        raise HTTPException(400, {"error": str(e)})
+    return _fmt_logistics(txn)
+
+
+@router.post(
+    "/v1/admin/logistics/returns/{transaction_id}/reject",
+    dependencies=[Depends(require_admin)],
+)
+async def admin_reject_return(
+    transaction_id: UUID, body: _AdminReturnDecisionRequest, db: DBSession,
+):
+    txn = await db.get(Transaction, transaction_id)
+    if not txn:
+        raise HTTPException(404, {"error": "NOT_FOUND"})
+    try:
+        await return_service.admin_reject_return(db, txn, admin_id=txn.seller_id, note=body.note)
+        await db.commit()
+    except ValueError as e:
+        raise HTTPException(400, {"error": str(e)})
+    return _fmt_logistics(txn)
+
+
+@router.post(
+    "/v1/admin/logistics/returns/{transaction_id}/assign-pickup",
+    dependencies=[Depends(require_admin)],
+)
+async def admin_assign_return_pickup(
+    transaction_id: UUID, body: _AdminAssignReturnPickupRequest, db: DBSession,
+):
+    txn = await db.get(Transaction, transaction_id)
+    if not txn:
+        raise HTTPException(404, {"error": "NOT_FOUND"})
+    try:
+        await return_service.admin_assign_return_pickup(
+            db, txn, admin_id=txn.seller_id, fe_user_id=body.fe_user_id,
+        )
+        await db.commit()
+    except ValueError as e:
+        raise HTTPException(400, {"error": str(e)})
+    return _fmt_logistics(txn)
+
+
+# ── FE: return pickups ────────────────────────────────────────────────────────
+
+@router.get("/v1/fe/return-pickups")
+async def fe_my_return_pickups(current_user: FeUser, db: DBSession):
+    rows = await db.execute(
+        select(Transaction, Listing.title)
+        .join(Listing, Listing.id == Transaction.listing_id)
+        .where(and_(
+            Transaction.return_pickup_fe_id == current_user.user_id,
+            Transaction.return_status == "pickup_scheduled",
+        ))
+        .order_by(Transaction.return_decision_at.asc())
+    )
+    return {"return_pickups": [_fmt_logistics(t, title) for t, title in rows.all()]}
+
+
+@router.post("/v1/fe/return-pickups/{transaction_id}/complete")
+async def fe_complete_return_pickup(
+    transaction_id: UUID, current_user: FeUser, db: DBSession,
+):
+    txn = await db.get(Transaction, transaction_id)
+    if not txn:
+        raise HTTPException(404, {"error": "NOT_FOUND"})
+    try:
+        await return_service.fe_complete_return_pickup(db, txn, fe_user_id=current_user.user_id)
+        await db.commit()
+    except ValueError as e:
+        raise HTTPException(400, {"error": str(e)})
+    return _fmt_logistics(txn)
+
+
 # ── Admin: hub dispatch ───────────────────────────────────────────────────────
 
 @router.get("/v1/admin/logistics/hub-queue", dependencies=[Depends(require_admin)])
@@ -459,6 +613,16 @@ async def buyer_tracking(transaction_id: UUID, current_user: BasicUser, db: DBSe
         {"step": "delivered",             "at": txn.delivered_at.isoformat() if txn.delivered_at else None,
          "label": "Delivered to you", "done": txn.delivered_at is not None},
     ]
+    # Return-window eligibility: only buyers, only delivered/completed
+    # transactions inside the 7-day window with no return already open.
+    return_eligible = (
+        txn.buyer_id == current_user.user_id
+        and txn.status in ("delivered", "completed")
+        and txn.return_status in ("none", "rejected")
+        and txn.delivered_at is not None
+        and (datetime.now(timezone.utc) - txn.delivered_at).days <= 7
+    )
+
     return {
         "transaction_id": str(transaction_id),
         "status": txn.status,
@@ -480,4 +644,10 @@ async def buyer_tracking(transaction_id: UUID, current_user: BasicUser, db: DBSe
         "refund_amount": str(txn.refund_amount) if txn.refund_amount else None,
         "refund_reason": txn.refund_reason,
         "refund_completed_at": txn.refund_completed_at.isoformat() if txn.refund_completed_at else None,
+        # Return flow visibility
+        "return_eligible": return_eligible,
+        "return_status": txn.return_status,
+        "return_reason": txn.return_reason,
+        "return_decision_note": txn.return_decision_note,
+        "return_requested_at": txn.return_requested_at.isoformat() if txn.return_requested_at else None,
     }
