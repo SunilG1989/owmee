@@ -95,6 +95,24 @@ class Transaction(Base, TimestampMixin):
     # Rating gate — 2h delay
     rate_available_at = Column(DateTime(timezone=True))
 
+    # ── Sprint 6c: hybrid logistics ────────────────────────────────────────
+    # State machine post-Sprint-6c:
+    #   payment_captured → at_hub → delivery_in_progress → delivered → completed
+    pickup_fe_id = Column(UUID(as_uuid=True))                     # FE who picked up + inspected
+    pickup_inspection_passed = Column(Boolean)                    # True=item OK, False=rejected
+    pickup_inspection_notes = Column(Text)
+    pickup_inspection_photo_keys = Column(JSONB)                  # list of R2 keys
+    at_hub_at = Column(DateTime(timezone=True))
+    delivery_mode = Column(String(16))                            # 'fe' | 'courier'
+    delivery_fe_id = Column(UUID(as_uuid=True))                   # FE doing delivery (may differ from pickup_fe)
+    courier_name = Column(String(40))                             # 'porter' | 'delhivery' | 'self_delivered' | …
+    courier_booking_id = Column(String(120))                      # Porter booking ID or AWB
+    courier_tracking_url = Column(String(500))                    # public link buyer can open
+    delivery_handover_photo_key = Column(String(500))             # R2 key, FE captures at handover
+    buyer_acknowledgment_code = Column(String(8))                 # 6-digit OTP for delivery confirmation
+    routed_at = Column(DateTime(timezone=True))                   # admin chose FE/courier
+    delivered_at = Column(DateTime(timezone=True))
+
     # ── Sprint 4 / Pass 4e: frozen listing snapshot at reservation time ─────
     listing_snapshot = Column(JSONB, nullable=True)
     snapshot_frozen_at = Column(DateTime(timezone=True), nullable=True)
