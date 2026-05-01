@@ -97,7 +97,7 @@ export default function MyListingsScreen({ navigation }: any) {
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
-        <BackButton />
+        <BackButton onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>My Listings</Text>
         <TouchableOpacity onPress={() => navigation.navigate('Sell')}><Text style={{ fontSize: 24, color: C.honey }}>+</Text></TouchableOpacity>
       </View>

@@ -1,67 +1,147 @@
 /**
- * Owmee EmptyState — the standard "nothing here yet" treatment.
+ * Owmee EmptyState — v6 "Petrol"
  *
- * Replaces the three patterns we had: bare ActivityIndicator, raw text
- * "No items", and emoji-with-text-no-CTA. This one always has icon +
- * heading + body; an optional action button keeps the user moving
- * instead of staring at a dead screen.
+ * Use whenever a screen has nothing to show — no listings, no offers,
+ * no orders, empty search, no notifications, etc. NOT for errors —
+ * use ErrorState for those.
  *
- * Tone of voice: encouraging + specific. "No offers received yet" beats
- * "No data". "List your first item" beats "Click here".
+ * The voice is conversational and a little dry, matching the
+ * marketing voice ("you bought a Pixel 7. now we go get it.").
+ * Don't apologize. Don't say "Oops". State the situation, give
+ * the user one obvious next step.
+ *
+ * Layout: centered glyph + Fraunces headline + Inter supporting
+ * line + optional CTA button. Generous vertical padding so it
+ * never feels cramped on a tall screen.
+ *
+ * Examples:
+ *   <EmptyState
+ *     glyph="📦"
+ *     title="Nothing here yet"
+ *     body="When you list a phone, it'll show up here."
+ *     ctaLabel="List a phone"
+ *     onCtaPress={() => nav.navigate('Sell')}
+ *   />
+ *
+ *   <EmptyState
+ *     glyph="🔍"
+ *     title="No matches"
+ *     body="Try widening the radius or removing a filter."
+ *   />
  */
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import { C, I, S, T } from '../../utils/tokens';
-import Button, { ButtonVariant } from './Button';
+import { StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { C, FONTS, S, T } from '../../utils/tokens';
+import Button from './Button';
 
 interface Props {
-  icon?: string;          // emoji
+  /** Single emoji or short glyph. Replace with an SVG icon when you ship them. */
+  glyph?: string;
   title: string;
   body?: string;
-  actionLabel?: string;
-  onAction?: () => void;
-  actionVariant?: ButtonVariant;
+  /** Optional primary CTA. */
+  ctaLabel?: string;
+  onCtaPress?: () => void;
+  /** Optional secondary action (ghost). */
+  secondaryLabel?: string;
+  onSecondaryPress?: () => void;
+  /** Compact variant — for inline empty states inside cards. */
+  compact?: boolean;
+  style?: ViewStyle;
 }
 
 export default function EmptyState({
-  icon, title, body, actionLabel, onAction, actionVariant = 'primary',
+  glyph,
+  title,
+  body,
+  ctaLabel,
+  onCtaPress,
+  secondaryLabel,
+  onSecondaryPress,
+  compact = false,
+  style,
 }: Props) {
   return (
-    <View style={s.wrap}>
-      {icon && <Text style={s.icon} accessible={false}>{icon}</Text>}
-      <Text style={s.title} accessibilityRole="header">{title}</Text>
-      {body && <Text style={s.body}>{body}</Text>}
-      {actionLabel && onAction && (
-        <View style={{ marginTop: S.lg }}>
-          <Button label={actionLabel} onPress={onAction} variant={actionVariant} size="md" />
+    <View style={[styles.wrap, compact && styles.wrapCompact, style]}>
+      {glyph && (
+        <Text style={[styles.glyph, compact && styles.glyphCompact]}>{glyph}</Text>
+      )}
+      <Text style={[styles.title, compact && styles.titleCompact]}>{title}</Text>
+      {body && (
+        <Text style={[styles.body, compact && styles.bodyCompact]}>{body}</Text>
+      )}
+      {(ctaLabel || secondaryLabel) && (
+        <View style={styles.actions}>
+          {ctaLabel && onCtaPress && (
+            <Button
+              label={ctaLabel}
+              onPress={onCtaPress}
+              variant="primary"
+              size={compact ? 'sm' : 'md'}
+            />
+          )}
+          {secondaryLabel && onSecondaryPress && (
+            <Button
+              label={secondaryLabel}
+              onPress={onSecondaryPress}
+              variant="ghost"
+              size={compact ? 'sm' : 'md'}
+            />
+          )}
         </View>
       )}
     </View>
   );
 }
 
-const s = StyleSheet.create({
+const styles = StyleSheet.create({
   wrap: {
-    paddingVertical: S.xxxl + S.lg,
-    paddingHorizontal: S.xl,
+    flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: S.xxl,
+    paddingVertical: S.xxxl * 2,
   },
-  icon: {
-    fontSize: I.xl,
+  wrapCompact: {
+    flex: 0,
+    paddingVertical: S.xxl,
+  },
+  glyph: {
+    fontSize: 56,
+    marginBottom: S.lg,
+    opacity: 0.85,
+  },
+  glyphCompact: {
+    fontSize: 36,
     marginBottom: S.md,
   },
   title: {
-    fontSize: T.size.lg,
-    fontWeight: T.weight.semi,
+    fontFamily: FONTS.displayMedium,
+    fontSize: T.size.xl,
+    fontWeight: T.weight.medium,
     color: C.text,
     textAlign: 'center',
+    marginBottom: S.sm,
+  },
+  titleCompact: {
+    fontSize: T.size.lg,
   },
   body: {
-    fontSize: T.size.base,
+    fontFamily: FONTS.sans,
+    fontSize: T.size.md,
     color: C.text2,
     textAlign: 'center',
-    marginTop: S.sm,
-    lineHeight: 20,
+    lineHeight: T.size.md * 1.5,
     maxWidth: 320,
+    marginBottom: S.xl,
+  },
+  bodyCompact: {
+    fontSize: T.size.base,
+    marginBottom: S.lg,
+  },
+  actions: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: S.sm,
   },
 });

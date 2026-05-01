@@ -76,7 +76,7 @@ export default function CheckoutScreen({ navigation, route }: any) {
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
-        <BackButton />
+        <BackButton onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>Checkout</Text>
         <View style={{ width: 24 }} />
       </View>

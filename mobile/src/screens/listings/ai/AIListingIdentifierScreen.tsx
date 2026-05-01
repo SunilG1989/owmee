@@ -205,7 +205,7 @@ export default function AIListingIdentifierScreen({
   return (
     <SafeAreaView style={st.root}>
       <View style={st.header}>
-        <BackButton />
+        <BackButton onPress={() => navigation.goBack()} />
         <Text style={st.headerTitle}>{isSmartphone ? 'Capture IMEI' : 'Capture serial number'}</Text>
         <View style={st.headerBtn} />
       </View>

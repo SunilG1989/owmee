@@ -211,7 +211,7 @@ export default function AIListingSuggestScreen({
     <SafeAreaView style={st.root}>
       {/* Header */}
       <View style={st.header}>
-        <BackButton />
+        <BackButton onPress={() => navigation.goBack()} />
         <Text style={st.headerTitle}>Review listing</Text>
         <View style={st.headerBtn} />
       </View>

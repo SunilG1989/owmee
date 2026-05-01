@@ -36,7 +36,7 @@ export default function WishlistScreen({ navigation }: any) {
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
-        <BackButton />
+        <BackButton onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>Saved Items</Text>
         <View style={{ width: 24 }} />
       </View>

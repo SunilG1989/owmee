@@ -92,7 +92,7 @@ export default function MyFeVisitsScreen({ navigation }: RootScreen<'MyFeVisits'
   return (
     <SafeAreaView style={st.root} edges={['top']}>
       <View style={st.header}>
-        <BackButton />
+        <BackButton onPress={() => navigation.goBack()} />
         <View>
           <Text style={st.h1}>Your FE visits</Text>
           <Text style={st.subtitle}>

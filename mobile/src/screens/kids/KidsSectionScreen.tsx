@@ -19,7 +19,7 @@ export default function KidsSectionScreen({ navigation }: any) {
 
   return (<SafeAreaView style={{flex:1,backgroundColor:C.cream}} edges={['top']}>
     <View style={{paddingHorizontal:16,paddingTop:8,paddingBottom:12,flexDirection:'row',alignItems:'center',gap:12}}>
-      <BackButton />
+      <BackButton onPress={() => navigation.goBack()} />
       <View>
         <Text style={{fontSize:22,fontWeight:'700',color:C.text}}>🧸 Kids items</Text>
         <Text style={{fontSize:12,color:C.text3,marginTop:2}}>Verified sellers · Hygiene rated</Text>

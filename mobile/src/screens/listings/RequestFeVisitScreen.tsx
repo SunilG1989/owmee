@@ -146,7 +146,7 @@ export default function RequestFeVisitScreen({ route, navigation }: RootScreen<'
   return (
     <SafeAreaView style={st.root} edges={['top']}>
       <View style={st.header}>
-        <BackButton />
+        <BackButton onPress={() => navigation.goBack()} />
         <Text style={st.h1}>Request FE visit</Text>
         <View style={{ width: 24 }} />
       </View>

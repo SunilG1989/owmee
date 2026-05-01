@@ -115,7 +115,7 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
     <SafeAreaView style={s.safe} edges={['top']}>
       <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
         <View style={s.header}>
-          <BackButton />
+          <BackButton onPress={() => navigation.goBack()} />
           <Text style={s.title}>Order tracking</Text>
         </View>
 

@@ -42,7 +42,7 @@ export default function EditProfileScreen({ navigation }: any) {
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
-        <BackButton />
+        <BackButton onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>Edit Profile</Text>
         <TouchableOpacity onPress={save} disabled={saving}>
           <Text style={[s.saveText, saving && { opacity: 0.4 }]}>{saving ? 'Saving...' : 'Save'}</Text>

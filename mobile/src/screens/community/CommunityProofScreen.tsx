@@ -238,7 +238,7 @@ export default function CommunityProofScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.topBackWrap}>
-        <BackButton />
+        <BackButton onPress={() => navigation.goBack()} />
       </View>
       <ScrollView
         keyboardShouldPersistTaps="handled"

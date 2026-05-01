@@ -136,7 +136,7 @@ export default function EditListingScreen({ route, navigation }: RootScreen<'Edi
   return (
     <SafeAreaView style={st.root}>
       <View style={st.header}>
-        <BackButton />
+        <BackButton onPress={() => navigation.goBack()} />
         <Text style={st.headerTitle}>Edit listing</Text>
         <View style={st.headerBtn} />
       </View>

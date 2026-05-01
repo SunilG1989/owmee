@@ -127,7 +127,7 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
             />
           ) : <View style={{ width, height: imgH, backgroundColor: C.sand, alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 56 }}>📦</Text></View>}
           {images.length > 1 && <View style={s.dots}>{images.map((_, i) => <View key={i} style={[s.dot, i === imgIdx && s.dotOn]} />)}</View>}
-          <View style={s.backBtnWrap}><BackButton variant="floating" /></View>
+          <View style={s.backBtnWrap}><BackButton variant="floating" onPress={() => navigation.goBack()} /></View>
           <TouchableOpacity style={s.shareBtn} onPress={() => Share.share({ message: `Check out ${listing.title} on Owmee for ${formatPrice(listing.price)}! https://owmee.in/listing/${listingId}` }).catch(() => {})}><Text style={{ fontSize: 16 }}>↗</Text></TouchableOpacity>
           {!isOwn && <TouchableOpacity style={s.wishBtn} onPress={toggleWish}><Text style={{ fontSize: 18, color: wishlisted ? C.red : C.text3 }}>{wishlisted ? '♥' : '♡'}</Text></TouchableOpacity>}
         </View>

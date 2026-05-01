@@ -76,7 +76,7 @@ export default function OffersScreen({ navigation }: any) {
 
   const renderHeader = () => (
     <View style={s.headerRow}>
-      <BackButton />
+      <BackButton onPress={() => navigation.goBack()} />
       <Text style={s.hdr}>Offers</Text>
     </View>
   );
@@ -87,11 +87,11 @@ export default function OffersScreen({ navigation }: any) {
       <SafeAreaView style={s.safe} edges={['top']}>
         {renderHeader()}
         <EmptyState
-          icon="✉️"
+          glyph="✉️"
           title="Sign in to see your offers"
           body="Make and receive offers, track deals — all in one place."
-          actionLabel="Sign in"
-          onAction={() => navigation.getParent()?.navigate('AuthFlow')}
+          ctaLabel="Sign in"
+          onCtaPress={() => navigation.getParent()?.navigate('AuthFlow')}
         />
       </SafeAreaView>
     );
@@ -290,10 +290,10 @@ export default function OffersScreen({ navigation }: any) {
   const data: any[] = tab === 'inprogress' ? deals : offers;
   const renderItem = tab === 'inprogress' ? renderDeal as any : renderOffer as any;
   const emptyForTab = tab === 'received'
-    ? { icon: '✉️', title: 'No offers received', body: 'When buyers offer on your listings, they\'ll show up here.' }
+    ? { glyph: '✉️', title: 'No offers received', body: 'When buyers offer on your listings, they\'ll show up here.' }
     : tab === 'sent'
-      ? { icon: '✋', title: 'No offers sent', body: 'Find an item you like, hit Make Offer, and it\'ll appear here.' }
-      : { icon: '🤝', title: 'No deals in progress', body: 'Once an offer is accepted, the deal lives here until completion.' };
+      ? { glyph: '✋', title: 'No offers sent', body: 'Find an item you like, hit Make Offer, and it\'ll appear here.' }
+      : { glyph: '🤝', title: 'No deals in progress', body: 'Once an offer is accepted, the deal lives here until completion.' };
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
@@ -320,7 +320,7 @@ export default function OffersScreen({ navigation }: any) {
           <Text style={s.loading}>Loading…</Text>
         </View>
       ) : error ? (
-        <ErrorState body={error} onRetry={load} />
+        <ErrorState title="Couldn't load offers" body={error} onRetry={load} />
       ) : (
         <FlatList
           data={data}

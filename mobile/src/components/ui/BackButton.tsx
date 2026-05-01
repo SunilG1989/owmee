@@ -1,99 +1,92 @@
 /**
- * Standard back button used across every pushed screen.
+ * Owmee BackButton — v6 "Petrol"
  *
- * Shipping a single component (rather than per-screen TouchableOpacity
- * + Text) gives us:
- *   - one glyph (‹), one size, one tap target, one tint everywhere
- *   - a single accessibility label
- *   - safe-by-default behavior: hides itself when there's nothing to
- *     pop (canGoBack=false) so we don't render a dead control
+ * The standard chevron-back used by every detail screen. Default
+ * variant is a borderless circular tap target on bone surfaces.
+ * `floating` variant is for hero-image headers (translucent on
+ * the photo, ensures contrast over any background).
  *
- * Usage:
- *   import { BackButton } from '../components/ui';
- *   <BackButton />                              // pops the stack
- *   <BackButton onPress={customHandler} />      // override (e.g. confirm-before-leave)
- *   <BackButton tint={C.white} />               // dark hero header (e.g. listing detail)
- *   <BackButton variant="floating" />           // overlay back on photo (semi-transparent pill)
+ *   <BackButton onPress={() => nav.goBack()} />
+ *   <BackButton onPress={() => nav.goBack()} variant="floating" />
+ *   <BackButton onPress={() => nav.goBack()} variant="onDark" />
  */
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { C } from '../../utils/tokens';
+import { StyleSheet, Text, TouchableOpacity, View, ViewStyle } from 'react-native';
+import { C, MIN_TAP, R, Shadow } from '../../utils/tokens';
 
-export type BackButtonVariant = 'plain' | 'floating';
+export type BackButtonVariant = 'default' | 'floating' | 'onDark';
 
 interface Props {
-  onPress?: () => void;
-  tint?: string;
+  onPress: () => void;
   variant?: BackButtonVariant;
-  /** Render even when there's nothing to pop — useful inside modals where canGoBack returns false. */
-  alwaysVisible?: boolean;
-  /** Optional left-margin override (default keeps glyph aligned to a 16px gutter). */
-  marginLeft?: number;
+  style?: ViewStyle;
+  a11y?: string;
 }
-
-const HIT = { top: 12, bottom: 12, left: 12, right: 12 };
 
 export default function BackButton({
   onPress,
-  tint,
-  variant = 'plain',
-  alwaysVisible = false,
-  marginLeft,
+  variant = 'default',
+  style,
+  a11y = 'Back',
 }: Props) {
-  const navigation = useNavigation<any>();
-  const canGoBack = navigation?.canGoBack?.() ?? false;
-  if (!canGoBack && !alwaysVisible) return null;
-
-  const handle = () => {
-    if (onPress) return onPress();
-    if (canGoBack) navigation.goBack();
-  };
-
-  const isFloating = variant === 'floating';
-  const glyphTint = tint ?? (isFloating ? C.white : C.text);
-
+  const v = variantStyles[variant];
   return (
     <TouchableOpacity
-      onPress={handle}
-      hitSlop={HIT}
+      onPress={onPress}
       activeOpacity={0.7}
+      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       accessibilityRole="button"
-      accessibilityLabel="Back"
-      style={[
-        s.btn,
-        isFloating && s.floating,
-        marginLeft !== undefined && { marginLeft },
-      ]}
+      accessibilityLabel={a11y}
+      style={[styles.base, v.container, style]}
     >
-      <View style={s.inner}>
-        <Text style={[s.glyph, { color: glyphTint }]}>‹</Text>
+      <View style={styles.glyphWrap}>
+        {/* Chevron drawn with two lines so it survives any font swap */}
+        <View style={[styles.chevTop, { backgroundColor: v.fg }]} />
+        <View style={[styles.chevBot, { backgroundColor: v.fg }]} />
       </View>
     </TouchableOpacity>
   );
 }
 
-const s = StyleSheet.create({
-  btn: {
-    width: 40,
-    height: 40,
+const styles = StyleSheet.create({
+  base: {
+    width: MIN_TAP,
+    height: MIN_TAP,
+    borderRadius: R.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  floating: {
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    borderRadius: 20,
+  glyphWrap: { width: 14, height: 14, alignItems: 'center', justifyContent: 'center' },
+  chevTop: {
+    position: 'absolute',
+    width: 12,
+    height: 2,
+    borderRadius: 1,
+    transform: [{ translateX: -2 }, { translateY: -3 }, { rotate: '-45deg' }],
   },
-  inner: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  glyph: {
-    fontSize: 32,
-    fontWeight: '400',
-    lineHeight: 32,
-    marginTop: -3,
+  chevBot: {
+    position: 'absolute',
+    width: 12,
+    height: 2,
+    borderRadius: 1,
+    transform: [{ translateX: -2 }, { translateY: 3 }, { rotate: '45deg' }],
   },
 });
+
+const variantStyles: Record<BackButtonVariant, { container: ViewStyle; fg: string }> = {
+  default: {
+    container: { backgroundColor: 'transparent' },
+    fg: C.ink,
+  },
+  floating: {
+    container: {
+      backgroundColor: 'rgba(15, 26, 31, 0.55)',
+      ...Shadow.subtle,
+    },
+    fg: C.bone,
+  },
+  onDark: {
+    container: { backgroundColor: 'transparent' },
+    fg: C.bone,
+  },
+};

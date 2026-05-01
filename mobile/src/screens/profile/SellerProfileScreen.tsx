@@ -82,7 +82,7 @@ export default function SellerProfileScreen({ navigation, route }: any) {
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.headerBar}>
-        <BackButton />
+        <BackButton onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>Seller profile</Text>
         <TouchableOpacity onPress={() => Alert.alert('Actions', '', [
           { text: 'Report user', onPress: () => {

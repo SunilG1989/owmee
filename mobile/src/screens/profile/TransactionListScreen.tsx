@@ -54,7 +54,7 @@ export default function TransactionListScreen({ navigation }: any) {
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
-        <BackButton />
+        <BackButton onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>Transactions</Text>
         <View style={{ width: 24 }} />
       </View>

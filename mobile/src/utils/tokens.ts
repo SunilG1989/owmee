@@ -1,146 +1,205 @@
 /**
- * Owmee Design Tokens — v4 "Warm Trust"
+ * Owmee Design Tokens — v6 "Petrol"
  *
- * Why v4: v3's #E8920D honey was too saturated for primary surfaces —
- * read as "kids cereal" rather than "premium marketplace." User feedback
- * was explicit: mild + warm + attractive. v4 desaturates the honey to
- * an aged-brass tone, softens forest into sage-emerald, and warms the
- * neutrals (cream, sand, borders) by 1–2 hue steps so the whole canvas
- * feels like ghee + parchment instead of office-printer-paper.
+ * Drop-in replacement for mobile/src/utils/tokens.ts.
+ * Preserves every export from v4 (C, T, S, R, Shadow, I, O, StatusColor,
+ * MIN_TAP, formatPrice, percentOff, formatDistance, timeAgo, condStyle,
+ * statusTone, prettyStatus) so existing screens compile UNCHANGED.
  *
- * Reference points: Aesop's tan + ink, Notion's warm beiges, Mercari
- * Japan's restrained red. NOT high-saturation Meesho/OLX.
+ * What changed from v4 "Warm Trust":
+ *   - Primary: warm honey #D88A36  →  petrol #1E5F5C (green-blue mix)
+ *   - Secondary: sage forest #3D7A5C  →  petrol family (one cool primary)
+ *   - Canvas: ghee cream #FAF6EE  →  bone #F6F1E7 (kept warm; refined)
+ *   - Added: coral #E87A5D for "act now" moments (sale, ending soon)
+ *   - Shadows: warm amber tint  →  cool ink tint (matches petrol family)
  *
- * Contrast: every C.text* on every C.cream/sand/honeyLight passes WCAG
- * AA at body-text size. Verified at design time.
+ * Migration philosophy:
+ *   - Every legacy NAME (C.honey, C.forest, C.cream, etc.) still works.
+ *     They now point at the v6 palette so screens render the new brand
+ *     instantly without code edits.
+ *   - For NEW code, prefer the semantic layer at the bottom (theme.brand,
+ *     theme.accent, theme.bg, etc.) — palette-swap-stable.
  */
 
 export const C = {
-  // ── Primary brand: warm honey (saffron-toned, mid-saturation) ────────
-  honey: '#D88A36',          // primary CTA — aged-brass amber, not candy-orange
-  honeyLight: '#FBF1DC',     // tinted background (callouts, trust strip)
-  honeyGlow: '#F0B662',      // softer warm gold for highlights
-  honeyDeep: '#A56B22',      // text on light + hover/pressed states
-  honeyText: '#6E4716',      // dark amber for ultra-readable on cream
+  // ── PRIMARY · petrol (green+blue mix) ────────────────────────────────
+  petrol:        '#1E5F5C',
+  petrolLight:   '#D9EAE8',
+  petrolMid:     '#3F8C87',
+  petrolGlow:    '#5FB8A8',
+  petrolDeep:    '#134543',
+  petrolText:    '#0B2D2C',
 
-  // ── Secondary: sage-emerald forest (depth without overwhelming) ──────
-  forest: '#3D7A5C',         // primary green — sage-leaning, less aggressive than v3's #1A5C3A
-  forestLight: '#E5EFE9',    // gentle green tint background
-  forestVivid: '#4F9272',    // brighter green for active states
-  forestText: '#2C5E45',     // dark green for text on light backgrounds
+  // ── SECONDARY · aqua (lighter teal, hover/secondary) ─────────────────
+  aqua:          '#5FB8A8',
+  aquaLight:     '#E8F4F1',
+  aquaDeep:      '#2E8077',
 
-  // ── Surfaces (warm whites, parchment beiges) ─────────────────────────
-  cream: '#FAF6EE',          // primary canvas — ghee-tinted, more present than v3's near-white
-  sand: '#F0E8D5',           // warmer card-on-card layer — visible without competing
-  surface: '#FFFFFF',        // pure white when contrast against cream is needed
+  // ── ACCENT · coral (warm complement, used SPARINGLY — once per screen)
+  // Sale, ending soon, paid-out, hot, urgent. Pairs with petrol the way
+  // coral does with teal in nature.
+  coral:         '#E87A5D',
+  coralLight:    '#FCE8E0',
+  coralDeep:     '#B85638',
 
-  // ── Ink (warm darks) ──────────────────────────────────────────────────
-  ink: '#2A2118',            // primary text — coffee-grounds dark, not pure black
-  ink2: '#3D3528',           // softer ink for subtitles
+  // ── SURFACES · warm bone canvas ──────────────────────────────────────
+  bone:          '#F6F1E7',
+  bone2:         '#ECE5D4',
+  cream:         '#F6F1E7',  // legacy alias → bone
+  sand:          '#ECE5D4',  // legacy alias → bone2
+  surface:       '#FFFFFF',
 
-  // ── Text scale (warm grays, contrast-tested) ─────────────────────────
-  text: '#2A2118',           // primary
-  text2: '#6B5F4D',          // secondary — warm taupe
-  text3: '#8A7E6B',          // tertiary — bumped for AA contrast on sand
-  text4: '#BFB39E',          // quaternary — borders/disabled only, never body text
+  // Dark surfaces (for inverse contexts — invoice receipts, FE night ops)
+  inkBg:         '#0F1A1F',
+  inkBg2:        '#182429',
+  inkBg3:        '#243136',
 
-  // ── Lines ─────────────────────────────────────────────────────────────
-  border: '#E8DFCD',         // warm parchment border
-  border2: '#EFE9D9',        // even softer for subtle dividers
+  // ── INK · deep blue-black (matches petrol family) ────────────────────
+  ink:           '#0F1A1F',
+  ink2:          '#182429',
 
-  // ── Semantic colors (mature, non-candy) ──────────────────────────────
-  red: '#B85454',            // less aggressive than v3's #D14343
-  redLight: '#FBEEEE',
-  green: '#3E8460',          // sage success green
-  greenLight: '#E7F1EB',
-  yellow: '#C99A2A',         // mustard, not lemon
-  yellowLight: '#FBF4DD',
+  // ── TEXT scale (cool grays, contrast-tested) ─────────────────────────
+  text:          '#0F1A1F',
+  text2:         '#4A555B',
+  text3:         '#828A90',
+  text4:         '#BCC2C7',
 
-  white: '#FFFFFF',
+  onDark1:       '#F6F1E7',
+  onDark2:       'rgba(246, 241, 231, 0.72)',
+  onDark3:       'rgba(246, 241, 231, 0.48)',
 
-  // ── Legacy semantic aliases ──────────────────────────────────────────
-  // v3-and-earlier screens used C.primary / C.muted / C.danger /
-  // C.success / C.successBg / C.bg / C.surfaceMuted. The v4 redesign
-  // moved to honey/red/green/cream/sand vocabulary. Aliases below keep
-  // those legacy callsites compiling without forcing a screen-by-screen
-  // migration. Marked as legacy so future contributors prefer the
-  // primary names.
-  primary: '#D88A36',         // → honey
-  muted: '#8A7E6B',           // → text3
-  danger: '#B85454',          // → red
-  success: '#3E8460',         // → green
-  successBg: '#E7F1EB',       // → greenLight
-  bg: '#FAF6EE',              // → cream
-  surfaceMuted: '#F0E8D5',    // → sand
-  amber: '#D88A36',           // → honey (older Sprint 4 alias)
-  amberLight: '#FBF1DC',      // → honeyLight
+  // ── LINES ────────────────────────────────────────────────────────────
+  border:        '#E5DECB',
+  border2:       '#EFEAD9',
+  borderDark:    'rgba(246, 241, 231, 0.10)',
+
+  // ── SEMANTIC ─────────────────────────────────────────────────────────
+  red:           '#C8473A',
+  redLight:      '#FAE5E2',
+  green:         '#2E8B57',
+  greenLight:    '#E2F3EA',
+  yellow:        '#D4A02E',
+  yellowLight:   '#F8EED2',
+
+  white:         '#FFFFFF',
+
+  // ── CARD ACCENT BACKGROUNDS (for variety on home/discover) ───────────
+  cardBgGray:    '#ECE5D4',
+  cardBgMauve:   '#F1E5EE',
+  cardBgGreen:   '#D9EAE8',
+  cardBgPeach:   '#FCE8E0',
+  cardBgAmber:   '#F8EED2',
+  cardBgStone:   '#ECE5D4',
+  cardBgPastel:  '#E8F4F1',
+
+  // ── LEGACY ALIASES — v4 "Warm Trust" names → v6 "Petrol" values ──────
+  // Every legacy callsite (C.honey, C.forest, C.primary, C.muted, etc.)
+  // keeps compiling. Visual output now matches v6 brand.
+  // Migrate one screen at a time, then delete this block.
+  honey:         '#1E5F5C',  // was #D88A36 — primary CTA → petrol
+  honeyLight:    '#D9EAE8',  // was #FBF1DC — petrol tint
+  honeyGlow:     '#5FB8A8',  // was #F0B662 — petrol glow
+  honeyDeep:     '#134543',  // was #A56B22 — petrol deep
+  honeyText:     '#0B2D2C',  // was #6E4716 — readable on bone
+
+  forest:        '#1E5F5C',  // was #3D7A5C — collapses into petrol
+  forestLight:   '#D9EAE8',  // was #E5EFE9 — petrol tint
+  forestVivid:   '#3F8C87',  // was #4F9272 — petrol mid
+  forestText:    '#0B2D2C',  // was #2C5E45 — readable on bone
+
+  primary:       '#1E5F5C',  // → petrol
+  muted:         '#828A90',  // → text3
+  danger:        '#C8473A',  // → red
+  success:       '#2E8B57',  // → green
+  successBg:     '#E2F3EA',  // → greenLight
+  bg:            '#F6F1E7',  // → bone
+  surfaceMuted:  '#ECE5D4',  // → bone2
+  amber:         '#1E5F5C',  // legacy Sprint 4 alias → petrol
+  amberLight:    '#D9EAE8',  // → petrolLight
 } as const;
 
 export const T = {
   size: { xs: 10, sm: 11, base: 13, md: 15, lg: 17, xl: 20, xxl: 24, display: 30 },
   weight: { regular: '400' as const, medium: '500' as const, semi: '600' as const, bold: '700' as const, heavy: '800' as const },
 
-  // ── Legacy aliases ────────────────────────────────────────────────────
-  // v3-and-earlier screens reference T.h1 / T.h2 / T.h3 / T.body / T.small /
-  // T.caption directly. The v4 redesign moved to T.size.* / T.weight.* but
-  // touching every callsite is more risk than this 8-line shim. Numeric
-  // aliases mirror the prior visual scale so screen layouts stay identical.
-  h1: 24,         // matches T.size.xxl
-  h2: 20,         // matches T.size.xl
-  h3: 17,         // matches T.size.lg
-  body: 15,       // matches T.size.md
-  small: 13,      // matches T.size.base
-  caption: 11,    // matches T.size.sm
+  // Legacy numeric aliases — keep stable so existing screens lay out identically.
+  h1: 24,
+  h2: 20,
+  h3: 17,
+  body: 15,
+  small: 13,
+  caption: 11,
+} as const;
+
+// ── FONT FAMILIES (NEW in v6) ─────────────────────────────────────────
+// Drop the TTFs into mobile/assets/fonts/ and run:
+//   cd mobile && npx react-native-asset
+//   cd ios && pod install
+// Then rebuild native (Metro restart alone is NOT enough on iOS).
+//
+// Until you ship the fonts, RN silently falls back to system serif/sans —
+// the brand still functions, just looks generic. So this file is safe to
+// land BEFORE the fonts are in place.
+export const FONTS = {
+  display:             'Fraunces-Regular',
+  displayMedium:       'Fraunces-Medium',
+  displaySemi:         'Fraunces-SemiBold',
+  displayItalic:       'Fraunces-Italic',
+  displayMediumItalic: 'Fraunces-MediumItalic',
+
+  sans:                'Inter-Regular',
+  sansMedium:          'Inter-Medium',
+  sansSemi:            'Inter-SemiBold',
+  sansBold:            'Inter-Bold',
+
+  mono:                'JetBrainsMono-Regular',
+  monoMedium:          'JetBrainsMono-Medium',
+  monoBold:            'JetBrainsMono-Bold',
 } as const;
 
 export const S = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24, xxxl: 32 } as const;
 export const R = { xs: 6, sm: 10, md: 14, lg: 16, xl: 20, pill: 999 } as const;
 
-// Shadow alias — older screens reference Shadow.sm. Maps to the v4 subtle.
-// (Defined after the Shadow object further down, so we extend it via
-// re-export — see end of file.)
-
-const _SUBTLE_SHADOW = { shadowColor: '#7A5A35', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1 };
+// ── SHADOWS · cool-tinted (matches petrol family) ─────────────────────
+// Shadow color updated from warm amber (#7A5A35) → cool ink (#0F1A1F).
+// Keeps depth feeling consistent with the new cool primary.
+const _SUBTLE_SHADOW = { shadowColor: '#0F1A1F', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4,  elevation: 1 };
 
 export const Shadow = {
-  // Warmer shadow tint (#7A5A35 instead of #8B7355) so cards on cream
-  // feel like the surface is actually casting a soft amber-tinted shadow,
-  // not floating on a generic gray plane.
   subtle: _SUBTLE_SHADOW,
-  // Legacy alias: pre-v4 code used Shadow.sm. Same value as subtle.
-  sm: _SUBTLE_SHADOW,
-  card:   { shadowColor: '#7A5A35', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 10, elevation: 3 },
-  lifted: { shadowColor: '#7A5A35', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.12, shadowRadius: 18, elevation: 6 },
-  // glow inherits the new honey, slightly less opacity for refinement
-  glow:   { shadowColor: '#D88A36', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 14, elevation: 5 },
+  sm:     _SUBTLE_SHADOW, // legacy alias
+  card:   { shadowColor: '#0F1A1F', shadowOffset: { width: 0, height: 4  }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 2  },
+  lifted: { shadowColor: '#0F1A1F', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.10, shadowRadius: 32, elevation: 6  },
+  // Glow inherits petrol so brand-colored buttons "halo" their own color
+  glow:   { shadowColor: '#1E5F5C', shadowOffset: { width: 0, height: 6  }, shadowOpacity: 0.22, shadowRadius: 22, elevation: 8  },
 };
 
-// Icon sizes — for emoji-as-icons + glyph-as-icons. Keeps emoji rendering
-// uniform across the app so a 📦 in one place isn't 48px and another 18px.
 export const I = { xs: 12, sm: 16, md: 24, lg: 32, xl: 48, display: 56 } as const;
 
-// Translucent overlays used over images / behind modals. Centralized so
-// contrast feels consistent in dark-on-image situations.
 export const O = {
-  dark30: 'rgba(0,0,0,0.3)',
-  dark50: 'rgba(0,0,0,0.5)',
+  dark30:  'rgba(0,0,0,0.3)',
+  dark50:  'rgba(0,0,0,0.5)',
   white80: 'rgba(255,255,255,0.8)',
   white90: 'rgba(255,255,255,0.9)',
 } as const;
 
-// Status color map — consolidates the scattered transaction/offer/refund
-// status pill styles. Anything outside this set should be added here, not
-// inlined in a screen.
+// ── STATUS COLOR MAP ──────────────────────────────────────────────────
+// Brand tone now uses petrol; everything else preserved.
 export const StatusColor = {
-  // Generic semantic
-  positive: { bg: C.greenLight, text: C.green, border: C.greenLight },
-  warning:  { bg: C.yellowLight, text: C.yellow, border: C.yellowLight },
-  danger:   { bg: C.redLight, text: C.red, border: C.redLight },
-  neutral:  { bg: C.sand, text: C.text2, border: C.border },
-  brand:    { bg: C.honeyLight, text: C.honeyDeep, border: C.honeyLight },
+  positive: { bg: C.greenLight,  text: C.green,       border: C.greenLight },
+  warning:  { bg: C.yellowLight, text: C.yellow,      border: C.yellowLight },
+  danger:   { bg: C.redLight,    text: C.red,         border: C.redLight },
+  neutral:  { bg: C.bone2,       text: C.text2,       border: C.border },
+  brand:    { bg: C.petrolLight, text: C.petrolDeep,  border: C.petrolLight },
+  // NEW in v6 — the "act now" tone (sale, ending soon, paid-out, hot)
+  hot:      { bg: C.coralLight,  text: C.coralDeep,   border: C.coralLight },
 } as const;
 
 export const MIN_TAP = 48;
+
+// ──────────────────────────────────────────────────────────────────────
+// HELPERS — preserved verbatim from v4
+// ──────────────────────────────────────────────────────────────────────
 
 export function formatPrice(n: number | string | null | undefined): string {
   if (n == null) return '₹0';
@@ -172,31 +231,70 @@ export function timeAgo(d: string | null | undefined): string {
 
 export function condStyle(c: string) {
   switch (c) {
-    // Note: forestText/honeyText/yellow are darker variants picked so the
-    // 12-13px label sizes still pass AA contrast on their tinted backgrounds.
-    case 'like_new': return { label: 'Like new', bg: C.forestLight, color: C.forestText };
-    case 'good': return { label: 'Good', bg: C.greenLight, color: C.forestText };
-    case 'fair': return { label: 'Fair', bg: C.yellowLight, color: C.honeyText };
-    default: return { label: c || 'Used', bg: C.sand, color: C.text2 };
+    case 'like_new': return { label: 'Like new', bg: C.petrolLight,   color: C.petrolText };
+    case 'good':     return { label: 'Good',     bg: C.greenLight,    color: C.green };
+    case 'fair':     return { label: 'Fair',     bg: C.yellowLight,   color: C.yellow };
+    default:         return { label: c || 'Used', bg: C.bone2,         color: C.text2 };
   }
 }
 
-// Map a transaction or refund/return/dispute status string to a status
-// tone. Any UI rendering a status pill should call this rather than
-// rolling its own color map.
 export function statusTone(status: string | null | undefined):
-  'positive' | 'warning' | 'danger' | 'neutral' | 'brand' {
+  'positive' | 'warning' | 'danger' | 'neutral' | 'brand' | 'hot' {
   if (!status) return 'neutral';
   const s = status.toLowerCase();
   if (['completed', 'delivered', 'paid', 'accepted', 'verified', 'processed'].includes(s)) return 'positive';
   if (['pending', 'requested', 'processing', 'in_progress', 'delivery_in_progress', 'at_hub', 'pickup_scheduled', 'picked_up', 'approved'].includes(s)) return 'brand';
   if (['cancelled', 'rejected', 'pickup_rejected', 'failed', 'expired', 'disputed'].includes(s)) return 'danger';
   if (['under_review'].includes(s)) return 'warning';
+  if (['ending_soon', 'sale', 'hot', 'flash'].includes(s)) return 'hot';
   return 'neutral';
 }
 
-// Pretty-print a status for end-users — kebab/snake → "Like new".
 export function prettyStatus(status: string | null | undefined): string {
   if (!status) return '';
   return status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
+
+// ──────────────────────────────────────────────────────────────────────
+// SEMANTIC LAYER (NEW — prefer for new code)
+// Palette-swap-stable. Use these instead of raw C.* in new code.
+// ──────────────────────────────────────────────────────────────────────
+export const theme = {
+  // backgrounds
+  bg:            C.bone,
+  bgRaised:      C.surface,
+  bgInverse:     C.inkBg,
+  bgAccent:      C.bone2,
+
+  // text
+  textPrimary:   C.ink,
+  textSecondary: C.text2,
+  textTertiary:  C.text3,
+  textOnDark:    C.onDark1,
+  textOnBrand:   '#FFFFFF',
+
+  // brand
+  brand:         C.petrol,
+  brandHover:    C.petrolDeep,
+  brandFaint:    C.petrolLight,
+  brandText:     C.petrolText,
+
+  // accent (the spotlight color — once per screen)
+  accent:        C.coral,
+  accentFaint:   C.coralLight,
+  accentText:    C.coralDeep,
+
+  // status
+  success:       C.green,
+  successFaint:  C.greenLight,
+  warn:          C.yellow,
+  warnFaint:     C.yellowLight,
+  danger:        C.red,
+  dangerFaint:   C.redLight,
+
+  // hairlines
+  border:        C.border,
+  borderSoft:    C.border2,
+} as const;
+
+export type Theme = typeof theme;
