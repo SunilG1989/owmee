@@ -1,15 +1,22 @@
 """
-Offers router — v2 India UX
+Offers router — Owmee V1 (escrow + managed logistics, no meetups, no cash)
 
-New endpoints (India UX review):
-  POST /v1/offers/{id}/accept-cash         — accept as cash deal
-  POST /v1/transactions/{id}/meetup        — seller confirms meetup time
-  POST /v1/transactions/{id}/cancel-meetup — buyer cancels at meetup (30-min window)
+Key endpoints:
+  POST /v1/offers                          — create offer
+  POST /v1/offers/{id}/update-price        — buyer revises (max 3 times)
+  POST /v1/offers/{id}/counter             — seller counters (48h window)
+  POST /v1/offers/{id}/accept              — accept (creates txn + payment link)
+  POST /v1/offers/{id}/reject              — reject (sets 7-day cooldown)
+  POST /v1/offers/{id}/withdraw            — buyer withdraws their own offer
   GET  /v1/users/me/reputation             — seller reputation ladder
   PUT  /v1/notifications/preferences       — notification bucket preferences
   GET  /v1/listings/activity               — activity ticker for home screen
   POST /v1/listings/{id}/mark-sold         — sold on owmee or sold elsewhere
   PUT  /v1/listings/{id}/price             — update price (triggers wishlist notifications)
+
+Removed (Sprint 6c — no-meetup mandate):
+  /accept-cash, /transactions/{id}/meetup, /transactions/{id}/cancel-meetup.
+  Buyer-seller meetups don't exist; logistics is fully managed.
 """
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -27,8 +34,8 @@ from app.modules.offers.models import (
     Rating, Transaction, Wishlist,
 )
 from app.modules.offers.service import (
-    accept_offer, accept_offer_cash, add_to_wishlist, buyer_confirm_deal,
-    cancel_at_meetup, confirm_meetup_time, counter_offer, make_offer,
+    accept_offer, add_to_wishlist, buyer_confirm_deal,
+    counter_offer, make_offer,
     notify_price_drop, process_payment_paid, reject_offer,
     remove_from_wishlist, submit_rating, update_offer_price, withdraw_offer,
 )
@@ -63,14 +70,6 @@ class RateRequest(BaseModel):
     stars: int = Field(..., ge=1, le=5)
     comment: str | None = Field(None, max_length=500)
     item_as_described: str | None = Field(None, pattern="^(yes|mostly|no)$")
-
-
-class MeetupTimeRequest(BaseModel):
-    meetup_at: datetime = Field(..., description="ISO 8601 datetime for meetup")
-
-
-class CancelAtMeetupRequest(BaseModel):
-    reason: str = Field(..., min_length=5, max_length=200)
 
 
 class NotificationPreferencesRequest(BaseModel):
@@ -244,22 +243,6 @@ async def accept_offer_endpoint(offer_id: UUID, current_user: BasicUser, db: DBS
     return resp
 
 
-@router.post("/offers/{offer_id}/accept-cash")
-async def accept_offer_cash_endpoint(offer_id: UUID, current_user: BasicUser, db: DBSession):
-    """Accept offer as cash-at-meetup deal. Skips payment link."""
-    try:
-        offer, reservation, txn = await accept_offer_cash(db, offer_id, current_user.user_id)
-        await db.commit()
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail={"error": str(e)})
-    return {
-        "offer": _fmt_offer(offer),
-        "transaction_id": str(txn.id),
-        "payment_method": "cash",
-        "message": "Cash deal accepted. Arrange meetup with buyer.",
-    }
-
-
 @router.post("/offers/{offer_id}/reject")
 async def reject_offer_endpoint(offer_id: UUID, body: RejectOfferRequest,
                                  current_user: BasicUser, db: DBSession):
@@ -313,49 +296,6 @@ async def get_transaction(transaction_id: UUID, current_user: BasicUser, db: DBS
         data["payment_link_status"] = pl.status
         data["payment_link_expires_at"] = pl.expires_at.isoformat() if pl.expires_at else None
     return data
-
-
-@router.post("/transactions/{transaction_id}/meetup")
-async def confirm_meetup_endpoint(transaction_id: UUID, body: MeetupTimeRequest,
-                                   current_user: BasicUser, db: DBSession):
-    """Seller confirms meetup time after payment. Starts the 30-min cancel window clock."""
-    try:
-        txn = await confirm_meetup_time(db, transaction_id, current_user.user_id, body.meetup_at)
-        await db.commit()
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail={"error": str(e)})
-    return {
-        "transaction_id": str(transaction_id),
-        "agreed_meetup_at": txn.agreed_meetup_at.isoformat(),
-        "cancel_window_until": txn.meetup_deadline.isoformat(),
-        "message": "Meetup time confirmed. Buyer notified.",
-    }
-
-
-@router.post("/transactions/{transaction_id}/cancel-meetup")
-async def cancel_at_meetup_endpoint(transaction_id: UUID, body: CancelAtMeetupRequest,
-                                     current_user: BasicUser, db: DBSession):
-    """
-    Buyer cancels deal at meetup — item doesn't match listing.
-    Available within 30 minutes of agreed meetup time.
-    Triggers immediate refund initiation.
-    """
-    try:
-        txn = await cancel_at_meetup(db, transaction_id, current_user.user_id, body.reason)
-        await db.commit()
-    except ValueError as e:
-        code = str(e)
-        msgs = {
-            "CANCEL_WINDOW_EXPIRED": "The 30-minute cancel window has passed. Please raise a dispute instead.",
-            "INVALID_STATUS": "This transaction cannot be cancelled at meetup.",
-        }
-        raise HTTPException(status_code=400, detail={"error": code, "message": msgs.get(code, code)})
-    return {
-        "transaction_id": str(transaction_id),
-        "status": txn.status,
-        "message": "Deal cancelled. Refund will be processed within 5-7 business days.",
-        "reason": txn.cancelled_reason,
-    }
 
 
 @router.post("/transactions/{transaction_id}/confirm")
@@ -919,6 +859,20 @@ async def buy_now(body: BuyNowRequest, current_user: BasicUser, db: DBSession):
         raise HTTPException(status_code=400, detail={"error": "LISTING_NOT_AVAILABLE"})
     if listing.seller_id == current_user.user_id:
         raise HTTPException(status_code=400, detail={"error": "CANNOT_BUY_OWN_LISTING"})
+
+    # Sprint trust pillar: buyer must also be inside a launch zone for
+    # FE-managed delivery to work. Pull buyer location from users table.
+    from app.core.zones import is_in_service_area, out_of_service_message
+    from sqlalchemy import text as _text
+    bloc = await db.execute(
+        _text("SELECT lat, lng FROM users WHERE id = :uid"),
+        {"uid": current_user.user_id},
+    )
+    buyer_loc = bloc.first()
+    buyer_lat = buyer_loc.lat if buyer_loc else None
+    buyer_lng = buyer_loc.lng if buyer_loc else None
+    if not is_in_service_area(buyer_lat, buyer_lng):
+        raise HTTPException(status_code=400, detail=out_of_service_message())
 
     # Create offer at listed price
     from app.modules.offers.service import make_offer, accept_offer

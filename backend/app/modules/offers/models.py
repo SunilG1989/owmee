@@ -59,6 +59,9 @@ class Transaction(Base, TimestampMixin):
     gross_amount = Column(Numeric(10, 2), nullable=False)
     platform_fee = Column(Numeric(10, 2), nullable=False, default=0)
     gst_on_fee = Column(Numeric(10, 2), nullable=False, default=0)
+    # Sprint pricing-rewrite: ₹100 for small-appliances, ₹0 elsewhere.
+    # Buyer pays gross_amount = agreed_price + delivery_fee.
+    delivery_fee = Column(Numeric(10, 2), nullable=False, default=0, server_default=text("0"))
     tds_withheld = Column(Numeric(10, 2), nullable=False, default=0)
     partial_refund = Column(Numeric(10, 2), nullable=False, default=0)
     net_payout = Column(Numeric(10, 2), nullable=False, default=0)

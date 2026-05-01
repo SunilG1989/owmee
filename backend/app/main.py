@@ -8,6 +8,22 @@ from fastapi.responses import ORJSONResponse
 from app.core.settings import settings
 from app.core.redis import get_redis, close_redis
 from app.db.session import engine
+
+# Initialize Sentry as early as possible so it captures startup errors too.
+# Set SENTRY_DSN in env to enable; empty default = silent no-op.
+if settings.sentry_dsn:
+    import sentry_sdk
+    from sentry_sdk.integrations.fastapi import FastApiIntegration
+    from sentry_sdk.integrations.starlette import StarletteIntegration
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        environment=settings.env,
+        traces_sample_rate=0.05 if settings.is_production else 1.0,
+        profiles_sample_rate=0.0,
+        integrations=[FastApiIntegration(), StarletteIntegration()],
+        # Don't leak the body of failed POSTs (which contain phone, OTP, etc).
+        send_default_pii=False,
+    )
 from app.modules.geo import router as geo_router_mod  # SPRINT8_PHASE1_ROUTERS
 from app.modules.listings import feed_router as feed_router_mod  # SPRINT8_PHASE1_ROUTERS
 from app.modules.identity_auth import location_router as user_loc_router_mod  # SPRINT8_PHASE1_ROUTERS

@@ -5,10 +5,7 @@ India UX review changes (v2):
 - Tiered offer expiry: 24h <5K, 48h 5K–20K, 72h >20K
 - Offer note field (buyer context with offer)
 - Payment link expiry: 30min <5K, 24h >=5K
-- Cash at meetup option (payment_method=cash)
 - Seller ghosting: seller_response_deadline = payment_captured + 4h
-- Meetup coordination: agreed_meetup_at + cancel window
-- Cancel at meetup: 30-min window after agreed_meetup_at
 - Blind mutual rating: hidden until both rate or 7 days
 - Rating delayed 2h after deal complete
 - Price-drop wishlist notification
@@ -46,7 +43,34 @@ CONFIRMATION_WINDOW_HOURS = 48
 RATING_DELAY_HOURS = 2          # Rate available 2h after deal complete
 BLIND_RATING_DAYS = 7           # Reveal ratings after 7 days if peer hasn't rated
 SELLER_RESPONSE_HOURS = 4       # Auto-escalate if seller silent after payment
-MEETUP_CANCEL_MINUTES = 30      # Cancel-at-meetup window after agreed_meetup_at
+
+
+# ── Pricing — Owmee V1 model ──────────────────────────────────────────────
+# Zero platform fee. ₹100 delivery fee on small-appliances only. Buyer
+# pays (agreed_price + delivery_fee); seller receives (agreed_price - TDS);
+# Owmee keeps delivery_fee.
+DELIVERY_FEE_BY_CATEGORY: dict[str, Decimal] = {
+    "small-appliances": Decimal("100"),
+}
+
+
+def delivery_fee_for(category_slug: str | None) -> Decimal:
+    if not category_slug:
+        return Decimal("0")
+    return DELIVERY_FEE_BY_CATEGORY.get(category_slug, Decimal("0"))
+
+
+# Sprint trust pillar: every product priced over ₹1000 gets FE-inspected
+# at pickup. Items at or below ₹1000 are FE-collected only (no condition
+# inspection) so we keep unit economics workable on small items.
+FE_INSPECTION_PRICE_THRESHOLD: Decimal = Decimal("1000")
+
+
+def requires_fe_inspection(price: Decimal | float | int | None) -> bool:
+    if price is None:
+        return False
+    p = price if isinstance(price, Decimal) else Decimal(str(price))
+    return p > FE_INSPECTION_PRICE_THRESHOLD
 
 
 def _offer_expiry_hours(price: Decimal) -> int:
@@ -321,8 +345,17 @@ async def accept_offer(
 
     snapshot = await create_snapshot(db, offer.listing_id, reservation.id)
 
-    # Determine payment method from offer context — default UPI
-    payment_method = "upi"
+    # Pricing: zero platform fee, conditional delivery fee. Buyer pays
+    # (agreed_price + delivery_fee); seller receives (agreed_price - TDS);
+    # Owmee keeps delivery_fee.
+    cat_result = await db.execute(
+        select(Category.slug).where(Category.id == listing.category_id)
+    )
+    cat_slug = cat_result.scalar_one_or_none()
+    fee = delivery_fee_for(cat_slug)
+    buyer_pays = agreed_price + fee
+
+    payment_method = "upi"  # Sprint 6c: cash/meetup mode removed
 
     txn = Transaction(
         reservation_id=reservation.id,
@@ -330,9 +363,11 @@ async def accept_offer(
         buyer_id=offer.buyer_id,
         seller_id=offer.seller_id,
         listing_snapshot_id=snapshot.id,
-        transaction_type="local",
+        transaction_type="shipped",
         payment_method=payment_method,
-        gross_amount=agreed_price,
+        gross_amount=buyer_pays,
+        delivery_fee=fee,
+        # net_payout placeholder — final value computed at TDS time.
         net_payout=agreed_price,
         status="payment_pending",
         confirmation_deadline=now + timedelta(hours=CONFIRMATION_WINDOW_HOURS),
@@ -367,9 +402,10 @@ async def accept_offer(
 
         idempotency_key = hashlib.sha256(f"txn:{txn.id}:v1".encode()).hexdigest()[:64]
         adapter = get_payment_adapter()
-        expiry_minutes = _payment_link_expiry_minutes(agreed_price)
+        expiry_minutes = _payment_link_expiry_minutes(buyer_pays)
         link_result = await adapter.create_payment_link(
-            amount_paise=int(agreed_price * 100),
+            # buyer pays gross_amount = agreed_price + delivery_fee
+            amount_paise=int(buyer_pays * 100),
             transaction_id=str(txn.id),
             description=f"Owmee: {listing.title[:50]}",
             buyer_phone=buyer_phone,
@@ -383,7 +419,7 @@ async def accept_offer(
             transaction_id=txn.id,
             razorpay_link_id=link_result.razorpay_link_id,
             short_url=link_result.short_url,
-            amount=agreed_price,
+            amount=buyer_pays,
             status="created",
             idempotency_key=idempotency_key,
             expires_at=now + timedelta(minutes=expiry_minutes),
@@ -391,10 +427,11 @@ async def accept_offer(
         db.add(payment_link)
 
         expiry_label = "24 hours" if expiry_minutes >= 1440 else "30 minutes"
+        fee_note = f" (incl. ₹{int(fee)} delivery)" if fee > 0 else ""
         await _notify(
             db, offer.buyer_id, "offer_accepted",
             f"{listing.title[:30]} — offer accepted!",
-            f"Pay ₹{agreed_price:,.0f} to confirm. Link valid for {expiry_label}.",
+            f"Pay ₹{buyer_pays:,.0f}{fee_note} to confirm. Link valid for {expiry_label}.",
             "transaction", str(txn.id),
         )
     else:
@@ -419,59 +456,6 @@ async def accept_offer(
     return offer, reservation, txn, payment_link
 
 
-async def accept_offer_cash(
-    db: AsyncSession,
-    offer_id: UUID,
-    seller_id: UUID,
-) -> tuple[Offer, Reservation, Transaction]:
-    """Accept offer with cash payment method — skips payment link."""
-    result = await db.execute(select(Offer).where(Offer.id == offer_id))
-    offer = result.scalar_one_or_none()
-    if not offer or offer.seller_id != seller_id or offer.status != "pending":
-        raise ValueError("CANNOT_ACCEPT")
-
-    # Lock the listing row to serialize concurrent accept attempts; without
-    # this, two flows racing on the same listing could both pass the
-    # status="active" check and both create reservations.
-    listing_result = await db.execute(
-        select(Listing).where(Listing.id == offer.listing_id).with_for_update()
-    )
-    listing = listing_result.scalar_one_or_none()
-    if not listing or listing.status != "active":
-        raise ValueError("LISTING_NO_LONGER_AVAILABLE")
-
-    now = datetime.now(timezone.utc)
-    offer.status = "accepted"
-    offer.responded_at = now
-    listing.status = "reserved"
-
-    reservation = Reservation(
-        offer_id=offer.id, listing_id=offer.listing_id,
-        buyer_id=offer.buyer_id, seller_id=offer.seller_id,
-        agreed_price=offer.offered_price, status="active",
-        expires_at=now + timedelta(hours=RESERVATION_EXPIRY_HOURS),
-        activated_at=now,
-    )
-    db.add(reservation)
-    await db.flush()
-
-    snapshot = await create_snapshot(db, offer.listing_id, reservation.id)
-    txn = Transaction(
-        reservation_id=reservation.id, listing_id=offer.listing_id,
-        buyer_id=offer.buyer_id, seller_id=offer.seller_id,
-        listing_snapshot_id=snapshot.id, transaction_type="local",
-        payment_method="cash", gross_amount=offer.offered_price,
-        net_payout=offer.offered_price, status="awaiting_confirmation",
-        confirmation_deadline=now + timedelta(hours=CONFIRMATION_WINDOW_HOURS),
-    )
-    db.add(txn)
-    await db.flush()
-
-    await _notify(db, offer.buyer_id, "offer_accepted",
-        f"{listing.title[:30]} — cash deal accepted!",
-        f"Cash at meetup: ₹{offer.offered_price:,.0f}. Arrange meetup time with seller.",
-        "transaction", str(txn.id))
-    return offer, reservation, txn
 
 
 async def reject_offer(db, offer_id, seller_id, reason=""):
@@ -554,83 +538,6 @@ async def process_payment_paid(db, razorpay_link_id, razorpay_payment_id, webhoo
     return txn
 
 
-# ── Meetup coordination ─────────────────────────────────────────────────────────
-
-async def confirm_meetup_time(
-    db: AsyncSession,
-    transaction_id: UUID,
-    seller_id: UUID,
-    meetup_at: datetime,
-) -> Transaction:
-    """Seller proposes/confirms a meetup time after payment."""
-    result = await db.execute(select(Transaction).where(Transaction.id == transaction_id))
-    txn = result.scalar_one_or_none()
-    if not txn:
-        raise ValueError("TRANSACTION_NOT_FOUND")
-    if txn.seller_id != seller_id:
-        raise ValueError("NOT_YOUR_TRANSACTION")
-    if txn.status not in ("payment_captured", "awaiting_confirmation"):
-        raise ValueError(f"INVALID_STATUS:{txn.status}")
-    if meetup_at <= datetime.now(timezone.utc):
-        raise ValueError("MEETUP_TIME_MUST_BE_FUTURE")
-
-    txn.agreed_meetup_at = meetup_at
-    txn.meetup_deadline = meetup_at + timedelta(minutes=MEETUP_CANCEL_MINUTES)
-    txn.seller_responded_at = datetime.now(timezone.utc)
-
-    await _notify(db, txn.buyer_id, "meetup_confirmed",
-        "Meetup time set",
-        f"Seller confirmed meetup time. Meet to inspect and complete the deal.",
-        "transaction", str(txn.id))
-    logger.info("meetup.confirmed", transaction_id=str(transaction_id))
-    return txn
-
-
-async def cancel_at_meetup(
-    db: AsyncSession,
-    transaction_id: UUID,
-    buyer_id: UUID,
-    reason: str,
-) -> Transaction:
-    """
-    Buyer cancels at meetup — item doesn't match listing.
-    Only available within MEETUP_CANCEL_MINUTES of agreed_meetup_at.
-    """
-    result = await db.execute(select(Transaction).where(Transaction.id == transaction_id))
-    txn = result.scalar_one_or_none()
-    if not txn:
-        raise ValueError("TRANSACTION_NOT_FOUND")
-    if txn.buyer_id != buyer_id:
-        raise ValueError("NOT_YOUR_TRANSACTION")
-    if txn.status not in ("payment_captured", "awaiting_confirmation"):
-        raise ValueError(f"INVALID_STATUS:{txn.status}")
-
-    now = datetime.now(timezone.utc)
-    # Enforce 30-min window if meetup time was set
-    if txn.agreed_meetup_at and txn.meetup_deadline:
-        if now > txn.meetup_deadline:
-            raise ValueError("CANCEL_WINDOW_EXPIRED")
-
-    txn.status = "cancelled_at_meetup"
-    txn.cancelled_at_meetup_at = now
-    txn.cancelled_reason = reason[:100] if reason else "Item does not match listing"
-
-    # Reopen listing
-    listing_result = await db.execute(select(Listing).where(Listing.id == txn.listing_id))
-    listing = listing_result.scalar_one_or_none()
-    if listing:
-        listing.status = "active"
-
-    await _notify(db, txn.seller_id, "cancelled_at_meetup",
-        "Deal cancelled at meetup",
-        f"Buyer cancelled: {txn.cancelled_reason}. Listing is back to active. Payout will be reversed.",
-        "transaction", str(txn.id))
-    await _notify(db, txn.buyer_id, "cancelled_at_meetup_buyer",
-        "Deal cancelled — refund initiated",
-        "Your payment will be refunded within 5-7 business days.",
-        "transaction", str(txn.id))
-    logger.info("deal.cancelled_at_meetup", transaction_id=str(transaction_id))
-    return txn
 
 
 # ── Deal confirmation ───────────────────────────────────────────────────────────
@@ -647,14 +554,12 @@ async def buyer_confirm_deal(db, transaction_id, buyer_id):
 
     now = datetime.now(timezone.utc)
 
-    # Sprint-fix: compute TDS / platform fee / GST for local meetup deals
-    # too. The shipped flow (transactions/shipped.py) computes these in
-    # accept_delivery, but local-meetup deals went through buyer_confirm
-    # with txn.net_payout still set to gross_amount — sellers were paid
-    # the full amount with no fee deducted.
+    # Compute TDS on seller-side gross (agreed_price = gross_amount -
+    # delivery_fee). Delivery fee is Owmee revenue, not seller payout.
     from app.modules.transactions.shipped import compute_tds
+    seller_gross = Decimal(str(txn.gross_amount or 0)) - Decimal(str(txn.delivery_fee or 0))
     tds_result = await compute_tds(
-        db, txn.seller_id, Decimal(str(txn.gross_amount or 0)), transaction_id
+        db, txn.seller_id, seller_gross, transaction_id
     )
     txn.tds_withheld = tds_result["tds_amount"]
     txn.platform_fee = tds_result["platform_fee"]
@@ -665,6 +570,20 @@ async def buyer_confirm_deal(db, transaction_id, buyer_id):
     txn.buyer_confirmed_at = now
     txn.completed_at = now
     txn.payout_flagged_at = now
+
+    # Trust gate: payout cannot release until seller's bank/UPI is KYC-
+    # verified. Release is ops-driven; the admin payout queue must filter
+    # on seller_payout_verified() before disbursing. Log here so unverified-
+    # seller flags are observable in Sentry/logs.
+    from app.modules.transactions.shipped import seller_payout_verified
+    if not await seller_payout_verified(db, txn.seller_id):
+        logger.warning(
+            "payout.flagged_for_unverified_seller",
+            transaction_id=str(transaction_id),
+            seller_id=str(txn.seller_id),
+            net_payout=str(txn.net_payout),
+        )
+
     # Update trust scores
     import asyncio
     asyncio.create_task(adjust_trust_score(txn.seller_id, "deal_completed", note="buyer_confirmed"))

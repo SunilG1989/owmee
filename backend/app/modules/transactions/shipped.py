@@ -34,9 +34,30 @@ router = APIRouter(tags=["shipped"])
 # ── TDS constants (India Income Tax Act Section 194-O) ────────────────────────
 TDS_THRESHOLD_INR = Decimal("500000")  # ₹5,00,000 per FY
 TDS_RATE = Decimal("0.01")             # 1%
-PLATFORM_FEE_RATE = Decimal("0.02")    # 2% platform fee
-GST_RATE = Decimal("0.18")             # 18% GST on platform fee
+# Owmee charges no platform fee at launch; PLATFORM_FEE_RATE/GST_RATE are
+# kept as zero so compute_tds keeps a stable return shape for callers, but
+# they no longer reduce the seller's payout.
+PLATFORM_FEE_RATE = Decimal("0.00")
+GST_RATE = Decimal("0.00")
 BUYER_ACCEPTANCE_WINDOW_HOURS = 48
+
+
+# Sprint 6c trust gate: a seller's payout cannot release until their bank
+# / UPI has been verified via KYC partner. The actual release is ops-
+# driven (no code endpoint), so we log + return a flag at flag-time so
+# the admin dashboard can suppress unverified payouts.
+async def seller_payout_verified(db, seller_id: UUID) -> bool:
+    """Returns True iff the seller's KYCVerification.payout_verified=True."""
+    from sqlalchemy import select as _select
+    from app.modules.kyc.models import KYCVerification
+    r = await db.execute(
+        _select(KYCVerification.payout_verified)
+        .where(KYCVerification.user_id == seller_id)
+        .order_by(KYCVerification.created_at.desc())
+        .limit(1)
+    )
+    row = r.scalar_one_or_none()
+    return bool(row)
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
@@ -63,6 +84,10 @@ class AcceptDeliveryRequest(BaseModel):
 async def compute_tds(db, seller_id: UUID, gross_amount: Decimal, transaction_id: UUID) -> dict:
     """
     Compute TDS 194-O for a payout.
+    `gross_amount` here is the **seller-side gross** (i.e. agreed_price, NOT
+    the buyer's total payment). Callers must subtract delivery_fee before
+    invoking — that fee is Owmee's revenue, not the seller's.
+
     Returns: tds_amount, net_payout, cumulative_fy_payout, tds_threshold_crossed
     """
     from app.modules.offers.models import Transaction
@@ -331,11 +356,13 @@ async def accept_delivery(
             "message": "Dispute opened. Our team will review within 48 hours.",
         }
 
-    # Buyer accepted — compute TDS and flag payout
+    # Buyer accepted — compute TDS on the SELLER-side gross
+    # (gross_amount - delivery_fee). Delivery fee is Owmee revenue.
+    seller_gross = Decimal(str(txn.gross_amount or 0)) - Decimal(str(txn.delivery_fee or 0))
     tds_result = await compute_tds(
         db,
         txn.seller_id,
-        Decimal(str(txn.gross_amount or 0)),
+        seller_gross,
         transaction_id,
     )
 
@@ -346,6 +373,17 @@ async def accept_delivery(
     txn.net_payout = tds_result["net_payout"]
     txn.payout_flagged_at = now
     txn.buyer_confirmed_at = now
+
+    # Trust gate: log if the seller isn't payout-verified. The actual
+    # release is ops-driven; the admin payout queue must filter on
+    # seller_payout_verified() before disbursing.
+    if not await seller_payout_verified(db, txn.seller_id):
+        logger.warning(
+            "payout.flagged_for_unverified_seller",
+            transaction_id=str(transaction_id),
+            seller_id=str(txn.seller_id),
+            net_payout=str(tds_result["net_payout"]),
+        )
 
     await db.execute(text("""
         UPDATE shipments SET
