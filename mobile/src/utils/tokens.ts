@@ -26,10 +26,36 @@ export const S = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24, xxxl: 32 } as 
 export const R = { xs: 6, sm: 10, md: 14, lg: 16, xl: 20, pill: 999 } as const;
 
 export const Shadow = {
+  subtle: { shadowColor: '#8B7355', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },
   card: { shadowColor: '#8B7355', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3 },
   lifted: { shadowColor: '#8B7355', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.12, shadowRadius: 16, elevation: 6 },
   glow: { shadowColor: '#E8920D', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 12, elevation: 5 },
 };
+
+// Icon sizes — for emoji-as-icons + glyph-as-icons. Keeps emoji rendering
+// uniform across the app so a 📦 in one place isn't 48px and another 18px.
+export const I = { xs: 12, sm: 16, md: 24, lg: 32, xl: 48, display: 56 } as const;
+
+// Translucent overlays used over images / behind modals. Centralized so
+// contrast feels consistent in dark-on-image situations.
+export const O = {
+  dark30: 'rgba(0,0,0,0.3)',
+  dark50: 'rgba(0,0,0,0.5)',
+  white80: 'rgba(255,255,255,0.8)',
+  white90: 'rgba(255,255,255,0.9)',
+} as const;
+
+// Status color map — consolidates the scattered transaction/offer/refund
+// status pill styles. Anything outside this set should be added here, not
+// inlined in a screen.
+export const StatusColor = {
+  // Generic semantic
+  positive: { bg: C.greenLight, text: C.green, border: C.greenLight },
+  warning:  { bg: C.yellowLight, text: C.yellow, border: C.yellowLight },
+  danger:   { bg: C.redLight, text: C.red, border: C.redLight },
+  neutral:  { bg: C.sand, text: C.text2, border: C.border },
+  brand:    { bg: C.honeyLight, text: C.honeyDeep, border: C.honeyLight },
+} as const;
 
 export const MIN_TAP = 48;
 
@@ -66,6 +92,26 @@ export function condStyle(c: string) {
     case 'like_new': return { label: 'Like new', bg: C.forestLight, color: C.forest };
     case 'good': return { label: 'Good', bg: C.greenLight, color: C.green };
     case 'fair': return { label: 'Fair', bg: C.yellowLight, color: C.yellow };
-    default: return { label: c || 'Used', bg: C.sand, color: C.text3 };
+    default: return { label: c || 'Used', bg: C.sand, color: C.text2 };  // upgraded from text3 — passes WCAG on sand
   }
+}
+
+// Map a transaction or refund/return/dispute status string to a status
+// tone. Any UI rendering a status pill should call this rather than
+// rolling its own color map.
+export function statusTone(status: string | null | undefined):
+  'positive' | 'warning' | 'danger' | 'neutral' | 'brand' {
+  if (!status) return 'neutral';
+  const s = status.toLowerCase();
+  if (['completed', 'delivered', 'paid', 'accepted', 'verified', 'processed'].includes(s)) return 'positive';
+  if (['pending', 'requested', 'processing', 'in_progress', 'delivery_in_progress', 'at_hub', 'pickup_scheduled', 'picked_up', 'approved'].includes(s)) return 'brand';
+  if (['cancelled', 'rejected', 'pickup_rejected', 'failed', 'expired', 'disputed'].includes(s)) return 'danger';
+  if (['under_review'].includes(s)) return 'warning';
+  return 'neutral';
+}
+
+// Pretty-print a status for end-users — kebab/snake → "Like new".
+export function prettyStatus(status: string | null | undefined): string {
+  if (!status) return '';
+  return status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
