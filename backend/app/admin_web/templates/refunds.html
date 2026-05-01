@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Refunds — Owmee Admin{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-6">Refunds in flight ({{ rows|length }})</h1>
+{% if not rows %}
+<div class="bg-white rounded-lg border border-stone-200 p-8 text-center text-stone-500">
+  No refunds pending. Pickup-rejected items auto-refund the buyer.
+</div>
+{% else %}
+<div class="bg-white rounded-lg border border-stone-200 overflow-hidden">
+<table class="w-full text-sm">
+  <thead class="bg-stone-100 text-left text-stone-600">
+    <tr>
+      <th class="px-4 py-2">Listing</th>
+      <th class="px-4 py-2 text-right">Amount</th>
+      <th class="px-4 py-2">Status</th>
+      <th class="px-4 py-2">Trigger</th>
+      <th class="px-4 py-2">Initiated</th>
+      <th class="px-4 py-2">Reason</th>
+    </tr>
+  </thead>
+  <tbody class="divide-y divide-stone-200">
+    {% for txn, title in rows %}
+    <tr class="hover:bg-stone-50">
+      <td class="px-4 py-3">
+        <a href="/admin/txn/{{ txn.id }}" class="text-amber-700 hover:underline">{{ title }}</a>
+      </td>
+      <td class="px-4 py-3 text-right font-medium">₹{{ txn.refund_amount or txn.gross_amount }}</td>
+      <td class="px-4 py-3">
+        {% if txn.refund_status == 'failed' %}
+          <span class="inline-block px-2 py-0.5 text-xs rounded bg-red-100 text-red-700 font-medium">FAILED</span>
+        {% elif txn.refund_status == 'processing' %}
+          <span class="inline-block px-2 py-0.5 text-xs rounded bg-amber-100 text-amber-700 font-medium">processing</span>
+        {% else %}
+          <span class="inline-block px-2 py-0.5 text-xs rounded bg-stone-100 text-stone-700 font-medium">{{ txn.refund_status }}</span>
+        {% endif %}
+      </td>
+      <td class="px-4 py-3 text-xs text-stone-600">{{ txn.refund_initiated_by or '—' }}</td>
+      <td class="px-4 py-3 text-xs text-stone-500">
+        {{ txn.refund_initiated_at.strftime('%d %b %H:%M') if txn.refund_initiated_at else '—' }}
+      </td>
+      <td class="px-4 py-3 text-xs text-stone-600">{{ txn.refund_reason }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% endblock %}

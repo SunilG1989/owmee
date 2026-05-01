@@ -211,17 +211,76 @@ async def fe_complete_pickup(
     if body.inspection_passed:
         txn.at_hub_at = now
     else:
-        # Pickup rejected: refund flow is owned by the refund/return work
-        # in the next sprint phase. For now we just mark the txn rejected
-        # and rely on ops to push the refund through manually.
-        logger.info(
-            "logistics.pickup_rejected_refund_pending",
-            transaction_id=str(transaction_id),
-            seller_id=str(txn.seller_id),
-            buyer_id=str(txn.buyer_id),
-            notes=body.inspection_notes,
+        # Pickup rejected = trust failure. Auto-initiate the buyer's
+        # refund right here so ops doesn't have to chase it manually.
+        from app.modules.transactions.refund_service import (
+            initiate_refund, INITIATED_BY_SYSTEM_PICKUP,
         )
+        try:
+            await initiate_refund(
+                db, txn,
+                reason=f"Pickup inspection failed: {body.inspection_notes}"[:200],
+                initiated_by=INITIATED_BY_SYSTEM_PICKUP,
+            )
+        except ValueError as ref_err:
+            # Already-refunded or not-paid is a no-op for the FE flow;
+            # log so ops can investigate but don't block the pickup.
+            logger.warning(
+                "logistics.pickup_rejected_refund_skip",
+                transaction_id=str(transaction_id),
+                reason=str(ref_err),
+            )
 
+    await db.commit()
+    return _fmt_logistics(txn)
+
+
+# ── Admin: refund queue + initiate ────────────────────────────────────────────
+
+class _InitiateRefundRequest(BaseModel):
+    reason: str = Field(..., min_length=2, max_length=200)
+
+
+@router.get("/v1/admin/logistics/refunds", dependencies=[Depends(require_admin)])
+async def admin_refund_queue(db: DBSession):
+    """Refunds in flight (requested / processing / failed) for the admin
+    dashboard. 'completed' refunds are fine — we don't need to look at
+    them after the fact."""
+    rows = (await db.execute(
+        select(Transaction, Listing.title)
+        .join(Listing, Listing.id == Transaction.listing_id)
+        .where(Transaction.refund_status.in_(["requested", "processing", "failed"]))
+        .order_by(Transaction.refund_initiated_at.desc())
+    )).all()
+    out = []
+    for t, title in rows:
+        d = _fmt_logistics(t, title)
+        d["refund_status"] = t.refund_status
+        d["refund_amount"] = str(t.refund_amount) if t.refund_amount else None
+        d["refund_reason"] = t.refund_reason
+        d["refund_initiated_at"] = t.refund_initiated_at.isoformat() if t.refund_initiated_at else None
+        d["refund_initiated_by"] = t.refund_initiated_by
+        out.append(d)
+    return {"refunds": out}
+
+
+@router.post(
+    "/v1/admin/logistics/transactions/{transaction_id}/refund",
+    dependencies=[Depends(require_admin)],
+)
+async def admin_initiate_refund(
+    transaction_id: UUID, body: _InitiateRefundRequest, db: DBSession,
+):
+    from app.modules.transactions.refund_service import (
+        initiate_refund, INITIATED_BY_ADMIN,
+    )
+    txn = await db.get(Transaction, transaction_id)
+    if not txn:
+        raise HTTPException(404, {"error": "NOT_FOUND"})
+    try:
+        await initiate_refund(db, txn, reason=body.reason, initiated_by=INITIATED_BY_ADMIN)
+    except ValueError as e:
+        raise HTTPException(400, {"error": str(e)})
     await db.commit()
     return _fmt_logistics(txn)
 
@@ -415,4 +474,10 @@ async def buyer_tracking(transaction_id: UUID, current_user: BasicUser, db: DBSe
                 and txn.delivery_mode == "fe")
             else None
         ),
+        # Refund visibility — the buyer wants to know "did the money come
+        # back" during pickup-rejected / dispute resolution flows.
+        "refund_status": txn.refund_status,
+        "refund_amount": str(txn.refund_amount) if txn.refund_amount else None,
+        "refund_reason": txn.refund_reason,
+        "refund_completed_at": txn.refund_completed_at.isoformat() if txn.refund_completed_at else None,
     }

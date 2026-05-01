@@ -113,6 +113,16 @@ class Transaction(Base, TimestampMixin):
     routed_at = Column(DateTime(timezone=True))                   # admin chose FE/courier
     delivered_at = Column(DateTime(timezone=True))
 
+    # ── Sprint refund flow (migration 0030) ────────────────────────────────
+    # refund_status: 'none' | 'requested' | 'processing' | 'completed' | 'failed'
+    refund_status = Column(String(20), nullable=False, default="none", server_default=text("'none'"))
+    refund_amount = Column(Numeric(10, 2))
+    refund_reason = Column(String(200))
+    refund_initiated_at = Column(DateTime(timezone=True))
+    refund_completed_at = Column(DateTime(timezone=True))
+    refund_initiated_by = Column(String(20))                       # system_pickup_rejected | admin | buyer
+    razorpay_refund_id = Column(String(120))
+
     # ── Sprint 4 / Pass 4e: frozen listing snapshot at reservation time ─────
     listing_snapshot = Column(JSONB, nullable=True)
     snapshot_frozen_at = Column(DateTime(timezone=True), nullable=True)

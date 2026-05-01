@@ -341,6 +341,10 @@ export interface TrackingResponse {
   courier_name: string | null;
   courier_tracking_url: string | null;
   ack_code: string | null;
+  refund_status: 'none' | 'requested' | 'processing' | 'completed' | 'failed';
+  refund_amount: string | null;
+  refund_reason: string | null;
+  refund_completed_at: string | null;
 }
 
 // ── Wishlist ─────────────────────────────────────────────────────────────────

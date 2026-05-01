@@ -71,4 +71,32 @@
   {% for k in txn.pickup_inspection_photo_keys %}<div class="font-mono">{{ k }}</div>{% endfor %}
 </div>
 {% endif %}
+
+<h2 class="text-sm font-semibold text-stone-700 uppercase tracking-wide mb-2">Refund</h2>
+<div class="bg-white rounded-lg border border-stone-200 p-4 mb-6 text-sm">
+  {% if txn.refund_status and txn.refund_status != 'none' %}
+    <div><span class="text-stone-500">Status:</span>
+      {% if txn.refund_status == 'failed' %}<span class="text-red-700 font-medium">{{ txn.refund_status }}</span>
+      {% elif txn.refund_status == 'completed' %}<span class="text-green-700 font-medium">completed</span>
+      {% else %}<span class="text-amber-700">{{ txn.refund_status }}</span>{% endif %}
+    </div>
+    {% if txn.refund_amount %}<div><span class="text-stone-500">Amount:</span> ₹{{ txn.refund_amount }}</div>{% endif %}
+    {% if txn.refund_initiated_by %}<div><span class="text-stone-500">Trigger:</span> {{ txn.refund_initiated_by }}</div>{% endif %}
+    {% if txn.refund_reason %}<div class="mt-1 text-xs text-stone-600">{{ txn.refund_reason }}</div>{% endif %}
+    {% if txn.refund_status == 'failed' %}
+      <form method="post" action="/admin/txn/{{ txn.id }}/refund" class="mt-3">
+        <input name="reason" value="{{ txn.refund_reason }}" hidden>
+        <button class="text-xs bg-red-600 hover:bg-red-700 text-white rounded px-3 py-1">Retry refund</button>
+      </form>
+    {% endif %}
+  {% else %}
+    <div class="text-stone-500 mb-3">No refund initiated.</div>
+    <form method="post" action="/admin/txn/{{ txn.id }}/refund" class="flex gap-2 items-center">
+      <input name="reason" required placeholder="Reason for refund"
+             class="text-xs border border-stone-300 rounded px-2 py-1 flex-1" maxlength="200">
+      <button class="text-xs bg-red-600 hover:bg-red-700 text-white rounded px-3 py-1 whitespace-nowrap"
+              onclick="return confirm('Initiate refund? This is irreversible.')">Initiate refund</button>
+    </form>
+  {% endif %}
+</div>
 {% endblock %}

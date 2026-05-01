@@ -152,6 +152,32 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
           <Row label="You paid" value={formatPrice(Number(txn.gross_amount))} bold />
         </View>
 
+        {tracking.refund_status && tracking.refund_status !== 'none' && (
+          <View style={[s.refundBox,
+            tracking.refund_status === 'completed' && s.refundOK,
+            tracking.refund_status === 'failed' && s.refundErr,
+          ]}>
+            <Text style={s.refundLabel}>
+              {tracking.refund_status === 'completed' ? 'Refunded' :
+               tracking.refund_status === 'failed' ? 'Refund failed' :
+               'Refund in progress'}
+            </Text>
+            {tracking.refund_amount && (
+              <Text style={s.refundAmount}>{formatPrice(Number(tracking.refund_amount))}</Text>
+            )}
+            {tracking.refund_status === 'completed' ? (
+              <Text style={s.refundHint}>The amount has been credited to your original payment method. Bank settlement can take 5-7 working days.</Text>
+            ) : tracking.refund_status === 'failed' ? (
+              <Text style={s.refundHint}>Owmee ops will retry shortly. Contact support@owmee.in if it stays unresolved for 24 hours.</Text>
+            ) : (
+              <Text style={s.refundHint}>Your refund is being processed. We'll notify you when it lands.</Text>
+            )}
+            {tracking.refund_reason && (
+              <Text style={s.refundReason}>Reason: {tracking.refund_reason}</Text>
+            )}
+          </View>
+        )}
+
         {isDelivered && isBuyer && (
           <View style={s.actions}>
             <TouchableOpacity
@@ -295,6 +321,14 @@ const s = StyleSheet.create({
   btnSecondary: { borderWidth: 1, borderColor: C.border, borderRadius: 10, paddingVertical: 14, alignItems: 'center' },
   btnSecondaryText: { color: C.text3, fontSize: 14 },
   btnDisabled: { opacity: 0.5 },
+
+  refundBox: { margin: 16, padding: 16, borderRadius: 10, backgroundColor: '#fef3c7', borderWidth: 1, borderColor: '#fcd34d' },
+  refundOK: { backgroundColor: '#dcfce7', borderColor: '#86efac' },
+  refundErr: { backgroundColor: '#fee2e2', borderColor: '#fca5a5' },
+  refundLabel: { fontSize: 13, fontWeight: '700', color: C.text, textTransform: 'uppercase', letterSpacing: 0.5 },
+  refundAmount: { fontSize: 20, fontWeight: '800', color: C.text, marginVertical: 4 },
+  refundHint: { fontSize: 12, color: C.text3, lineHeight: 18 },
+  refundReason: { fontSize: 11, color: C.text4, marginTop: 6, fontStyle: 'italic' },
 
   modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   modal: { backgroundColor: C.cream, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 24 },

@@ -42,6 +42,23 @@ class PaymentLinkResult:
         self.error = error
 
 
+class RefundResult:
+    """Adapter response for refund attempts. razorpay_refund_id is the
+    payment-partner's id we store for idempotent retries."""
+
+    def __init__(
+        self,
+        success: bool,
+        razorpay_refund_id: str = "",
+        status: str = "",
+        error: str | None = None,
+    ):
+        self.success = success
+        self.razorpay_refund_id = razorpay_refund_id
+        self.status = status  # 'created' | 'processed' | 'failed'
+        self.error = error
+
+
 class WebhookVerifyResult:
     def __init__(self, valid: bool, event: str = "", payment_link_id: str = "", payment_id: str = ""):
         self.valid = valid
@@ -100,6 +117,23 @@ class _DevPaymentAdapter:
             return WebhookVerifyResult(valid=True, event=event, payment_link_id=pl_id, payment_id=payment_id)
         except Exception as e:
             return WebhookVerifyResult(valid=False)
+
+    async def refund(
+        self,
+        razorpay_payment_id: str,
+        amount_paise: int,
+        idempotency_key: str,
+        notes: dict | None = None,
+    ) -> RefundResult:
+        """Dev: pretend the refund succeeded immediately."""
+        fake_id = f"rfnd_dev_{uuid4().hex[:12]}"
+        logger.info(
+            "refund.dev_processed",
+            refund_id=fake_id,
+            razorpay_payment_id=razorpay_payment_id,
+            amount_rupees=amount_paise / 100,
+        )
+        return RefundResult(success=True, razorpay_refund_id=fake_id, status="processed")
 
     def build_dev_paid_webhook(self, razorpay_link_id: str, transaction_id: str) -> dict:
         """Build a realistic-looking webhook payload for dev testing."""
@@ -177,6 +211,43 @@ class _RazorpayAdapter:
         except Exception as e:
             logger.error("razorpay.payment_link.error", error=str(e))
             return PaymentLinkResult(success=False, error=str(e))
+
+    async def refund(
+        self,
+        razorpay_payment_id: str,
+        amount_paise: int,
+        idempotency_key: str,
+        notes: dict | None = None,
+    ) -> RefundResult:
+        """Razorpay refund. Idempotent via the X-Razorpay-Idempotency-Key
+        header — calling twice with the same key returns the same refund.
+
+        Razorpay docs: POST /payments/{id}/refund — body {amount, notes?}.
+        Async response status is one of: 'pending' | 'processed' | 'failed'.
+        """
+        url = f"{self.BASE}/payments/{razorpay_payment_id}/refund"
+        body = {"amount": amount_paise}
+        if notes:
+            body["notes"] = notes
+        headers = {"X-Razorpay-Idempotency-Key": idempotency_key}
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                r = await client.post(url, auth=self._auth(), json=body, headers=headers)
+            data = r.json() if r.content else {}
+            if r.status_code in (200, 201):
+                return RefundResult(
+                    success=True,
+                    razorpay_refund_id=data.get("id", ""),
+                    status=data.get("status", "processed"),
+                )
+            logger.error("razorpay.refund.failed", status=r.status_code, body=data)
+            return RefundResult(
+                success=False,
+                error=data.get("error", {}).get("description", f"HTTP {r.status_code}"),
+            )
+        except Exception as e:
+            logger.error("razorpay.refund.error", error=str(e))
+            return RefundResult(success=False, error=str(e))
 
     def verify_webhook(self, payload_body: bytes, signature: str) -> WebhookVerifyResult:
         import json

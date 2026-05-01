@@ -295,6 +295,46 @@ async def txn_detail(
     })
 
 
+@router.get("/admin/refunds", response_class=HTMLResponse)
+async def refunds_page(
+    request: Request, db: DBSession,
+    admin: AdminUserModel = Depends(require_admin_cookie),
+):
+    rows = (await db.execute(
+        select(Transaction, Listing.title)
+        .join(Listing, Listing.id == Transaction.listing_id)
+        .where(Transaction.refund_status.in_(["requested", "processing", "failed"]))
+        .order_by(Transaction.refund_initiated_at.desc())
+    )).all()
+    return templates.TemplateResponse("refunds.html", {
+        "request": request, "admin": admin, "rows": rows,
+    })
+
+
+@router.post("/admin/txn/{transaction_id}/refund")
+async def txn_initiate_refund(
+    transaction_id: UUID, db: DBSession,
+    reason: str = Form(...),
+    admin: AdminUserModel = Depends(require_admin_cookie),
+):
+    from app.modules.transactions.refund_service import (
+        initiate_refund, INITIATED_BY_ADMIN,
+    )
+    txn = await db.get(Transaction, transaction_id)
+    if not txn:
+        raise HTTPException(404)
+    try:
+        await initiate_refund(db, txn, reason=reason, initiated_by=INITIATED_BY_ADMIN)
+        await db.commit()
+    except ValueError as e:
+        # Re-render the detail page with an error banner instead of a 500.
+        logger.warning("admin.refund_failed", transaction_id=str(transaction_id),
+                       error=str(e), admin_id=str(admin.id))
+    logger.info("admin.refund_initiated", transaction_id=str(transaction_id),
+                reason=reason, admin_id=str(admin.id))
+    return RedirectResponse(url=f"/admin/txn/{transaction_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
 @router.post("/admin/txn/{transaction_id}/courier-status")
 async def txn_courier_status(
     transaction_id: UUID, db: DBSession,
