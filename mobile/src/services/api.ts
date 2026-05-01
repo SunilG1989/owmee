@@ -315,15 +315,33 @@ export const Offers = {
 };
 
 // ── Transactions ─────────────────────────────────────────────────────────────
+// Sprint 6c: meetup endpoints removed (confirmMeetup, cancelAtMeetup);
+// logistics is fully managed. Tracking endpoint added for the new flow.
 export const Transactions = {
   list: () => api.get('/v1/transactions'),
   get: (id: string) => api.get(`/v1/transactions/${id}`),
-  confirmMeetup: (id: string, meetupAt?: string) => api.post(`/v1/transactions/${id}/meetup`, { meetup_at: meetupAt || new Date(Date.now() + 86400000).toISOString() }),
-  cancelAtMeetup: (id: string, reason: string) => api.post(`/v1/transactions/${id}/cancel-meetup`, { reason }),
+  tracking: (id: string) => api.get<TrackingResponse>(`/v1/transactions/${id}/tracking`),
   confirmDeal: (id: string) => api.post(`/v1/transactions/${id}/confirm`),
   rate: (id: string, stars: number, ok: boolean, note?: string) =>
     api.post(`/v1/transactions/${id}/rate`, { stars, item_as_described: ok ? 'yes' : 'no', comment: note }),
 };
+
+export interface TrackingStep {
+  step: 'payment_captured' | 'fe_pickup' | 'at_hub' | 'routed_for_delivery' | 'delivered';
+  at: string | null;
+  label: string;
+  done: boolean;
+}
+
+export interface TrackingResponse {
+  transaction_id: string;
+  status: string;
+  timeline: TrackingStep[];
+  delivery_mode: 'fe' | 'courier' | null;
+  courier_name: string | null;
+  courier_tracking_url: string | null;
+  ack_code: string | null;
+}
 
 // ── Wishlist ─────────────────────────────────────────────────────────────────
 export const Wishlist = {
