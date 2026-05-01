@@ -287,7 +287,12 @@ async def accept_offer(
     if not (is_seller_accepting or is_buyer_accepting_counter):
         raise ValueError("CANNOT_ACCEPT")
 
-    listing_result = await db.execute(select(Listing).where(Listing.id == offer.listing_id))
+    # Lock the listing row to serialize concurrent accept attempts; without
+    # this, two flows racing on the same listing could both pass the
+    # status="active" check and both create reservations.
+    listing_result = await db.execute(
+        select(Listing).where(Listing.id == offer.listing_id).with_for_update()
+    )
     listing = listing_result.scalar_one_or_none()
     if not listing or listing.status != "active":
         raise ValueError("LISTING_NO_LONGER_AVAILABLE")
@@ -425,7 +430,12 @@ async def accept_offer_cash(
     if not offer or offer.seller_id != seller_id or offer.status != "pending":
         raise ValueError("CANNOT_ACCEPT")
 
-    listing_result = await db.execute(select(Listing).where(Listing.id == offer.listing_id))
+    # Lock the listing row to serialize concurrent accept attempts; without
+    # this, two flows racing on the same listing could both pass the
+    # status="active" check and both create reservations.
+    listing_result = await db.execute(
+        select(Listing).where(Listing.id == offer.listing_id).with_for_update()
+    )
     listing = listing_result.scalar_one_or_none()
     if not listing or listing.status != "active":
         raise ValueError("LISTING_NO_LONGER_AVAILABLE")
@@ -499,8 +509,15 @@ async def withdraw_offer(db, offer_id, buyer_id):
 # ── Payment processing ──────────────────────────────────────────────────────────
 
 async def process_payment_paid(db, razorpay_link_id, razorpay_payment_id, webhook_payload):
+    # Lock the PaymentLink row so the (status check → status write)
+    # sequence is atomic. Razorpay delivers `payment.captured` more than
+    # once in normal operation; without the lock two concurrent webhook
+    # deliveries would both see status != "paid", both update the txn,
+    # both fire notifications, both reset confirmation_deadline.
     result = await db.execute(
-        select(PaymentLink).where(PaymentLink.razorpay_link_id == razorpay_link_id)
+        select(PaymentLink)
+        .where(PaymentLink.razorpay_link_id == razorpay_link_id)
+        .with_for_update()
     )
     pl = result.scalar_one_or_none()
     if not pl:
@@ -629,6 +646,21 @@ async def buyer_confirm_deal(db, transaction_id, buyer_id):
         raise ValueError(f"INVALID_STATUS:{txn.status}")
 
     now = datetime.now(timezone.utc)
+
+    # Sprint-fix: compute TDS / platform fee / GST for local meetup deals
+    # too. The shipped flow (transactions/shipped.py) computes these in
+    # accept_delivery, but local-meetup deals went through buyer_confirm
+    # with txn.net_payout still set to gross_amount — sellers were paid
+    # the full amount with no fee deducted.
+    from app.modules.transactions.shipped import compute_tds
+    tds_result = await compute_tds(
+        db, txn.seller_id, Decimal(str(txn.gross_amount or 0)), transaction_id
+    )
+    txn.tds_withheld = tds_result["tds_amount"]
+    txn.platform_fee = tds_result["platform_fee"]
+    txn.gst_on_fee = tds_result["gst_on_fee"]
+    txn.net_payout = tds_result["net_payout"]
+
     txn.status = "completed"
     txn.buyer_confirmed_at = now
     txn.completed_at = now

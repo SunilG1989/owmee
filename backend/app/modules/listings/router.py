@@ -27,7 +27,24 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select, update
 
 from app.core.dependencies import BasicUser, DBSession, OptionalUser, VerifiedUser
-from app.core.storage import generate_presigned_upload_url, object_key_for_listing_image, public_url
+from app.core.storage import (
+    generate_presigned_download_url, generate_presigned_upload_url,
+    object_key_for_listing_image, public_url,
+)
+
+
+def _img_url(key: str | None) -> str | None:
+    """6h presigned download URL. Used by card/detail/my-listings format.
+    Switched from public_url() because (a) it works on private MinIO buckets
+    without a public-read policy, (b) it sidesteps the public-vs-internal
+    hostname signing mismatch we hit on Android emulator, (c) feed_router
+    started doing the same thing for consistency."""
+    if not key:
+        return None
+    try:
+        return generate_presigned_download_url(key, expires_in=60 * 60 * 6)
+    except Exception:
+        return None
 from app.modules.listings.models import Category, Listing, ListingImage
 from app.modules.listings.service import (
     add_image_record, create_draft, get_all_categories, publish_listing,
@@ -115,8 +132,8 @@ def _fmt_card(listing: Listing, seller_verified: bool = False) -> dict:
         "city": listing.city,
         "locality": listing.locality,
         "category_id": str(listing.category_id),
-        "image_urls": [public_url(k) for k in (listing.image_urls or [])],
-        "thumbnail_url": public_url(listing.thumbnail_url) if listing.thumbnail_url else None,
+        "image_urls": [u for u in (_img_url(k) for k in (listing.image_urls or [])) if u],
+        "thumbnail_url": _img_url(listing.thumbnail_url),
         "view_count": listing.view_count,
         "seller_verified": seller_verified,
         "is_kids_item": listing.is_kids_item,
@@ -185,8 +202,8 @@ def _fmt_my(listing: Listing) -> dict:
         "moderation_status": listing.moderation_status,
         "city": listing.city,
         "category_id": str(listing.category_id),
-        "image_urls": [public_url(k) for k in (listing.image_urls or [])],
-        "thumbnail_url": public_url(listing.thumbnail_url) if listing.thumbnail_url else None,
+        "image_urls": [u for u in (_img_url(k) for k in (listing.image_urls or [])) if u],
+        "thumbnail_url": _img_url(listing.thumbnail_url),
         "view_count": listing.view_count,
         "is_kids_item": listing.is_kids_item,
         "is_negotiable": listing.is_negotiable,
@@ -483,7 +500,11 @@ async def confirm_image_upload(listing_id: UUID, body: ImageConfirmRequest,
 
 
 @router.post("/{listing_id}/publish")
-async def publish(listing_id: UUID, current_user: VerifiedUser, db: DBSession):
+async def publish(listing_id: UUID, current_user: BasicUser, db: DBSession):
+    # Sprint 6a — KYC is the badge, not the gate. publish was missed in the
+    # initial pass and kept on VerifiedUser, which paired with creation
+    # being BasicUser-gated meant unverified sellers could create drafts
+    # but could not actually publish them.
     try:
         listing = await publish_listing(db, listing_id, current_user.user_id)
         await db.commit()

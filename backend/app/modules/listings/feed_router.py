@@ -17,6 +17,19 @@ from sqlalchemy import text
 
 from app.core.dependencies import DBSession, OptionalUser
 from app.core.redis import get_redis
+from app.core.storage import generate_presigned_download_url
+
+
+def _img_url(key: str | None) -> str | None:
+    """Sprint-fix: feed used to return raw object keys. Mobile then tried to
+    render them as image URIs, got nothing, blank cards. Presigned download
+    URLs work whether or not the MinIO bucket has a public policy."""
+    if not key:
+        return None
+    try:
+        return generate_presigned_download_url(key, expires_in=60 * 60 * 6)
+    except Exception:
+        return None
 
 router = APIRouter(prefix="/v1/feed", tags=["feed"])
 log = logging.getLogger(__name__)
@@ -75,8 +88,10 @@ def _serialize_row(r, distance_km):
         "price": float(r["price"]) if r.get("price") is not None else 0.0,
         "original_price": float(r["original_price"]) if r.get("original_price") is not None else None,
         "discount_pct": float(r["discount_pct"]) if r.get("discount_pct") is not None else None,
-        "image_urls": r.get("image_urls") or [],
-        "thumbnail_url": r.get("thumbnail_url"),
+        # image_urls in DB is a list of object keys, not absolute URLs —
+        # mobile needs presigned URLs to actually fetch them.
+        "image_urls": [u for u in (_img_url(k) for k in (r.get("image_urls") or [])) if u],
+        "thumbnail_url": _img_url(r.get("thumbnail_url")),
         "city": r.get("city"),
         "state": r.get("state"),
         "category_slug": r.get("category_slug"),
