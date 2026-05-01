@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Disputes — Owmee Admin{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-6">Disputes ({{ rows|length }})</h1>
+{% if not rows %}
+<div class="bg-white rounded-lg border border-stone-200 p-8 text-center text-stone-500">
+  No open disputes. Buyer-raised disputes appear here for review.
+</div>
+{% else %}
+<div class="space-y-4">
+  {% for dispute, txn, title in rows %}
+  <div class="bg-white rounded-lg border border-stone-200 p-4">
+    <div class="flex justify-between items-start mb-2">
+      <div>
+        <a href="/admin/txn/{{ txn.id }}" class="text-amber-700 font-medium hover:underline">{{ title }}</a>
+        <div class="text-xs text-stone-500 mt-1">
+          ₹{{ txn.gross_amount }} · raised {{ dispute.created_at.strftime('%d %b %H:%M') }} ·
+          reason <span class="font-mono">{{ dispute.reason }}</span>
+        </div>
+      </div>
+      <div class="text-xs">
+        {% if dispute.status == 'under_review' %}
+          <span class="px-2 py-0.5 bg-amber-100 text-amber-700 rounded font-medium">UNDER REVIEW</span>
+        {% else %}
+          <span class="px-2 py-0.5 bg-red-100 text-red-700 rounded font-medium">OPEN</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="text-sm text-stone-700 bg-stone-50 rounded p-3 mb-3">{{ dispute.description }}</div>
+
+    <form method="post" action="/admin/disputes/{{ dispute.id }}/resolve" class="flex flex-col md:flex-row gap-2">
+      <select name="resolution" required class="text-sm border border-stone-300 rounded px-2 py-1">
+        <option value="">Resolution…</option>
+        <option value="full_refund">Full refund (buyer wins)</option>
+        <option value="partial_refund">Partial refund</option>
+        <option value="full_release">Full release (seller wins)</option>
+        <option value="dismissed">Dismissed</option>
+      </select>
+      <input name="resolution_note" placeholder="Note (visible to buyer + seller)"
+             class="text-sm border border-stone-300 rounded px-2 py-1 flex-1" maxlength="500">
+      <button class="text-sm bg-amber-600 hover:bg-amber-700 text-white rounded px-4 py-1 whitespace-nowrap"
+              onclick="return confirm('Resolve this dispute? This is final.')">Resolve</button>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

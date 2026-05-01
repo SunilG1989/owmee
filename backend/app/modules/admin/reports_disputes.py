@@ -366,19 +366,42 @@ async def resolve_dispute(dispute_id: UUID, body: ResolveDisputeRequest, db: DBS
     dispute.resolution_note = body.resolution_note
     dispute.resolved_at = now
 
-    # Update transaction status
+    # Update transaction status + actually move money
     from app.modules.offers.models import Transaction
+    from app.modules.transactions.refund_service import initiate_refund, INITIATED_BY_ADMIN
     txn_result = await db.execute(
         select(Transaction).where(Transaction.id == dispute.transaction_id)
     )
     txn = txn_result.scalar_one_or_none()
+    refund_status = None
     if txn:
         if body.resolution in ("full_refund", "partial_refund"):
             txn.status = "refunded"
+            # Actually trigger the refund — earlier the code just flipped
+            # status='refunded' without calling the payment partner, so
+            # buyers were left wondering why their money never came back.
+            try:
+                await initiate_refund(
+                    db, txn,
+                    reason=f"Dispute {dispute_id} resolved: {body.resolution}. {body.resolution_note or ''}"[:200],
+                    initiated_by=INITIATED_BY_ADMIN,
+                )
+                refund_status = txn.refund_status
+            except ValueError as ref_err:
+                # E.g. ALREADY_REFUNDED if pickup auto-refunded earlier;
+                # NOT_PAID if dispute opened before payment captured.
+                logger.warning("dispute.refund_skip", dispute_id=str(dispute_id), error=str(ref_err))
+                refund_status = "skipped"
         elif body.resolution == "full_release":
             txn.status = "completed"
             txn.payout_flagged_at = now
 
     await db.commit()
-    logger.info("dispute.resolved", dispute_id=str(dispute_id), resolution=body.resolution)
-    return {"dispute_id": str(dispute_id), "status": "resolved", "resolution": body.resolution}
+    logger.info("dispute.resolved", dispute_id=str(dispute_id), resolution=body.resolution,
+                refund_status=refund_status)
+    return {
+        "dispute_id": str(dispute_id),
+        "status": "resolved",
+        "resolution": body.resolution,
+        "refund_status": refund_status,
+    }

@@ -295,6 +295,73 @@ async def txn_detail(
     })
 
 
+@router.get("/admin/disputes", response_class=HTMLResponse)
+async def disputes_page(
+    request: Request, db: DBSession,
+    admin: AdminUserModel = Depends(require_admin_cookie),
+):
+    # Open disputes (admin handles the resolution); inline import keeps
+    # the cross-module dependency narrow since the Dispute model lives
+    # in admin.reports_disputes alongside the existing dispute router.
+    from app.modules.admin.reports_disputes import Dispute
+    rows = (await db.execute(
+        select(Dispute, Transaction, Listing.title)
+        .join(Transaction, Transaction.id == Dispute.transaction_id)
+        .join(Listing, Listing.id == Transaction.listing_id)
+        .where(Dispute.status.in_(["opened", "under_review"]))
+        .order_by(Dispute.created_at.desc())
+    )).all()
+    return templates.TemplateResponse("disputes.html", {
+        "request": request, "admin": admin, "rows": rows,
+    })
+
+
+@router.post("/admin/disputes/{dispute_id}/resolve")
+async def disputes_resolve(
+    dispute_id: UUID, db: DBSession,
+    resolution: str = Form(...),
+    resolution_note: str = Form(""),
+    admin: AdminUserModel = Depends(require_admin_cookie),
+):
+    """Wraps the JSON admin endpoint so the form-post flow round-trips
+    cleanly. We don't reuse the JSON handler directly because the
+    response shape differs (HTML redirect vs JSON)."""
+    from app.modules.admin.reports_disputes import (
+        Dispute, VALID_RESOLUTIONS,
+    )
+    from app.modules.transactions.refund_service import initiate_refund, INITIATED_BY_ADMIN
+    if resolution not in VALID_RESOLUTIONS:
+        raise HTTPException(400, "bad_resolution")
+    dispute = await db.get(Dispute, dispute_id)
+    if not dispute:
+        raise HTTPException(404)
+    now = datetime.now(timezone.utc)
+    dispute.status = "resolved"
+    dispute.resolution = resolution
+    dispute.resolution_note = resolution_note or None
+    dispute.resolved_at = now
+
+    txn = await db.get(Transaction, dispute.transaction_id)
+    if txn:
+        if resolution in ("full_refund", "partial_refund"):
+            txn.status = "refunded"
+            try:
+                await initiate_refund(
+                    db, txn,
+                    reason=f"Dispute {dispute.id}: {resolution}. {resolution_note or ''}"[:200],
+                    initiated_by=INITIATED_BY_ADMIN,
+                )
+            except ValueError as e:
+                logger.warning("admin.dispute_refund_skip", dispute_id=str(dispute_id), error=str(e))
+        elif resolution == "full_release":
+            txn.status = "completed"
+            txn.payout_flagged_at = now
+    await db.commit()
+    logger.info("admin.dispute_resolved", dispute_id=str(dispute_id),
+                resolution=resolution, admin_id=str(admin.id))
+    return RedirectResponse(url="/admin/disputes", status_code=status.HTTP_303_SEE_OTHER)
+
+
 @router.get("/admin/refunds", response_class=HTMLResponse)
 async def refunds_page(
     request: Request, db: DBSession,
