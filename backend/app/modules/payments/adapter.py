@@ -60,10 +60,15 @@ class RefundResult:
 
 
 class WebhookVerifyResult:
-    def __init__(self, valid: bool, event: str = "", payment_link_id: str = "", payment_id: str = ""):
+    def __init__(
+        self, valid: bool, event: str = "",
+        payment_link_id: str = "", payment_id: str = "",
+        refund_id: str = "",
+    ):
         self.valid = valid
         self.event = event
         self.payment_link_id = payment_link_id
+        self.refund_id = refund_id
         self.payment_id = payment_id
 
 
@@ -114,7 +119,18 @@ class _DevPaymentAdapter:
                 .get("entity", {})
                 .get("id", "")
             )
-            return WebhookVerifyResult(valid=True, event=event, payment_link_id=pl_id, payment_id=payment_id)
+            # Refund events carry the refund entity instead of (or in
+            # addition to) payment / payment_link.
+            refund_id = (
+                data.get("payload", {})
+                .get("refund", {})
+                .get("entity", {})
+                .get("id", "")
+            )
+            return WebhookVerifyResult(
+                valid=True, event=event,
+                payment_link_id=pl_id, payment_id=payment_id, refund_id=refund_id,
+            )
         except Exception as e:
             return WebhookVerifyResult(valid=False)
 
@@ -269,7 +285,18 @@ class _RazorpayAdapter:
                 .get("entity", {})
                 .get("id", "")
             )
-            return WebhookVerifyResult(valid=True, event=event, payment_link_id=pl_id, payment_id=payment_id)
+            # Refund events carry the refund entity instead of (or in
+            # addition to) payment / payment_link.
+            refund_id = (
+                data.get("payload", {})
+                .get("refund", {})
+                .get("entity", {})
+                .get("id", "")
+            )
+            return WebhookVerifyResult(
+                valid=True, event=event,
+                payment_link_id=pl_id, payment_id=payment_id, refund_id=refund_id,
+            )
         except Exception:
             return WebhookVerifyResult(valid=False)
 

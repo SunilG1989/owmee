@@ -3,10 +3,13 @@ from typing import BinaryIO
 from uuid import uuid4
 
 import boto3
+import structlog
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
 from app.core.settings import settings
+
+logger = structlog.get_logger()
 
 
 def _r2_client():
@@ -104,6 +107,66 @@ def delete_object(object_key: str, bucket: str | None = None) -> None:
     client = _r2_client()
     bucket = bucket or settings.r2_bucket
     client.delete_object(Bucket=bucket, Key=object_key)
+
+
+def download_bytes(object_key: str, bucket: str | None = None) -> bytes:
+    """Server-side fetch of an object as bytes. Used by the resize
+    pipeline to read the original after the buyer's PUT lands."""
+    client = _r2_client()
+    bucket = bucket or settings.r2_bucket
+    obj = client.get_object(Bucket=bucket, Key=object_key)
+    return obj["Body"].read()
+
+
+def resize_listing_image(
+    original_key: str,
+    *,
+    max_dimension: int = 1200,
+    webp_quality: int = 80,
+    bucket: str | None = None,
+) -> str | None:
+    """Resize an uploaded listing image into a 1200px-max webp thumbnail.
+    Stored alongside the original at `<original-key>.thumb.webp`.
+
+    Returns the thumbnail key on success, None on failure (logged but
+    silent — we don't want a Pillow hiccup to block the upload-confirm
+    flow; the original is still serveable via presigned URL).
+
+    Why 1200px webp at q=80
+    -----------------------
+    - 800px is too small for zoom on phone listings; 1200 is a safe
+      ceiling for the 6.7"-screen long-edge.
+    - WebP at quality 80 is ~50% smaller than JPEG at the same perceived
+      quality. India mobile networks really notice this.
+
+    The original is preserved untouched. Once we have a CDN we can
+    serve the webp from edge cache and let originals live cold.
+    """
+    try:
+        from io import BytesIO
+        from PIL import Image  # type: ignore
+    except Exception:
+        logger.warning("resize.pillow_missing", original_key=original_key)
+        return None
+
+    try:
+        raw = download_bytes(original_key, bucket=bucket)
+        img = Image.open(BytesIO(raw))
+        # Strip EXIF + alpha mode handling so webp encode is deterministic.
+        if img.mode in ("RGBA", "P"):
+            img = img.convert("RGB")
+        img.thumbnail((max_dimension, max_dimension))
+        out = BytesIO()
+        img.save(out, format="WEBP", quality=webp_quality, method=4)
+        out.seek(0)
+        thumb_key = f"{original_key}.thumb.webp"
+        upload_bytes(out.getvalue(), thumb_key, content_type="image/webp", bucket=bucket)
+        return thumb_key
+    except Exception as e:
+        # Don't crash the upload flow on a resize hiccup — log + serve
+        # the original via the unchanged image_urls fallback.
+        logger.warning("resize.failed", original_key=original_key, error=str(e))
+        return None
 
 
 def object_key_for_listing_image(listing_id: str, size: str = "original") -> str:

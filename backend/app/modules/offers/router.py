@@ -23,11 +23,12 @@ from decimal import Decimal
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, select
 
 from app.core.dependencies import BasicUser, DBSession
+from app.core.rate_limit import OFFER_CREATE_PER_USER, limit_by_user
 from app.core.settings import settings
 from app.modules.offers.models import (
     NotificationEvent, NotificationPreference, Offer, PaymentLink,
@@ -133,7 +134,11 @@ def _fmt_txn(t: Transaction) -> dict:
 
 # ── Offer endpoints ─────────────────────────────────────────────────────────────
 
-@router.post("/offers", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/offers",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(limit_by_user("offer_create", OFFER_CREATE_PER_USER))],
+)
 async def make_offer_endpoint(body: MakeOfferRequest, current_user: BasicUser, db: DBSession):
     try:
         offer = await make_offer(db, body.listing_id, current_user.user_id,
@@ -718,6 +723,7 @@ async def razorpay_webhook(request: Request, db: DBSession):
     verify = adapter.verify_webhook(body, signature)
     if not verify.valid:
         return {"status": "ignored"}
+
     if verify.event == "payment_link.paid":
         import json
         payload = json.loads(body)
@@ -727,6 +733,34 @@ async def razorpay_webhook(request: Request, db: DBSession):
         )
         if txn:
             await db.commit()
+
+    elif verify.event in ("refund.processed", "refund.failed") and verify.refund_id:
+        # Async refund completion. Razorpay calls back when their banking
+        # partner confirms the refund landed (or failed). We acknowledge
+        # 200 OK either way so they stop retrying.
+        from app.modules.transactions.refund_service import (
+            mark_refund_completed, REFUND_STATUS_FAILED,
+        )
+        if verify.event == "refund.processed":
+            txn = await mark_refund_completed(db, verify.refund_id)
+            if txn:
+                await db.commit()
+        else:  # refund.failed
+            from sqlalchemy import select as _select
+            from app.modules.offers.models import Transaction as _Txn
+            r = await db.execute(
+                _select(_Txn).where(_Txn.razorpay_refund_id == verify.refund_id)
+            )
+            txn = r.scalar_one_or_none()
+            if txn:
+                txn.refund_status = REFUND_STATUS_FAILED
+                logger.error(
+                    "refund.razorpay_failed",
+                    transaction_id=str(txn.id),
+                    refund_id=verify.refund_id,
+                )
+                await db.commit()
+
     return {"status": "ok"}
 
 

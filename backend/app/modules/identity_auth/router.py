@@ -2,13 +2,14 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 import hashlib
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 import phonenumbers
 import structlog
 
 from app.core.dependencies import AuthUser, DBSession
 from app.core.jwt import create_access_token, create_refresh_token
+from app.core.rate_limit import OTP_PER_IP, limit_by_ip
 from app.core.redis import get_redis
 from app.core.settings import settings
 
@@ -278,9 +279,19 @@ def _issue_access_token(user, session_id: str, role: str = "user") -> str:
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
-@router.post("/otp/send", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/otp/send",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[
+        # IP-level cap so a single attacker cycling through phone numbers
+        # can't blow through our SMS budget. The phone-level limit a few
+        # lines down handles the same-phone case.
+        Depends(limit_by_ip("otp_send_ip", OTP_PER_IP)),
+    ],
+)
 async def send_otp(body: SendOTPRequest, request: Request):
-    """Send OTP to phone number. Rate limited to 3/hour."""
+    """Send OTP to phone number. Rate limited to 3/hour per phone, plus
+    20/hour per IP (handles attacker cycling through numbers)."""
     phone = _normalise_phone(body.phone_number)
     await _check_rate_limit(phone)
     # Sprint 5b: whitelist override for test numbers

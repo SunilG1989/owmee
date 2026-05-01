@@ -27,10 +27,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select, update
 
 from app.core.dependencies import BasicUser, DBSession, OptionalUser, VerifiedUser
+from app.core.rate_limit import LISTING_CREATE_PER_USER, limit_by_user
 from app.core.storage import (
     generate_presigned_download_url, generate_presigned_upload_url,
-    object_key_for_listing_image, public_url,
+    object_key_for_listing_image, public_url, resize_listing_image,
 )
+from fastapi import Depends
 
 
 def _img_url(key: str | None) -> str | None:
@@ -414,7 +416,11 @@ async def my_listings(current_user: BasicUser, db: DBSession,
     return {"listings": [_fmt_my(l) for l in listings], "count": len(listings)}
 
 
-@router.post("", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(limit_by_user("listing_create", LISTING_CREATE_PER_USER))],
+)
 async def create_listing(body: CreateListingRequest, current_user: BasicUser, db: DBSession):
     result = await db.execute(select(Category).where(Category.id == body.category_id))
     category = result.scalar_one_or_none()
@@ -513,10 +519,23 @@ async def confirm_image_upload(listing_id: UUID, body: ImageConfirmRequest,
     current_urls = listing.image_urls or []
     if body.r2_key not in current_urls:
         listing.image_urls = current_urls + [body.r2_key]
-    if body.is_primary:
+
+    # Resize to 1200px webp synchronously. ~500ms-1s of latency at upload
+    # time, but saves ~50% bandwidth on every subsequent feed/detail view
+    # — easy trade for an Indian-mobile-network-heavy app. Resize failures
+    # are logged but don't block the upload (presigned URL on the original
+    # still works as a fallback).
+    thumb_key = resize_listing_image(body.r2_key)
+    if thumb_key and (body.is_primary or not listing.thumbnail_url):
+        listing.thumbnail_url = thumb_key
+    elif body.is_primary:
+        # Resize failed and this is the primary — point thumbnail at the
+        # original so something renders.
         listing.thumbnail_url = body.r2_key
+
     await db.commit()
     return {"image_id": str(image.id), "r2_key": body.r2_key,
+            "thumbnail_key": thumb_key,
             "public_url": public_url(body.r2_key), "moderation_status": "pending"}
 
 
