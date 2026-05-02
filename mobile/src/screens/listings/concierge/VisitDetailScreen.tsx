@@ -25,7 +25,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { FEVisits, type FEVisit } from '../../../services/api';
 import { BackButton, Button } from '../../../components/ui';
 import SpecialistProfileCard from '../../../components/concierge/SpecialistProfileCard';
-import { C, R, S, Shadow } from '../../../utils/tokens';
+import { C, R, S, T, Shadow } from '../../../utils/tokens';
 import type { RootScreen } from '../../../navigation/types';
 
 export default function VisitDetailScreen({
@@ -204,8 +204,8 @@ const s = StyleSheet.create({
     gap: S.xs,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: T.size.lg + 1,
+    fontWeight: T.weight.bold,
     color: C.text,
   },
   body: {
@@ -222,22 +222,22 @@ const s = StyleSheet.create({
     ...Shadow.glow,
   },
   cardLabel: {
-    fontSize: 11,
+    fontSize: T.size.sm,
     color: C.text3,
-    fontWeight: '700',
+    fontWeight: T.weight.bold,
     letterSpacing: 0.5,
-    marginBottom: 4,
+    marginBottom: S.xs,
   },
   cardValue: {
-    fontSize: 15,
+    fontSize: T.size.md,
     color: C.text,
-    fontWeight: '500',
+    fontWeight: T.weight.medium,
     lineHeight: 21,
   },
   section: { marginTop: S.md },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: T.size.lg - 1,
+    fontWeight: T.weight.bold,
     color: C.text,
     marginBottom: S.sm,
   },
@@ -247,14 +247,14 @@ const s = StyleSheet.create({
     padding: S.lg,
   },
   matchingTitle: {
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: T.size.md,
+    fontWeight: T.weight.bold,
     color: C.petrolText,
   },
   matchingBody: {
-    fontSize: 13,
+    fontSize: T.size.base,
     color: C.petrolText,
-    marginTop: 4,
+    marginTop: S.xs,
     lineHeight: 18,
   },
   codeCard: {
@@ -265,25 +265,25 @@ const s = StyleSheet.create({
     ...Shadow.glow,
   },
   codeText: {
-    fontSize: 36,
-    fontWeight: '800',
+    fontSize: T.size.display + 6,
+    fontWeight: T.weight.heavy,
     color: C.petrolDeep,
     letterSpacing: 6,
   },
   codeHint: {
-    fontSize: 12,
+    fontSize: T.size.sm,
     color: C.text3,
-    marginTop: 6,
+    marginTop: S.xs + 2,
     textAlign: 'center',
   },
   tagsLine: {
-    fontSize: 13,
+    fontSize: T.size.base,
     color: C.text2,
-    fontWeight: '500',
-    marginBottom: 6,
+    fontWeight: T.weight.medium,
+    marginBottom: S.xs + 2,
   },
   notesLine: {
-    fontSize: 14,
+    fontSize: T.size.sm + 1,
     color: C.text,
     fontStyle: 'italic',
     lineHeight: 20,

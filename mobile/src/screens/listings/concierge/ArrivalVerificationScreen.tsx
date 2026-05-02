@@ -24,7 +24,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { FEVisits, type FEVisit } from '../../../services/api';
 import { BackButton, Button } from '../../../components/ui';
 import { parseApiError } from '../../../utils/errors';
-import { C, R, S, Shadow } from '../../../utils/tokens';
+import { C, R, S, T, Shadow } from '../../../utils/tokens';
 import type { RootScreen } from '../../../navigation/types';
 
 export default function ArrivalVerificationScreen({
@@ -114,14 +114,14 @@ export default function ArrivalVerificationScreen({
           ))}
         </View>
 
-        <View style={{ height: S.xl }} />
+        <View style={s.gap} />
 
         <Button
           label="✓ They told me this code"
           onPress={onMatched}
           loading={submitting === 'match'}
           disabled={submitting !== null}
-          style={{ width: '100%' }}
+          fullWidth
         />
         <Button
           label="⚠️ Code didn't match"
@@ -129,7 +129,8 @@ export default function ArrivalVerificationScreen({
           loading={submitting === 'mismatch'}
           disabled={submitting !== null}
           variant="ghost"
-          style={{ width: '100%', marginTop: S.sm }}
+          fullWidth
+          style={s.spacedBtn}
         />
       </View>
     </SafeAreaView>
@@ -151,21 +152,23 @@ const s = StyleSheet.create({
     paddingHorizontal: S.xxl,
   },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  glyph: { fontSize: 56, marginBottom: S.md },
+  glyph: { fontSize: T.size.display + 26, marginBottom: S.md },     // 56
   title: {
-    fontSize: 22,
-    fontWeight: '700',
+    fontSize: T.size.xxl - 2,
+    fontWeight: T.weight.bold,
     color: C.text,
     textAlign: 'center',
     marginBottom: S.sm,
   },
   intro: {
-    fontSize: 15,
+    fontSize: T.size.md,
     color: C.text2,
     textAlign: 'center',
     lineHeight: 22,
     marginBottom: S.lg,
   },
+  gap: { height: S.xl },
+  spacedBtn: { marginTop: S.sm },
   codeRow: {
     flexDirection: 'row',
     gap: S.sm,
@@ -182,8 +185,8 @@ const s = StyleSheet.create({
     ...Shadow.glow,
   },
   codeChar: {
-    fontSize: 38,
-    fontWeight: '800',
+    fontSize: T.size.display + 8,
+    fontWeight: T.weight.heavy,
     color: C.petrolDeep,
   },
 });

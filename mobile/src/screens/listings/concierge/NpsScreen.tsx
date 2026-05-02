@@ -24,7 +24,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { FEVisits } from '../../../services/api';
 import { BackButton, Button } from '../../../components/ui';
 import { parseApiError } from '../../../utils/errors';
-import { C, R, S, Shadow } from '../../../utils/tokens';
+import { C, R, S, T } from '../../../utils/tokens';
 import type { RootScreen } from '../../../navigation/types';
 
 const SCORES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
@@ -99,7 +99,7 @@ export default function NpsScreen({
           textAlignVertical="top"
         />
 
-        <View style={{ height: S.lg }} />
+        <View style={s.gap} />
 
         <Button
           label="Submit"
@@ -122,20 +122,21 @@ const s = StyleSheet.create({
     gap: S.xs,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: T.size.lg + 1,
+    fontWeight: T.weight.bold,
     color: C.text,
   },
   body: { padding: S.lg },
+  gap: { height: S.lg },
   q: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: T.size.lg + 1,
+    fontWeight: T.weight.semi,
     color: C.text,
     marginBottom: S.lg,
     lineHeight: 24,
   },
   qSub: {
-    fontSize: 13,
+    fontSize: T.size.base,
     color: C.text2,
     marginTop: S.lg,
     marginBottom: S.sm,
@@ -143,7 +144,7 @@ const s = StyleSheet.create({
   scoreRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: S.sm,
     justifyContent: 'space-between',
   },
   scoreChip: {
@@ -161,14 +162,14 @@ const s = StyleSheet.create({
     backgroundColor: C.petrol,
     borderColor: C.petrol,
   },
-  scoreText: { fontSize: 14, color: C.text, fontWeight: '600' },
-  scoreTextOn: { color: C.bone, fontWeight: '800' },
+  scoreText: { fontSize: T.size.sm + 1, color: C.text, fontWeight: T.weight.semi },
+  scoreTextOn: { color: C.bone, fontWeight: T.weight.heavy },
   legendRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: S.sm,
   },
-  legendText: { fontSize: 11, color: C.text3 },
+  legendText: { fontSize: T.size.sm, color: C.text3 },
   input: {
     backgroundColor: C.surface,
     borderRadius: R.md,
@@ -176,7 +177,7 @@ const s = StyleSheet.create({
     borderColor: C.border,
     minHeight: 100,
     padding: S.md,
-    fontSize: 14,
+    fontSize: T.size.sm + 1,
     color: C.text,
   },
 });

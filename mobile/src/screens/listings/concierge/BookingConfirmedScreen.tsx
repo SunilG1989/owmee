@@ -12,12 +12,12 @@
  * Specialist").
  */
 import React from 'react';
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '../../../components/ui';
 import { CONCIERGE_STRINGS } from '../../../utils/conciergeStrings';
-import { C, MIN_TAP, R, S, Shadow, T } from '../../../utils/tokens';
+import { C, R, S, T } from '../../../utils/tokens';
 import type { RootScreen } from '../../../navigation/types';
 
 const STR = CONCIERGE_STRINGS.bookingConfirmed;
@@ -72,26 +72,31 @@ export default function BookingConfirmedScreen({
           <Text style={s.matchingMessage}>{STR.matchingMessage}</Text>
         </View>
 
-        <View style={{ height: S.xl }} />
+        <View style={s.gap} />
 
         <Button
           label={STR.addToCalendar}
           onPress={onAddToCalendar}
           variant="secondary"
+          fullWidth
           style={s.cta}
         />
         <Button
           label={STR.trackVisit}
           onPress={onTrackVisit}
           variant="ghost"
+          fullWidth
           style={s.cta}
         />
       </View>
 
       <View style={s.footer}>
-        <TouchableOpacity onPress={onBackHome} style={s.footerBtn}>
-          <Text style={s.footerText}>{STR.backHome}</Text>
-        </TouchableOpacity>
+        <Button
+          label={STR.backHome}
+          variant="ghost"
+          size="sm"
+          onPress={onBackHome}
+        />
       </View>
     </SafeAreaView>
   );
@@ -153,26 +158,26 @@ const s = StyleSheet.create({
     paddingHorizontal: S.xxl,
   },
   tick: {
-    fontSize: 56,
+    fontSize: T.size.display + 26,
     color: C.petrol,
     marginBottom: S.md,
   },
   title: {
-    fontSize: 24,
-    fontWeight: '700',
+    fontSize: T.size.xxl,
+    fontWeight: T.weight.bold,
     color: C.text,
     marginBottom: S.lg,
     textAlign: 'center',
   },
   slot: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: T.size.lg + 1,
+    fontWeight: T.weight.semi,
     color: C.text,
     textAlign: 'center',
-    marginBottom: 6,
+    marginBottom: S.xs + 2,
   },
   address: {
-    fontSize: 14,
+    fontSize: T.size.sm + 1,
     color: C.text2,
     textAlign: 'center',
     marginBottom: S.lg,
@@ -185,29 +190,16 @@ const s = StyleSheet.create({
     width: '100%',
   },
   matchingMessage: {
-    fontSize: 14,
+    fontSize: T.size.sm + 1,
     color: C.petrolText,
     lineHeight: 20,
     textAlign: 'center',
   },
-  cta: {
-    width: '100%',
-    marginBottom: S.sm,
-  },
+  gap: { height: S.xl },
+  cta: { marginBottom: S.sm },
   footer: {
     paddingHorizontal: S.xl,
     paddingBottom: S.md,
     alignItems: 'center',
-  },
-  footerBtn: {
-    minHeight: MIN_TAP,
-    paddingHorizontal: S.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  footerText: {
-    fontSize: 14,
-    color: C.text3,
-    fontWeight: '500',
   },
 });

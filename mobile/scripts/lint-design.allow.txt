@@ -49,12 +49,9 @@ src/screens/listings/ai/SellTabRedirect.tsx
 src/screens/listings/ai/shared/ComparablesSheet.tsx
 src/screens/listings/ai/shared/EditDetailsSheet.tsx
 src/screens/listings/ai/shared/PriceSheet.tsx
-src/screens/listings/concierge/ArrivalVerificationScreen.tsx
-src/screens/listings/concierge/BookingConfirmedScreen.tsx
 src/screens/listings/concierge/BookingScreen.tsx
 src/screens/listings/concierge/MyConciergeScreen.tsx
 src/screens/listings/concierge/NpsScreen.tsx
-src/screens/listings/concierge/VisitDetailScreen.tsx
 src/screens/profile/EditProfileScreen.tsx
 src/screens/profile/MyFeVisitsScreen.tsx
 src/screens/profile/NotificationsScreen.tsx
