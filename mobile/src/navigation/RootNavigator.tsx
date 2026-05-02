@@ -102,8 +102,8 @@ function TabIcon({ label, icon, active }: { label: string; icon: string; active:
   }
   return (
     <View style={st.tabItem}>
-      <Text style={[st.tabIcon, active && { color: C.honey }]}>{icon}</Text>
-      <Text style={[st.tabLabel, active && { color: C.honey, fontWeight: '600' }]}>{label}</Text>
+      <Text style={[st.tabIcon, active && { color: C.petrol }]}>{icon}</Text>
+      <Text style={[st.tabLabel, active && { color: C.petrol, fontWeight: T.weight.semi }]}>{label}</Text>
       {active && <View style={st.tabDot} />}
     </View>
   );
@@ -421,19 +421,19 @@ const st = StyleSheet.create({
     backgroundColor: C.surface,
     borderTopWidth: 1,
     borderTopColor: C.border,
-    paddingTop: 6,
+    paddingTop: S.sm,
   },
   tabTouch: { flex: 1, alignItems: 'center' },
   tabItem: { alignItems: 'center', gap: 2 },
-  tabIcon: { fontSize: 18, color: C.text4 },
-  tabLabel: { fontSize: 10, fontWeight: '500', color: C.text4 },
-  tabDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: C.honey, marginTop: 2 },
+  tabIcon: { fontSize: T.size.lg, color: C.text4 },
+  tabLabel: { fontSize: T.size.xs, fontWeight: T.weight.medium, color: C.text4 },
+  tabDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: C.petrol, marginTop: 2 },
   fab: {
-    width: 52, height: 52, borderRadius: 16,
-    backgroundColor: C.honey,
+    width: 52, height: 52, borderRadius: R.lg,
+    backgroundColor: C.petrol,
     alignItems: 'center', justifyContent: 'center',
     marginBottom: -4,
     ...Shadow.glow,
   },
-  fabIcon: { fontSize: 28, fontWeight: '200', color: C.white, marginTop: -2 },
+  fabIcon: { fontSize: T.size.display, fontWeight: '200', color: C.white, marginTop: -2 },
 });

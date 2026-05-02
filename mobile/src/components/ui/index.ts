@@ -12,6 +12,8 @@ export { default as IconButton } from './IconButton';
 export type { IconButtonVariant, IconButtonSize } from './IconButton';
 export { default as Card } from './Card';
 export type { CardVariant } from './Card';
+export { default as Chip } from './Chip';
+export type { ChipVariant, ChipSize } from './Chip';
 export { default as EmptyState } from './EmptyState';
 export { default as ErrorState } from './ErrorState';
 export { default as StatusBadge } from './StatusBadge';
