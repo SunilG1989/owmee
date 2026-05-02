@@ -469,8 +469,8 @@ const s = StyleSheet.create({
     gap: S.xs,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: T.size.lg + 1,
+    fontWeight: T.weight.bold,
     color: C.text,
     flex: 1,
   },
@@ -481,17 +481,17 @@ const s = StyleSheet.create({
   },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: S.xl },
 
-  setUpEmoji: { fontSize: 56, marginBottom: S.md },
+  setUpEmoji: { fontSize: T.size.display + 26, marginBottom: S.md },     // 56
   setUpTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: T.size.lg + 1,
+    fontWeight: T.weight.semi,
     color: C.text,
     textAlign: 'center',
   },
 
   sectionLabel: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: T.size.lg - 1,
+    fontWeight: T.weight.bold,
     color: C.text,
     marginBottom: S.sm,
   },
@@ -507,26 +507,26 @@ const s = StyleSheet.create({
     borderColor: C.border,
     gap: S.md,
   },
-  addressEmpty: { fontSize: 14, color: C.text3, flex: 1 },
+  addressEmpty: { fontSize: T.size.sm + 1, color: C.text3, flex: 1 },
   addressLabel: {
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: T.size.md,
+    fontWeight: T.weight.bold,
     color: C.text,
     marginBottom: 4,
   },
   addressLine: {
-    fontSize: 13,
+    fontSize: T.size.base,
     color: C.text2,
     lineHeight: 18,
   },
   changeBtn: {
     paddingHorizontal: S.sm,
-    paddingVertical: 6,
+    paddingVertical: S.xs + 2,
   },
   changeBtnText: {
-    fontSize: 13,
+    fontSize: T.size.base,
     color: C.petrol,
-    fontWeight: '600',
+    fontWeight: T.weight.semi,
   },
   pickerBlock: {
     backgroundColor: C.surface,
@@ -546,28 +546,28 @@ const s = StyleSheet.create({
   },
   pickerRowOn: { backgroundColor: C.petrolLight },
   pickerLabel: {
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: T.size.sm + 1,
+    fontWeight: T.weight.bold,
     color: C.text,
   },
   pickerLine: {
-    fontSize: 12,
+    fontSize: T.size.sm,
     color: C.text3,
     marginTop: 2,
   },
   pickerTick: {
-    fontSize: 18,
+    fontSize: T.size.lg + 1,
     color: C.petrolDeep,
-    fontWeight: '700',
+    fontWeight: T.weight.bold,
   },
   addNewRow: {
     paddingHorizontal: S.lg,
     paddingVertical: S.md,
   },
   addNewText: {
-    fontSize: 14,
+    fontSize: T.size.sm + 1,
     color: C.petrol,
-    fontWeight: '600',
+    fontWeight: T.weight.semi,
   },
 
   // Slots
@@ -591,20 +591,20 @@ const s = StyleSheet.create({
     borderColor: C.petrol,
   },
   slotDay: {
-    fontSize: 13,
+    fontSize: T.size.base,
     color: C.text2,
-    fontWeight: '500',
+    fontWeight: T.weight.medium,
   },
-  slotDayOn: { color: C.petrolDeep, fontWeight: '700' },
+  slotDayOn: { color: C.petrolDeep, fontWeight: T.weight.bold },
   slotTime: {
-    fontSize: 15,
+    fontSize: T.size.md,
     color: C.text,
-    fontWeight: '600',
+    fontWeight: T.weight.semi,
     marginTop: 2,
   },
   slotTimeOn: { color: C.petrolDeep },
   fullyBooked: {
-    fontSize: 14,
+    fontSize: T.size.sm + 1,
     color: C.text2,
     textAlign: 'center',
     paddingVertical: S.lg,
@@ -615,23 +615,23 @@ const s = StyleSheet.create({
     alignItems: 'flex-end',
   },
   moreTimesText: {
-    fontSize: 13,
+    fontSize: T.size.base,
     color: C.petrol,
-    fontWeight: '600',
+    fontWeight: T.weight.semi,
   },
 
   // Notes / tags
   notesHint: {
-    fontSize: 12,
+    fontSize: T.size.sm,
     color: C.text3,
     fontStyle: 'italic',
     marginBottom: S.md,
   },
   tagsTitle: {
-    fontSize: 13,
+    fontSize: T.size.base,
     color: C.text2,
     marginBottom: S.sm,
-    fontWeight: '500',
+    fontWeight: T.weight.medium,
   },
   tagsRow: {
     flexDirection: 'row',
@@ -641,7 +641,7 @@ const s = StyleSheet.create({
   },
   tagChip: {
     paddingHorizontal: S.md,
-    paddingVertical: 8,
+    paddingVertical: S.sm,
     backgroundColor: C.surface,
     borderRadius: R.pill,
     borderWidth: 1,
@@ -651,14 +651,14 @@ const s = StyleSheet.create({
     backgroundColor: C.petrolLight,
     borderColor: C.petrol,
   },
-  tagText: { fontSize: 13, color: C.text2 },
-  tagTextOn: { color: C.petrolDeep, fontWeight: '600' },
+  tagText: { fontSize: T.size.base, color: C.text2 },
+  tagTextOn: { color: C.petrolDeep, fontWeight: T.weight.semi },
   notesInput: {
     backgroundColor: C.surface,
     borderRadius: R.md,
     paddingHorizontal: S.md,
     paddingVertical: S.md,
-    fontSize: 15,
+    fontSize: T.size.md,
     color: C.text,
     borderWidth: 1,
     borderColor: C.border,
