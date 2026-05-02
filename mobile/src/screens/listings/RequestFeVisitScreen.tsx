@@ -1,13 +1,11 @@
 /**
  * RequestFeVisit (A9) — Sprint 4 / Pass 2
  *
- * Seller-facing screen to request an FE visit. Collects:
- *   - Address (pre-filled from their profile address if set)
- *   - Preferred 2-hour slot
- *   - Category hint
- *   - Item notes
- *
- * Then POSTs to /v1/fe-visits/request and shows a confirmation toast.
+ * @deprecated  Replaced by Concierge BookingScreen (master spec section
+ * 4.3) in Phase 1. The Sell tab no longer routes here; this file stays
+ * in the repo as historical reference until Phase 5 deletion. Note that
+ * this screen still posts the LEGACY embedded-`address` payload, which
+ * the API no longer accepts — calls will 422. Do not re-wire it.
  */
 import React, { useMemo, useState } from 'react';
 import {
@@ -104,7 +102,11 @@ export default function RequestFeVisitScreen({ route, navigation }: RootScreen<'
     const slot = slotOptions[slotIdx];
     setSubmitting(true);
     try {
-      const res = await FEVisits.request({
+      // Deprecated screen — payload no longer matches ConciergeBookingRequest.
+      // Cast to any so the file compiles for archival reasons; this code
+      // path is unreachable from the running app (Sell tab now routes to
+      // SellModeForkScreen → ConciergeBookingScreen).
+      const res = await (FEVisits.request as any)({
         requested_slot_start: slot.start.toISOString(),
         requested_slot_end: slot.end.toISOString(),
         category_hint: categoryHint,

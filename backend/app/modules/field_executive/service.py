@@ -120,6 +120,7 @@ async def create_visit_request(
     address_snapshot: dict,
     category_hint: str,
     item_notes: Optional[str] = None,
+    notes_tags: Optional[list[str]] = None,
 ) -> FEVisit:
     if requested_end <= requested_start:
         raise ValueError("requested_slot_end must be after requested_slot_start")
@@ -131,6 +132,7 @@ async def create_visit_request(
         address_snapshot=address_snapshot,
         category_hint=category_hint,
         item_notes=item_notes,
+        notes_tags=notes_tags or [],
         status="requested",
     )
     db.add(visit)
@@ -140,6 +142,7 @@ async def create_visit_request(
         visit_id=str(visit.id),
         seller_id=str(seller.id),
         category=category_hint,
+        tags=notes_tags or [],
     )
     return visit
 

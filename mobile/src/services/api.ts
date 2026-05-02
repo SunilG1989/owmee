@@ -224,6 +224,7 @@ export interface FEVisit {
   outcome_reason: string | null;
   category_hint: string;
   item_notes: string | null;
+  notes_tags: string[];
   address: any;
   requested_slot_start: string;
   requested_slot_end: string;
@@ -233,6 +234,15 @@ export interface FEVisit {
   created_at: string;
   started_at: string | null;
   completed_at: string | null;
+}
+
+/** Concierge Phase 1 booking request — replaces the legacy embedded address payload. */
+export interface ConciergeBookingRequest {
+  requested_slot_start: string;  // ISO
+  requested_slot_end: string;    // ISO
+  address_id: string;
+  notes?: string | null;
+  notes_tags?: string[];
 }
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
@@ -499,24 +509,14 @@ export const SellerTier = {
 
 // ── Sprint 4 / Pass 2: FE Visits (seller-facing) ─────────────────────
 export const FEVisits = {
-  request: (body: {
-    requested_slot_start: string;
-    requested_slot_end: string;
-    category_hint: string;
-    item_notes?: string;
-    address: {
-      house?: string;
-      street?: string;
-      locality?: string;
-      city: string;
-      pincode?: string;
-      state?: string;
-      landmark?: string;
-      lat?: number;
-      lng?: number;
-    };
-  }) => api.post('/v1/fe-visits/request', body),
-  mine: () => api.get('/v1/fe-visits/me'),
+  /**
+   * Concierge Phase 1 booking. address_id resolves to a saved
+   * UserAddress; backend snapshots it into address_snapshot. notes_tags
+   * is a subset of phone|laptop|audio|appliance|kids|multiple.
+   */
+  request: (body: ConciergeBookingRequest) =>
+    api.post<FEVisit>('/v1/fe-visits/request', body),
+  mine: () => api.get<FEVisit[]>('/v1/fe-visits/me'),
   cancel: (id: string) => api.post(`/v1/fe-visits/${id}/cancel`),
 };
 

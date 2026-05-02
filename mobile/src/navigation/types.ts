@@ -49,6 +49,12 @@ export type RootStackParams = {
   AIListingIdentifier: { draft: any; finalFields: any };
   EditListing: { listingId: string };
 
+  // ── Concierge (master spec) ─────────────────────────────────────────
+  SellModeFork: undefined;
+  ConciergeBooking: undefined;
+  ConciergeBookingConfirmed: { visit: import('../services/api').FEVisit };
+  MyConcierge: undefined;
+
   // ── Address PRD: 3-screen address flow ───────────────────────────────
   // Each screen optionally carries `returnTo` (the screen that should
   // own the user when the flow finishes). For onboarding-gate use it's

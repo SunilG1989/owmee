@@ -70,6 +70,11 @@ import AIListingSuggestScreen from '../screens/listings/ai/AIListingSuggestScree
 import AIListingIdentifierScreen from '../screens/listings/ai/AIListingIdentifierScreen';
 import EditListingScreen from '../screens/listings/EditListingScreen';
 import SellTabRedirect from '../screens/listings/ai/SellTabRedirect';
+// Concierge master spec — Phase 1
+import SellModeForkScreen from '../screens/listings/SellModeForkScreen';
+import ConciergeBookingScreen from '../screens/listings/concierge/BookingScreen';
+import ConciergeBookingConfirmedScreen from '../screens/listings/concierge/BookingConfirmedScreen';
+import MyConciergeScreen from '../screens/listings/concierge/MyConciergeScreen';
 
 import type { RootStackParams, AuthStackParams, TabParams } from './types';
 
@@ -190,7 +195,10 @@ function MainTabs() {
     >
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Search" component={SearchScreen} />
-      <Tab.Screen name="Sell" component={SellTabRedirect} />
+      {/* Concierge Phase 1: Sell tab → fork. SellTabRedirect retained
+          as a tabbed component would auto-mount; using SellModeForkScreen
+          directly is safe because it doesn't auto-navigate on mount. */}
+      <Tab.Screen name="Sell" component={SellModeForkScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );
@@ -334,7 +342,14 @@ export default function RootNavigator() {
         {/* Purchase flow */}
         <RootStack.Screen name="Checkout" component={CheckoutScreen} options={{ animation: 'slide_from_right' }} />
         <RootStack.Screen name="OrderConfirmation" component={OrderConfirmationScreen} options={{ animation: 'fade', gestureEnabled: false }} />
-        {/* Sprint 4 / Pass 2 + Pass 3: FE seller-facing flow */}
+        {/* Concierge master spec — Phase 1 booking flow */}
+        <RootStack.Screen name="SellModeFork" component={SellModeForkScreen} options={{ animation: 'slide_from_right' }} />
+        <RootStack.Screen name="ConciergeBooking" component={ConciergeBookingScreen} options={{ animation: 'slide_from_right' }} />
+        <RootStack.Screen name="ConciergeBookingConfirmed" component={ConciergeBookingConfirmedScreen} options={{ animation: 'fade', gestureEnabled: false }} />
+        <RootStack.Screen name="MyConcierge" component={MyConciergeScreen} options={{ animation: 'slide_from_right' }} />
+        {/* Legacy seller-facing FE request screen — DEPRECATED in Concierge
+            Phase 1, file kept (marked @deprecated) for reference only.
+            Phase 5 deletes the file. */}
         <RootStack.Screen name="RequestFeVisit" component={RequestFeVisitScreen} options={{ animation: 'slide_from_right' }} />
         <RootStack.Screen name="FeVisitConfirmation" component={FeVisitConfirmationScreen} options={{ animation: 'slide_from_right' }} />
         <RootStack.Screen name="VerificationWall" component={VerificationWallScreen} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />

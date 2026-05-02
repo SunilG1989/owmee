@@ -80,6 +80,10 @@ class FEVisit(Base, TimestampMixin):
     address_snapshot = Column(JSONB, nullable=False)
     category_hint = Column(String(100), nullable=False)
     item_notes = Column(Text, nullable=True)
+    # Concierge Phase 1 (master spec section 4.5): six-value subset of
+    # phone | laptop | audio | appliance | kids | multiple. Validated at
+    # the API layer (ALLOWED_TAGS), not the DB.
+    notes_tags = Column(JSONB, nullable=False, default=list)
 
     # Sprint 4 / Pass 3: category locked at admin assignment so FeCaptureScreen
     # can upload photos and submit the listing without a runtime picker hack.

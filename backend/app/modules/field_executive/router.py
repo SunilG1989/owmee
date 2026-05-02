@@ -25,7 +25,7 @@ from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import desc, select
 
 from app.core.admin_dependencies import AdminAny, AdminL2
@@ -64,18 +64,42 @@ class AddressSnapshot(BaseModel):
     lng: Optional[float] = None
 
 
+# Master spec section 4.5: canonical Concierge tag set. Validated at API
+# layer; not enforced in DB.
+ALLOWED_TAGS = {"phone", "laptop", "audio", "appliance", "kids", "multiple"}
+
+
 class RequestVisitRequest(BaseModel):
+    """Concierge Phase 1 simplified booking shape.
+
+    Required: address_id + slot. Everything else optional.
+
+    `category_hint` is no longer required — admin locks the real category
+    when assigning a specialist. Default is 'unknown' so the existing
+    NOT NULL DB column stays satisfied.
+
+    `notes` (free text) maps to the `item_notes` column. The booking
+    addendum kept the legacy column name to avoid a renaming migration.
+    """
     requested_slot_start: datetime
     requested_slot_end: datetime
-    category_hint: str = Field(..., min_length=1, max_length=100)
-    item_notes: Optional[str] = Field(None, max_length=2000)
-    # Address PRD: prefer address_id (resolves to a saved user_addresses
-    # row owned by the requester). Legacy `address` payload still accepted
-    # so the existing RequestFeVisitScreen keeps working until Concierge
-    # Phase 1 ships its booking wizard. Exactly one of the two must be
-    # provided — handler validates this.
-    address_id: Optional[UUID] = None
-    address: Optional[AddressSnapshot] = None
+    address_id: UUID
+    notes: Optional[str] = Field(None, max_length=500)
+    notes_tags: list[str] = Field(default_factory=list, max_length=6)
+    # Optional — only legacy callers (the deprecated RequestFeVisitScreen)
+    # still send this. Default 'unknown' so DB NOT NULL stays satisfied.
+    category_hint: str = Field("unknown", max_length=100)
+
+    @field_validator("notes_tags")
+    @classmethod
+    def _validate_tags(cls, v: list[str]) -> list[str]:
+        invalid = set(v) - ALLOWED_TAGS
+        if invalid:
+            raise ValueError(
+                f"Invalid tags: {sorted(invalid)}. Allowed: {sorted(ALLOWED_TAGS)}"
+            )
+        # Dedupe, preserving order.
+        return list(dict.fromkeys(v))
 
 
 class VisitResponse(BaseModel):
@@ -91,6 +115,7 @@ class VisitResponse(BaseModel):
     category_slug: Optional[str]
     category_name: Optional[str]
     item_notes: Optional[str]
+    notes_tags: list[str] = Field(default_factory=list)
     address: dict
     requested_slot_start: str
     requested_slot_end: str
@@ -305,6 +330,7 @@ async def _visit_to_response(db, visit: FEVisit) -> VisitResponse:
         category_slug=cat_slug,
         category_name=cat_name,
         item_notes=visit.item_notes,
+        notes_tags=list(visit.notes_tags or []),
         address=visit.address_snapshot or {},
         requested_slot_start=visit.requested_slot_start.isoformat(),
         requested_slot_end=visit.requested_slot_end.isoformat(),
@@ -436,23 +462,11 @@ async def request_visit(
     if seller is None:
         raise HTTPException(status_code=404, detail={"error": "USER_NOT_FOUND"})
 
-    # Resolve address: prefer address_id (new flow), fall back to embedded
-    # `address` payload (legacy RequestFeVisitScreen). Exactly one must be
-    # provided.
-    if body.address_id is not None:
-        addr_snapshot = await _resolve_address_id_to_snapshot(
-            db, body.address_id, current_user.user_id
-        )
-    elif body.address is not None:
-        addr_snapshot = _address_to_dict(body.address)
-    else:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "error": "ADDRESS_REQUIRED",
-                "message": "Provide either address_id or address.",
-            },
-        )
+    # Concierge Phase 1: address_id is required (Pydantic enforces). Resolve
+    # to an owned user_addresses row and snapshot into address_snapshot.
+    addr_snapshot = await _resolve_address_id_to_snapshot(
+        db, body.address_id, current_user.user_id
+    )
 
     try:
         visit = await fe_service.create_visit_request(
@@ -462,7 +476,8 @@ async def request_visit(
             requested_end=body.requested_slot_end,
             address_snapshot=addr_snapshot,
             category_hint=body.category_hint,
-            item_notes=body.item_notes,
+            item_notes=body.notes,
+            notes_tags=body.notes_tags,
         )
     except ValueError as e:
         raise HTTPException(
