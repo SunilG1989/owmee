@@ -21,6 +21,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { launchCamera } from 'react-native-image-picker';
 
 import { FE, type FePickup } from '../../services/api';
+import { Button, Chip, IconButton } from '../../components/ui';
 import { C, R, S, T } from '../../utils/tokens';
 import type { RootScreen } from '../../navigation/types';
 
@@ -63,46 +64,38 @@ export default function FeOpsScreen({ navigation }: RootScreen<'FeOps'>) {
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={s.back}>←</Text>
-        </TouchableOpacity>
+        <IconButton icon="←" onPress={() => navigation.goBack()} a11y="Back" size="sm" />
         <Text style={s.title}>My ops</Text>
       </View>
 
       <View style={s.tabs}>
-        <TouchableOpacity
-          style={[s.tab, tab === 'pickups' && s.tabOn]}
+        <Chip
+          label={`Pickups (${pickups.length})`}
+          selected={tab === 'pickups'}
+          variant="filter"
           onPress={() => setTab('pickups')}
-        >
-          <Text style={[s.tabText, tab === 'pickups' && s.tabTextOn]}>
-            Pickups ({pickups.length})
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[s.tab, tab === 'deliveries' && s.tabOn]}
+        />
+        <Chip
+          label={`Deliveries (${deliveries.length})`}
+          selected={tab === 'deliveries'}
+          variant="filter"
           onPress={() => setTab('deliveries')}
-        >
-          <Text style={[s.tabText, tab === 'deliveries' && s.tabTextOn]}>
-            Deliveries ({deliveries.length})
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[s.tab, tab === 'returns' && s.tabOn]}
+        />
+        <Chip
+          label={`Returns (${returns.length})`}
+          selected={tab === 'returns'}
+          variant="filter"
           onPress={() => setTab('returns')}
-        >
-          <Text style={[s.tabText, tab === 'returns' && s.tabTextOn]}>
-            Returns ({returns.length})
-          </Text>
-        </TouchableOpacity>
+        />
       </View>
 
       {loading ? (
-        <ActivityIndicator color={C.petrol} style={{ marginTop: 60 }} />
+        <ActivityIndicator color={C.petrol} style={s.loading} />
       ) : (
         <FlatList
           data={list}
           keyExtractor={i => i.transaction_id}
-          contentContainerStyle={{ padding: 16 }}
+          contentContainerStyle={s.listPadding}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); reload(); }} tintColor={C.petrol} />
           }
@@ -168,13 +161,21 @@ function ReturnPickupSheet({ item, onClose, onDone }: { item: FePickup; onClose:
             Confirm only after you have the item in hand. The buyer's refund fires automatically.
           </Text>
 
-          <View style={{ flexDirection: 'row', gap: 12, marginTop: 24 }}>
-            <TouchableOpacity style={[s.btnGhost, { flex: 1 }]} onPress={onClose}>
-              <Text style={s.btnGhostText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[s.btnPrimary, { flex: 2 }, busy && s.btnDisabled]} disabled={busy} onPress={submit}>
-              <Text style={s.btnPrimaryText}>Item collected → refund buyer</Text>
-            </TouchableOpacity>
+          <View style={s.sheetActions}>
+            <Button
+              label="Cancel"
+              variant="ghost"
+              onPress={onClose}
+              style={s.actionGhost}
+            />
+            <Button
+              label="Item collected → refund buyer"
+              variant="primary"
+              loading={busy}
+              disabled={busy}
+              onPress={submit}
+              style={s.actionPrimary}
+            />
           </View>
         </View>
       </View>
@@ -252,17 +253,27 @@ function PickupSheet({ item, onClose, onDone }: { item: FePickup; onClose: () =>
           />
 
           <Text style={s.rowLabel}>Inspection photos ({photoKeys.length})</Text>
-          <TouchableOpacity style={s.btnSecondary} onPress={addPhoto}>
-            <Text style={s.btnSecondaryText}>+ Add photo</Text>
-          </TouchableOpacity>
+          <Button
+            label="+ Add photo"
+            variant="secondary"
+            onPress={addPhoto}
+          />
 
-          <View style={{ flexDirection: 'row', gap: 12, marginTop: 24 }}>
-            <TouchableOpacity style={[s.btnGhost, { flex: 1 }]} onPress={onClose}>
-              <Text style={s.btnGhostText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[s.btnPrimary, { flex: 2 }, busy && s.btnDisabled]} disabled={busy} onPress={submit}>
-              <Text style={s.btnPrimaryText}>{passed ? 'Mark passed → at hub' : 'Reject pickup'}</Text>
-            </TouchableOpacity>
+          <View style={s.sheetActions}>
+            <Button
+              label="Cancel"
+              variant="ghost"
+              onPress={onClose}
+              style={s.actionGhost}
+            />
+            <Button
+              label={passed ? 'Mark passed → at hub' : 'Reject pickup'}
+              variant="primary"
+              loading={busy}
+              disabled={busy}
+              onPress={submit}
+              style={s.actionPrimary}
+            />
           </View>
         </View>
       </View>
@@ -326,18 +337,20 @@ function DeliverySheet({ item, onClose, onDone }: { item: FePickup; onClose: () 
           <Text style={s.sheetSub}>₹{item.gross_amount}</Text>
 
           <Text style={s.rowLabel}>Handover photo</Text>
-          <TouchableOpacity style={s.btnSecondary} onPress={addPhoto}>
-            <Text style={s.btnSecondaryText}>{photoKey ? '✓ Photo captured' : '+ Take handover photo'}</Text>
-          </TouchableOpacity>
+          <Button
+            label={photoKey ? '✓ Photo captured' : '+ Take handover photo'}
+            variant="secondary"
+            onPress={addPhoto}
+          />
 
-          <Text style={[s.rowLabel, { marginTop: 16 }]}>
+          <Text style={[s.rowLabel, s.spacedRow]}>
             Buyer's 6-digit code
           </Text>
           <Text style={s.hint}>
             Ask the buyer to open their Owmee app and read out the code on the order screen.
           </Text>
           <TextInput
-            style={[s.input, { fontSize: 24, letterSpacing: 8, textAlign: 'center', fontWeight: '700' }]}
+            style={[s.input, s.codeInput]}
             value={ackCode}
             onChangeText={(t) => setAckCode(t.replace(/[^0-9]/g, '').slice(0, 6))}
             keyboardType="number-pad"
@@ -346,13 +359,21 @@ function DeliverySheet({ item, onClose, onDone }: { item: FePickup; onClose: () 
             placeholderTextColor={C.text4}
           />
 
-          <View style={{ flexDirection: 'row', gap: 12, marginTop: 24 }}>
-            <TouchableOpacity style={[s.btnGhost, { flex: 1 }]} onPress={onClose}>
-              <Text style={s.btnGhostText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[s.btnPrimary, { flex: 2 }, busy && s.btnDisabled]} disabled={busy} onPress={submit}>
-              <Text style={s.btnPrimaryText}>Complete delivery</Text>
-            </TouchableOpacity>
+          <View style={s.sheetActions}>
+            <Button
+              label="Cancel"
+              variant="ghost"
+              onPress={onClose}
+              style={s.actionGhost}
+            />
+            <Button
+              label="Complete delivery"
+              variant="primary"
+              loading={busy}
+              disabled={busy}
+              onPress={submit}
+              style={s.actionPrimary}
+            />
           </View>
         </View>
       </View>
@@ -362,39 +383,53 @@ function DeliverySheet({ item, onClose, onDone }: { item: FePickup; onClose: () 
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bone },
-  header: { paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  back: { fontSize: 20, color: C.text3 },
-  title: { fontSize: 18, fontWeight: '700', color: C.text },
+  loading: { marginTop: S.xxxl + S.xxxl },
+  header: {
+    paddingHorizontal: S.lg, paddingVertical: S.md,
+    flexDirection: 'row', alignItems: 'center', gap: S.md,
+  },
+  title: { fontSize: T.size.lg + 1, fontWeight: T.weight.bold, color: C.text },
 
-  tabs: { flexDirection: 'row', paddingHorizontal: 16, gap: 8, marginBottom: 8 },
-  tab: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: R.pill, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
-  tabOn: { backgroundColor: C.petrol, borderColor: C.petrol },
-  tabText: { fontSize: 13, color: C.text3 },
-  tabTextOn: { color: C.white, fontWeight: '700' },
+  tabs: { flexDirection: 'row', paddingHorizontal: S.lg, gap: S.sm, marginBottom: S.sm },
 
-  card: { backgroundColor: C.surface, borderRadius: 10, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: C.border },
-  cardTitle: { fontSize: 15, fontWeight: '600', color: C.text },
-  cardMeta: { fontSize: 13, color: C.text3, marginTop: 4 },
-  cardWarn: { fontSize: 11, color: C.petrol, marginTop: 6, fontStyle: 'italic' },
+  listPadding: { padding: S.lg },
+  card: {
+    backgroundColor: C.surface, borderRadius: R.sm,
+    padding: S.lg, marginBottom: S.sm + 2,
+    borderWidth: 1, borderColor: C.border,
+  },
+  cardTitle: { fontSize: T.size.md, fontWeight: T.weight.semi, color: C.text },
+  cardMeta: { fontSize: T.size.base, color: C.text3, marginTop: S.xs },
+  cardWarn: { fontSize: T.size.sm, color: C.petrol, marginTop: S.xs + 2, fontStyle: 'italic' },
 
-  empty: { padding: 60, alignItems: 'center' },
-  emptyText: { color: C.text4, fontSize: 14 },
+  empty: { padding: S.xxxl + S.xxl, alignItems: 'center' },
+  emptyText: { color: C.text4, fontSize: T.size.sm + 1 },
 
   sheetBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: C.bone, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 24, paddingBottom: 36 },
-  sheetTitle: { fontSize: 18, fontWeight: '700', color: C.text },
-  sheetSub: { fontSize: 14, color: C.text3, marginBottom: 16 },
+  sheet: {
+    backgroundColor: C.bone,
+    borderTopLeftRadius: R.lg, borderTopRightRadius: R.lg,
+    padding: S.xxl, paddingBottom: S.xxxl + S.xs,
+  },
+  sheetTitle: { fontSize: T.size.lg + 1, fontWeight: T.weight.bold, color: C.text },
+  sheetSub: { fontSize: T.size.sm + 1, color: C.text3, marginBottom: S.lg },
 
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginVertical: 12 },
-  rowLabel: { fontSize: 13, fontWeight: '600', color: C.text2, marginTop: 8, marginBottom: 4 },
-  hint: { fontSize: 12, color: C.text4, marginBottom: 8 },
-  input: { borderWidth: 1, borderColor: C.border, borderRadius: 8, padding: 12, color: C.text, minHeight: 44 },
+  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginVertical: S.md },
+  rowLabel: { fontSize: T.size.base, fontWeight: T.weight.semi, color: C.text2, marginTop: S.sm, marginBottom: S.xs },
+  spacedRow: { marginTop: S.lg },
+  hint: { fontSize: T.size.sm, color: C.text4, marginBottom: S.sm },
+  input: {
+    borderWidth: 1, borderColor: C.border, borderRadius: R.xs + 2,
+    padding: S.md, color: C.text, minHeight: 44,
+  },
+  codeInput: {
+    fontSize: T.size.xxl,
+    letterSpacing: 8,
+    textAlign: 'center',
+    fontWeight: T.weight.bold,
+  },
 
-  btnPrimary: { backgroundColor: C.petrol, borderRadius: 10, paddingVertical: 14, alignItems: 'center' },
-  btnPrimaryText: { color: C.white, fontSize: 14, fontWeight: '700' },
-  btnSecondary: { borderWidth: 1, borderColor: C.petrol, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
-  btnSecondaryText: { color: C.petrol, fontSize: 14, fontWeight: '600' },
-  btnGhost: { borderWidth: 1, borderColor: C.border, borderRadius: 10, paddingVertical: 14, alignItems: 'center' },
-  btnGhostText: { color: C.text3, fontSize: 14 },
-  btnDisabled: { opacity: 0.5 },
+  sheetActions: { flexDirection: 'row', gap: S.md, marginTop: S.xl },
+  actionGhost: { flex: 1 },
+  actionPrimary: { flex: 2 },
 });
