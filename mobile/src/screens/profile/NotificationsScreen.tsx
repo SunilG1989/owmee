@@ -48,9 +48,11 @@ export default function NotificationsScreen({ navigation }: any) {
 
   const renderItem = ({ item }: { item: NotifItem }) => (
     <TouchableOpacity style={[s.card, !item.is_read && s.unread]} onPress={() => handleTap(item)} activeOpacity={0.85}>
-      <View style={s.iconWrap}><Text style={{ fontSize: 20 }}>{ICON_MAP[item.type] || '🔔'}</Text></View>
+      <View style={s.iconWrap}>
+        <Text style={s.icon}>{ICON_MAP[item.type] || '🔔'}</Text>
+      </View>
       <View style={s.content}>
-        <Text style={[s.title, !item.is_read && { fontWeight: '700' }]}>{item.title}</Text>
+        <Text style={[s.title, !item.is_read && s.titleUnread]}>{item.title}</Text>
         <Text style={s.body} numberOfLines={2}>{item.body}</Text>
         <Text style={s.time}>{timeAgo(item.created_at)}</Text>
       </View>
@@ -58,14 +60,20 @@ export default function NotificationsScreen({ navigation }: any) {
     </TouchableOpacity>
   );
 
-  if (loading) return <SafeAreaView style={s.safe}><ActivityIndicator color={C.petrol} style={{ marginTop: 60 }} /></SafeAreaView>;
+  if (loading) {
+    return (
+      <SafeAreaView style={s.safe}>
+        <ActivityIndicator color={C.petrol} style={s.loading} />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
         <BackButton onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>Notifications</Text>
-        <View style={{ width: 24 }} />
+        <View style={s.headerSpacer} />
       </View>
       <FlatList
         data={items}
@@ -75,7 +83,7 @@ export default function NotificationsScreen({ navigation }: any) {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={C.petrol} />}
         ListEmptyComponent={
           <View style={s.empty}>
-            <Text style={{ fontSize: 48, marginBottom: 16 }}>🔔</Text>
+            <Text style={s.emptyEmoji}>🔔</Text>
             <Text style={s.emptyTitle}>No notifications</Text>
             <Text style={s.emptySub}>You'll see offers, updates, and alerts here</Text>
           </View>
@@ -88,18 +96,38 @@ export default function NotificationsScreen({ navigation }: any) {
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bone },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: C.surface, borderBottomWidth: 0.5, borderBottomColor: C.border },
-  headerTitle: { fontSize: 16, fontWeight: '600', color: C.text },
-  list: { padding: 16 },
-  card: { flexDirection: 'row', alignItems: 'flex-start', padding: 14, marginBottom: 8, backgroundColor: C.surface, borderRadius: R.lg, borderWidth: 0.5, borderColor: C.border },
+  loading: { marginTop: S.xxxl + S.xxxl },
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: S.lg, paddingVertical: S.sm + 2,
+    backgroundColor: C.surface,
+    borderBottomWidth: 0.5, borderBottomColor: C.border,
+  },
+  headerTitle: { fontSize: T.size.lg - 1, fontWeight: T.weight.semi, color: C.text },
+  headerSpacer: { width: 24 },
+  list: { padding: S.lg },
+  card: {
+    flexDirection: 'row', alignItems: 'flex-start',
+    padding: S.md + 2, marginBottom: S.sm,
+    backgroundColor: C.surface, borderRadius: R.lg,
+    borderWidth: 0.5, borderColor: C.border,
+  },
   unread: { backgroundColor: C.petrolLight, borderColor: C.petrol },
-  iconWrap: { width: 40, height: 40, borderRadius: 20, backgroundColor: C.bone2, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  iconWrap: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: C.bone2,
+    alignItems: 'center', justifyContent: 'center',
+    marginRight: S.md,
+  },
+  icon: { fontSize: T.size.xl },
   content: { flex: 1 },
-  title: { fontSize: 14, fontWeight: '500', color: C.text, marginBottom: 2 },
-  body: { fontSize: 12, color: C.text3, lineHeight: 17, marginBottom: 4 },
-  time: { fontSize: 10, color: C.text4 },
-  unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.petrol, marginTop: 4 },
-  empty: { alignItems: 'center', paddingTop: 80 },
-  emptyTitle: { fontSize: 18, fontWeight: '600', color: C.text, marginBottom: 4 },
-  emptySub: { fontSize: 13, color: C.text3, textAlign: 'center' },
+  title: { fontSize: T.size.sm + 1, fontWeight: T.weight.medium, color: C.text, marginBottom: 2 },
+  titleUnread: { fontWeight: T.weight.bold },
+  body: { fontSize: T.size.sm, color: C.text3, lineHeight: 17, marginBottom: S.xs },
+  time: { fontSize: T.size.xs, color: C.text4 },
+  unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.petrol, marginTop: S.xs },
+  empty: { alignItems: 'center', paddingTop: S.xxxl + S.xxl },
+  emptyEmoji: { fontSize: T.size.display + 18, marginBottom: S.lg },
+  emptyTitle: { fontSize: T.size.lg + 1, fontWeight: T.weight.semi, color: C.text, marginBottom: S.xs },
+  emptySub: { fontSize: T.size.base, color: C.text3, textAlign: 'center' },
 });

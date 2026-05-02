@@ -3,9 +3,9 @@
  * Shows: name, city, KYC badge, trust score, ratings, deal count, active listings
  */
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, useWindowDimensions, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, useWindowDimensions, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { BackButton } from '../../components/ui';
+import { BackButton, IconButton } from '../../components/ui';
 import { C, T, S, R, Shadow, formatPrice, timeAgo } from '../../utils/tokens';
 import { Listings, type Listing } from '../../services/api';
 import { ListingCard, calcCardWidth } from '../../components/listing/ListingCard';
@@ -84,29 +84,34 @@ export default function SellerProfileScreen({ navigation, route }: any) {
       <View style={s.headerBar}>
         <BackButton onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>Seller profile</Text>
-        <TouchableOpacity onPress={() => Alert.alert('Actions', '', [
-          { text: 'Report user', onPress: () => {
-            import('../../services/api').then(({ Reports }) => {
-              Reports.reportUser(seller.id, 'inappropriate').then(() => {
-                Alert.alert('Reported', 'Our team will review within 48 hours.');
-              }).catch(() => Alert.alert('Error', 'Could not submit report'));
-            });
-          }},
-          { text: 'Block user', style: 'destructive', onPress: () => {
-            import('../../services/api').then(({ Reports }) => {
-              Reports.blockUser(seller.id).then(() => {
-                Alert.alert('Blocked', "You won't see this seller's listings anymore.", [
-                  { text: 'OK', onPress: () => navigation.goBack() },
-                ]);
-              }).catch(() => Alert.alert('Error', 'Could not block user'));
-            });
-          }},
-          { text: 'Cancel', style: 'cancel' },
-        ])}><Text style={{ fontSize: 18, color: C.text3 }}>⋮</Text></TouchableOpacity>
+        <IconButton
+          icon="⋮"
+          onPress={() => Alert.alert('Actions', '', [
+            { text: 'Report user', onPress: () => {
+              import('../../services/api').then(({ Reports }) => {
+                Reports.reportUser(seller.id, 'inappropriate').then(() => {
+                  Alert.alert('Reported', 'Our team will review within 48 hours.');
+                }).catch(() => Alert.alert('Error', 'Could not submit report'));
+              });
+            }},
+            { text: 'Block user', style: 'destructive', onPress: () => {
+              import('../../services/api').then(({ Reports }) => {
+                Reports.blockUser(seller.id).then(() => {
+                  Alert.alert('Blocked', "You won't see this seller's listings anymore.", [
+                    { text: 'OK', onPress: () => navigation.goBack() },
+                  ]);
+                }).catch(() => Alert.alert('Error', 'Could not block user'));
+              });
+            }},
+            { text: 'Cancel', style: 'cancel' },
+          ])}
+          a11y="Seller actions"
+          size="sm"
+        />
       </View>
 
       {loading ? (
-        <ActivityIndicator color={C.petrol} style={{ marginTop: 60 }} />
+        <ActivityIndicator color={C.petrol} style={s.loading} />
       ) : (
         <FlatList
           data={listings}
@@ -114,13 +119,13 @@ export default function SellerProfileScreen({ navigation, route }: any) {
           numColumns={2}
           columnWrapperStyle={s.gridRow}
           ListHeaderComponent={header}
-          ListFooterComponent={<View style={{ height: 100 }} />}
+          ListFooterComponent={<View style={s.bottomSpacer} />}
           renderItem={({ item }) => (
             <ListingCard listing={item} onPress={l => navigation.navigate('ListingDetail', { listingId: l.id })} cardWidth={cardWidth} />
           )}
           ListEmptyComponent={
             <View style={s.empty}>
-              <Text style={{ fontSize: 40, marginBottom: 12 }}>📦</Text>
+              <Text style={s.emptyEmoji}>📦</Text>
               <Text style={s.emptyText}>No active listings</Text>
             </View>
           }
@@ -133,25 +138,60 @@ export default function SellerProfileScreen({ navigation, route }: any) {
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bone },
-  headerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: C.surface, borderBottomWidth: 0.5, borderBottomColor: C.border },
-  headerTitle: { fontSize: 16, fontWeight: '600', color: C.text },
-  profileCard: { alignItems: 'center', backgroundColor: C.surface, margin: 16, borderRadius: R.xl, padding: 24, borderWidth: 1, borderColor: C.border, ...Shadow.card },
-  avatar: { width: 72, height: 72, borderRadius: 36, backgroundColor: C.petrolLight, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
-  avatarText: { fontSize: 28, fontWeight: '700', color: C.petrolDeep },
-  name: { fontSize: 20, fontWeight: '700', color: C.ink },
-  city: { fontSize: 13, color: C.text3, marginTop: 4 },
-  badges: { flexDirection: 'row', gap: 8, marginTop: 12 },
-  kycBadge: { backgroundColor: C.petrolLight, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8 },
-  kycBadgeText: { fontSize: 12, fontWeight: '700', color: C.petrol },
-  trustBadge: { backgroundColor: C.bone2, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8 },
-  trustBadgeText: { fontSize: 12, fontWeight: '600', color: C.text2 },
-  stats: { flexDirection: 'row', marginTop: 20, width: '100%', justifyContent: 'space-around' },
+  loading: { marginTop: S.xxxl + S.xxxl },
+  bottomSpacer: { height: 100 },
+  headerBar: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: S.lg, paddingVertical: S.sm + 2,
+    backgroundColor: C.surface,
+    borderBottomWidth: 0.5, borderBottomColor: C.border,
+  },
+  headerTitle: { fontSize: T.size.lg - 1, fontWeight: T.weight.semi, color: C.text },
+  profileCard: {
+    alignItems: 'center', backgroundColor: C.surface,
+    margin: S.lg, borderRadius: R.xl, padding: S.xxl,
+    borderWidth: 1, borderColor: C.border,
+    ...Shadow.card,
+  },
+  avatar: {
+    width: 72, height: 72, borderRadius: 36,
+    backgroundColor: C.petrolLight,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: S.md,
+  },
+  avatarText: { fontSize: T.size.display - 2, fontWeight: T.weight.bold, color: C.petrolDeep },
+  name: { fontSize: T.size.xl, fontWeight: T.weight.bold, color: C.ink },
+  city: { fontSize: T.size.base, color: C.text3, marginTop: S.xs },
+  badges: { flexDirection: 'row', gap: S.sm, marginTop: S.md },
+  kycBadge: {
+    backgroundColor: C.petrolLight,
+    paddingHorizontal: S.md, paddingVertical: 5,
+    borderRadius: R.xs + 2,
+  },
+  kycBadgeText: { fontSize: T.size.sm, fontWeight: T.weight.bold, color: C.petrol },
+  trustBadge: {
+    backgroundColor: C.bone2,
+    paddingHorizontal: S.md, paddingVertical: 5,
+    borderRadius: R.xs + 2,
+  },
+  trustBadgeText: { fontSize: T.size.sm, fontWeight: T.weight.semi, color: C.text2 },
+  stats: { flexDirection: 'row', marginTop: S.xl, width: '100%', justifyContent: 'space-around' },
   stat: { alignItems: 'center' },
-  statNum: { fontSize: 18, fontWeight: '800', color: C.ink },
-  statLabel: { fontSize: 10, color: C.text3, marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.3 },
-  statDivider: { width: 1, backgroundColor: C.border, marginVertical: 4 },
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: C.ink, paddingHorizontal: 16, marginTop: 8, marginBottom: 8 },
+  statNum: { fontSize: T.size.lg + 1, fontWeight: T.weight.heavy, color: C.ink },
+  statLabel: {
+    fontSize: T.size.xs, color: C.text3, marginTop: 2,
+    textTransform: 'uppercase', letterSpacing: 0.3,
+  },
+  statDivider: { width: 1, backgroundColor: C.border, marginVertical: S.xs },
+  sectionTitle: {
+    fontSize: T.size.md,
+    fontWeight: T.weight.bold,
+    color: C.ink,
+    paddingHorizontal: S.lg,
+    marginTop: S.sm, marginBottom: S.sm,
+  },
   gridRow: { flexDirection: 'row', gap: S.sm, paddingHorizontal: S.xl },
-  empty: { alignItems: 'center', paddingTop: 40 },
-  emptyText: { fontSize: 14, color: C.text3 },
+  empty: { alignItems: 'center', paddingTop: S.xxxl },
+  emptyEmoji: { fontSize: T.size.display + 10, marginBottom: S.md },
+  emptyText: { fontSize: T.size.sm + 1, color: C.text3 },
 });

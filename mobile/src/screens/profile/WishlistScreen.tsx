@@ -31,28 +31,34 @@ export default function WishlistScreen({ navigation }: any) {
 
   useFocusEffect(useCallback(() => { load(); }, []));
 
-  if (loading) return <SafeAreaView style={s.safe}><ActivityIndicator color={C.petrol} style={{ marginTop: 60 }} /></SafeAreaView>;
+  if (loading) {
+    return (
+      <SafeAreaView style={s.safe}>
+        <ActivityIndicator color={C.petrol} style={s.loading} />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
         <BackButton onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>Saved Items</Text>
-        <View style={{ width: 24 }} />
+        <View style={s.headerSpacer} />
       </View>
       <FlatList
         data={items}
         keyExtractor={i => i.id}
         numColumns={2}
         columnWrapperStyle={s.gridRow}
-        contentContainerStyle={{ paddingBottom: 100 }}
+        contentContainerStyle={s.listPadding}
         renderItem={({ item }) => (
           <ListingCard listing={item} onPress={l => navigation.navigate('ListingDetail', { listingId: l.id })} cardWidth={cardWidth} />
         )}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={C.petrol} />}
         ListEmptyComponent={
           <View style={s.empty}>
-            <Text style={{ fontSize: 48, marginBottom: 16 }}>♡</Text>
+            <Text style={s.emptyEmoji}>♡</Text>
             <Text style={s.emptyTitle}>No saved items</Text>
             <Text style={s.emptySub}>Tap ♡ on listings to save them here</Text>
           </View>
@@ -65,10 +71,23 @@ export default function WishlistScreen({ navigation }: any) {
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bone },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: C.surface, borderBottomWidth: 0.5, borderBottomColor: C.border },
-  headerTitle: { fontSize: 16, fontWeight: '600', color: C.text },
+  loading: { marginTop: S.xxxl + S.xxxl },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: S.lg,
+    paddingVertical: S.sm + 2,
+    backgroundColor: C.surface,
+    borderBottomWidth: 0.5,
+    borderBottomColor: C.border,
+  },
+  headerTitle: { fontSize: T.size.lg - 1, fontWeight: T.weight.semi, color: C.text },
+  headerSpacer: { width: 24 },
   gridRow: { flexDirection: 'row', gap: S.sm, paddingHorizontal: S.xl },
-  empty: { alignItems: 'center', paddingTop: 80 },
-  emptyTitle: { fontSize: 18, fontWeight: '600', color: C.text, marginBottom: 4 },
-  emptySub: { fontSize: 13, color: C.text3 },
+  listPadding: { paddingBottom: S.xxxl * 3 },
+  empty: { alignItems: 'center', paddingTop: S.xxxl + S.xxl },
+  emptyEmoji: { fontSize: T.size.display + 18, marginBottom: S.lg },
+  emptyTitle: { fontSize: T.size.lg + 1, fontWeight: T.weight.semi, color: C.text, marginBottom: S.xs },
+  emptySub: { fontSize: T.size.base, color: C.text3 },
 });

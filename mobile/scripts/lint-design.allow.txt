@@ -62,8 +62,6 @@ src/screens/profile/EditProfileScreen.tsx
 src/screens/profile/MyFeVisitsScreen.tsx
 src/screens/profile/NotificationsScreen.tsx
 src/screens/profile/ProfileScreen.tsx
-src/screens/profile/SellerProfileScreen.tsx
 src/screens/profile/TransactionListScreen.tsx
-src/screens/profile/WishlistScreen.tsx
 src/screens/purchase/CheckoutScreen.tsx
 src/screens/purchase/OrderConfirmationScreen.tsx
