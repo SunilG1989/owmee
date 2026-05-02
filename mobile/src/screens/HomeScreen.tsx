@@ -114,7 +114,15 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
       const nextPage = page + 1;
       const res = await Feed.explore(nextPage, cursor);
       const data = res.data;
-      setFeedItems(prev => [...prev, ...(data.items || [])]);
+      // Dedup by id — score-based cursor pagination can return rows
+      // that already appear on the previous page when scores tie or
+      // when listings are reordered between requests. Without this,
+      // React warns about duplicate keys and renders the row twice.
+      setFeedItems(prev => {
+        const seen = new Set(prev.map(i => i.id));
+        const fresh = (data.items || []).filter(i => !seen.has(i.id));
+        return [...prev, ...fresh];
+      });
       setCursor(data.next_cursor);
       setPage(data.page);
       setHasMore(!!data.next_cursor);
