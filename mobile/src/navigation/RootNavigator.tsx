@@ -124,16 +124,23 @@ function TabCell({
 
 /**
  * Sell-tab FAB — raised circular button +14px above the bar
- * baseline, soft petrol glow shadow. Anchors the primary marketplace
- * action ("List something") so "I came here to sell" lands in one
- * tap. Same idiom as Instagram's centred create button + WhatsApp's
- * call FAB.
+ * baseline, coral fill + coral-tinted halo. Anchors the primary
+ * marketplace action ("Sell my stuff") with a camera glyph that
+ * primes the AI-from-photo flow that's already step 1 of every
+ * listing. Pattern lifted from Mercari/Poshmark/Depop/OfferUp —
+ * the four photo-first C2C marketplaces — where the camera icon
+ * does the affordance work and the label confirms the verb.
+ *
+ * Coral (vs petrol) is deliberate: tokens.ts:38-41 reserves coral
+ * for "act now / once per screen" moments, which is exactly what
+ * this FAB is. Mercari Japan does the same with brand red — the
+ * primary action shouldn't blend into the rest of the chrome.
  */
 function SellFab({ active }: { active: boolean }) {
   return (
     <View style={st.fabSlot}>
       <View style={[st.fab, active && st.fabActive]}>
-        <Text style={st.fabPlus} allowFontScaling={false}>＋</Text>
+        <Text style={st.fabIcon} allowFontScaling={false}>📷</Text>
       </View>
       <Text style={[st.fabLabel, active && st.fabLabelActive]}>Sell</Text>
     </View>
@@ -214,10 +221,12 @@ function MainTabs() {
   // Placeholder — wire to a real unread-notifications source when ready.
   const notifBadge = 0;
 
+  // Sell.icon is unused (SellFab renders its own camera glyph) but
+  // kept in the array shape so the index/layout math stays clean.
   const tabs: { key: keyof TabParams; label: string; icon: string }[] = [
     { key: 'Home',          label: 'Home',          icon: '⌂' },
     { key: 'Search',        label: 'Search',        icon: '🔍' },
-    { key: 'Sell',          label: 'Sell',          icon: '＋' },
+    { key: 'Sell',          label: 'Sell',          icon: '📷' },
     { key: 'Notifications', label: 'Inbox',         icon: '🔔' },
     { key: 'Profile',       label: 'Profile',       icon: '👤' },
   ];
@@ -533,25 +542,29 @@ const st = StyleSheet.create({
     lineHeight: 12,
   },
 
-  // ── Sell tab: raised petrol FAB ─────────────────────────────────────────
+  // ── Sell tab: raised coral FAB (primary "act now" surface) ─────────────
+  // Coral fill + coral-tinted halo — pattern borrowed from Mercari
+  // (red), Poshmark (red-pink), and Depop (high-contrast). The Sell
+  // verb is the loudest thing in the bar, on purpose.
   fabSlot: { alignItems: 'center', justifyContent: 'flex-start' },
   fab: {
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: C.petrol,
+    backgroundColor: C.coral,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: -14,
-    ...Shadow.glow,
+    ...Shadow.coralGlow,
   },
-  fabActive: { backgroundColor: C.petrolDeep },
-  fabPlus: {
-    fontSize: T.size.xxl,
-    fontWeight: '300',
-    color: C.white,
-    lineHeight: T.size.xxl + 2,
-    marginTop: -1,
+  // No coralDeep token; press-state uses inline opacity via
+  // activeOpacity on the wrapping TouchableOpacity. Keep this style
+  // empty for now — added back if we introduce a darker coral later.
+  fabActive: {},
+  fabIcon: {
+    fontSize: T.size.xl,
+    lineHeight: T.size.xl + 4,
+    marginTop: 1,
   },
   fabLabel: {
     fontSize: T.size.xs,
@@ -559,5 +572,5 @@ const st = StyleSheet.create({
     color: C.text2,
     marginTop: 2,
   },
-  fabLabelActive: { color: C.petrol, fontWeight: T.weight.semi },
+  fabLabelActive: { color: C.coral, fontWeight: T.weight.semi },
 });

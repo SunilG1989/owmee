@@ -172,6 +172,10 @@ export const Shadow = {
   lifted: { shadowColor: '#0F1A1F', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.10, shadowRadius: 32, elevation: 6  },
   // Glow inherits petrol so brand-colored buttons "halo" their own color
   glow:   { shadowColor: '#1E5F5C', shadowOffset: { width: 0, height: 6  }, shadowOpacity: 0.22, shadowRadius: 22, elevation: 8  },
+  // Coral-tinted glow for "act now" surfaces (Sell FAB, sale CTAs).
+  // Mirrors the Mercari pattern of pairing the primary action button
+  // with a colored halo of its own family.
+  coralGlow: { shadowColor: '#E87A5D', shadowOffset: { width: 0, height: 6  }, shadowOpacity: 0.28, shadowRadius: 22, elevation: 8 },
 };
 
 export const I = { xs: 12, sm: 16, md: 24, lg: 32, xl: 48, display: 56 } as const;
