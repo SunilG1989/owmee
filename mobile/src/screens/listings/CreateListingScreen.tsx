@@ -20,6 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import { parseApiError } from '../../utils/errors';
 import { C, T, S, R, Shadow, formatPrice } from '../../utils/tokens';
+import { Button, IconButton } from '../../components/ui';
 import { Listings } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { useLocation } from '../../hooks/useLocation';
@@ -137,11 +138,13 @@ export default function CreateListingScreen({ navigation }: any) {
   if (!isAuthenticated) return (
     <SafeAreaView style={st.safe}>
       <View style={st.gate}>
-        <Text style={{ fontSize: 48, marginBottom: 16 }}>🔐</Text>
+        <Text style={st.gateEmoji}>🔐</Text>
         <Text style={st.gateH}>Sign in to sell</Text>
-        <TouchableOpacity style={st.gateBtn} onPress={() => navigation.getParent()?.navigate('AuthFlow')}>
-          <Text style={{ fontSize: 14, color: C.white, fontWeight: '600' }}>Sign in</Text>
-        </TouchableOpacity>
+        <Button
+          label="Sign in"
+          variant="primary"
+          onPress={() => navigation.getParent()?.navigate('AuthFlow')}
+        />
       </View>
     </SafeAreaView>
   );
@@ -395,18 +398,21 @@ export default function CreateListingScreen({ navigation }: any) {
     <SafeAreaView style={st.safe}>
       {/* Header with step dots */}
       <View style={st.top}>
-        <TouchableOpacity onPress={() => step > 0 ? setStep(step - 1) : navigation.goBack()}>
-          <Text style={{ fontSize: 20, color: C.text2 }}>←</Text>
-        </TouchableOpacity>
+        <IconButton
+          icon="←"
+          onPress={() => (step > 0 ? setStep(step - 1) : navigation.goBack())}
+          a11y={step > 0 ? 'Previous step' : 'Back'}
+          size="sm"
+        />
         <View style={st.dots}>
           {steps.map((l, i) => (
             <View key={i} style={st.dw}>
-              <View style={[st.d, i <= step && { backgroundColor: C.honey }]} />
-              <Text style={[st.dl, i <= step && { color: C.honey }]}>{l}</Text>
+              <View style={[st.d, i <= step && st.dActive]} />
+              <Text style={[st.dl, i <= step && st.dlActive]}>{l}</Text>
             </View>
           ))}
         </View>
-        <View style={{ width: 24 }} />
+        <View style={st.topSpacer} />
       </View>
 
       {/* ═══ STEP 0: Photos ═══ */}
@@ -617,8 +623,8 @@ export default function CreateListingScreen({ navigation }: any) {
             )}
 
             <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 16 }} onPress={() => setNego(!nego)}>
-              <View style={[st.toggle, nego && { backgroundColor: C.honey }]}>
-                <View style={[st.toggleThumb, nego && { alignSelf: 'flex-end' }]} />
+              <View style={[st.toggle, nego && st.toggleActive]}>
+                <View style={[st.toggleThumb, nego && st.toggleThumbOn]} />
               </View>
               <Text style={{ fontSize: 14, color: C.text }}>Open to negotiation</Text>
             </TouchableOpacity>
@@ -647,7 +653,7 @@ export default function CreateListingScreen({ navigation }: any) {
                 </View>
               ))}
 
-              <Text style={{ fontSize: 22, fontWeight: '700', color: C.honey, marginTop: 8 }}>
+              <Text style={st.reviewPrice}>
                 {formatPrice(price)}{nego ? ' · Negotiable' : ''}
               </Text>
             </View>
@@ -660,21 +666,25 @@ export default function CreateListingScreen({ navigation }: any) {
       {/* ═══ Bottom bar ═══ */}
       <View style={st.bar}>
         {step < 4 ? (
-          <TouchableOpacity
-            style={[st.btn, !canProceed() && { opacity: 0.4 }]}
+          <Button
+            label="Continue"
+            variant="primary"
+            size="lg"
             disabled={!canProceed()}
             onPress={() => setStep(step + 1)}
-          >
-            <Text style={st.btnT}>Continue</Text>
-          </TouchableOpacity>
+            fullWidth
+          />
         ) : (
-          <TouchableOpacity
-            style={[st.btn, { backgroundColor: C.ink }, (busy || !canProceed()) && { opacity: 0.4 }]}
+          <Button
+            label="Publish listing"
+            variant="primary"
+            size="lg"
             disabled={busy || !canProceed()}
+            loading={busy}
             onPress={submit}
-          >
-            {busy ? <ActivityIndicator color={C.white} /> : <Text style={st.btnT}>Publish listing</Text>}
-          </TouchableOpacity>
+            fullWidth
+            style={st.publishBtn}
+          />
         )}
       </View>
     </SafeAreaView>
@@ -683,61 +693,144 @@ export default function CreateListingScreen({ navigation }: any) {
 
 // ── Styles ────────────────────────────────────────────────────────
 const st = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: C.cream },
-  top: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, backgroundColor: C.surface, borderBottomWidth: 0.5, borderBottomColor: C.border },
-  dots: { flex: 1, flexDirection: 'row', justifyContent: 'center', gap: 12 },
+  safe: { flex: 1, backgroundColor: C.bone },
+  top: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: S.lg, paddingVertical: S.sm,
+    backgroundColor: C.surface,
+    borderBottomWidth: 0.5, borderBottomColor: C.border,
+  },
+  topSpacer: { width: 24 },
+  dots: { flex: 1, flexDirection: 'row', justifyContent: 'center', gap: S.md },
   dw: { alignItems: 'center', gap: 3 },
   d: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.border },
-  dl: { fontSize: 9, color: C.text4 },
-  body: { flex: 1, paddingHorizontal: 16, paddingTop: 16 },
-  h: { fontSize: 20, fontWeight: '700', color: C.text, marginBottom: 4 },
-  sub: { fontSize: 13, color: C.text3, marginBottom: 16 },
-  lbl: { fontSize: 12, fontWeight: '600', color: C.text2, marginTop: 16, marginBottom: 6 },
-  inp: { borderWidth: 0.5, borderColor: C.border, borderRadius: R.sm, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: C.text, backgroundColor: C.surface },
-  // Chips
-  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: R.pill, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface },
-  chipActive: { backgroundColor: C.honeyLight, borderColor: C.honey },
-  chipText: { fontSize: 13, color: C.text2 },
-  chipTextActive: { color: C.honeyDeep, fontWeight: '600' },
+  dActive: { backgroundColor: C.petrol },
+  dl: { fontSize: T.size.xs - 1, color: C.text4 },                  // 9
+  dlActive: { color: C.petrol },
+
+  body: { flex: 1, paddingHorizontal: S.lg, paddingTop: S.lg },
+  h: { fontSize: T.size.xl, fontWeight: T.weight.bold, color: C.text, marginBottom: S.xs },
+  sub: { fontSize: T.size.base, color: C.text3, marginBottom: S.lg },
+  lbl: {
+    fontSize: T.size.sm, fontWeight: T.weight.semi,
+    color: C.text2, marginTop: S.lg, marginBottom: S.xs + 2,
+  },
+  inp: {
+    borderWidth: 0.5, borderColor: C.border, borderRadius: R.sm,
+    paddingHorizontal: S.md, paddingVertical: S.sm + 2,
+    fontSize: T.size.sm + 1, color: C.text, backgroundColor: C.surface,
+  },
+
+  // Chips (local helper — TODO migrate to components/ui/Chip)
+  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: S.sm },
+  chip: {
+    paddingHorizontal: S.md + 2, paddingVertical: S.sm,
+    borderRadius: R.pill, borderWidth: 1,
+    borderColor: C.border, backgroundColor: C.surface,
+  },
+  chipActive: { backgroundColor: C.petrolLight, borderColor: C.petrol },
+  chipText: { fontSize: T.size.base, color: C.text2 },
+  chipTextActive: { color: C.petrolDeep, fontWeight: T.weight.semi },
+
   // Category cards
-  catCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, marginBottom: 8, borderRadius: R.md, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface },
-  catCardActive: { borderColor: C.honey, backgroundColor: C.honeyLight },
-  catName: { fontSize: 16, fontWeight: '600', color: C.text },
-  catTag: { fontSize: 10, color: C.amber, fontWeight: '600', backgroundColor: C.amberLight, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
+  catCard: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    padding: S.lg, marginBottom: S.sm,
+    borderRadius: R.md, borderWidth: 1,
+    borderColor: C.border, backgroundColor: C.surface,
+  },
+  catCardActive: { borderColor: C.petrol, backgroundColor: C.petrolLight },
+  catName: { fontSize: T.size.lg - 1, fontWeight: T.weight.semi, color: C.text },
+  catTag: {
+    fontSize: T.size.xs, color: C.petrol, fontWeight: T.weight.semi,
+    backgroundColor: C.petrolLight,
+    paddingHorizontal: S.sm, paddingVertical: 2,
+    borderRadius: R.xs - 2,
+  },
+
   // Condition cards
-  condCard: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, marginBottom: 8, borderRadius: R.md, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface },
-  condCardActive: { borderColor: C.honey, backgroundColor: C.honeyLight },
-  condLabel: { fontSize: 15, fontWeight: '600', color: C.text },
-  condDesc: { fontSize: 12, color: C.text3, marginTop: 2 },
-  radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: C.border, alignItems: 'center', justifyContent: 'center' },
-  radioActive: { borderColor: C.honey },
-  radioDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: C.honey },
+  condCard: {
+    flexDirection: 'row', alignItems: 'center', gap: S.md,
+    padding: S.lg, marginBottom: S.sm,
+    borderRadius: R.md, borderWidth: 1,
+    borderColor: C.border, backgroundColor: C.surface,
+  },
+  condCardActive: { borderColor: C.petrol, backgroundColor: C.petrolLight },
+  condLabel: { fontSize: T.size.md, fontWeight: T.weight.semi, color: C.text },
+  condDesc: { fontSize: T.size.sm, color: C.text3, marginTop: 2 },
+  radio: {
+    width: 22, height: 22, borderRadius: 11,
+    borderWidth: 2, borderColor: C.border,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  radioActive: { borderColor: C.petrol },
+  radioDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: C.petrol },
+
   // Mini cards (screen/body condition)
-  miniCard: { padding: 12, marginBottom: 6, borderRadius: R.sm, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface },
-  miniCardActive: { borderColor: C.honey, backgroundColor: C.honeyLight },
-  miniLabel: { fontSize: 13, fontWeight: '600', color: C.text },
-  miniDesc: { fontSize: 11, color: C.text3, marginTop: 2 },
+  miniCard: {
+    padding: S.md, marginBottom: S.xs + 2,
+    borderRadius: R.sm, borderWidth: 1,
+    borderColor: C.border, backgroundColor: C.surface,
+  },
+  miniCardActive: { borderColor: C.petrol, backgroundColor: C.petrolLight },
+  miniLabel: { fontSize: T.size.base, fontWeight: T.weight.semi, color: C.text },
+  miniDesc: { fontSize: T.size.sm, color: C.text3, marginTop: 2 },
+
   // Defects
-  defectRow: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, marginBottom: 4, borderRadius: R.sm },
-  defectActive: { backgroundColor: C.honeyLight },
-  defectLabel: { fontSize: 13, color: C.text },
-  checkbox: { width: 20, height: 20, borderRadius: 4, borderWidth: 1.5, borderColor: C.border, alignItems: 'center', justifyContent: 'center' },
-  checkboxActive: { backgroundColor: C.honey, borderColor: C.honey },
+  defectRow: {
+    flexDirection: 'row', alignItems: 'center', gap: S.sm + 2,
+    padding: S.sm + 2, marginBottom: S.xs,
+    borderRadius: R.sm,
+  },
+  defectActive: { backgroundColor: C.petrolLight },
+  defectLabel: { fontSize: T.size.base, color: C.text },
+  checkbox: {
+    width: 20, height: 20, borderRadius: R.xs - 2,
+    borderWidth: 1.5, borderColor: C.border,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  checkboxActive: { backgroundColor: C.petrol, borderColor: C.petrol },
+
   // Photos
-  pg: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  ps: { width: '31%' as any, aspectRatio: 1, borderRadius: R.sm, overflow: 'hidden', borderWidth: 1, borderColor: C.border, borderStyle: 'dashed' },
+  pg: { flexDirection: 'row', flexWrap: 'wrap', gap: S.sm },
+  ps: {
+    width: '31%' as any, aspectRatio: 1,
+    borderRadius: R.sm, overflow: 'hidden',
+    borderWidth: 1, borderColor: C.border, borderStyle: 'dashed',
+  },
   pe: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  px: { position: 'absolute', top: 4, right: 4, width: 20, height: 20, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
+  px: {
+    position: 'absolute', top: 4, right: 4,
+    width: 20, height: 20, borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+
   // Toggle
-  toggle: { width: 44, height: 24, borderRadius: 12, backgroundColor: C.border, justifyContent: 'center', padding: 2 },
+  toggle: {
+    width: 44, height: 24, borderRadius: 12,
+    backgroundColor: C.border, justifyContent: 'center', padding: 2,
+  },
+  toggleActive: { backgroundColor: C.petrol },
   toggleThumb: { width: 20, height: 20, borderRadius: 10, backgroundColor: C.white },
+  toggleThumbOn: { alignSelf: 'flex-end' },
+  reviewPrice: {
+    fontSize: T.size.xxl - 2,
+    fontWeight: T.weight.bold,
+    color: C.petrol,
+    marginTop: S.sm,
+  },
+
   // Bottom bar
-  bar: { paddingHorizontal: 16, paddingVertical: 12, backgroundColor: C.surface, borderTopWidth: 0.5, borderTopColor: C.border },
-  btn: { backgroundColor: C.honey, borderRadius: R.sm, paddingVertical: 14, alignItems: 'center' },
-  btnT: { fontSize: 15, color: C.white, fontWeight: '600' },
+  bar: {
+    paddingHorizontal: S.lg, paddingVertical: S.md,
+    backgroundColor: C.surface,
+    borderTopWidth: 0.5, borderTopColor: C.border,
+  },
+  publishBtn: { backgroundColor: C.ink },
+
   // Gate
-  gate: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
-  gateH: { fontSize: 18, fontWeight: '600', color: C.text, marginBottom: 16 },
-  gateBtn: { backgroundColor: C.honey, borderRadius: R.sm, paddingHorizontal: 24, paddingVertical: 12 },
+  gate: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: S.xxxl },
+  gateEmoji: { fontSize: T.size.display + 18, marginBottom: S.lg },   // 48
+  gateH: { fontSize: T.size.lg, fontWeight: T.weight.semi, color: C.text, marginBottom: S.lg },
 });
