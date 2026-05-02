@@ -34,7 +34,7 @@ import { launchCamera } from 'react-native-image-picker';
 
 import { C, T, S, R, Shadow, formatPrice } from '../../../utils/tokens';
 import { AIListing } from '../../../services/api';
-import { BackButton } from '../../../components/ui';
+import { BackButton, Button } from '../../../components/ui';
 import { parseApiError } from '../../../utils/errors';
 import type { RootScreen } from '../../../navigation/types';
 
@@ -183,19 +183,24 @@ export default function AIListingIdentifierScreen({
           <Text style={st.successStep}>• We schedule pickup from your address</Text>
           <Text style={st.successStep}>• You get paid 2 days after pickup</Text>
 
-          <View style={{ flex: 1 }} />
-          <TouchableOpacity
-            style={st.primaryBtn}
+          <View style={st.flex} />
+          <Button
+            label="See my listing"
+            variant="primary"
+            size="lg"
             onPress={() =>
               navigation.replace('ListingDetail' as never, { listingId: success.listingId } as never)
-            }>
-            <Text style={st.primaryBtnText}>See my listing</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
+            }
+            fullWidth
+            style={st.primaryBtn}
+          />
+          <Button
+            label="List another item"
+            variant="secondary"
+            onPress={() => navigation.replace('AIListingCamera' as never, undefined as never)}
+            fullWidth
             style={st.secondaryBtn}
-            onPress={() => navigation.replace('AIListingCamera' as never, undefined as never)}>
-            <Text style={st.secondaryBtnText}>List another item</Text>
-          </TouchableOpacity>
+          />
         </View>
       </SafeAreaView>
     );
@@ -207,12 +212,12 @@ export default function AIListingIdentifierScreen({
       <View style={st.header}>
         <BackButton onPress={() => navigation.goBack()} />
         <Text style={st.headerTitle}>{isSmartphone ? 'Capture IMEI' : 'Capture serial number'}</Text>
-        <View style={st.headerBtn} />
+        <View style={st.headerSpacer} />
       </View>
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={{ flex: 1 }}>
+        style={st.flex}>
         <View style={st.body}>
           {!manualMode && !imei && !serial ? (
             // Photo path
@@ -239,12 +244,21 @@ export default function AIListingIdentifierScreen({
                 </View>
               )}
 
-              <TouchableOpacity onPress={openCameraForIdentifier} style={st.cameraBtn}>
-                <Text style={st.cameraBtnText}>📷  Take a photo</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => setManualMode(true)} style={st.manualLink}>
-                <Text style={st.manualLinkText}>Or enter manually</Text>
-              </TouchableOpacity>
+              <Button
+                label="📷  Take a photo"
+                variant="primary"
+                size="lg"
+                onPress={openCameraForIdentifier}
+                fullWidth
+                style={st.cameraBtn}
+              />
+              <Button
+                label="Or enter manually"
+                variant="ghost"
+                size="sm"
+                onPress={() => setManualMode(true)}
+                style={st.manualLink}
+              />
             </>
           ) : (
             // Manual / confirm path
@@ -283,9 +297,13 @@ export default function AIListingIdentifierScreen({
               )}
 
               {!photoUri && (
-                <TouchableOpacity onPress={openCameraForIdentifier} style={st.tryPhotoBtn}>
-                  <Text style={st.tryPhotoText}>📷 Try photo extraction instead</Text>
-                </TouchableOpacity>
+                <Button
+                  label="📷 Try photo extraction instead"
+                  variant="ghost"
+                  size="sm"
+                  onPress={openCameraForIdentifier}
+                  style={st.tryPhotoBtn}
+                />
               )}
             </>
           )}
@@ -293,18 +311,16 @@ export default function AIListingIdentifierScreen({
 
         {/* Sticky CTA */}
         <View style={st.ctaBar}>
-          <TouchableOpacity
-            style={[st.primaryBtn, submitting && { opacity: 0.6 }]}
+          <Button
+            label={`List for ${formatPrice(finalFields.price)} →`}
+            variant="primary"
+            size="lg"
+            loading={submitting}
+            disabled={submitting}
             onPress={submit}
-            disabled={submitting}>
-            {submitting ? (
-              <ActivityIndicator color={C.surface} />
-            ) : (
-              <Text style={st.primaryBtnText}>
-                List for {formatPrice(finalFields.price)} →
-              </Text>
-            )}
-          </TouchableOpacity>
+            fullWidth
+            style={st.primaryBtn}
+          />
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -323,9 +339,9 @@ const st = StyleSheet.create({
     borderBottomColor: C.border,
     backgroundColor: C.surface,
   },
-  headerBtn: { minWidth: 32, height: 32, justifyContent: 'center' },
-  headerBtnText: { fontSize: 22, color: C.text2 },
+  headerSpacer: { width: 36 },
   headerTitle: { fontSize: T.size.lg, fontWeight: T.weight.semi, color: C.text },
+  flex: { flex: 1 },
 
   body: { flex: 1, padding: S.xl },
   bodyTitle: {
@@ -349,16 +365,8 @@ const st = StyleSheet.create({
   extractingRow: { flexDirection: 'row', alignItems: 'center', marginBottom: S.md },
   extractingText: { marginLeft: S.sm, color: C.text2, fontSize: T.size.base },
 
-  cameraBtn: {
-    backgroundColor: C.petrol,
-    paddingVertical: S.lg,
-    borderRadius: R.md,
-    alignItems: 'center',
-    ...Shadow.glow,
-  },
-  cameraBtnText: { color: C.surface, fontSize: T.size.lg, fontWeight: T.weight.bold },
-  manualLink: { marginTop: S.md, paddingVertical: S.sm, alignItems: 'center' },
-  manualLinkText: { color: C.text2, fontSize: T.size.md, textDecorationLine: 'underline' },
+  cameraBtn: { ...Shadow.glow },
+  manualLink: { marginTop: S.md, alignSelf: 'center' },
 
   input: {
     borderWidth: 1,
@@ -374,8 +382,7 @@ const st = StyleSheet.create({
   },
   errText: { marginTop: S.sm, color: C.red, fontSize: T.size.sm },
 
-  tryPhotoBtn: { marginTop: S.lg, paddingVertical: S.md, alignItems: 'center' },
-  tryPhotoText: { color: C.petrol, fontSize: T.size.md, fontWeight: T.weight.semi },
+  tryPhotoBtn: { marginTop: S.lg, alignSelf: 'center' },
 
   ctaBar: {
     paddingHorizontal: S.lg,
@@ -385,28 +392,12 @@ const st = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: C.border,
   },
-  primaryBtn: {
-    backgroundColor: C.petrol,
-    paddingVertical: S.lg,
-    borderRadius: R.md,
-    alignItems: 'center',
-    ...Shadow.glow,
-  },
-  primaryBtnText: { color: C.surface, fontSize: T.size.lg, fontWeight: T.weight.bold },
-  secondaryBtn: {
-    marginTop: S.md,
-    paddingVertical: S.lg,
-    borderRadius: R.md,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: C.border,
-    backgroundColor: C.bone,
-  },
-  secondaryBtnText: { color: C.text2, fontSize: T.size.md, fontWeight: T.weight.semi },
+  primaryBtn: { ...Shadow.glow },
+  secondaryBtn: { marginTop: S.md },
 
   // Success
   successWrap: { flex: 1, padding: S.xxl, alignItems: 'center' },
-  successCheck: { fontSize: 64, color: C.petrol, marginTop: S.xxl, marginBottom: S.lg },
+  successCheck: { fontSize: T.size.display + 34, color: C.petrol, marginTop: S.xxl, marginBottom: S.lg },
   successTitle: {
     fontSize: T.size.xxl,
     fontWeight: T.weight.bold,

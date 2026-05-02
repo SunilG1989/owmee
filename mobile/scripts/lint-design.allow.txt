@@ -35,7 +35,6 @@ src/screens/listings/MyListingsScreen.tsx
 src/screens/listings/RequestFeVisitScreen.tsx
 src/screens/listings/SellModeForkScreen.tsx
 src/screens/listings/ai/AIListingCameraScreen.tsx
-src/screens/listings/ai/AIListingIdentifierScreen.tsx
 src/screens/listings/ai/AIListingSuggestScreen.tsx
 src/screens/listings/ai/shared/ComparablesSheet.tsx
 src/screens/listings/ai/shared/EditDetailsSheet.tsx
