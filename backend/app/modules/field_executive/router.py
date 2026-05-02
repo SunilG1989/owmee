@@ -507,6 +507,25 @@ async def request_visit(
     return await _visit_to_response(db, visit)
 
 
+@seller_router.get("/me", response_model=list[VisitResponse])
+async def my_visits(current_user: BasicUser, db: DBSession):
+    """List the seller's own visits, newest first.
+
+    NOTE: this route MUST be registered BEFORE /{visit_id} so FastAPI's
+    path matcher doesn't try to parse "me" as a UUID (it 422s the
+    request). See also /v1/listings/price-suggestion which had the same
+    issue. New static endpoints here go above /{visit_id}.
+    """
+    res = await db.execute(
+        select(FEVisit)
+        .where(FEVisit.seller_id == current_user.user_id)
+        .order_by(desc(FEVisit.created_at))
+        .limit(50)
+    )
+    visits = list(res.scalars().all())
+    return [await _visit_to_response(db, v) for v in visits]
+
+
 @seller_router.get("/{visit_id}", response_model=VisitResponse)
 async def my_visit(
     visit_id: UUID,
@@ -519,18 +538,6 @@ async def my_visit(
     if visit.seller_id != current_user.user_id:
         raise HTTPException(status_code=403, detail={"error": "NOT_YOUR_VISIT"})
     return await _visit_to_response(db, visit)
-
-
-@seller_router.get("/me", response_model=list[VisitResponse])
-async def my_visits(current_user: BasicUser, db: DBSession):
-    res = await db.execute(
-        select(FEVisit)
-        .where(FEVisit.seller_id == current_user.user_id)
-        .order_by(desc(FEVisit.created_at))
-        .limit(50)
-    )
-    visits = list(res.scalars().all())
-    return [await _visit_to_response(db, v) for v in visits]
 
 
 @seller_router.post("/{visit_id}/cancel", response_model=VisitResponse)

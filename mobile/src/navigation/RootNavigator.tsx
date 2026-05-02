@@ -387,6 +387,8 @@ export default function RootNavigator() {
         <RootStack.Screen name="AIListingSuggest" component={AIListingSuggestScreen} options={{ animation: 'slide_from_right' }} />
         <RootStack.Screen name="AIListingIdentifier" component={AIListingIdentifierScreen} options={{ animation: 'slide_from_right' }} />
         <RootStack.Screen name="EditListing" component={EditListingScreen} options={{ animation: 'slide_from_right' }} />
+        {/* Manual-entry listing form — fallback when AI can't run. */}
+        <RootStack.Screen name="CreateListing" component={CreateListingScreen} options={{ animation: 'slide_from_right' }} />
         {/* Address PRD: 3-screen flow + picker */}
         <RootStack.Screen name="LocationDetect" component={LocationDetectScreen} options={{ animation: 'slide_from_right' }} />
         <RootStack.Screen name="LocationMap" component={LocationMapScreen} options={{ animation: 'slide_from_right' }} />

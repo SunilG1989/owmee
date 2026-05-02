@@ -58,6 +58,10 @@ export type RootStackParams = {
   AIListingSuggest: { draft: any };
   AIListingIdentifier: { draft: any; finalFields: any };
   EditListing: { listingId: string };
+  // Manual-entry fallback when the AI flow can't run (Gemini quota
+  // exhausted, etc.). Reachable from AIListingCameraScreen's
+  // "Use manual form" Alert action.
+  CreateListing: undefined;
 
   // ── Concierge (master spec) ─────────────────────────────────────────
   SellModeFork: undefined;
