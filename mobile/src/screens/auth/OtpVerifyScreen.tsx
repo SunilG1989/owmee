@@ -8,11 +8,25 @@ import { Auth } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { parseApiError } from '../../utils/errors';
 
-/** Extract user_id (sub claim) from JWT */
+/** Decode the `sub` (user id) claim from a JWT.
+ *
+ * JWTs are base64url-encoded (RFC 7515): `-`/`_` instead of `+`/`/`,
+ * no `=` padding. RN's atob() only accepts standard base64 — a naive
+ * `atob(token.split('.')[1])` silently fails on every JWT and returns
+ * empty, which broke session persistence (setTokens stored an empty
+ * userId, hydrate's `if (a && r && u)` guard then refused to restore
+ * the session, forcing the user to OTP-verify on every relaunch).
+ */
 function extractUserId(token: string): string {
   try {
-    const payload = token.split('.')[1];
-    const decoded = JSON.parse(atob(payload));
+    const raw = token.split('.')[1];
+    if (!raw) return '';
+    let b64 = raw.replace(/-/g, '+').replace(/_/g, '/');
+    const pad = b64.length % 4;
+    if (pad === 2) b64 += '==';
+    else if (pad === 3) b64 += '=';
+    else if (pad === 1) return '';
+    const decoded = JSON.parse(atob(b64));
     return decoded.sub || '';
   } catch { return ''; }
 }

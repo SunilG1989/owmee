@@ -3,6 +3,23 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { AuthState as TriAuthState, SellerTier, UserRole, EligibilitySnapshot } from '../eligibility';
 
+/** Decode the `sub` claim from a JWT. Handles base64url (RFC 7515)
+ *  — RN's atob() only accepts standard base64, which is why a naive
+ *  `atob(token.split('.')[1])` fails on every JWT. */
+function decodeJwtSub(token: string): string {
+  try {
+    const raw = token.split('.')[1];
+    if (!raw) return '';
+    let b64 = raw.replace(/-/g, '+').replace(/_/g, '/');
+    const pad = b64.length % 4;
+    if (pad === 2) b64 += '==';
+    else if (pad === 3) b64 += '=';
+    else if (pad === 1) return '';
+    const decoded = JSON.parse(atob(b64));
+    return decoded.sub || '';
+  } catch { return ''; }
+}
+
 interface AuthState {
   isAuthenticated: boolean;
   hydrated: boolean;
@@ -145,7 +162,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       pairs.forEach(([k, v]) => { map[k] = v; });
       const a = map[KEYS.a];
       const r = map[KEYS.r];
-      const u = map[KEYS.u];
+      let u = map[KEYS.u];
+
+      // Self-heal: existing builds shipped with a buggy extractUserId that
+      // silently returned '' for any base64url-encoded JWT (i.e. all of
+      // them). Those users have valid a + r in storage but u === ''.
+      // Decode the access token and patch the userId so they stay logged
+      // in without having to re-OTP.
+      if (a && r && !u) {
+        const sub = decodeJwtSub(a);
+        if (sub) {
+          u = sub;
+          AsyncStorage.setItem(KEYS.u, sub).catch(() => {});
+        }
+      }
+
       if (a && r && u) {
         set({
           isAuthenticated: true,
