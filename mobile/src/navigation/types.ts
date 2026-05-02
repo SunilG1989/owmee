@@ -54,6 +54,9 @@ export type RootStackParams = {
   ConciergeBooking: undefined;
   ConciergeBookingConfirmed: { visit: import('../services/api').FEVisit };
   MyConcierge: undefined;
+  // Phase 2 — trust theater
+  VisitDetail: { visit_id: string };
+  ArrivalVerification: { visit_id: string };
 
   // ── Address PRD: 3-screen address flow ───────────────────────────────
   // Each screen optionally carries `returnTo` (the screen that should

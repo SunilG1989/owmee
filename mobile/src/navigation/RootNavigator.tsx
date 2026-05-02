@@ -75,6 +75,9 @@ import SellModeForkScreen from '../screens/listings/SellModeForkScreen';
 import ConciergeBookingScreen from '../screens/listings/concierge/BookingScreen';
 import ConciergeBookingConfirmedScreen from '../screens/listings/concierge/BookingConfirmedScreen';
 import MyConciergeScreen from '../screens/listings/concierge/MyConciergeScreen';
+// Concierge master spec — Phase 2
+import VisitDetailScreen from '../screens/listings/concierge/VisitDetailScreen';
+import ArrivalVerificationScreen from '../screens/listings/concierge/ArrivalVerificationScreen';
 
 import type { RootStackParams, AuthStackParams, TabParams } from './types';
 
@@ -347,6 +350,9 @@ export default function RootNavigator() {
         <RootStack.Screen name="ConciergeBooking" component={ConciergeBookingScreen} options={{ animation: 'slide_from_right' }} />
         <RootStack.Screen name="ConciergeBookingConfirmed" component={ConciergeBookingConfirmedScreen} options={{ animation: 'fade', gestureEnabled: false }} />
         <RootStack.Screen name="MyConcierge" component={MyConciergeScreen} options={{ animation: 'slide_from_right' }} />
+        {/* Concierge Phase 2 — trust theater deep links */}
+        <RootStack.Screen name="VisitDetail" component={VisitDetailScreen} options={{ animation: 'slide_from_right' }} />
+        <RootStack.Screen name="ArrivalVerification" component={ArrivalVerificationScreen} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
         {/* Legacy seller-facing FE request screen — DEPRECATED in Concierge
             Phase 1, file kept (marked @deprecated) for reference only.
             Phase 5 deletes the file. */}

@@ -116,6 +116,9 @@ class VisitResponse(BaseModel):
     category_name: Optional[str]
     item_notes: Optional[str]
     notes_tags: list[str] = Field(default_factory=list)
+    # Concierge Phase 2 (master spec section 5.4)
+    arrival_verification_code: Optional[str] = None
+    arrival_confirmed_by_seller_at: Optional[str] = None
     address: dict
     requested_slot_start: str
     requested_slot_end: str
@@ -331,6 +334,12 @@ async def _visit_to_response(db, visit: FEVisit) -> VisitResponse:
         category_name=cat_name,
         item_notes=visit.item_notes,
         notes_tags=list(visit.notes_tags or []),
+        arrival_verification_code=visit.arrival_verification_code,
+        arrival_confirmed_by_seller_at=(
+            visit.arrival_confirmed_by_seller_at.isoformat()
+            if visit.arrival_confirmed_by_seller_at
+            else None
+        ),
         address=visit.address_snapshot or {},
         requested_slot_start=visit.requested_slot_start.isoformat(),
         requested_slot_end=visit.requested_slot_end.isoformat(),
@@ -486,6 +495,29 @@ async def request_visit(
 
     await db.commit()
     await db.refresh(visit)
+
+    # Concierge Phase 2 N1: "Visit booked, matching specialist now."
+    # Fire-and-forget so a notification failure can't roll back the booking.
+    try:
+        from app.modules.notifications.concierge_templates import notify_visit_booked
+        await notify_visit_booked(seller_id=visit.seller_id, visit_id=visit.id)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("concierge.notify_visit_booked.failed", visit_id=str(visit.id), error=str(e))
+
+    return await _visit_to_response(db, visit)
+
+
+@seller_router.get("/{visit_id}", response_model=VisitResponse)
+async def my_visit(
+    visit_id: UUID,
+    current_user: BasicUser,
+    db: DBSession,
+):
+    """Seller-side single-visit fetch — used by the Phase 2 visit detail
+    screen + ArrivalVerificationScreen."""
+    visit = await _load_visit_by_id(db, visit_id)
+    if visit.seller_id != current_user.user_id:
+        raise HTTPException(status_code=403, detail={"error": "NOT_YOUR_VISIT"})
     return await _visit_to_response(db, visit)
 
 
@@ -525,6 +557,128 @@ async def cancel_my_visit(
     await db.commit()
     await db.refresh(visit)
     return await _visit_to_response(db, visit)
+
+
+# ── Concierge Phase 2 seller-facing endpoints (master spec section 5) ────
+
+
+class SpecialistProfileResponse(BaseModel):
+    specialist_id: str
+    name: str
+    photo_url: Optional[str]
+    rating_avg: float
+    visit_count_total: int
+    joined_year: int
+    verified: bool
+    background_checked: bool
+
+
+@seller_router.get(
+    "/{visit_id}/specialist-profile",
+    response_model=SpecialistProfileResponse,
+)
+async def get_specialist_profile(
+    visit_id: UUID,
+    current_user: BasicUser,
+    db: DBSession,
+):
+    """Master spec section 5.3: specialist profile card data.
+
+    Owner-only — visit must belong to the requesting seller. The `name`
+    field returns first name + last initial (privacy + brand polish).
+    Pilot-era defaults: rating 4.8 if no NPS rows yet (Phase 5 wires the
+    real aggregate); background_checked=True (manual policy).
+    """
+    visit = await _load_visit_by_id(db, visit_id)
+    if visit.seller_id != current_user.user_id:
+        raise HTTPException(status_code=403, detail={"error": "NOT_YOUR_VISIT"})
+    if visit.fe_id is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "SPECIALIST_NOT_ASSIGNED",
+                "message": "We're still matching you with a specialist.",
+            },
+        )
+
+    fe = await _load_fe_by_id(db, visit.fe_id)
+    name_str = "Owmee Specialist"
+    photo_url: Optional[str] = None
+    joined_year = 2025
+    if fe.user_id:
+        u_res = await db.execute(select(User).where(User.id == fe.user_id))
+        u = u_res.scalar_one_or_none()
+        if u and u.name:
+            parts = u.name.strip().split()
+            first = parts[0] if parts else ""
+            last_initial = f" {parts[-1][0].upper()}." if len(parts) > 1 else ""
+            name_str = f"{first}{last_initial}".strip() or name_str
+        if u and u.created_at:
+            joined_year = u.created_at.year
+
+    completed_res = await db.execute(
+        select(FEVisit.id).where(FEVisit.fe_id == fe.id, FEVisit.status == "completed")
+    )
+    visit_count = len(completed_res.scalars().all())
+
+    return SpecialistProfileResponse(
+        specialist_id=str(fe.id),
+        name=name_str,
+        photo_url=photo_url,
+        rating_avg=4.8,
+        visit_count_total=visit_count,
+        joined_year=joined_year,
+        verified=True,
+        background_checked=True,
+    )
+
+
+class SellerConfirmArrivalRequest(BaseModel):
+    code_matched: bool
+
+
+@seller_router.post(
+    "/{visit_id}/seller-confirm-arrival",
+)
+async def seller_confirm_arrival(
+    visit_id: UUID,
+    body: SellerConfirmArrivalRequest,
+    current_user: BasicUser,
+    db: DBSession,
+):
+    """Master spec section 5.4: seller's at-door verification action.
+
+    On match: stamp the confirmation timestamp. The visit's status
+    transition to in_progress is owned by the FE-side `/start` endpoint
+    (which already fires N6); this endpoint is the seller's confirmation
+    record and does not move status.
+
+    On mismatch: create an `fe_visit_issue` row with severity `urgent`
+    and category `safety_concern` so admin web shows the alert. Phase 5
+    introduces the table; for Phase 2 we log + return alerted=True.
+    Phase 5 will replace the log with the real insert.
+    """
+    visit = await _load_visit_by_id(db, visit_id)
+    if visit.seller_id != current_user.user_id:
+        raise HTTPException(status_code=403, detail={"error": "NOT_YOUR_VISIT"})
+
+    if body.code_matched:
+        from datetime import datetime, timezone
+        visit.arrival_confirmed_by_seller_at = datetime.now(timezone.utc)
+        await db.commit()
+        return {"confirmed": True, "alerted": False}
+
+    # Code mismatch — phase 5 lands the real fe_visit_issues table; for
+    # now log loud so admin can intervene from server logs / Sentry.
+    logger.error(
+        "concierge.code_mismatch_alert",
+        visit_id=str(visit.id),
+        seller_id=str(visit.seller_id),
+        fe_id=str(visit.fe_id) if visit.fe_id else None,
+        severity="urgent",
+        category="safety_concern",
+    )
+    return {"confirmed": False, "alerted": True}
 
 
 # ── FE-facing router: /v1/fe/visits ───────────────────────────────────────────
@@ -567,6 +721,12 @@ async def start_visit(
     current_fe: FEUser,
     db: DBSession,
 ):
+    """FE taps "Arrived" — moves visit to in_progress + fires N6 (at the door).
+
+    Master spec section 5.2: this is the "I'm at the seller's door" moment.
+    The N6 push deep-links the seller to ArrivalVerificationScreen which
+    shows the same arrival_verification_code generated at booking time.
+    """
     visit = await _load_visit_by_id(db, visit_id)
     fe = await fe_service.get_fe_by_user_id(db, current_fe.user_id)
     if fe is None or visit.fe_id != fe.id:
@@ -585,7 +745,95 @@ async def start_visit(
     if visit.workflow_id:
         await _signal_fe_started(visit.workflow_id)
 
+    # Concierge Phase 2 N6: "at the door" notification with code.
+    try:
+        from app.modules.notifications.concierge_templates import notify_specialist_at_door
+        first_name = await _fe_first_name(db, fe)
+        await notify_specialist_at_door(
+            seller_id=visit.seller_id,
+            visit_id=visit.id,
+            specialist_first_name=first_name,
+            arrival_code=visit.arrival_verification_code or "----",
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning("concierge.notify_at_door.failed", visit_id=str(visit.id), error=str(e))
+
     return await _visit_to_response(db, visit)
+
+
+@fe_router.post("/{visit_id}/start-route", response_model=VisitResponse)
+async def start_route(
+    visit_id: UUID,
+    current_fe: FEUser,
+    db: DBSession,
+):
+    """FE taps "Start route" in their day-of view — fires N4 ("on the way").
+
+    No status change. The visit stays `scheduled` until the FE actually
+    arrives (POST /start). This endpoint is purely a notification trigger
+    so the seller's app shows progress before the door knock.
+    """
+    visit = await _load_visit_by_id(db, visit_id)
+    fe = await fe_service.get_fe_by_user_id(db, current_fe.user_id)
+    if fe is None or visit.fe_id != fe.id:
+        raise HTTPException(status_code=403, detail={"error": "NOT_YOUR_VISIT"})
+
+    try:
+        from app.modules.notifications.concierge_templates import notify_specialist_starting
+        first_name = await _fe_first_name(db, fe)
+        eta_label = ""
+        if visit.scheduled_slot_start:
+            eta_label = f"Estimated arrival: {visit.scheduled_slot_start.astimezone().strftime('%-I:%M%p').lower()}"
+        await notify_specialist_starting(
+            seller_id=visit.seller_id,
+            visit_id=visit.id,
+            specialist_first_name=first_name,
+            eta_label=eta_label or "On the way",
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning("concierge.notify_start_route.failed", visit_id=str(visit.id), error=str(e))
+
+    return await _visit_to_response(db, visit)
+
+
+@fe_router.post("/{visit_id}/arriving-soon", response_model=VisitResponse)
+async def arriving_soon(
+    visit_id: UUID,
+    current_fe: FEUser,
+    db: DBSession,
+):
+    """FE taps "I'm 30 mins away" — fires N5.
+
+    Same pattern as start-route — no status change, pure notification.
+    """
+    visit = await _load_visit_by_id(db, visit_id)
+    fe = await fe_service.get_fe_by_user_id(db, current_fe.user_id)
+    if fe is None or visit.fe_id != fe.id:
+        raise HTTPException(status_code=403, detail={"error": "NOT_YOUR_VISIT"})
+
+    try:
+        from app.modules.notifications.concierge_templates import notify_specialist_arriving_soon
+        first_name = await _fe_first_name(db, fe)
+        await notify_specialist_arriving_soon(
+            seller_id=visit.seller_id,
+            visit_id=visit.id,
+            specialist_first_name=first_name,
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning("concierge.notify_arriving_soon.failed", visit_id=str(visit.id), error=str(e))
+
+    return await _visit_to_response(db, visit)
+
+
+async def _fe_first_name(db, fe) -> str | None:
+    """Fetch the FE's user record's first name for notification copy."""
+    if not fe.user_id:
+        return None
+    res = await db.execute(select(User).where(User.id == fe.user_id))
+    u = res.scalar_one_or_none()
+    if not u or not u.name:
+        return None
+    return u.name.strip().split()[0]
 
 
 @fe_router.post("/{visit_id}/enforce-aadhaar")
@@ -1012,7 +1260,52 @@ async def admin_assign(
         await db.commit()
         await db.refresh(visit)
 
+    # Concierge Phase 2 N2: notify seller "Vikram is your Owmee Specialist"
+    try:
+        await _fire_specialist_assigned_notification(db, visit, fe)
+    except Exception as e:  # noqa: BLE001
+        logger.warning(
+            "concierge.notify_specialist_assigned.failed",
+            visit_id=str(visit.id),
+            error=str(e),
+        )
+
     return await _visit_to_response(db, visit)
+
+
+async def _fire_specialist_assigned_notification(db, visit, fe) -> None:
+    """N2 wrapper — derives display fields from the FE's linked user row.
+
+    `fe.user_id` may be unset for legacy FE records; in that case we call
+    the notify with all-fallbacks so the seller still gets *something*.
+    """
+    from app.modules.notifications.concierge_templates import notify_specialist_assigned
+
+    first_name: str | None = None
+    last_initial: str | None = None
+    visit_count = 0
+    if fe.user_id:
+        user_res = await db.execute(select(User).where(User.id == fe.user_id))
+        u = user_res.scalar_one_or_none()
+        if u and u.name:
+            parts = u.name.strip().split()
+            first_name = parts[0] if parts else None
+            last_initial = parts[-1][0] if len(parts) > 1 else None
+
+    # Pull a rough visit count for trust signal. Cheap COUNT(*).
+    cnt_res = await db.execute(
+        select(FEVisit.id).where(FEVisit.fe_id == fe.id, FEVisit.status == "completed")
+    )
+    visit_count = len(cnt_res.scalars().all())
+
+    await notify_specialist_assigned(
+        seller_id=visit.seller_id,
+        visit_id=visit.id,
+        specialist_first_name=first_name,
+        specialist_last_initial=last_initial,
+        rating=4.8,  # NPS aggregate ships in Phase 5; default for now
+        visit_count=visit_count,
+    )
 
 
 @admin_router.post("/{visit_id}/reassign", response_model=VisitResponse)

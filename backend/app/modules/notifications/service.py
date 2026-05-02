@@ -42,6 +42,20 @@ BUCKET_MAP = {
     "price_drop":            "transactions",
     "new_message":           "messages",
     "promo_badge":           "promotions",
+    # ── Concierge Phase 2 — trust theater (master spec section 5) ──
+    "concierge_visit_booked":      "transactions",  # N1
+    "concierge_specialist_assigned": "transactions",  # N2
+    "concierge_day_before":        "transactions",  # N3
+    "concierge_specialist_starting": "transactions",  # N4
+    "concierge_specialist_arriving": "transactions",  # N5
+    "concierge_specialist_at_door": "transactions",  # N6
+    # ── Concierge Phase 4 — passive timeline ─────────────────────
+    "concierge_item_sold":         "transactions",
+    "concierge_pickup_scheduled":  "transactions",
+    "concierge_money_credited":    "transactions",
+    # ── Concierge Phase 5 — safety + NPS ─────────────────────────
+    "concierge_visit_receipt":     "transactions",
+    "concierge_nps_request":       "transactions",
 }
 
 

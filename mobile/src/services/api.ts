@@ -225,6 +225,9 @@ export interface FEVisit {
   category_hint: string;
   item_notes: string | null;
   notes_tags: string[];
+  /** Concierge Phase 2: 4-digit code shared at the door. Null until generated. */
+  arrival_verification_code: string | null;
+  arrival_confirmed_by_seller_at: string | null;
   address: any;
   requested_slot_start: string;
   requested_slot_end: string;
@@ -508,6 +511,17 @@ export const SellerTier = {
 };
 
 // ── Sprint 4 / Pass 2: FE Visits (seller-facing) ─────────────────────
+export interface SpecialistProfile {
+  specialist_id: string;
+  name: string;
+  photo_url: string | null;
+  rating_avg: number;
+  visit_count_total: number;
+  joined_year: number;
+  verified: boolean;
+  background_checked: boolean;
+}
+
 export const FEVisits = {
   /**
    * Concierge Phase 1 booking. address_id resolves to a saved
@@ -517,7 +531,17 @@ export const FEVisits = {
   request: (body: ConciergeBookingRequest) =>
     api.post<FEVisit>('/v1/fe-visits/request', body),
   mine: () => api.get<FEVisit[]>('/v1/fe-visits/me'),
+  get: (id: string) => api.get<FEVisit>(`/v1/fe-visits/${id}`),
   cancel: (id: string) => api.post(`/v1/fe-visits/${id}/cancel`),
+
+  // Concierge Phase 2: trust theater
+  specialistProfile: (visitId: string) =>
+    api.get<SpecialistProfile>(`/v1/fe-visits/${visitId}/specialist-profile`),
+  sellerConfirmArrival: (visitId: string, codeMatched: boolean) =>
+    api.post<{ confirmed: boolean; alerted: boolean }>(
+      `/v1/fe-visits/${visitId}/seller-confirm-arrival`,
+      { code_matched: codeMatched },
+    ),
 };
 
 // ── Sprint 4 / Pass 2: FE-role endpoints ─────────────────────────────

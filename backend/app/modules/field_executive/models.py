@@ -85,6 +85,13 @@ class FEVisit(Base, TimestampMixin):
     # the API layer (ALLOWED_TAGS), not the DB.
     notes_tags = Column(JSONB, nullable=False, default=list)
 
+    # Concierge Phase 2 (master spec section 5.4): mutual at-door
+    # verification. Generated at visit-request time, shown to specialist
+    # when they tap "Arrived" and to seller via N6 push. Confirm timestamp
+    # tracks the seller's "code matched" tap.
+    arrival_verification_code = Column(String(4), nullable=True)
+    arrival_confirmed_by_seller_at = Column(DateTime(timezone=True), nullable=True)
+
     # Sprint 4 / Pass 3: category locked at admin assignment so FeCaptureScreen
     # can upload photos and submit the listing without a runtime picker hack.
     category_id = Column(

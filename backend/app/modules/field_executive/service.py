@@ -125,6 +125,12 @@ async def create_visit_request(
     if requested_end <= requested_start:
         raise ValueError("requested_slot_end must be after requested_slot_start")
 
+    # Concierge Phase 2: generate the 4-digit at-door verification code
+    # right here so it's stable from booking through visit-day. Zero-pad
+    # to 4 chars so codes like "0042" stay 4 digits in display.
+    import secrets
+    arrival_code = f"{secrets.randbelow(10000):04d}"
+
     visit = FEVisit(
         seller_id=seller.id,
         requested_slot_start=requested_start,
@@ -133,6 +139,7 @@ async def create_visit_request(
         category_hint=category_hint,
         item_notes=item_notes,
         notes_tags=notes_tags or [],
+        arrival_verification_code=arrival_code,
         status="requested",
     )
     db.add(visit)
