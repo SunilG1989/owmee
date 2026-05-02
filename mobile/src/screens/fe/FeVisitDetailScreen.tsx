@@ -69,6 +69,28 @@ export default function FeVisitDetailScreen({ route, navigation }: RootScreen<'F
     }
   };
 
+  // Concierge Phase 2 trust theater: N4 + N5 trigger buttons. These do
+  // not change visit status; they fire seller-side notifications so the
+  // seller sees progress before the door knock. Errors are non-fatal.
+  const onStartRoute = async () => {
+    if (!visit) return;
+    try {
+      await FE.startRoute(visit.id);
+      Alert.alert('Notification sent', 'Seller has been told you\'re on the way.');
+    } catch (e: any) {
+      Alert.alert('Could not notify', e?.response?.data?.detail?.message || 'Try again.');
+    }
+  };
+  const onArrivingSoon = async () => {
+    if (!visit) return;
+    try {
+      await FE.arrivingSoon(visit.id);
+      Alert.alert('Notification sent', 'Seller has been told you\'re 30 mins away.');
+    } catch (e: any) {
+      Alert.alert('Could not notify', e?.response?.data?.detail?.message || 'Try again.');
+    }
+  };
+
   const onMaps = () => {
     if (!visit) return;
     const a = visit.address || {};
@@ -154,10 +176,45 @@ export default function FeVisitDetailScreen({ route, navigation }: RootScreen<'F
           </TouchableOpacity>
         </View>
 
-        {visit.item_notes ? (
+        {/* Concierge Phase 3 — pre-visit briefing block.
+            Reads notes_tags + item_notes from booking. The verification
+            code subtitle is for the FE to read out at the door. */}
+        {(visit.notes_tags && visit.notes_tags.length > 0) || visit.item_notes ? (
           <View style={st.card}>
             <Text style={st.label}>Seller notes</Text>
-            <Text style={st.value}>{visit.item_notes}</Text>
+            {visit.notes_tags && visit.notes_tags.length > 0 ? (
+              <Text style={[st.subValue, { marginBottom: S.sm }]}>
+                Tags: {visit.notes_tags.join(', ')}
+              </Text>
+            ) : null}
+            {visit.item_notes ? (
+              <Text style={st.value}>"{visit.item_notes}"</Text>
+            ) : null}
+          </View>
+        ) : null}
+
+        {visit.arrival_verification_code ? (
+          <View style={st.card}>
+            <Text style={st.label}>Verification code</Text>
+            <Text style={[st.value, { fontSize: 28, letterSpacing: 6, fontWeight: '700' }]}>
+              {visit.arrival_verification_code}
+            </Text>
+            <Text style={st.subValue}>
+              Tell the seller this code when they ask — it proves you're really us.
+            </Text>
+          </View>
+        ) : null}
+
+        {/* Concierge Phase 2 — trust theater triggers (scheduled visits only) */}
+        {canStart ? (
+          <View style={st.card}>
+            <Text style={st.label}>Notify seller</Text>
+            <TouchableOpacity style={st.secondaryBtn} onPress={onStartRoute}>
+              <Text style={st.secondaryBtnText}>📍 I'm starting my route</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[st.secondaryBtn, { marginTop: S.sm }]} onPress={onArrivingSoon}>
+              <Text style={st.secondaryBtnText}>⏱ I'm 30 mins away</Text>
+            </TouchableOpacity>
           </View>
         ) : null}
       </ScrollView>

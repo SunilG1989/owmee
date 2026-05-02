@@ -32,6 +32,13 @@ export type RootStackParams = {
   FeVisitDetail: { visitId: string };
   FeCapture: { visitId: string };
   FeVisitHistory: undefined;
+  // Concierge Phase 3 — specialist excellence (FE app)
+  SellerApproval: {
+    visitId: string;
+    summary: { title: string; condition: string; priceInr: number };
+    payload: any;
+  };
+  VisitContinue: { visitId: string };
 
   // Sprint 8 / Phase 1: Location picker re-entry (modal)
   LocationPicker: undefined;

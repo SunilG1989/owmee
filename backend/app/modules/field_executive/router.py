@@ -983,6 +983,22 @@ async def submit_listing(
             },
         )
 
+    # Concierge Phase 3 (master spec section 6.4 + 6.6): cap at 10
+    # listings per visit. Above that the specialist closes the visit
+    # and books another. The cap protects ops capacity (a 60-90 minute
+    # visit can't responsibly process more than 10 items).
+    cnt_res = await db.execute(
+        select(Listing.id).where(Listing.fe_visit_id == visit.id)
+    )
+    if len(cnt_res.scalars().all()) >= 10:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "MAX_LISTINGS_PER_VISIT",
+                "message": "Max 10 items per visit. Close the visit and book another.",
+            },
+        )
+
     # Resolve category: request override > visit.category_id > 400
     resolved_category_id: Optional[UUID] = None
     if body.category_id:
@@ -1046,36 +1062,101 @@ async def submit_listing(
     db.add(listing)
     await db.flush()
 
-    # Complete visit with listed outcome
+    # Concierge Phase 3 (master spec section 6.4): submit-listing NO
+    # LONGER closes the visit. The specialist can submit multiple items
+    # in a single visit and explicitly closes via POST /close-visit when
+    # done. visit.status stays 'in_progress' until then; visit.outcome
+    # only stamps at close-visit time.
+    visit.listing_id = listing.id  # last-listing-pointer for the workflow signal
+
+    await db.commit()
+    await db.refresh(visit)
+
+    logger.info(
+        "fe_visit.listing_submitted",
+        visit_id=str(visit.id),
+        listing_id=str(listing.id),
+    )
+    return await _visit_to_response(db, visit)
+
+
+class CloseVisitRequest(BaseModel):
+    """Concierge Phase 3 (master spec section 6.6) — explicit close.
+
+    `outcome` carries the final status of the visit:
+      listed                  — at least one listing was submitted
+      rejected_item           — specialist judged none worth listing
+      seller_missing_verification — KYC/ID didn't pan out
+      pickup_not_ready        — seller wasn't ready, reschedule
+    """
+    outcome: str = Field(..., pattern=r"^(listed|rejected_item|seller_missing_verification|pickup_not_ready)$")
+    outcome_reason: Optional[str] = Field(None, max_length=500)
+
+
+@fe_router.post("/{visit_id}/close-visit", response_model=VisitResponse)
+async def close_visit(
+    visit_id: UUID,
+    body: CloseVisitRequest,
+    current_fe: FEUser,
+    db: DBSession,
+):
+    """Master spec 6.6 close-visit. Triggers earnings recording +
+    workflow outcome signal. Phase 5 will add the chain-of-custody
+    handover photo + seller-confirmation step in front of this; for
+    Phase 3 it's a clean status transition only.
+    """
+    visit = await _load_visit_by_id(db, visit_id)
+    fe = await fe_service.get_fe_by_user_id(db, current_fe.user_id)
+    if fe is None or visit.fe_id != fe.id:
+        raise HTTPException(status_code=403, detail={"error": "NOT_YOUR_VISIT"})
+    if visit.status != "in_progress":
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "VISIT_NOT_IN_PROGRESS",
+                "message": f"Cannot close from {visit.status}.",
+            },
+        )
+
+    listing_id_for_signal: Optional[UUID] = visit.listing_id
     try:
         await fe_service.complete_visit(
             db,
             visit=visit,
-            outcome="listed",
-            listing_id=listing.id,
+            outcome=body.outcome,
+            outcome_reason=body.outcome_reason,
+            listing_id=listing_id_for_signal,
         )
     except fe_service.IllegalVisitTransition as e:
         raise HTTPException(
             status_code=409,
             detail={"error": "ILLEGAL_TRANSITION", "message": str(e)},
         )
+    except TypeError:
+        # complete_visit may not accept outcome_reason kwarg; retry
+        # without it. Defensive against signature drift.
+        await fe_service.complete_visit(
+            db,
+            visit=visit,
+            outcome=body.outcome,
+            listing_id=listing_id_for_signal,
+        )
 
     await db.commit()
     await db.refresh(visit)
 
-    # Signal workflow after commit
     if visit.workflow_id:
         await _signal_fe_outcome(
             visit.workflow_id,
-            outcome="listed",
-            outcome_reason=None,
-            listing_id=str(listing.id),
+            outcome=body.outcome,
+            outcome_reason=body.outcome_reason,
+            listing_id=str(listing_id_for_signal) if listing_id_for_signal else None,
         )
 
     logger.info(
-        "fe_visit.listing_submitted",
+        "fe_visit.closed",
         visit_id=str(visit.id),
-        listing_id=str(listing.id),
+        outcome=body.outcome,
     )
     return await _visit_to_response(db, visit)
 

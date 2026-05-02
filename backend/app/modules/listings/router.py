@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 """
 Listings router — Epic 3 + Epic 5 + UI v3 fixes + Sprint 4 Pass 3
 
@@ -741,6 +742,129 @@ async def new_since_last_visit(
 
 
 
+# ── Concierge Phase 3: expert pricing panel ─────────────────────────────────
+#
+# REGISTERED BEFORE /{listing_id} so FastAPI's path matcher doesn't
+# shadow this route. Adding new static endpoints under /v1/listings/
+# requires the same precaution.
+
+from sqlalchemy import text  # noqa: E402
+from app.core.fe_dependencies import FEUser  # noqa: E402
+
+
+class PriceSuggestionResponse(BaseModel):
+    """Master spec section 6.6.
+
+    Progressive filter widening: try exact (category + brand + model +
+    condition) first, then drop condition, then drop model. If even the
+    loosest match returns < 5 rows, all price fields come back null and
+    the FE app shows "No similar items in last 60 days. Use your
+    judgment." instead of the panel.
+    """
+    match_count: int
+    match_quality: str  # exact | category_brand_model | category_brand_only | no_match
+    p25: Optional[int] = None
+    median: Optional[int] = None
+    p75: Optional[int] = None
+    avg_days_to_sell: Optional[float] = None
+    suggested: Optional[int] = None
+    faster_sell_price: Optional[int] = None
+    premium_price: Optional[int] = None
+
+
+_PRICE_QUERY = """
+    WITH matches AS (
+        SELECT
+            t.gross_amount - COALESCE(t.delivery_fee, 0) AS sale_price,
+            t.completed_at,
+            l.published_at
+        FROM transactions t
+        JOIN listings l ON l.id = t.listing_id
+        WHERE l.category_id = :category_id
+          AND l.brand ILIKE :brand_pattern
+          {extra}
+          AND t.status = 'completed'
+          AND t.completed_at IS NOT NULL
+          AND t.completed_at > NOW() - INTERVAL '60 days'
+        LIMIT 100
+    )
+    SELECT
+        count(*) AS match_count,
+        percentile_cont(0.25) WITHIN GROUP (ORDER BY sale_price) AS p25,
+        percentile_cont(0.50) WITHIN GROUP (ORDER BY sale_price) AS median,
+        percentile_cont(0.75) WITHIN GROUP (ORDER BY sale_price) AS p75,
+        AVG(EXTRACT(EPOCH FROM (completed_at - published_at)) / 86400.0) AS avg_days
+    FROM matches
+"""
+
+
+@router.get("/price-suggestion", response_model=PriceSuggestionResponse)
+async def price_suggestion(
+    db: DBSession,
+    current_user: FEUser,
+    category_id: UUID = Query(...),
+    brand: str = Query(..., min_length=1),
+    model: Optional[str] = Query(None),
+    condition: Optional[str] = Query(None),
+):
+    """Specialist pricing panel data — master spec section 6.3.
+
+    FE-only access (specialists running the visit). Each call tries
+    increasingly-loose filters until match_count >= 5; if even the
+    loosest filter returns < 5, response carries match_count=0 and the
+    UI hides the panel.
+
+    The reported sale price is gross_amount minus delivery_fee, i.e.
+    what the seller-comparable item actually went for.
+    """
+    base_params = {
+        "category_id": str(category_id),
+        "brand_pattern": f"%{brand}%",
+    }
+
+    filters: list[tuple[str, str, dict]] = []
+    if model and condition:
+        filters.append((
+            "AND l.model ILIKE :model_pattern AND l.condition = :condition",
+            "exact",
+            {**base_params, "model_pattern": f"%{model}%", "condition": condition},
+        ))
+    if model:
+        filters.append((
+            "AND l.model ILIKE :model_pattern",
+            "category_brand_model",
+            {**base_params, "model_pattern": f"%{model}%"},
+        ))
+    filters.append(("", "category_brand_only", base_params))
+
+    for extra_sql, quality, params in filters:
+        sql = _PRICE_QUERY.format(extra=extra_sql)
+        res = await db.execute(text(sql), params)
+        row = res.first()
+        if row is None or row.match_count is None:
+            continue
+        if int(row.match_count) >= 5:
+            p25 = int(row.p25)
+            median = int(row.median)
+            p75 = int(row.p75)
+            return PriceSuggestionResponse(
+                match_count=int(row.match_count),
+                match_quality=quality,
+                p25=p25,
+                median=median,
+                p75=p75,
+                avg_days_to_sell=float(row.avg_days) if row.avg_days else None,
+                suggested=median,
+                faster_sell_price=int(round(p25 + (median - p25) * 0.5)),
+                premium_price=int(round(median + (p75 - median) * 0.5)),
+            )
+
+    return PriceSuggestionResponse(
+        match_count=0,
+        match_quality="no_match",
+    )
+
+
 @router.get("/{listing_id}")
 async def get_listing(listing_id: UUID, db: DBSession):
     result = await db.execute(select(Listing).where(Listing.id == listing_id))
@@ -776,3 +900,8 @@ async def delete_listing(listing_id: UUID, current_user: BasicUser, db: DBSessio
         raise HTTPException(status_code=400, detail={"error": "CANNOT_DELETE"})
     listing.status = "removed"
     await db.commit()
+
+
+# Concierge Phase 3 endpoints have been moved above /{listing_id} so
+# FastAPI's path matcher doesn't shadow them. See the price_suggestion
+# route declared earlier in this file.

@@ -549,8 +549,33 @@ export const FE = {
   assignedVisits: () => api.get('/v1/fe/visits/assigned'),
   getVisit: (id: string) => api.get(`/v1/fe/visits/${id}`),
   startVisit: (id: string) => api.post(`/v1/fe/visits/${id}/start`),
+  // Concierge Phase 2 trust theater — N4 + N5 trigger endpoints.
+  startRoute: (id: string) => api.post(`/v1/fe/visits/${id}/start-route`),
+  arrivingSoon: (id: string) => api.post(`/v1/fe/visits/${id}/arriving-soon`),
   enforceAadhaar: (id: string) => api.post(`/v1/fe/visits/${id}/enforce-aadhaar`),
   submitListing: (id: string, payload: any) => api.post(`/v1/fe/visits/${id}/submit-listing`, payload),
+  // Concierge Phase 3 — explicit close-visit (decoupled from submit-listing).
+  closeVisit: (id: string, payload: {
+    outcome: 'listed' | 'rejected_item' | 'seller_missing_verification' | 'pickup_not_ready';
+    outcome_reason?: string;
+  }) => api.post(`/v1/fe/visits/${id}/close-visit`, payload),
+  // Concierge Phase 3 — expert pricing panel.
+  priceSuggestion: (params: {
+    category_id: string;
+    brand: string;
+    model?: string;
+    condition?: string;
+  }) => api.get<{
+    match_count: number;
+    match_quality: 'exact' | 'category_brand_model' | 'category_brand_only' | 'no_match';
+    p25: number | null;
+    median: number | null;
+    p75: number | null;
+    avg_days_to_sell: number | null;
+    suggested: number | null;
+    faster_sell_price: number | null;
+    premium_price: number | null;
+  }>('/v1/listings/price-suggestion', { params }),
   submitOutcome: (
     id: string,
     outcome: 'listed' | 'rejected_item' | 'seller_missing_verification' | 'pickup_not_ready' | 'postponed',

@@ -59,6 +59,9 @@ import FeCaptureScreen from '../screens/fe/FeCaptureScreen';
 // Sprint 6c: post-purchase pickups + deliveries
 import FeOpsScreen from '../screens/fe/FeOpsScreen';
 import FeVisitHistoryScreen from '../screens/fe/FeVisitHistoryScreen';
+// Concierge Phase 3 — specialist excellence (FE app)
+import SellerApprovalScreen from '../screens/fe/SellerApprovalScreen';
+import VisitContinueScreen from '../screens/fe/VisitContinueScreen';
 import RequestFeVisitScreen from '../screens/listings/RequestFeVisitScreen';
 import CommunityProofScreen from '../screens/community/CommunityProofScreen';
 // Sprint 4 / Pass 3: real screens replacing Pass 2 stubs
@@ -216,6 +219,9 @@ function FeRootStack() {
         <FeStack.Screen name="FeVisitDetail" component={FeVisitDetailScreen} options={{ animation: 'slide_from_right' }} />
         <FeStack.Screen name="FeCapture" component={FeCaptureScreen} options={{ animation: 'slide_from_right' }} />
         <FeStack.Screen name="FeVisitHistory" component={FeVisitHistoryScreen} options={{ animation: 'slide_from_right' }} />
+        {/* Concierge Phase 3 — specialist excellence */}
+        <FeStack.Screen name="SellerApproval" component={SellerApprovalScreen} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
+        <FeStack.Screen name="VisitContinue" component={VisitContinueScreen} options={{ animation: 'slide_from_right' }} />
       </FeStack.Navigator>
     </NavigationContainer>
   );

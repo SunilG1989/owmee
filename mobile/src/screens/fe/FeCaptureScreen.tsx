@@ -34,6 +34,8 @@ import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { FE, Listings, FEVisits } from '../../services/api';
 import { C, S, R, T, Shadow } from '../../utils/tokens';
 import type { RootScreen } from '../../navigation/types';
+// Concierge Phase 3
+import ExpertPricingPanel from '../../components/concierge/ExpertPricingPanel';
 
 type OutcomeChoice = 'listed' | 'rejected_item' | 'seller_missing_verification' | 'pickup_not_ready';
 
@@ -335,6 +337,35 @@ export default function FeCaptureScreen({ route, navigation }: RootScreen<'FeCap
     return true;
   }, [title, brand, model, priceRupees, photosCount, selectedCategoryId]);
 
+  const buildPayload = () => {
+    const payload: any = {
+      title: title.trim(),
+      category_id: selectedCategoryId,
+      brand: brand.trim() || undefined,
+      model: model.trim() || undefined,
+      storage: storage.trim() || undefined,
+      ram: ram.trim() || undefined,
+      color: color.trim() || undefined,
+      purchase_year: purchaseYear ? parseInt(purchaseYear, 10) : undefined,
+      screen_condition: screenCondition,
+      body_condition: bodyCondition,
+      price: parseFloat(priceRupees),
+      accessories: accessories.trim() || undefined,
+      warranty_info: warrantyInfo.trim() || undefined,
+      battery_health: batteryHealth ? parseInt(batteryHealth, 10) : undefined,
+      serial_number: serialNumber.trim() || undefined,
+      condition: screenCondition,
+      image_urls: photos.filter(Boolean).map((p) => p.r2Key),
+      city: cityOfVisit || 'Bengaluru',
+      description: notes.trim() || undefined,
+      is_kids_item: isKidsCategory,
+    };
+    if (isKidsCategory) {
+      payload.kids_safety_checklist = kidsChecklist;
+    }
+    return payload;
+  };
+
   const submitListing = async () => {
     if (!canSubmit) {
       Alert.alert(
@@ -343,48 +374,20 @@ export default function FeCaptureScreen({ route, navigation }: RootScreen<'FeCap
       );
       return;
     }
-    setSubmitting(true);
-    try {
-      const payload: any = {
+    // Concierge Phase 3 (master spec section 6.5): "Show seller" gate.
+    // Specialist hands the phone to the seller for in-person sign-off.
+    // The approval screen owns the API call so we don't need a callback
+    // round-trip. On approve → submit + navigate to VisitContinue.
+    // On edit → goBack here.
+    navigation.navigate('SellerApproval', {
+      visitId,
+      summary: {
         title: title.trim(),
-        category_id: selectedCategoryId,
-        brand: brand.trim() || undefined,
-        model: model.trim() || undefined,
-        storage: storage.trim() || undefined,
-        ram: ram.trim() || undefined,
-        color: color.trim() || undefined,
-        purchase_year: purchaseYear ? parseInt(purchaseYear, 10) : undefined,
-        screen_condition: screenCondition,
-        body_condition: bodyCondition,
-        price: parseFloat(priceRupees),
-        accessories: accessories.trim() || undefined,
-        warranty_info: warrantyInfo.trim() || undefined,
-        battery_health: batteryHealth ? parseInt(batteryHealth, 10) : undefined,
-        serial_number: serialNumber.trim() || undefined,
-        condition: screenCondition,   // listing.condition mirrors screen for now
-        image_urls: photos.filter(Boolean).map((p) => p.r2Key),
-        city: cityOfVisit || 'Bengaluru',
-        description: notes.trim() || undefined,
-        is_kids_item: isKidsCategory,
-      };
-      if (isKidsCategory) {
-        payload.kids_safety_checklist = kidsChecklist;
-      }
-
-      await FE.submitListing(visitId, payload);
-      Alert.alert(
-        'Listing submitted',
-        'The listing is queued for ops review. You’ll see it appear in the seller’s account shortly.',
-        [{ text: 'Done', onPress: () => navigation.navigate('FeHome') }],
-      );
-    } catch (e: any) {
-      Alert.alert(
-        'Submit failed',
-        e?.response?.data?.detail?.message || 'Please try again.',
-      );
-    } finally {
-      setSubmitting(false);
-    }
+        condition: screenCondition,
+        priceInr: parseFloat(priceRupees),
+      },
+      payload: buildPayload(),
+    });
   };
 
   const submitNonListedOutcome = async (outcome: OutcomeChoice, label: string) => {
@@ -513,6 +516,17 @@ export default function FeCaptureScreen({ route, navigation }: RootScreen<'FeCap
             <LabeledInput label="Accessories" value={accessories} onChangeText={setAccessories} placeholder="Box, charger, warranty card" />
             <LabeledInput label="Warranty" value={warrantyInfo} onChangeText={setWarrantyInfo} placeholder="4 months left" />
             <LabeledInput label="Serial / IMEI" value={serialNumber} onChangeText={setSerialNumber} placeholder="Optional" />
+            {/* Concierge Phase 3 — expert pricing panel.
+                Fires when category + brand are filled; updates as model
+                + condition change. Tap a chip to auto-fill the price. */}
+            <ExpertPricingPanel
+              categoryId={selectedCategoryId}
+              brand={brand.trim() || null}
+              model={model.trim() || null}
+              condition={screenCondition}
+              itemDisplayName={[brand, model].filter(Boolean).join(' ').trim() || undefined}
+              onPickPrice={(p) => setPriceRupees(String(p))}
+            />
             <LabeledInput label="Asking price (₹)" value={priceRupees} onChangeText={setPriceRupees} placeholder="35000" keyboardType="number-pad" />
           </View>
 
