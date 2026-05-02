@@ -17,7 +17,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { FEVisits } from '../../services/api';
-import { BackButton } from '../../components/ui';
+import { BackButton, Button } from '../../components/ui';
 import { C, S, R, T, Shadow } from '../../utils/tokens';
 import type { RootScreen } from '../../navigation/types';
 
@@ -108,9 +108,7 @@ export default function MyFeVisitsScreen({ navigation }: RootScreen<'MyFeVisits'
       ) : error ? (
         <View style={st.centerFill}>
           <Text style={st.err}>{error}</Text>
-          <TouchableOpacity onPress={load} style={st.retryBtn}>
-            <Text style={st.retryBtnText}>Try again</Text>
-          </TouchableOpacity>
+          <Button label="Try again" variant="primary" onPress={load} style={st.retryBtn} />
         </View>
       ) : visits.length === 0 ? (
         <View style={st.centerFill}>
@@ -124,7 +122,7 @@ export default function MyFeVisitsScreen({ navigation }: RootScreen<'MyFeVisits'
         <FlatList
           data={visits}
           keyExtractor={(v) => v.id}
-          contentContainerStyle={{ padding: S.lg, paddingBottom: S.xxxl }}
+          contentContainerStyle={st.listPadding}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.petrol} />
           }
@@ -168,32 +166,29 @@ export default function MyFeVisitsScreen({ navigation }: RootScreen<'MyFeVisits'
 const st = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bone },
   header: { flexDirection: 'row', alignItems: 'center', padding: S.lg, gap: S.md },
-  backBtn: {
-    width: 40, height: 40, borderRadius: R.md, backgroundColor: C.surface,
-    alignItems: 'center', justifyContent: 'center',
-    ...Shadow.glow,
-  },
-  backGlyph: { fontSize: 28, lineHeight: 30, color: C.text, fontWeight: '300' },
-  h1: { fontSize: T.h2, fontWeight: '700', color: C.text },
+  h1: { fontSize: T.h2, fontWeight: T.weight.bold, color: C.text },
   subtitle: { fontSize: T.body, color: C.text3, marginTop: 2 },
+
+  listPadding: { padding: S.lg, paddingBottom: S.xxxl },
+
   card: {
-    backgroundColor: C.surface, borderRadius: R.lg, padding: S.lg, marginBottom: S.md,
+    backgroundColor: C.surface, borderRadius: R.lg,
+    padding: S.lg, marginBottom: S.md,
     ...Shadow.glow,
   },
   cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  cardTitle: { fontSize: T.h3, fontWeight: '600', color: C.text, flex: 1, marginRight: S.sm },
-  cardSlot: { fontSize: T.body, color: C.petrolText, fontWeight: '500', marginTop: S.sm },
+  cardTitle: { fontSize: T.h3, fontWeight: T.weight.semi, color: C.text, flex: 1, marginRight: S.sm },
+  cardSlot: { fontSize: T.body, color: C.petrolText, fontWeight: T.weight.medium, marginTop: S.sm },
   cardFe: { fontSize: T.body, color: C.text2, marginTop: S.xs },
   cardNotes: { fontSize: T.small, color: C.text3, marginTop: S.sm, fontStyle: 'italic' },
+
   pill: { paddingHorizontal: S.sm, paddingVertical: 2, borderRadius: R.pill },
-  pillText: { fontSize: T.small, fontWeight: '600' },
+  pillText: { fontSize: T.small, fontWeight: T.weight.semi },
+
   centerFill: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: S.xl },
   err: { fontSize: T.body, color: C.text2, textAlign: 'center' },
-  retryBtn: {
-    marginTop: S.md, paddingHorizontal: S.lg, paddingVertical: S.sm,
-    backgroundColor: C.petrol, borderRadius: R.md,
-  },
-  retryBtnText: { color: C.white, fontWeight: '600' },
-  empty: { fontSize: T.h3, color: C.text, fontWeight: '600' },
+  retryBtn: { marginTop: S.md },
+
+  empty: { fontSize: T.h3, color: C.text, fontWeight: T.weight.semi },
   emptyHint: { fontSize: T.body, color: C.text3, marginTop: S.sm, textAlign: 'center' },
 });

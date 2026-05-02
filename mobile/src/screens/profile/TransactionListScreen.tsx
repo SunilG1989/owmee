@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { BackButton } from '../../components/ui';
+import { BackButton, Chip } from '../../components/ui';
 import { useFocusEffect } from '@react-navigation/native';
 import { C, T, S, R, Shadow, formatPrice, timeAgo } from '../../utils/tokens';
 import { Transactions, type Transaction } from '../../services/api';
@@ -33,7 +33,9 @@ export default function TransactionListScreen({ navigation }: any) {
     const dotColor = STATUS_COLORS[item.status] || C.text4;
     return (
       <TouchableOpacity style={s.card} onPress={() => navigation.navigate('TransactionDetail', { transactionId: item.id })} activeOpacity={0.85}>
-        <View style={s.iconWrap}><Text style={{ fontSize: 24 }}>🤝</Text></View>
+        <View style={s.iconWrap}>
+          <Text style={s.iconEmoji}>🤝</Text>
+        </View>
         <View style={s.info}>
           <Text style={s.title} numberOfLines={1}>{item.listing_title || 'Transaction'}</Text>
           <Text style={s.price}>{formatPrice(item.amount)}</Text>
@@ -49,23 +51,34 @@ export default function TransactionListScreen({ navigation }: any) {
     );
   };
 
-  if (loading) return <SafeAreaView style={s.safe}><ActivityIndicator color={C.petrol} style={{ marginTop: 60 }} /></SafeAreaView>;
+  if (loading) {
+    return (
+      <SafeAreaView style={s.safe}>
+        <ActivityIndicator color={C.petrol} style={s.loading} />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
         <BackButton onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>Transactions</Text>
-        <View style={{ width: 24 }} />
+        <View style={s.headerSpacer} />
       </View>
-      <View style={{flexDirection:'row',marginBottom:12,gap:8}}>
-          {(['buying','selling','completed'] as const).map(tab => (
-            <TouchableOpacity key={tab} style={{flex:1,paddingVertical:10,borderRadius:R.sm,backgroundColor:activeTab===tab?C.petrol:C.surface,borderWidth:activeTab===tab?0:0.5,borderColor:C.border,alignItems:'center'}} onPress={()=>setActiveTab(tab)}>
-              <Text style={{fontSize:12,fontWeight:'600',color:activeTab===tab?C.white:C.text3,textTransform:'capitalize'}}>{tab}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-        <FlatList
+      <View style={s.tabRow}>
+        {(['buying', 'selling', 'completed'] as const).map(tab => (
+          <Chip
+            key={tab}
+            label={tab.charAt(0).toUpperCase() + tab.slice(1)}
+            selected={activeTab === tab}
+            variant="filter"
+            onPress={() => setActiveTab(tab)}
+            style={s.tabChip}
+          />
+        ))}
+      </View>
+      <FlatList
         data={txns.filter(t => activeTab==='buying' ? t.buyer_id===userId : activeTab==='selling' ? t.seller_id===userId : t.status==='completed')}
         keyExtractor={i => i.id}
         renderItem={renderItem}
@@ -73,7 +86,7 @@ export default function TransactionListScreen({ navigation }: any) {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={C.petrol} />}
         ListEmptyComponent={
           <View style={s.empty}>
-            <Text style={{ fontSize: 48, marginBottom: 16 }}>🤝</Text>
+            <Text style={s.emptyEmoji}>🤝</Text>
             <Text style={s.emptyTitle}>No transactions yet</Text>
             <Text style={s.emptySub}>Your deals will appear here</Text>
           </View>
@@ -86,21 +99,47 @@ export default function TransactionListScreen({ navigation }: any) {
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bone },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: C.surface, borderBottomWidth: 0.5, borderBottomColor: C.border },
-  headerTitle: { fontSize: 16, fontWeight: '600', color: C.text },
-  list: { padding: 16 },
-  card: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.surface, borderRadius: R.lg, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: C.border },
-  iconWrap: { width: 48, height: 48, borderRadius: 24, backgroundColor: C.petrolLight, alignItems: 'center', justifyContent: 'center' },
-  info: { flex: 1, marginLeft: 12 },
-  title: { fontSize: 14, fontWeight: '600', color: C.text, marginBottom: 2 },
-  price: { fontSize: 16, fontWeight: '700', color: C.petrol, marginBottom: 4 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  loading: { marginTop: S.xxxl + S.xxxl },
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: S.lg, paddingVertical: S.sm + 2,
+    backgroundColor: C.surface,
+    borderBottomWidth: 0.5, borderBottomColor: C.border,
+  },
+  headerTitle: { fontSize: T.size.lg - 1, fontWeight: T.weight.semi, color: C.text },
+  headerSpacer: { width: 24 },
+
+  tabRow: {
+    flexDirection: 'row',
+    paddingHorizontal: S.lg, paddingTop: S.md, paddingBottom: S.sm,
+    gap: S.sm,
+  },
+  tabChip: { flex: 1 },
+
+  list: { padding: S.lg },
+  card: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: C.surface, borderRadius: R.lg,
+    padding: S.md, marginBottom: S.sm + 2,
+    borderWidth: 1, borderColor: C.border,
+  },
+  iconWrap: {
+    width: 48, height: 48, borderRadius: 24,
+    backgroundColor: C.petrolLight,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  iconEmoji: { fontSize: T.size.xxl },
+  info: { flex: 1, marginLeft: S.md },
+  title: { fontSize: T.size.sm + 1, fontWeight: T.weight.semi, color: C.text, marginBottom: 2 },
+  price: { fontSize: T.size.lg - 1, fontWeight: T.weight.bold, color: C.petrol, marginBottom: S.xs },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: S.xs },
   dot: { width: 6, height: 6, borderRadius: 3 },
-  status: { fontSize: 11, color: C.text3, textTransform: 'capitalize' },
-  role: { fontSize: 11, color: C.text3 },
-  time: { fontSize: 10, color: C.text4 },
-  arrow: { fontSize: 20, color: C.text4 },
-  empty: { alignItems: 'center', paddingTop: 80 },
-  emptyTitle: { fontSize: 18, fontWeight: '600', color: C.text, marginBottom: 4 },
-  emptySub: { fontSize: 13, color: C.text3 },
+  status: { fontSize: T.size.sm, color: C.text3, textTransform: 'capitalize' },
+  role: { fontSize: T.size.sm, color: C.text3 },
+  time: { fontSize: T.size.xs, color: C.text4 },
+  arrow: { fontSize: T.size.xl, color: C.text4 },
+  empty: { alignItems: 'center', paddingTop: S.xxxl + S.xxl },
+  emptyEmoji: { fontSize: T.size.display + 18, marginBottom: S.lg },
+  emptyTitle: { fontSize: T.size.lg + 1, fontWeight: T.weight.semi, color: C.text, marginBottom: S.xs },
+  emptySub: { fontSize: T.size.base, color: C.text3 },
 });
