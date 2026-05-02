@@ -31,7 +31,7 @@ import { useFocusEffect } from '@react-navigation/native';
 
 import { Offers, Transactions, type Offer, type Transaction } from '../services/api';
 import { useAuthStore } from '../store/authStore';
-import { BackButton, Button, Card, EmptyState, ErrorState, StatusBadge } from '../components/ui';
+import { BackButton, Button, Card, Chip, EmptyState, ErrorState, StatusBadge } from '../components/ui';
 import { confirmDestructive } from '../utils/confirm';
 import { parseApiError } from '../utils/errors';
 import { C, I, MIN_TAP, R, S, T, formatPrice, timeAgo } from '../utils/tokens';
@@ -301,17 +301,14 @@ export default function OffersScreen({ navigation }: any) {
 
       <View style={s.tabs}>
         {TABS.map(t => (
-          <TouchableOpacity
+          <Chip
             key={t.key}
-            style={[s.tab, tab === t.key && s.tabOn]}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: tab === t.key }}
-            accessibilityLabel={`${t.label} tab`}
+            label={t.label}
+            selected={tab === t.key}
+            variant="filter"
             onPress={() => setTab(t.key)}
-            activeOpacity={0.85}
-          >
-            <Text style={[s.tabText, tab === t.key && s.tabTextOn]}>{t.label}</Text>
-          </TouchableOpacity>
+            style={s.tab}
+          />
         ))}
       </View>
 

@@ -21,8 +21,6 @@ src/components/concierge/ExpertPricingPanel.tsx
 src/components/concierge/SpecialistProfileCard.tsx
 src/components/listing/ListingCard.tsx
 src/screens/HomeScreen.tsx
-src/screens/KycRequiredForActionScreen.tsx
-src/screens/OffersScreen.tsx
 src/screens/SearchScreen.tsx
 src/screens/TransactionDetailScreen.tsx
 src/screens/auth/LocationPickerScreen.tsx

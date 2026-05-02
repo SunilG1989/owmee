@@ -5,19 +5,14 @@
  * Sprint 6 model: KYC is badge-only for listing/offer/buying. It's a HARD
  * gate only at the friction moments where platform needs provable identity.
  *
- * Not wired to any action yet — refund/return/dispute features arrive later.
- * This screen is ready for those callsites when they land.
- *
  * Route params:
  *   - actionLabel: string (e.g. "refund", "return", "dispute")
  *   - returnTo?: string (where to navigate after KYC completes)
  */
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView } from 'react-native';
-import { C, T, S, R } from '../utils/tokens';
-
-// Fallback spacing if tokens are missing. Safe at runtime.
-const SP_XXL = (S as any).xxl ?? 32;
+import { View, Text, StyleSheet, SafeAreaView } from 'react-native';
+import { C, T, S } from '../utils/tokens';
+import { Button } from '../components/ui';
 
 type Props = {
   navigation: any;
@@ -27,14 +22,6 @@ type Props = {
 export default function KycRequiredForActionScreen({ navigation, route }: Props) {
   const actionLabel = route.params?.actionLabel || 'this action';
   const returnTo = route.params?.returnTo;
-
-  const onVerify = () => {
-    navigation.replace('KycFlow', { returnTo });
-  };
-
-  const onCancel = () => {
-    navigation.goBack();
-  };
 
   return (
     <SafeAreaView style={s.safe}>
@@ -52,13 +39,20 @@ export default function KycRequiredForActionScreen({ navigation, route }: Props)
           Aadhaar OTP + PAN. You'll also get the "Verified by Owmee" badge.
         </Text>
 
-        <TouchableOpacity style={s.primary} onPress={onVerify} activeOpacity={0.85}>
-          <Text style={s.primaryText}>Start verification</Text>
-        </TouchableOpacity>
+        <Button
+          label="Start verification"
+          variant="primary"
+          size="lg"
+          onPress={() => navigation.replace('KycFlow', { returnTo })}
+          style={s.primary}
+        />
 
-        <TouchableOpacity style={s.secondary} onPress={onCancel} activeOpacity={0.7}>
-          <Text style={s.secondaryText}>Not now</Text>
-        </TouchableOpacity>
+        <Button
+          label="Not now"
+          variant="ghost"
+          size="sm"
+          onPress={() => navigation.goBack()}
+        />
       </View>
     </SafeAreaView>
   );
@@ -72,9 +66,9 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: S.xl,
   },
-  icon: { fontSize: 56, marginBottom: S.lg },
+  icon: { fontSize: T.size.display + 26, marginBottom: S.lg },     // 56
   title: {
-    fontSize: (T.size as any).xl ?? 22,
+    fontSize: T.size.xl,
     fontWeight: T.weight.heavy,
     color: C.ink,
     marginBottom: S.md,
@@ -91,31 +85,9 @@ const s = StyleSheet.create({
     fontSize: T.size.sm,
     color: C.text3,
     textAlign: 'center',
-    marginBottom: SP_XXL,
+    marginBottom: S.xxl,
     lineHeight: 20,
     paddingHorizontal: S.md,
   },
-  primary: {
-    backgroundColor: C.petrol,
-    paddingVertical: 14,
-    paddingHorizontal: SP_XXL,
-    borderRadius: R.md,
-    minWidth: 220,
-    alignItems: 'center',
-    marginBottom: S.md,
-  },
-  primaryText: {
-    fontSize: T.size.base,
-    fontWeight: T.weight.bold,
-    color: C.white,
-  },
-  secondary: {
-    paddingVertical: 12,
-    paddingHorizontal: S.xl,
-  },
-  secondaryText: {
-    fontSize: T.size.sm,
-    color: C.text3,
-    fontWeight: T.weight.medium,
-  },
+  primary: { minWidth: 220, marginBottom: S.md },
 });
