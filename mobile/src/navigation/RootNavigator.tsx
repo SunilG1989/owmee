@@ -92,19 +92,50 @@ const FeStack = createNativeStackNavigator<RootStackParams>();
 const AuthStack = createNativeStackNavigator<AuthStackParams>();
 const Tab = createBottomTabNavigator<TabParams>();
 
-function TabIcon({ label, icon, active }: { label: string; icon: string; active: boolean }) {
-  if (label === 'Sell') {
-    return (
-      <View style={st.fab}>
-        <Text style={st.fabIcon}>+</Text>
-      </View>
-    );
-  }
+/**
+ * Bottom tab cell (non-Sell). Material You–style: contained pill
+ * behind the icon when active, label always visible underneath.
+ * Inactive icons sit on a transparent pill so the active-state
+ * transition is purely background — no icon hop. Inactive icon
+ * color bumped from C.text4 → C.text2 (passes WCAG AA on white).
+ */
+function TabCell({
+  label, icon, active, badge,
+}: {
+  label: string;
+  icon: string;
+  active: boolean;
+  badge?: number;
+}) {
   return (
-    <View style={st.tabItem}>
-      <Text style={[st.tabIcon, active && { color: C.petrol }]}>{icon}</Text>
-      <Text style={[st.tabLabel, active && { color: C.petrol, fontWeight: T.weight.semi }]}>{label}</Text>
-      {active && <View style={st.tabDot} />}
+    <View style={st.cell}>
+      <View style={[st.iconPill, active && st.iconPillActive]}>
+        <Text style={[st.cellIcon, active && st.cellIconActive]}>{icon}</Text>
+        {badge && badge > 0 ? (
+          <View style={st.badge}>
+            <Text style={st.badgeText}>{badge > 99 ? '99+' : badge}</Text>
+          </View>
+        ) : null}
+      </View>
+      <Text style={[st.cellLabel, active && st.cellLabelActive]}>{label}</Text>
+    </View>
+  );
+}
+
+/**
+ * Sell-tab FAB — raised circular button +14px above the bar
+ * baseline, soft petrol glow shadow. Anchors the primary marketplace
+ * action ("List something") so "I came here to sell" lands in one
+ * tap. Same idiom as Instagram's centred create button + WhatsApp's
+ * call FAB.
+ */
+function SellFab({ active }: { active: boolean }) {
+  return (
+    <View style={st.fabSlot}>
+      <View style={[st.fab, active && st.fabActive]}>
+        <Text style={st.fabPlus} allowFontScaling={false}>＋</Text>
+      </View>
+      <Text style={[st.fabLabel, active && st.fabLabelActive]}>Sell</Text>
     </View>
   );
 }
@@ -167,47 +198,80 @@ function MainTabsWithAddressGate() {
   return <MainTabs />;
 }
 
+/**
+ * Five-tab layout: Home · Search · Sell (raised FAB) · Notifications · Profile.
+ * The Sell tab is the centre slot and renders as a circular FAB; the
+ * other four are contained-pill cells.
+ *
+ * Notifications gets a badge slot — wire `useUnreadNotifications()` (or
+ * any future Zustand selector) into the `notifBadge` value to surface
+ * the unread count. Currently 0 (no source yet) — UI is ready.
+ */
 function MainTabs() {
   const { isAuthenticated } = useAuthStore();
   const insets = useSafeAreaInsets();
 
-  const tabs = [
-    { key: 'Home', label: 'Home', icon: '⌂' },
-    { key: 'Search', label: 'Search', icon: '🔍' },
-    { key: 'Sell', label: 'Sell', icon: '+' },
-    { key: 'Profile', label: 'Profile', icon: '👤' },
+  // Placeholder — wire to a real unread-notifications source when ready.
+  const notifBadge = 0;
+
+  const tabs: { key: keyof TabParams; label: string; icon: string }[] = [
+    { key: 'Home',          label: 'Home',          icon: '⌂' },
+    { key: 'Search',        label: 'Search',        icon: '🔍' },
+    { key: 'Sell',          label: 'Sell',          icon: '＋' },
+    { key: 'Notifications', label: 'Inbox',         icon: '🔔' },
+    { key: 'Profile',       label: 'Profile',       icon: '👤' },
   ];
 
   return (
     <Tab.Navigator
       screenOptions={{ headerShown: false }}
       tabBar={({ state, navigation: tabNav }) => (
-        <View style={[st.tabBar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
-          {tabs.map((tab, index) => (
-            <TouchableOpacity
-              key={tab.key}
-              style={st.tabTouch}
-              onPress={() => {
-                if (tab.key === 'Sell' && !isAuthenticated) {
-                  (tabNav as any).getParent()?.navigate('AuthFlow');
-                  return;
-                }
-                tabNav.navigate(tab.key as keyof TabParams);
-              }}
-              activeOpacity={0.7}
-            >
-              <TabIcon label={tab.label} icon={tab.icon} active={state.index === index} />
-            </TouchableOpacity>
-          ))}
+        <View style={[st.tabBar, { paddingBottom: Math.max(insets.bottom, S.sm) }]}>
+          {tabs.map((tab, index) => {
+            const active = state.index === index;
+            const isSell = tab.key === 'Sell';
+            const onPress = () => {
+              if (isSell && !isAuthenticated) {
+                (tabNav as any).getParent()?.navigate('AuthFlow');
+                return;
+              }
+              if (tab.key === 'Notifications' && !isAuthenticated) {
+                (tabNav as any).getParent()?.navigate('AuthFlow');
+                return;
+              }
+              tabNav.navigate(tab.key as never);
+            };
+            return (
+              <TouchableOpacity
+                key={tab.key}
+                style={st.tabTouch}
+                onPress={onPress}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={tab.label}
+                accessibilityState={{ selected: active }}
+              >
+                {isSell ? (
+                  <SellFab active={active} />
+                ) : (
+                  <TabCell
+                    label={tab.label}
+                    icon={tab.icon}
+                    active={active}
+                    badge={tab.key === 'Notifications' ? notifBadge : undefined}
+                  />
+                )}
+              </TouchableOpacity>
+            );
+          })}
         </View>
       )}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Search" component={SearchScreen} />
-      {/* Concierge Phase 1: Sell tab → fork. SellTabRedirect retained
-          as a tabbed component would auto-mount; using SellModeForkScreen
-          directly is safe because it doesn't auto-navigate on mount. */}
+      {/* Sell tab → fork screen. Renders as raised FAB in the bar. */}
       <Tab.Screen name="Sell" component={SellModeForkScreen} />
+      <Tab.Screen name="Notifications" component={NotificationsScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );
@@ -422,18 +486,78 @@ const st = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: C.border,
     paddingTop: S.sm,
+    minHeight: 64,
   },
-  tabTouch: { flex: 1, alignItems: 'center' },
-  tabItem: { alignItems: 'center', gap: 2 },
-  tabIcon: { fontSize: T.size.lg, color: C.text4 },
-  tabLabel: { fontSize: T.size.xs, fontWeight: T.weight.medium, color: C.text4 },
-  tabDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: C.petrol, marginTop: 2 },
+  tabTouch: { flex: 1, alignItems: 'center', justifyContent: 'flex-start' },
+
+  // ── Non-Sell tab cell: Material You–style icon pill + label ─────────────
+  cell: { alignItems: 'center', justifyContent: 'center', paddingTop: 2 },
+  iconPill: {
+    width: 56,
+    height: 28,
+    borderRadius: R.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  iconPillActive: { backgroundColor: C.petrolLight },
+  cellIcon: { fontSize: T.size.lg, color: C.text2, lineHeight: 20 },
+  cellIconActive: { color: C.petrol },
+  cellLabel: {
+    fontSize: T.size.xs,
+    fontWeight: T.weight.medium,
+    color: C.text2,
+    marginTop: 2,
+  },
+  cellLabelActive: { color: C.petrol, fontWeight: T.weight.semi },
+
+  // ── Notification badge (unread count) ───────────────────────────────────
+  badge: {
+    position: 'absolute',
+    top: -2,
+    right: 8,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    backgroundColor: C.coral,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: C.surface,
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: T.weight.bold,
+    color: C.white,
+    lineHeight: 12,
+  },
+
+  // ── Sell tab: raised petrol FAB ─────────────────────────────────────────
+  fabSlot: { alignItems: 'center', justifyContent: 'flex-start' },
   fab: {
-    width: 52, height: 52, borderRadius: R.lg,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: C.petrol,
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: -4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -14,
     ...Shadow.glow,
   },
-  fabIcon: { fontSize: T.size.display, fontWeight: '200', color: C.white, marginTop: -2 },
+  fabActive: { backgroundColor: C.petrolDeep },
+  fabPlus: {
+    fontSize: T.size.xxl,
+    fontWeight: '300',
+    color: C.white,
+    lineHeight: T.size.xxl + 2,
+    marginTop: -1,
+  },
+  fabLabel: {
+    fontSize: T.size.xs,
+    fontWeight: T.weight.medium,
+    color: C.text2,
+    marginTop: 2,
+  },
+  fabLabelActive: { color: C.petrol, fontWeight: T.weight.semi },
 });
