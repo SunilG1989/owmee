@@ -1,6 +1,7 @@
 import React, { memo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet , Image} from 'react-native';
-import { C, T, S, R, Shadow, formatPrice, percentOff, condStyle, MIN_TAP } from '../../utils/tokens';
+import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import { C, T, S, R, Shadow, formatPrice, percentOff, condStyle } from '../../utils/tokens';
+import { Button, IconButton } from '../ui';
 import type { Listing } from '../../services/api';
 
 interface Props {
@@ -42,9 +43,16 @@ export const ListingCard = memo(function ListingCard({
           </View>
         )}
         {onWishlist && (
-          <TouchableOpacity style={s.heart} onPress={() => onWishlist(listing)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Text style={[s.heartIcon, isWishlisted && { color: C.red }]}>{isWishlisted ? '♥' : '♡'}</Text>
-          </TouchableOpacity>
+          <View style={s.heartWrap}>
+            <IconButton
+              icon={isWishlisted ? '♥' : '♡'}
+              onPress={() => onWishlist(listing)}
+              a11y={isWishlisted ? 'Remove from wishlist' : 'Add to wishlist'}
+              variant="outlined"
+              size="sm"
+              style={isWishlisted ? s.heartOn : undefined}
+            />
+          </View>
         )}
         <View style={[s.cond, { backgroundColor: cs.bg }]}>
           <Text style={[s.condText, { color: cs.color }]}>{cs.label}</Text>
@@ -97,7 +105,9 @@ export function SectionHeader({ title, onSeeAll }: { title: string; onSeeAll?: (
   return (
     <View style={s.secHeader}>
       <Text style={s.secTitle}>{title}</Text>
-      {onSeeAll && <TouchableOpacity onPress={onSeeAll}><Text style={s.secLink}>See all →</Text></TouchableOpacity>}
+      {onSeeAll && (
+        <Button label="See all →" variant="ghost" size="sm" onPress={onSeeAll} />
+      )}
     </View>
   );
 }
@@ -132,14 +142,14 @@ const s = StyleSheet.create({
   imgWrap: { width: '100%', backgroundColor: C.border2, position: 'relative' },
   img: { width: '100%', height: '100%' },
   placeholder: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: C.bone2 },
-  placeholderEmoji: { fontSize: 36 },
-  heart: { position: 'absolute', top: 8, right: 8, width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.92)', alignItems: 'center', justifyContent: 'center' },
-  heartIcon: { fontSize: 15, color: C.text4 },
-  cond: { position: 'absolute', bottom: 8, left: 8, paddingHorizontal: 9, paddingVertical: 3, borderRadius: R.xs },
+  placeholderEmoji: { fontSize: T.size.display + 6 },
+  heartWrap: { position: 'absolute', top: S.sm, right: S.sm },
+  heartOn: { backgroundColor: 'rgba(255,255,255,0.95)' },
+  cond: { position: 'absolute', bottom: S.sm, left: S.sm, paddingHorizontal: S.sm + 1, paddingVertical: 3, borderRadius: R.xs },
   condText: { fontSize: T.size.xs, fontWeight: T.weight.bold },
   info: { padding: S.md },
   priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 5, marginBottom: 3 },
-  price: { fontSize: 17, fontWeight: T.weight.heavy, color: C.ink, letterSpacing: -0.3 },
+  price: { fontSize: T.size.lg, fontWeight: T.weight.heavy, color: C.ink, letterSpacing: -0.3 },
   mrp: { fontSize: T.size.xs, color: C.text4, textDecorationLine: 'line-through' },
   off: { fontSize: T.size.xs, fontWeight: T.weight.heavy, color: C.petrolMid },
   title: { fontSize: T.size.base - 1, fontWeight: T.weight.medium, color: C.text2, lineHeight: 17, marginBottom: 5 },
@@ -149,15 +159,15 @@ const s = StyleSheet.create({
   ratingCount: { fontSize: T.size.xs, color: C.text3 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap' },
   verified: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: C.petrolLight, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5 },
-  verifiedIcon: { fontSize: 10, fontWeight: '900', color: C.petrol },
+  verifiedIcon: { fontSize: T.size.xs, fontWeight: '900', color: C.petrol },
   verifiedText: { fontSize: T.size.xs, fontWeight: T.weight.bold, color: C.petrolText },
   dist: { fontSize: T.size.xs, color: C.text3, fontWeight: T.weight.medium },
   negoTag: { backgroundColor: C.petrolLight, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5 },
-  negoText: { fontSize: 10, fontWeight: T.weight.bold, color: C.petrolDeep },
-  // Skeleton lines (T2-08: moved from inline objects)
-  skelLine1: { width: '60%', height: 14, backgroundColor: C.border, borderRadius: 4 },
-  skelLine2: { width: '85%', height: 10, backgroundColor: C.border2, borderRadius: 4, marginTop: 6 },
-  skelLine3: { width: '40%', height: 10, backgroundColor: C.border2, borderRadius: 4, marginTop: 6 },
+  negoText: { fontSize: T.size.xs, fontWeight: T.weight.bold, color: C.petrolDeep },
+  // Skeleton lines
+  skelLine1: { width: '60%', height: 14, backgroundColor: C.border, borderRadius: R.xs - 2 },
+  skelLine2: { width: '85%', height: 10, backgroundColor: C.border2, borderRadius: R.xs - 2, marginTop: 6 },
+  skelLine3: { width: '40%', height: 10, backgroundColor: C.border2, borderRadius: R.xs - 2, marginTop: 6 },
   secHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', paddingHorizontal: S.xl, marginTop: S.lg, marginBottom: S.sm },
   secTitle: { fontSize: T.size.lg, fontWeight: T.weight.bold, color: C.ink, letterSpacing: -0.3 },
   secLink: { fontSize: T.size.base - 1, color: C.petrolDeep, fontWeight: T.weight.semi },
