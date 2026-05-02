@@ -41,8 +41,19 @@ def _img_url(key: str | None) -> str | None:
     Switched from public_url() because (a) it works on private MinIO buckets
     without a public-read policy, (b) it sidesteps the public-vs-internal
     hostname signing mismatch we hit on Android emulator, (c) feed_router
-    started doing the same thing for consistency."""
+    started doing the same thing for consistency.
+
+    Defensive passthrough: if the stored value is already a URL (legacy
+    AI-flow listings where the draft saved a presigned URL into
+    image_urls instead of the bare key), don't re-presign — that
+    produced a double-prefixed broken URL. r2:// sentinel returns None
+    so the response stays clean.
+    """
     if not key:
+        return None
+    if key.startswith(("http://", "https://")):
+        return key
+    if key.startswith("r2://"):
         return None
     try:
         return generate_presigned_download_url(key, expires_in=60 * 60 * 6)

@@ -21,11 +21,20 @@ from app.core.storage import generate_presigned_download_url
 
 
 def _img_url(key: str | None) -> str | None:
-    """Sprint-fix: feed used to return raw object keys. Mobile then tried to
-    render them as image URIs, got nothing, blank cards. Presigned download
-    URLs work whether or not the MinIO bucket has a public policy."""
+    """Turn an R2 object key into a phone-reachable URL.
+
+    Defensive: if the value already looks like a URL (legacy AI-flow
+    listings where _store_photo accidentally saved a presigned URL into
+    image_urls), pass it through unchanged rather than re-presigning the
+    URL as if it were a key — that produced double-prefixed URLs that
+    couldn't be loaded. Same logic in app.modules.listings.router._img_url.
+    """
     if not key:
         return None
+    if key.startswith(("http://", "https://", "r2://")):
+        # Legacy data: full URL or sentinel. r2:// strings won't load
+        # but at least the row doesn't blow up the response.
+        return key if not key.startswith("r2://") else None
     try:
         return generate_presigned_download_url(key, expires_in=60 * 60 * 6)
     except Exception:

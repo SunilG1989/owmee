@@ -74,12 +74,24 @@ def _photo_object_key(user_id: UUID, draft_id: UUID, ext: str = "jpg") -> str:
 
 
 async def _store_photo(image_bytes: bytes, content_type: str, user_id: UUID, draft_id: UUID) -> str:
-    """Upload photo bytes via the existing storage helpers and return a URL.
+    """Upload photo bytes via the existing storage helpers and return the
+    R2 OBJECT KEY (not a URL).
 
-    Uses upload_bytes() for the server-side write and generate_presigned_download_url()
-    for a phone-reachable read URL. If storage is misconfigured we fall back
-    to a sentinel string so the AI flow can still complete (photos can be
-    re-uploaded by the mobile client via the existing image pipeline).
+    History
+    -------
+    This used to return a presigned download URL. That URL got written
+    into `ai_drafts.photo_urls` and then copied verbatim into
+    `listings.image_urls`. When the listing was later read back, the
+    feed's _img_url helper assumed the value was a key and re-presigned
+    it, producing a double-prefixed broken URL like:
+       http://host/bucket/http%3A//host/bucket/key%3Fold-presign?new-presign
+    Mobile <Image source={{uri}} /> couldn't load any of these and the
+    home page showed empty cards. Returning the bare key here lets the
+    feed serializer presign cleanly on every read with the right TTL.
+
+    If storage is misconfigured we fall back to a sentinel string so
+    the AI flow can still complete (photos can be re-uploaded later
+    via the existing image pipeline).
     """
     ext = "jpg"
     if content_type == "image/png":
@@ -95,11 +107,7 @@ async def _store_photo(image_bytes: bytes, content_type: str, user_id: UUID, dra
         log.warning("ai_assistant.photo_upload_failed", extra={"error": str(e), "key": key})
         return f"r2://{key}"
 
-    try:
-        return generate_presigned_download_url(key, expires_in=60 * 60 * 24 * 7)
-    except Exception as e:
-        log.warning("ai_assistant.presign_failed", extra={"error": str(e), "key": key})
-        return f"r2://{key}"
+    return key
 
 
 def _category_needs_identifier(slug: str | None) -> bool:
