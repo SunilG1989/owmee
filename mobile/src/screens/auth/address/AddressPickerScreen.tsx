@@ -19,7 +19,6 @@ import {
   FlatList,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -140,13 +139,12 @@ export default function AddressPickerScreen({
           <AddressCard address={item} onUse={() => onUse(item)} />
         )}
         ListFooterComponent={
-          <TouchableOpacity
-            style={s.addNew}
+          <Button
+            label="+ Add a new address"
+            variant="ghost"
             onPress={onAddNew}
-            activeOpacity={0.7}
-          >
-            <Text style={s.addNewText}>+ Add a new address</Text>
-          </TouchableOpacity>
+            style={s.addNew}
+          />
         }
       />
     </SafeAreaView>
@@ -208,8 +206,8 @@ const s = StyleSheet.create({
     gap: S.xs,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: T.size.lg + 1,
+    fontWeight: T.weight.bold,
     color: C.text,
   },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
@@ -232,17 +230,17 @@ const s = StyleSheet.create({
     marginBottom: S.sm,
   },
   cardLabel: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: T.size.lg - 1,
+    fontWeight: T.weight.bold,
     color: C.text,
   },
   cardDefault: {
-    fontSize: 12,
+    fontSize: T.size.sm,
     color: C.petrolDeep,
-    fontWeight: '600',
+    fontWeight: T.weight.semi,
   },
   cardLine: {
-    fontSize: 14,
+    fontSize: T.size.sm + 1,
     color: C.text2,
     lineHeight: 20,
   },
@@ -251,14 +249,7 @@ const s = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   addNew: {
-    paddingVertical: S.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  addNewText: {
-    fontSize: 16,
-    color: C.petrol,
-    fontWeight: '600',
-    textDecorationLine: 'underline',
+    marginTop: S.md,
+    alignSelf: 'center',
   },
 });

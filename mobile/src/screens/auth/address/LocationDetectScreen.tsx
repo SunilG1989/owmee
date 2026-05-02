@@ -17,14 +17,13 @@ import {
   Platform,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import Geolocation from '@react-native-community/geolocation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton, Button } from '../../../components/ui';
-import { C, MIN_TAP, R, S, Shadow, T } from '../../../utils/tokens';
+import { C, S, T } from '../../../utils/tokens';
 import type { RootScreen } from '../../../navigation/types';
 
 const BENGALURU = { lat: 12.9716, lng: 77.5946 };
@@ -138,14 +137,12 @@ export default function LocationDetectScreen({
           />
         ) : null}
 
-        <TouchableOpacity
-          style={s.secondaryBtn}
+        <Button
+          label="Set manually"
+          variant="ghost"
           onPress={onSetManually}
-          activeOpacity={0.7}
-          accessibilityRole="button"
-        >
-          <Text style={s.secondaryText}>Set manually</Text>
-        </TouchableOpacity>
+          style={s.secondaryBtn}
+        />
       </View>
 
       {probing ? (
@@ -173,15 +170,15 @@ const s = StyleSheet.create({
     paddingHorizontal: S.xxl,
     gap: S.md,
   },
-  glyph: { fontSize: 64, marginBottom: S.lg },
+  glyph: { fontSize: T.size.display + 34, marginBottom: S.lg },     // 64
   title: {
-    fontSize: 24,
-    fontWeight: '700',
+    fontSize: T.size.xxl,
+    fontWeight: T.weight.bold,
     color: C.text,
     textAlign: 'center',
   },
   subtitle: {
-    fontSize: 15,
+    fontSize: T.size.md,
     color: C.text2,
     textAlign: 'center',
     lineHeight: 22,
@@ -192,19 +189,11 @@ const s = StyleSheet.create({
     marginTop: S.md,
   },
   secondaryBtn: {
-    minHeight: MIN_TAP,
     paddingHorizontal: S.xl,
-    alignItems: 'center',
-    justifyContent: 'center',
     marginTop: S.xs,
   },
-  secondaryText: {
-    fontSize: 16,
-    color: C.text2,
-    fontWeight: '500',
-  },
   deniedHint: {
-    fontSize: 14,
+    fontSize: T.size.sm + 1,
     color: C.text3,
     textAlign: 'center',
     marginBottom: S.md,
@@ -218,7 +207,7 @@ const s = StyleSheet.create({
     gap: S.sm,
   },
   probingText: {
-    fontSize: 13,
+    fontSize: T.size.base,
     color: C.text3,
   },
 });

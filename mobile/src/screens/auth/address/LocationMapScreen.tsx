@@ -193,8 +193,8 @@ const s = StyleSheet.create({
     backgroundColor: C.bone,
   },
   headerTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: T.size.lg - 1,
+    fontWeight: T.weight.semi,
     color: C.text,
     flex: 1,
   },
@@ -213,7 +213,7 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   pinGlyph: {
-    fontSize: 44,
+    fontSize: T.size.display + 14,                                   // 44
   },
   accuracyBadge: {
     position: 'absolute',
@@ -227,7 +227,7 @@ const s = StyleSheet.create({
   },
   accuracyText: {
     color: C.bone,
-    fontSize: 13,
+    fontSize: T.size.base,
     textAlign: 'center',
   },
   sheet: {
@@ -241,17 +241,17 @@ const s = StyleSheet.create({
     ...Shadow.glow,
   },
   sheetMain: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: T.size.lg - 1,
+    fontWeight: T.weight.semi,
     color: C.text,
     lineHeight: 22,
   },
   sheetSub: {
-    fontSize: 13,
+    fontSize: T.size.base,
     color: C.text3,
   },
   sheetWarn: {
-    fontSize: 12,
+    fontSize: T.size.sm,
     color: C.petrolDeep,
     fontStyle: 'italic',
     marginTop: S.xs,
@@ -263,7 +263,7 @@ const s = StyleSheet.create({
     minHeight: 22,
   },
   sheetError: {
-    fontSize: 14,
+    fontSize: T.size.sm + 1,
     color: C.text2,
   },
   confirmBtn: {

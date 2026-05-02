@@ -5,12 +5,13 @@
  */
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, TextInput, TouchableOpacity,
-  Alert, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform,
+  View, Text, StyleSheet, TextInput,
+  Alert, ScrollView, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { C, R, S, T, Shadow } from '../../utils/tokens';
+import { Button, IconButton } from '../../components/ui';
 import { KYC } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { parseApiError } from '../../utils/errors';
@@ -22,11 +23,9 @@ export default function KycFlowScreen({ navigation }: any) {
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
 
-  // Aadhaar
   const [requestId, setRequestId] = useState('');
   const [otp, setOtp] = useState('');
 
-  // Address (auto-filled from Aadhaar response or manual)
   const [addrHouse, setAddrHouse] = useState('');
   const [addrStreet, setAddrStreet] = useState('');
   const [addrLocality, setAddrLocality] = useState('');
@@ -34,11 +33,8 @@ export default function KycFlowScreen({ navigation }: any) {
   const [addrPincode, setAddrPincode] = useState('');
   const [addrState, setAddrState] = useState('');
 
-  // PAN + Payout
   const [pan, setPan] = useState('');
   const [upi, setUpi] = useState('');
-
-  // ── Step 0: Aadhaar ──────────────────────────────────────────────
 
   const initAadhaar = async () => {
     setLoading(true);
@@ -56,7 +52,6 @@ export default function KycFlowScreen({ navigation }: any) {
     setLoading(true);
     try {
       const r = await KYC.verifyAadhaar(otp, requestId);
-      // Auto-fill address from Aadhaar response if partner provides it
       const addr = r.data?.address;
       if (addr) {
         setAddrHouse(addr.house || '');
@@ -77,8 +72,6 @@ export default function KycFlowScreen({ navigation }: any) {
       }
     } finally { setLoading(false); }
   };
-
-  // ── Step 1: Address confirm ──────────────────────────────────────
 
   const confirmAddress = async () => {
     if (!addrCity.trim() || !addrPincode.trim() || !addrState.trim()) {
@@ -106,8 +99,6 @@ export default function KycFlowScreen({ navigation }: any) {
     } finally { setLoading(false); }
   };
 
-  // ── Step 2: PAN ──────────────────────────────────────────────────
-
   const verPan = async () => {
     setLoading(true);
     try {
@@ -124,14 +115,11 @@ export default function KycFlowScreen({ navigation }: any) {
     } finally { setLoading(false); }
   };
 
-  // ── Step 3: Liveness ─────────────────────────────────────────────
-
   const doLiveness = async () => {
     setLoading(true);
     try {
       const session = await KYC.livenessSession();
       const sessionId = session.data.session_id || session.data.id || 'mock-session';
-      // In production: open camera SDK with sessionId
       await KYC.livenessVerify(sessionId);
       setStep(4);
       AsyncStorage.setItem('@ow_kyc_step', '4').catch(() => {});
@@ -139,8 +127,6 @@ export default function KycFlowScreen({ navigation }: any) {
       Alert.alert('Error', parseApiError(e, 'Liveness check failed'));
     } finally { setLoading(false); }
   };
-
-  // ── Step 4: Payout ───────────────────────────────────────────────
 
   const verPayout = async () => {
     setLoading(true);
@@ -157,165 +143,241 @@ export default function KycFlowScreen({ navigation }: any) {
     } finally { setLoading(false); }
   };
 
-  const addrValid = addrCity.trim().length >= 2 && addrPincode.trim().length >= 5 && addrState.trim().length >= 2;
-
-  // ── UI ───────────────────────────────────────────────────────────
+  const addrValid =
+    addrCity.trim().length >= 2 &&
+    addrPincode.trim().length >= 5 &&
+    addrState.trim().length >= 2;
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.top}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={{ fontSize: 20, color: C.text2 }}>←</Text>
-        </TouchableOpacity>
+        <IconButton icon="←" onPress={() => navigation.goBack()} a11y="Back" size="sm" />
         <Text style={s.topT}>Verify identity</Text>
-        <View style={{ width: 24 }} />
+        <View style={s.topSpacer} />
       </View>
 
-      {/* Progress bar */}
       <View style={s.progress}>
         {STEPS.map((l, i) => (
-          <View key={i} style={{ alignItems: 'center', gap: 3, flex: 1 }}>
-            <View style={[s.bar, i <= step && { backgroundColor: C.petrol }]} />
-            <Text style={[s.barL, i <= step && { color: C.petrol }]}>{l}</Text>
+          <View key={i} style={s.progressItem}>
+            <View style={[s.bar, i <= step && s.barOn]} />
+            <Text style={[s.barL, i <= step && s.barLOn]}>{l}</Text>
           </View>
         ))}
       </View>
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={{ flex: 1 }}
+        style={s.flex}
       >
         <ScrollView style={s.body} keyboardShouldPersistTaps="handled">
           <View style={[s.card, Shadow.card]}>
 
-            {/* ═══ Step 0: Aadhaar ═══ */}
             {step === 0 && (
               <>
-                <Text style={{ fontSize: 48, marginBottom: 16 }}>🪪</Text>
+                <Text style={s.cardEmoji}>🪪</Text>
                 <Text style={s.cardT}>Aadhaar Verification</Text>
                 <Text style={s.cardS}>
                   Verify via OTP sent to your Aadhaar-linked mobile.{'\n'}
                   Your Aadhaar number is never stored.
                 </Text>
                 {!requestId ? (
-                  <TouchableOpacity style={s.btn} onPress={initAadhaar} disabled={loading}>
-                    {loading ? <ActivityIndicator color={C.white} /> : <Text style={s.btnT}>Send Aadhaar OTP</Text>}
-                  </TouchableOpacity>
+                  <Button
+                    label="Send Aadhaar OTP"
+                    variant="primary"
+                    size="lg"
+                    onPress={initAadhaar}
+                    loading={loading}
+                    fullWidth
+                  />
                 ) : (
                   <>
-                    <TextInput style={s.input} placeholder="6-digit OTP" placeholderTextColor={C.text4}
-                      keyboardType="number-pad" maxLength={6} value={otp} onChangeText={setOtp} autoFocus />
-                    <TouchableOpacity style={[s.btn, otp.length < 6 && { opacity: 0.4 }]}
-                      onPress={verAadhaar} disabled={otp.length < 6 || loading}>
-                      {loading ? <ActivityIndicator color={C.white} /> : <Text style={s.btnT}>Verify</Text>}
-                    </TouchableOpacity>
+                    <TextInput
+                      style={s.input}
+                      placeholder="6-digit OTP"
+                      placeholderTextColor={C.text4}
+                      keyboardType="number-pad"
+                      maxLength={6}
+                      value={otp}
+                      onChangeText={setOtp}
+                      autoFocus
+                    />
+                    <Button
+                      label="Verify"
+                      variant="primary"
+                      size="lg"
+                      disabled={otp.length < 6 || loading}
+                      loading={loading}
+                      onPress={verAadhaar}
+                      fullWidth
+                    />
                   </>
                 )}
               </>
             )}
 
-            {/* ═══ Step 1: Address Confirm ═══ */}
             {step === 1 && (
               <>
-                <Text style={{ fontSize: 48, marginBottom: 16 }}>📍</Text>
+                <Text style={s.cardEmoji}>📍</Text>
                 <Text style={s.cardT}>Confirm your address</Text>
-                <Text style={s.cardS}>
-                  Auto-filled from your Aadhaar. Edit if needed.
-                </Text>
+                <Text style={s.cardS}>Auto-filled from your Aadhaar. Edit if needed.</Text>
                 <View style={s.addrForm}>
                   <Text style={s.addrLabel}>House / Flat / Building</Text>
-                  <TextInput style={s.addrInput} placeholder="e.g. Flat 402, Tower B"
-                    placeholderTextColor={C.text4} value={addrHouse} onChangeText={setAddrHouse} />
+                  <TextInput
+                    style={s.addrInput}
+                    placeholder="e.g. Flat 402, Tower B"
+                    placeholderTextColor={C.text4}
+                    value={addrHouse}
+                    onChangeText={setAddrHouse}
+                  />
 
                   <Text style={s.addrLabel}>Street / Area</Text>
-                  <TextInput style={s.addrInput} placeholder="e.g. 100 Feet Road"
-                    placeholderTextColor={C.text4} value={addrStreet} onChangeText={setAddrStreet} />
+                  <TextInput
+                    style={s.addrInput}
+                    placeholder="e.g. 100 Feet Road"
+                    placeholderTextColor={C.text4}
+                    value={addrStreet}
+                    onChangeText={setAddrStreet}
+                  />
 
                   <Text style={s.addrLabel}>Locality / Landmark</Text>
-                  <TextInput style={s.addrInput} placeholder="e.g. Near Forum Mall"
-                    placeholderTextColor={C.text4} value={addrLocality} onChangeText={setAddrLocality} />
+                  <TextInput
+                    style={s.addrInput}
+                    placeholder="e.g. Near Forum Mall"
+                    placeholderTextColor={C.text4}
+                    value={addrLocality}
+                    onChangeText={setAddrLocality}
+                  />
 
                   <View style={s.addrRow}>
-                    <View style={{ flex: 1 }}>
+                    <View style={s.flex}>
                       <Text style={s.addrLabel}>City *</Text>
-                      <TextInput style={s.addrInput} placeholder="Bengaluru"
-                        placeholderTextColor={C.text4} value={addrCity} onChangeText={setAddrCity} />
+                      <TextInput
+                        style={s.addrInput}
+                        placeholder="Bengaluru"
+                        placeholderTextColor={C.text4}
+                        value={addrCity}
+                        onChangeText={setAddrCity}
+                      />
                     </View>
-                    <View style={{ flex: 1 }}>
+                    <View style={s.flex}>
                       <Text style={s.addrLabel}>Pincode *</Text>
-                      <TextInput style={s.addrInput} placeholder="560034"
-                        placeholderTextColor={C.text4} keyboardType="number-pad" maxLength={6}
-                        value={addrPincode} onChangeText={setAddrPincode} />
+                      <TextInput
+                        style={s.addrInput}
+                        placeholder="560034"
+                        placeholderTextColor={C.text4}
+                        keyboardType="number-pad"
+                        maxLength={6}
+                        value={addrPincode}
+                        onChangeText={setAddrPincode}
+                      />
                     </View>
                   </View>
 
                   <Text style={s.addrLabel}>State *</Text>
-                  <TextInput style={s.addrInput} placeholder="Karnataka"
-                    placeholderTextColor={C.text4} value={addrState} onChangeText={setAddrState} />
+                  <TextInput
+                    style={s.addrInput}
+                    placeholder="Karnataka"
+                    placeholderTextColor={C.text4}
+                    value={addrState}
+                    onChangeText={setAddrState}
+                  />
                 </View>
-                <TouchableOpacity style={[s.btn, !addrValid && { opacity: 0.4 }]}
-                  onPress={confirmAddress} disabled={!addrValid || loading}>
-                  {loading ? <ActivityIndicator color={C.white} /> : <Text style={s.btnT}>Confirm address</Text>}
-                </TouchableOpacity>
+                <Button
+                  label="Confirm address"
+                  variant="primary"
+                  size="lg"
+                  disabled={!addrValid || loading}
+                  loading={loading}
+                  onPress={confirmAddress}
+                  fullWidth
+                />
               </>
             )}
 
-            {/* ═══ Step 2: PAN ═══ */}
             {step === 2 && (
               <>
-                <Text style={{ fontSize: 48, marginBottom: 16 }}>🪪</Text>
+                <Text style={s.cardEmoji}>🪪</Text>
                 <Text style={s.cardT}>PAN Verification</Text>
                 <Text style={s.cardS}>
                   Required for tax compliance (TDS 194-O).{'\n'}
                   PAN must be linked to your Aadhaar.
                 </Text>
-                <TextInput style={s.input} placeholder="ABCDE1234F" placeholderTextColor={C.text4}
-                  maxLength={10} autoCapitalize="characters" value={pan} onChangeText={setPan} autoFocus />
-                <TouchableOpacity style={[s.btn, pan.length < 10 && { opacity: 0.4 }]}
-                  onPress={verPan} disabled={pan.length < 10 || loading}>
-                  {loading ? <ActivityIndicator color={C.white} /> : <Text style={s.btnT}>Verify PAN</Text>}
-                </TouchableOpacity>
+                <TextInput
+                  style={s.input}
+                  placeholder="ABCDE1234F"
+                  placeholderTextColor={C.text4}
+                  maxLength={10}
+                  autoCapitalize="characters"
+                  value={pan}
+                  onChangeText={setPan}
+                  autoFocus
+                />
+                <Button
+                  label="Verify PAN"
+                  variant="primary"
+                  size="lg"
+                  disabled={pan.length < 10 || loading}
+                  loading={loading}
+                  onPress={verPan}
+                  fullWidth
+                />
               </>
             )}
 
-            {/* ═══ Step 3: Selfie ═══ */}
             {step === 3 && (
               <>
-                <Text style={{ fontSize: 48, marginBottom: 16 }}>🤳</Text>
+                <Text style={s.cardEmoji}>🤳</Text>
                 <Text style={s.cardT}>Quick Selfie Check</Text>
                 <Text style={s.cardS}>
                   A quick selfie to confirm it's really you.{'\n'}
                   Take it in a well-lit area.
                 </Text>
-                <TouchableOpacity style={s.btn} onPress={doLiveness} disabled={loading}>
-                  {loading ? <ActivityIndicator color={C.white} /> : <Text style={s.btnT}>Take selfie</Text>}
-                </TouchableOpacity>
+                <Button
+                  label="Take selfie"
+                  variant="primary"
+                  size="lg"
+                  loading={loading}
+                  onPress={doLiveness}
+                  fullWidth
+                />
               </>
             )}
 
-            {/* ═══ Step 4: Payout ═══ */}
             {step === 4 && (
               <>
-                <Text style={{ fontSize: 48, marginBottom: 16 }}>💳</Text>
+                <Text style={s.cardEmoji}>💳</Text>
                 <Text style={s.cardT}>Payout Account</Text>
                 <Text style={s.cardS}>
                   Add your UPI ID to receive payouts when you sell.{'\n'}
                   This is the last step!
                 </Text>
-                <TextInput style={s.input} placeholder="yourname@upi" placeholderTextColor={C.text4}
-                  value={upi} onChangeText={setUpi} autoCapitalize="none" autoFocus />
-                <TouchableOpacity style={[s.btn, !upi.includes('@') && { opacity: 0.4 }]}
-                  onPress={verPayout} disabled={!upi.includes('@') || loading}>
-                  {loading ? <ActivityIndicator color={C.white} /> : <Text style={s.btnT}>Verify & complete</Text>}
-                </TouchableOpacity>
+                <TextInput
+                  style={s.input}
+                  placeholder="yourname@upi"
+                  placeholderTextColor={C.text4}
+                  value={upi}
+                  onChangeText={setUpi}
+                  autoCapitalize="none"
+                  autoFocus
+                />
+                <Button
+                  label="Verify & complete"
+                  variant="primary"
+                  size="lg"
+                  disabled={!upi.includes('@') || loading}
+                  loading={loading}
+                  onPress={verPayout}
+                  fullWidth
+                />
               </>
             )}
           </View>
 
           <Text style={s.footer}>
-            Your data is encrypted per DPDP Act 2023.{'\n'}We never store your Aadhaar number.
+            Your data is encrypted per DPDP Act 2023.{'\n'}
+            We never store your Aadhaar number.
           </Text>
-          <View style={{ height: 40 }} />
+          <View style={s.bottomSpacer} />
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -324,33 +386,66 @@ export default function KycFlowScreen({ navigation }: any) {
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bone },
+  flex: { flex: 1 },
+
   top: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 10, backgroundColor: C.surface,
+    paddingHorizontal: S.lg, paddingVertical: S.sm + 2,
+    backgroundColor: C.surface,
     borderBottomWidth: 0.5, borderBottomColor: C.border,
   },
-  topT: { fontSize: 16, fontWeight: '600', color: C.text },
-  progress: { flexDirection: 'row', justifyContent: 'center', gap: 8, paddingVertical: 12, paddingHorizontal: 16 },
-  bar: { width: 12, height: 12, borderRadius: 6, backgroundColor: C.border },
-  barL: { fontSize: 9, color: C.text4 },
-  body: { flex: 1, padding: 16 },
-  card: { backgroundColor: C.surface, borderRadius: 20, padding: 24, alignItems: 'center' },
-  cardT: { fontSize: 20, fontWeight: '700', color: C.text, marginBottom: 4 },
-  cardS: { fontSize: 13, color: C.text3, textAlign: 'center', marginBottom: 24, lineHeight: 20 },
-  input: {
-    width: '100%', borderWidth: 0.5, borderColor: C.border, borderRadius: R.sm,
-    paddingHorizontal: 12, paddingVertical: 12, fontSize: 16, color: C.text,
-    textAlign: 'center', marginBottom: 16, backgroundColor: C.bone,
+  topT: { fontSize: T.size.lg - 1, fontWeight: T.weight.semi, color: C.text },
+  topSpacer: { width: 24 },
+
+  progress: {
+    flexDirection: 'row', justifyContent: 'center',
+    gap: S.sm, paddingVertical: S.md, paddingHorizontal: S.lg,
   },
-  btn: { width: '100%', backgroundColor: C.petrol, borderRadius: R.sm, paddingVertical: 14, alignItems: 'center' },
-  btnT: { fontSize: 14, color: C.white, fontWeight: '600' },
-  footer: { textAlign: 'center', fontSize: 11, color: C.text4, marginTop: 20, lineHeight: 18 },
-  // Address form
-  addrForm: { width: '100%', marginBottom: 16 },
-  addrLabel: { fontSize: 11, fontWeight: '600', color: C.text3, marginTop: 12, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.3 },
+  progressItem: { alignItems: 'center', gap: 3, flex: 1 },
+  bar: { width: 12, height: 12, borderRadius: 6, backgroundColor: C.border },
+  barOn: { backgroundColor: C.petrol },
+  barL: { fontSize: T.size.xs - 1, color: C.text4 },
+  barLOn: { color: C.petrol },
+
+  body: { flex: 1, padding: S.lg },
+  card: {
+    backgroundColor: C.surface,
+    borderRadius: R.xl,
+    padding: S.xxl,
+    alignItems: 'center',
+  },
+  cardEmoji: { fontSize: T.size.display + 18, marginBottom: S.lg },     // 48
+  cardT: { fontSize: T.size.xl, fontWeight: T.weight.bold, color: C.text, marginBottom: S.xs },
+  cardS: {
+    fontSize: T.size.base, color: C.text3,
+    textAlign: 'center', marginBottom: S.xxl, lineHeight: 20,
+  },
+  input: {
+    width: '100%',
+    borderWidth: 0.5, borderColor: C.border, borderRadius: R.sm,
+    paddingHorizontal: S.md, paddingVertical: S.md,
+    fontSize: T.size.lg - 1,
+    color: C.text, textAlign: 'center',
+    marginBottom: S.lg,
+    backgroundColor: C.bone,
+  },
+
+  footer: {
+    textAlign: 'center', fontSize: T.size.sm, color: C.text4,
+    marginTop: S.xl, lineHeight: 18,
+  },
+  bottomSpacer: { height: 40 },
+
+  addrForm: { width: '100%', marginBottom: S.lg },
+  addrLabel: {
+    fontSize: T.size.sm, fontWeight: T.weight.semi, color: C.text3,
+    marginTop: S.md, marginBottom: S.xs,
+    textTransform: 'uppercase', letterSpacing: 0.3,
+  },
   addrInput: {
     borderWidth: 0.5, borderColor: C.border, borderRadius: R.sm,
-    paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: C.text,
+    paddingHorizontal: S.md, paddingVertical: S.sm + 2,
+    fontSize: T.size.sm + 1, color: C.text,
     backgroundColor: C.bone,
   },
   addrRow: { flexDirection: 'row', gap: S.sm },

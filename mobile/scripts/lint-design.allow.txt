@@ -25,13 +25,9 @@ src/screens/KycRequiredForActionScreen.tsx
 src/screens/OffersScreen.tsx
 src/screens/SearchScreen.tsx
 src/screens/TransactionDetailScreen.tsx
-src/screens/auth/KycFlowScreen.tsx
 src/screens/auth/LocationPickerScreen.tsx
 src/screens/auth/VerificationWallScreen.tsx
 src/screens/auth/address/AddressDetailsScreen.tsx
-src/screens/auth/address/AddressPickerScreen.tsx
-src/screens/auth/address/LocationDetectScreen.tsx
-src/screens/auth/address/LocationMapScreen.tsx
 src/screens/community/CommunityProofScreen.tsx
 src/screens/fe/FeCaptureScreen.tsx
 src/screens/fe/FeHomeScreen.tsx
