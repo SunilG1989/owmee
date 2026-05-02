@@ -58,4 +58,3 @@ src/screens/profile/NotificationsScreen.tsx
 src/screens/profile/ProfileScreen.tsx
 src/screens/profile/TransactionListScreen.tsx
 src/screens/purchase/CheckoutScreen.tsx
-src/screens/purchase/OrderConfirmationScreen.tsx

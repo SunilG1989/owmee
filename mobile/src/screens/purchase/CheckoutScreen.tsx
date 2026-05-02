@@ -3,22 +3,22 @@
  * Item summary → delivery address → payment → platform fee breakdown → Owmee Guarantee → Pay
  */
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import {
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  Alert, ActivityIndicator,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { C, T, S, R, Shadow, formatPrice } from '../../utils/tokens';
 import { Listings, Orders, type Listing } from '../../services/api';
-import { useAuthStore } from '../../store/authStore';
-import { BackButton } from '../../components/ui';
+import { BackButton, Button } from '../../components/ui';
 import { parseApiError } from '../../utils/errors';
-import type { RootScreen } from '../../navigation/types';
 
 const PLATFORM_FEE_PERCENT = 0.02; // 2%
-const GST_RATE = 0.18; // 18% on platform fee
+const GST_RATE = 0.18;             // 18% on platform fee
 
 export default function CheckoutScreen({ navigation, route }: any) {
   const { listingId } = route.params;
-  const { kycStatus, userId } = useAuthStore();
   const [listing, setListing] = useState<Listing | null>(null);
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
@@ -34,12 +34,11 @@ export default function CheckoutScreen({ navigation, route }: any) {
         setListing(listRes.data);
         if (addrStr) {
           const loc = JSON.parse(addrStr);
-          // Also try to get full address from registration
           const profileStr = await AsyncStorage.getItem('@ow_address');
           if (profileStr) setAddress(JSON.parse(profileStr));
           else setAddress({ city: loc.city, pincode: loc.pincode || '' });
         }
-      } catch (e) {
+      } catch {
         Alert.alert('Error', 'Could not load listing');
         navigation.goBack();
       } finally { setLoading(false); }
@@ -47,7 +46,11 @@ export default function CheckoutScreen({ navigation, route }: any) {
   }, [listingId]);
 
   if (loading || !listing) {
-    return <SafeAreaView style={s.safe}><ActivityIndicator color={C.petrol} style={{ marginTop: 60 }} /></SafeAreaView>;
+    return (
+      <SafeAreaView style={s.safe}>
+        <ActivityIndicator color={C.petrol} style={s.loading} />
+      </SafeAreaView>
+    );
   }
 
   const itemPrice = listing.price;
@@ -58,11 +61,8 @@ export default function CheckoutScreen({ navigation, route }: any) {
   const handlePay = async () => {
     setPaying(true);
     try {
-      // Create offer at listing price (Buy Now = offer at asking price, auto-accepted)
       const res = await Orders.buyNow(listingId);
       const txnId = res.data?.transaction_id;
-      
-      // Navigate to order confirmation
       navigation.replace('OrderConfirmation', {
         transactionId: txnId || 'pending',
         listing: { title: listing.title, price: listing.price, image: listing.images?.[0] },
@@ -73,34 +73,41 @@ export default function CheckoutScreen({ navigation, route }: any) {
     } finally { setPaying(false); }
   };
 
+  const categoryEmoji =
+    listing.category_slug === 'phones' ? '📱' :
+    listing.category_slug === 'laptops' ? '💻' : '📦';
+
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
         <BackButton onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>Checkout</Text>
-        <View style={{ width: 24 }} />
+        <View style={s.headerSpacer} />
       </View>
 
       <ScrollView style={s.body} showsVerticalScrollIndicator={false}>
-        {/* Item summary */}
         <View style={s.itemCard}>
           <View style={s.itemImagePlaceholder}>
-            <Text style={{ fontSize: 32 }}>{listing.category_slug === 'phones' ? '📱' : listing.category_slug === 'laptops' ? '💻' : '📦'}</Text>
+            <Text style={s.itemImageEmoji}>{categoryEmoji}</Text>
           </View>
           <View style={s.itemInfo}>
             <Text style={s.itemTitle} numberOfLines={2}>{listing.title}</Text>
             <Text style={s.itemPrice}>{formatPrice(itemPrice)}</Text>
             {listing.condition && <Text style={s.itemCondition}>{listing.condition}</Text>}
             {listing.seller_verified && (
-              <View style={s.sellerBadge}><Text style={s.sellerBadgeText}>✓ Verified seller</Text></View>
+              <View style={s.sellerBadge}>
+                <Text style={s.sellerBadgeText}>✓ Verified seller</Text>
+              </View>
             )}
           </View>
         </View>
 
-        {/* Delivery address */}
         <View style={s.section}>
           <Text style={s.sectionTitle}>📍 Deliver to</Text>
-          <TouchableOpacity style={s.addressCard} onPress={() => Alert.alert('Coming soon', 'Address selection will be available shortly.')}>
+          <TouchableOpacity
+            style={s.addressCard}
+            onPress={() => Alert.alert('Coming soon', 'Address selection will be available shortly.')}
+          >
             {address ? (
               <>
                 <Text style={s.addressText}>
@@ -111,16 +118,17 @@ export default function CheckoutScreen({ navigation, route }: any) {
             ) : (
               <Text style={s.addressText}>Add delivery address</Text>
             )}
-            <Text style={{ fontSize: 13, color: C.petrol, fontWeight: '600' }}>Change ▾</Text>
+            <Text style={s.addressChange}>Change ▾</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Payment method */}
         <View style={s.section}>
           <Text style={s.sectionTitle}>💳 Payment</Text>
           <View style={s.paymentCard}>
-            <View style={s.upiIcon}><Text style={{ fontSize: 16, fontWeight: '700', color: C.petrol }}>UPI</Text></View>
-            <View style={{ flex: 1 }}>
+            <View style={s.upiIcon}>
+              <Text style={s.upiIconText}>UPI</Text>
+            </View>
+            <View style={s.flex1}>
               <Text style={s.paymentLabel}>UPI Payment</Text>
               <Text style={s.paymentSub}>GPay, PhonePe, Paytm or any UPI app</Text>
             </View>
@@ -128,39 +136,57 @@ export default function CheckoutScreen({ navigation, route }: any) {
           </View>
         </View>
 
-        {/* Price breakdown */}
         <View style={s.section}>
           <Text style={s.sectionTitle}>Price details</Text>
           <View style={s.priceCard}>
-            <View style={s.priceRow}><Text style={s.priceLabel}>Item price</Text><Text style={s.priceValue}>{formatPrice(itemPrice)}</Text></View>
-            <View style={s.priceRow}><Text style={s.priceLabel}>Platform fee (2%)</Text><Text style={s.priceValue}>{formatPrice(platformFee)}</Text></View>
-            <View style={s.priceRow}><Text style={s.priceLabel}>GST (18% on fee)</Text><Text style={s.priceValue}>{formatPrice(gstOnFee)}</Text></View>
+            <View style={s.priceRow}>
+              <Text style={s.priceLabel}>Item price</Text>
+              <Text style={s.priceValue}>{formatPrice(itemPrice)}</Text>
+            </View>
+            <View style={s.priceRow}>
+              <Text style={s.priceLabel}>Platform fee (2%)</Text>
+              <Text style={s.priceValue}>{formatPrice(platformFee)}</Text>
+            </View>
+            <View style={s.priceRow}>
+              <Text style={s.priceLabel}>GST (18% on fee)</Text>
+              <Text style={s.priceValue}>{formatPrice(gstOnFee)}</Text>
+            </View>
             <View style={s.priceDivider} />
-            <View style={s.priceRow}><Text style={s.totalLabel}>Total</Text><Text style={s.totalValue}>{formatPrice(total)}</Text></View>
+            <View style={s.priceRow}>
+              <Text style={s.totalLabel}>Total</Text>
+              <Text style={s.totalValue}>{formatPrice(total)}</Text>
+            </View>
           </View>
         </View>
 
-        {/* Owmee Guarantee */}
         <View style={s.guarantee}>
-          <Text style={{ fontSize: 20 }}>🛡️</Text>
-          <View style={{ flex: 1 }}>
+          <Text style={s.guaranteeIcon}>🛡️</Text>
+          <View style={s.flex1}>
             <Text style={s.guaranteeTitle}>Owmee Guarantee</Text>
-            <Text style={s.guaranteeSub}>Your money is held safely by our payment partner until you confirm receipt. Full refund if item doesn't match the listing.</Text>
+            <Text style={s.guaranteeSub}>
+              Your money is held safely by our payment partner until you confirm receipt.
+              Full refund if item doesn't match the listing.
+            </Text>
           </View>
         </View>
 
-        <View style={{ height: 120 }} />
+        <View style={s.bottomSpacer} />
       </ScrollView>
 
-      {/* Pay button — fixed at bottom */}
       <View style={s.bottomBar}>
         <View>
           <Text style={s.bottomTotal}>{formatPrice(total)}</Text>
           <Text style={s.bottomSub}>Total amount</Text>
         </View>
-        <TouchableOpacity style={s.payBtn} onPress={handlePay} disabled={paying} activeOpacity={0.85}>
-          {paying ? <ActivityIndicator color={C.white} /> : <Text style={s.payBtnText}>Pay {formatPrice(total)} →</Text>}
-        </TouchableOpacity>
+        <Button
+          label={`Pay ${formatPrice(total)} →`}
+          variant="primary"
+          size="lg"
+          loading={paying}
+          disabled={paying}
+          onPress={handlePay}
+          style={s.payBtn}
+        />
       </View>
     </SafeAreaView>
   );
@@ -168,45 +194,109 @@ export default function CheckoutScreen({ navigation, route }: any) {
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bone },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: C.surface, borderBottomWidth: 0.5, borderBottomColor: C.border },
-  headerTitle: { fontSize: 16, fontWeight: '600', color: C.text },
-  body: { flex: 1, paddingHorizontal: 16, paddingTop: 16 },
-  itemCard: { flexDirection: 'row', gap: 14, backgroundColor: C.surface, borderRadius: R.lg, padding: 16, borderWidth: 1, borderColor: C.border, ...Shadow.card },
-  itemImagePlaceholder: { width: 80, height: 80, borderRadius: R.sm, backgroundColor: C.bone2, alignItems: 'center', justifyContent: 'center' },
+  flex1: { flex: 1 },
+  loading: { marginTop: S.xxxl + S.xxxl },
+
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: S.lg, paddingVertical: S.sm + 2,
+    backgroundColor: C.surface,
+    borderBottomWidth: 0.5, borderBottomColor: C.border,
+  },
+  headerTitle: { fontSize: T.size.lg - 1, fontWeight: T.weight.semi, color: C.text },
+  headerSpacer: { width: 24 },
+
+  body: { flex: 1, paddingHorizontal: S.lg, paddingTop: S.lg },
+
+  itemCard: {
+    flexDirection: 'row', gap: S.md + 2,
+    backgroundColor: C.surface, borderRadius: R.lg,
+    padding: S.lg,
+    borderWidth: 1, borderColor: C.border,
+    ...Shadow.card,
+  },
+  itemImagePlaceholder: {
+    width: 80, height: 80, borderRadius: R.sm,
+    backgroundColor: C.bone2,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  itemImageEmoji: { fontSize: T.size.display + 2 },                 // 32
   itemInfo: { flex: 1 },
-  itemTitle: { fontSize: 15, fontWeight: '600', color: C.text, lineHeight: 20 },
-  itemPrice: { fontSize: 20, fontWeight: '800', color: C.petrol, marginTop: 4 },
-  itemCondition: { fontSize: 11, color: C.text3, textTransform: 'capitalize', marginTop: 2 },
-  sellerBadge: { marginTop: 6, alignSelf: 'flex-start', backgroundColor: C.petrolLight, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
-  sellerBadgeText: { fontSize: 10, fontWeight: '700', color: C.petrol },
+  itemTitle: { fontSize: T.size.md, fontWeight: T.weight.semi, color: C.text, lineHeight: 20 },
+  itemPrice: { fontSize: T.size.xl, fontWeight: T.weight.heavy, color: C.petrol, marginTop: S.xs },
+  itemCondition: { fontSize: T.size.sm, color: C.text3, textTransform: 'capitalize', marginTop: 2 },
+  sellerBadge: {
+    marginTop: S.xs + 2, alignSelf: 'flex-start',
+    backgroundColor: C.petrolLight,
+    paddingHorizontal: S.sm, paddingVertical: 3,
+    borderRadius: R.xs,
+  },
+  sellerBadgeText: { fontSize: T.size.xs, fontWeight: T.weight.bold, color: C.petrol },
+
   section: { marginTop: S.xl },
-  sectionTitle: { fontSize: 14, fontWeight: '700', color: C.ink, marginBottom: S.sm },
-  addressCard: { backgroundColor: C.surface, borderRadius: R.sm, padding: 14, borderWidth: 0.5, borderColor: C.border, flexDirection: 'column', gap: 2 },
-  addressText: { fontSize: 14, color: C.text, fontWeight: '500' },
-  addressCity: { fontSize: 12, color: C.text3 },
-  paymentCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.surface, borderRadius: R.sm, padding: 14, borderWidth: 1, borderColor: C.petrol },
-  upiIcon: { width: 40, height: 40, borderRadius: 8, backgroundColor: C.petrolLight, alignItems: 'center', justifyContent: 'center' },
-  paymentLabel: { fontSize: 14, fontWeight: '600', color: C.text },
-  paymentSub: { fontSize: 11, color: C.text3, marginTop: 1 },
-  radioOn: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: C.petrol, alignItems: 'center', justifyContent: 'center' },
+  sectionTitle: { fontSize: T.size.sm + 1, fontWeight: T.weight.bold, color: C.ink, marginBottom: S.sm },
+
+  addressCard: {
+    backgroundColor: C.surface, borderRadius: R.sm,
+    padding: S.md + 2,
+    borderWidth: 0.5, borderColor: C.border,
+    flexDirection: 'column', gap: 2,
+  },
+  addressText: { fontSize: T.size.sm + 1, color: C.text, fontWeight: T.weight.medium },
+  addressCity: { fontSize: T.size.sm, color: C.text3 },
+  addressChange: { fontSize: T.size.base, color: C.petrol, fontWeight: T.weight.semi },
+
+  paymentCard: {
+    flexDirection: 'row', alignItems: 'center', gap: S.md,
+    backgroundColor: C.surface, borderRadius: R.sm,
+    padding: S.md + 2,
+    borderWidth: 1, borderColor: C.petrol,
+  },
+  upiIcon: {
+    width: 40, height: 40, borderRadius: R.xs + 2,
+    backgroundColor: C.petrolLight,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  upiIconText: { fontSize: T.size.lg - 1, fontWeight: T.weight.bold, color: C.petrol },
+  paymentLabel: { fontSize: T.size.sm + 1, fontWeight: T.weight.semi, color: C.text },
+  paymentSub: { fontSize: T.size.sm, color: C.text3, marginTop: 1 },
+  radioOn: {
+    width: 20, height: 20, borderRadius: 10,
+    borderWidth: 2, borderColor: C.petrol,
+    alignItems: 'center', justifyContent: 'center',
+  },
   radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: C.petrol },
-  priceCard: { backgroundColor: C.surface, borderRadius: R.sm, padding: 16, borderWidth: 0.5, borderColor: C.border },
-  priceRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 },
-  priceLabel: { fontSize: 13, color: C.text3 },
-  priceValue: { fontSize: 13, color: C.text, fontWeight: '500' },
-  priceDivider: { height: 1, backgroundColor: C.border, marginVertical: 8 },
-  totalLabel: { fontSize: 15, fontWeight: '700', color: C.ink },
-  totalValue: { fontSize: 15, fontWeight: '700', color: C.petrol },
-  guarantee: { flexDirection: 'row', gap: 12, backgroundColor: C.petrolLight, borderRadius: R.lg, padding: 16, marginTop: S.xl, borderWidth: 1, borderColor: C.border },
-  guaranteeTitle: { fontSize: 14, fontWeight: '700', color: C.petrol },
-  guaranteeSub: { fontSize: 12, color: C.petrolText, lineHeight: 17, marginTop: 2 },
-  bottomBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: C.surface, borderTopWidth: 1, borderTopColor: C.border },
-  bottomTotal: { fontSize: 18, fontWeight: '800', color: C.ink },
-  bottomSub: { fontSize: 11, color: C.text3 },
-  payBtn: { backgroundColor: C.petrol, borderRadius: R.sm, paddingHorizontal: 28, paddingVertical: 14, ...Shadow.glow },
-  payBtnText: { fontSize: 15, fontWeight: '700', color: C.white },
-  gate: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
-  gateTitle: { fontSize: 20, fontWeight: '700', color: C.ink, marginBottom: 8 },
-  gateSub: { fontSize: 13, color: C.text3, textAlign: 'center', lineHeight: 19, marginBottom: 20 },
-  gateCta: { backgroundColor: C.petrol, borderRadius: R.sm, paddingHorizontal: 28, paddingVertical: 14 },
+
+  priceCard: {
+    backgroundColor: C.surface, borderRadius: R.sm,
+    padding: S.lg,
+    borderWidth: 0.5, borderColor: C.border,
+  },
+  priceRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: S.xs + 2 },
+  priceLabel: { fontSize: T.size.base, color: C.text3 },
+  priceValue: { fontSize: T.size.base, color: C.text, fontWeight: T.weight.medium },
+  priceDivider: { height: 1, backgroundColor: C.border, marginVertical: S.sm },
+  totalLabel: { fontSize: T.size.md, fontWeight: T.weight.bold, color: C.ink },
+  totalValue: { fontSize: T.size.md, fontWeight: T.weight.bold, color: C.petrol },
+
+  guarantee: {
+    flexDirection: 'row', gap: S.md,
+    backgroundColor: C.petrolLight, borderRadius: R.lg,
+    padding: S.lg, marginTop: S.xl,
+    borderWidth: 1, borderColor: C.border,
+  },
+  guaranteeIcon: { fontSize: T.size.xl },
+  guaranteeTitle: { fontSize: T.size.sm + 1, fontWeight: T.weight.bold, color: C.petrol },
+  guaranteeSub: { fontSize: T.size.sm, color: C.petrolText, lineHeight: 17, marginTop: 2 },
+
+  bottomSpacer: { height: 120 },
+  bottomBar: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: S.lg, paddingVertical: S.md + 2,
+    backgroundColor: C.surface,
+    borderTopWidth: 1, borderTopColor: C.border,
+  },
+  bottomTotal: { fontSize: T.size.lg + 1, fontWeight: T.weight.heavy, color: C.ink },
+  bottomSub: { fontSize: T.size.sm, color: C.text3 },
+  payBtn: { ...Shadow.glow },
 });
