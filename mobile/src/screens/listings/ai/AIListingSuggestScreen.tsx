@@ -35,7 +35,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { C, T, S, R, Shadow, Home, formatPrice, condStyle } from '../../../utils/tokens';
 import { AIListing } from '../../../services/api';
-import { BackButton } from '../../../components/ui';
+import { BackButton, Button } from '../../../components/ui';
 import type { AIDraftResponse } from '../../../services/api';
 import { parseApiError } from '../../../utils/errors';
 import type { RootScreen } from '../../../navigation/types';
@@ -189,17 +189,22 @@ export default function AIListingSuggestScreen({
           <Text style={st.successStep}>• We schedule pickup from your address</Text>
           <Text style={st.successStep}>• You get paid 2 days after pickup</Text>
 
-          <View style={{ flex: 1 }} />
-          <TouchableOpacity
+          <View style={st.flex} />
+          <Button
+            label="See my listing"
+            variant="primary"
+            size="lg"
+            onPress={() => navigation.replace('ListingDetail' as never, { listingId: success.listingId } as never)}
+            fullWidth
             style={st.primaryBtn}
-            onPress={() => navigation.replace('ListingDetail' as never, { listingId: success.listingId } as never)}>
-            <Text style={st.primaryBtnText}>See my listing</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
+          />
+          <Button
+            label="List another item"
+            variant="secondary"
+            onPress={() => navigation.replace('AIListingCamera' as never, undefined as never)}
+            fullWidth
             style={st.secondaryBtn}
-            onPress={() => navigation.replace('AIListingCamera' as never, undefined as never)}>
-            <Text style={st.secondaryBtnText}>List another item</Text>
-          </TouchableOpacity>
+          />
         </View>
       </SafeAreaView>
     );
@@ -212,10 +217,10 @@ export default function AIListingSuggestScreen({
       <View style={st.header}>
         <BackButton onPress={() => navigation.goBack()} />
         <Text style={st.headerTitle}>Review listing</Text>
-        <View style={st.headerBtn} />
+        <View style={st.headerSpacer} />
       </View>
 
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 96 }}>
+      <ScrollView style={st.flex} contentContainerStyle={st.scrollPad}>
         {/* Photo */}
         <View style={st.photoBlock}>
           <Image source={{ uri: draft.photo_url }} style={st.photo} resizeMode="cover" />
@@ -309,16 +314,16 @@ export default function AIListingSuggestScreen({
 
       {/* Sticky CTA */}
       <View style={st.ctaBar}>
-        <TouchableOpacity
-          style={[st.primaryBtn, submitting && { opacity: 0.6 }]}
+        <Button
+          label={`List for ${formatPrice(effectivePrice)} →`}
+          variant="primary"
+          size="lg"
+          loading={submitting}
+          disabled={submitting}
           onPress={submit}
-          disabled={submitting}>
-          {submitting ? (
-            <ActivityIndicator color={C.surface} />
-          ) : (
-            <Text style={st.primaryBtnText}>List for {formatPrice(effectivePrice)} →</Text>
-          )}
-        </TouchableOpacity>
+          fullWidth
+          style={st.primaryBtn}
+        />
       </View>
 
       {/* Bottom sheets */}
@@ -397,9 +402,10 @@ const st = StyleSheet.create({
     borderBottomColor: C.border,
     backgroundColor: C.surface,
   },
-  headerBtn: { minWidth: 32, height: 32, justifyContent: 'center' },
-  headerBtnText: { fontSize: 22, color: C.text2 },
+  headerSpacer: { width: 36 },
   headerTitle: { fontSize: T.size.lg, fontWeight: T.weight.semi, color: C.text },
+  flex: { flex: 1 },
+  scrollPad: { paddingBottom: 96 },
 
   // Photo
   photoBlock: { padding: S.lg, alignItems: 'center', backgroundColor: C.surface },
@@ -435,7 +441,7 @@ const st = StyleSheet.create({
     borderBottomColor: C.border,
   },
   priceBig: {
-    fontSize: 48,
+    fontSize: T.size.display + 18,                                  // 48
     fontWeight: T.weight.bold,
     color: C.text,
     letterSpacing: -1,
@@ -561,29 +567,13 @@ const st = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: C.border,
   },
-  primaryBtn: {
-    backgroundColor: C.petrol,
-    paddingVertical: S.lg,
-    borderRadius: R.md,
-    alignItems: 'center',
-    ...Shadow.glow,
-  },
-  primaryBtnText: { color: C.surface, fontSize: T.size.lg, fontWeight: T.weight.bold },
-  secondaryBtn: {
-    marginTop: S.md,
-    paddingVertical: S.lg,
-    borderRadius: R.md,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: C.border,
-    backgroundColor: C.bone,
-  },
-  secondaryBtnText: { color: C.text2, fontSize: T.size.md, fontWeight: T.weight.semi },
+  primaryBtn: { ...Shadow.glow },
+  secondaryBtn: { marginTop: S.md },
 
   // Success state
   successWrap: { flex: 1, padding: S.xxl, alignItems: 'center' },
   successCheck: {
-    fontSize: 64,
+    fontSize: T.size.display + 34,                                  // 64
     color: C.petrol,
     marginTop: S.xxl,
     marginBottom: S.lg,
