@@ -68,17 +68,60 @@ log = logging.getLogger(__name__)
 
 
 class _ImageSetQuality(BaseModel):
-    """Structured signals from PROMPT v2's IMAGE SET VALIDITY rules.
-    Each is True only when the model is confident enough to act on it.
+    """Descriptive metadata about the photo set (what's in it / overall
+    quality). Blocking signals (nsfw, multiple_items, blurry, ...) live
+    in the top-level `flags` list per PROMPT v2's IMAGE SET VALIDITY
+    section — this block is purely descriptive context that downstream
+    consumers (admin web, mobile review banner) can render without
+    string-matching the flags list.
     """
-    nsfw: bool = False
-    personal_info: bool = False
-    multiple_items: bool = False
-    no_product: bool = False
-    blurry: bool = False
-    packaging_only: bool = False
-    screenshot_only: bool = False
-    stock_or_catalog_suspected: bool = False
+    is_single_sellable_item: bool = False
+    has_actual_item_photo: bool = False
+    has_box_or_packaging: bool = False
+    has_settings_or_spec_screen: bool = False
+    has_receipt_or_warranty: bool = False
+    has_private_info: bool = False
+    is_stock_or_catalog_image_suspected: bool = False
+    # good | usable | poor | unusable
+    overall_photo_quality: str | None = None
+
+
+class _FieldConfidence(BaseModel):
+    """Per-field confidence (0.0-1.0). Keys mirror the canonical reference
+    schema — the post-processor and admin UI rely on these names.
+    """
+    category_slug: float | None = None
+    brand: float | None = None
+    model: float | None = None
+    storage: float | None = None
+    ram: float | None = None
+    processor: float | None = None
+    condition_guess: float | None = None
+    suggested_price_inr: float | None = None
+
+
+class _FieldEvidence(BaseModel):
+    """Per-field evidence level. Each value is one of:
+      "direct_visible" | "strong_visual_inference" | "not_evidenced"
+
+    Spec fields (storage/ram/processor/battery_health/purchase_year/
+    accessories/warranty_status/screen_size) are post-processor-restricted
+    to direct_visible — the schema accepts the wider enum so Gemini can
+    self-report not_evidenced, but Rule 3 nulls the value if it isn't
+    direct_visible.
+    """
+    category_slug: str | None = None
+    brand: str | None = None
+    model: str | None = None
+    storage: str | None = None
+    ram: str | None = None
+    processor: str | None = None
+    screen_size: str | None = None
+    battery_health: str | None = None
+    purchase_year: str | None = None
+    accessories: str | None = None
+    warranty_status: str | None = None
+    condition_guess: str | None = None
 
 
 class _GeminiVisionOut(BaseModel):
@@ -130,12 +173,8 @@ class _GeminiVisionOut(BaseModel):
     blocking_reasons: list[str] = []
     extraction_notes: str | None = None
     seller_photo_feedback: list[str] = []
-    # Plain dict — keys are field names from this schema ("brand",
-    # "storage", etc.) and values are floats 0.0-1.0.
-    field_confidence: dict = {}
-    # Same shape; values are "direct_visible" | "strong_visual_inference"
-    # | "not_evidenced".
-    field_evidence: dict = {}
+    field_confidence: _FieldConfidence = _FieldConfidence()
+    field_evidence: _FieldEvidence = _FieldEvidence()
 
 
 class _GeminiIMEIOut(BaseModel):
@@ -314,13 +353,20 @@ def _translate_vision_response(parsed: "_GeminiVisionOut") -> AIDetected:
     flags_in = parsed.flags if isinstance(parsed.flags, list) else []
     defects_in = parsed.defects if isinstance(parsed.defects, list) else []
 
-    # image_set_quality may come back as a Pydantic model OR a dict
-    # (when Gemini outputs JSON without nested-model coercion).
-    isq = parsed.image_set_quality
-    if isinstance(isq, dict):
-        isq_dict = isq
-    else:
-        isq_dict = isq.model_dump() if isq else {}
+    # Nested objects may come back as Pydantic models OR plain dicts
+    # (depends on SDK version + whether response_schema coercion ran).
+    def _to_dict(v: Any) -> dict:
+        if v is None:
+            return {}
+        if isinstance(v, dict):
+            return v
+        if hasattr(v, "model_dump"):
+            return v.model_dump(exclude_none=False)
+        return {}
+
+    isq_dict = _to_dict(parsed.image_set_quality)
+    fc_dict = _to_dict(parsed.field_confidence)
+    fe_dict = _to_dict(parsed.field_evidence)
 
     return AIDetected(
         category_slug=parsed.category_slug,
@@ -353,12 +399,12 @@ def _translate_vision_response(parsed: "_GeminiVisionOut") -> AIDetected:
         blocking_reasons=[str(b)[:200] for b in (parsed.blocking_reasons or [])][:8],
         extraction_notes=parsed.extraction_notes,
         seller_photo_feedback=[str(s)[:200] for s in (parsed.seller_photo_feedback or [])][:5],
-        field_confidence=dict(parsed.field_confidence or {}),
-        field_evidence=dict(parsed.field_evidence or {}),
+        field_confidence=fc_dict,
+        field_evidence=fe_dict,
     )
 
 
-# Spec fields that PROMPT v2 says require direct_visible evidence.
+# Spec fields that PROMPT v2 restricts to direct_visible evidence.
 # The post-processor nulls these unless field_evidence reports
 # direct_visible — protects against Gemini fabricating specs from
 # model knowledge.
@@ -369,43 +415,51 @@ _SPEC_FIELDS_REQUIRING_DIRECT_VISIBLE = (
     "battery_health",
     "purchase_year",
     "screen_size",
+    "accessories",
+    "warranty_status",
 )
 
-# Image-set quality flags that mean "do not auto-price this listing."
-_PRICE_BLOCKING_QUALITY_FLAGS = (
+# Flags (from the top-level `flags` list, per PROMPT v2's IMAGE SET
+# VALIDITY section) that mean "do not auto-price this listing."
+_PRICE_BLOCKING_FLAGS = (
     "multiple_items",
     "no_product",
     "blurry",
+    "packaging_only",
     "screenshot_only",
     "stock_or_catalog_suspected",
 )
+
+# Substrings in seller_photo_feedback that signal kids-set completeness
+# is unclear — we null pricing and force review for kids categories.
+_KIDS_COMPLETENESS_HINTS = ("all toy parts", "completeness", "all parts")
 
 
 def _apply_post_processing_guardrails(detected: AIDetected) -> AIDetected:
     """Server-side enforcement of the rules in PROMPT v2.
 
     Even when Gemini ignores the prompt's instructions, this function
-    reshapes the response so the rest of the app sees a safe payload:
+    reshapes the response so the rest of the app sees a safe payload.
+    Blocking signals are read from the top-level `flags` list (where
+    PROMPT v2's IMAGE SET VALIDITY section emits them); `image_set_quality`
+    is purely descriptive metadata and is NOT a guardrail input.
 
-      1. personal_info / nsfw → null all product/listing/pricing fields,
-         mark manual_review_required, drop auto_publish_candidate.
-      2. multiple_items / no_product / blurry / screenshot_only /
-         stock_or_catalog_suspected → null pricing.
+      1. personal_info / nsfw in flags → null all product/listing/pricing
+         fields, mark manual_review_required, drop auto_publish_candidate.
+      2. multiple_items / no_product / blurry / packaging_only /
+         screenshot_only / stock_or_catalog_suspected in flags → null pricing.
       3. spec fields without direct_visible field_evidence → null.
       4. price_confidence < 0.5 → suggested_price_inr null.
       5. manual_review_required True → auto_publish_candidate False.
+      6. kids-toys / kids-education with completeness-unclear feedback
+         → null pricing + force manual review.
     """
-    isq = detected.image_set_quality or {}
-
-    def _q(name: str) -> bool:
-        v = isq.get(name)
-        return bool(v) if v is not None else False
-
+    flags = set(detected.flags or [])
     blocking_reasons: list[str] = list(detected.blocking_reasons or [])
 
     # Rule 1: privacy / safety → nuke every product/listing/pricing field.
-    if _q("personal_info") or _q("nsfw"):
-        reason = "personal_info" if _q("personal_info") else "nsfw"
+    if "personal_info" in flags or "nsfw" in flags:
+        reason = "personal_info" if "personal_info" in flags else "nsfw"
         if reason not in blocking_reasons:
             blocking_reasons.append(reason)
         return AIDetected(
@@ -432,7 +486,7 @@ def _apply_post_processing_guardrails(detected: AIDetected) -> AIDetected:
             title_suggestion=None,
             description_suggestion=None,
             flags=detected.flags,
-            image_set_quality=isq,
+            image_set_quality=detected.image_set_quality or {},
             manual_review_required=True,
             auto_publish_candidate=False,
             blocking_reasons=blocking_reasons,
@@ -443,16 +497,14 @@ def _apply_post_processing_guardrails(detected: AIDetected) -> AIDetected:
             field_evidence={},
         )
 
-    # Rule 2: image-set quality flags that block pricing.
+    # Rule 2: flags that block pricing.
     suggested_price_inr = detected.suggested_price_inr
     price_confidence = detected.price_confidence
     price_reasoning = detected.price_reasoning
-    for flag in _PRICE_BLOCKING_QUALITY_FLAGS:
-        if _q(flag):
+    for flag in _PRICE_BLOCKING_FLAGS:
+        if flag in flags:
             if suggested_price_inr is not None:
-                price_reasoning = (
-                    f"price suppressed by post-processor: image_set_quality.{flag}"
-                )
+                price_reasoning = f"price suppressed by post-processor: flag={flag}"
             suggested_price_inr = None
             price_confidence = 0.0
             if flag not in blocking_reasons:
@@ -463,10 +515,8 @@ def _apply_post_processing_guardrails(detected: AIDetected) -> AIDetected:
     forced_specs: dict[str, None] = {}
     for spec_field in _SPEC_FIELDS_REQUIRING_DIRECT_VISIBLE:
         ev = fe.get(spec_field)
-        # If field_evidence is missing OR not direct_visible, force null.
-        # We only apply this when Gemini gave us evidence labels at all
-        # (the v2 prompt is what emits them); otherwise we leave the
-        # legacy behaviour intact for backwards compat with old prompts.
+        # Apply only when Gemini emitted evidence labels at all (v2 prompt
+        # behaviour); otherwise leave legacy compat untouched.
         if fe and getattr(detected, spec_field, None) is not None and ev != "direct_visible":
             forced_specs[spec_field] = None
 
@@ -479,10 +529,24 @@ def _apply_post_processing_guardrails(detected: AIDetected) -> AIDetected:
     # Rule 5: manual_review_required forces auto_publish_candidate False.
     manual_review_required = bool(detected.manual_review_required)
     auto_publish_candidate = bool(detected.auto_publish_candidate)
+
+    # Rule 6: kids-set completeness unclear → block price + force review.
+    if detected.category_slug in ("kids-toys", "kids-education"):
+        notes = " ".join(detected.seller_photo_feedback or []).lower()
+        if any(hint in notes for hint in _KIDS_COMPLETENESS_HINTS):
+            if suggested_price_inr is not None:
+                price_reasoning = (
+                    "kids set completeness unclear — price suppressed."
+                )
+            suggested_price_inr = None
+            price_confidence = 0.0
+            manual_review_required = True
+            if "kids_completeness_unclear" not in blocking_reasons:
+                blocking_reasons.append("kids_completeness_unclear")
+
     if manual_review_required:
         auto_publish_candidate = False
 
-    # Apply spec nulls (Pydantic immutable-by-convention; rebuild with .model_copy).
     update_kwargs: dict = {
         "suggested_price_inr": suggested_price_inr,
         "price_confidence": price_confidence,

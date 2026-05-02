@@ -103,6 +103,16 @@ Rules:
 - If packaging_only is true: you may extract brand/model from box, but manual_review_required = true and price should be null unless actual item is also visible.
 - If screenshot_only or stock_or_catalog_suspected is true: manual_review_required = true and price should be null.
 
+Also fill the structured image_set_quality block (descriptive, not blocking):
+- is_single_sellable_item: true if photos clearly show one sellable product
+- has_actual_item_photo: true if at least one photo shows the actual physical item
+- has_box_or_packaging: true if box/packaging is visible in any photo
+- has_settings_or_spec_screen: true if a Settings/About/spec screenshot is visible
+- has_receipt_or_warranty: true if a bill/receipt/warranty card is visible
+- has_private_info: true if any private info is visible (mirror "personal_info" in flags)
+- is_stock_or_catalog_image_suspected: true if any photo looks like a stock/catalog image
+- overall_photo_quality: one of "good" | "usable" | "poor" | "unusable"
+
 ==================================================
 EVIDENCE DISCIPLINE
 ==================================================

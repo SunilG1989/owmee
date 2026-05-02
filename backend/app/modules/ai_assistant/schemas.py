@@ -68,13 +68,21 @@ class AIDetected(BaseModel):
     # Authoring
     title_suggestion: str | None = None
     description_suggestion: str | None = None
-    flags: list[str] = Field(default_factory=list)
-    # Image-set safety / quality flags. Old code reads from `flags`;
-    # PROMPT v2 also surfaces these as a structured `image_set_quality`
-    # block so post-processing can reason about them without string
-    # matching:
+    # Top-level flags list. Per PROMPT v2's IMAGE SET VALIDITY section,
+    # blocking signals are emitted here as string tokens:
     #   nsfw, personal_info, multiple_items, no_product, blurry,
-    #   packaging_only, screenshot_only, stock_or_catalog_suspected
+    #   packaging_only, screenshot_only, stock_or_catalog_suspected,
+    #   plus ai_failed:<reason> for client/SDK failures.
+    # The post-processor in claude_client._apply_post_processing_guardrails
+    # reads from this list (NOT from image_set_quality).
+    flags: list[str] = Field(default_factory=list)
+    # Descriptive metadata about the photo set. Filled keys per the
+    # canonical schema:
+    #   is_single_sellable_item, has_actual_item_photo, has_box_or_packaging,
+    #   has_settings_or_spec_screen, has_receipt_or_warranty,
+    #   has_private_info, is_stock_or_catalog_image_suspected (booleans),
+    #   overall_photo_quality ("good" | "usable" | "poor" | "unusable").
+    # This block is purely descriptive — it is NOT a guardrail input.
     image_set_quality: dict = Field(default_factory=dict)
 
     # Review routing — populated by Gemini per PROMPT v2 + reinforced
