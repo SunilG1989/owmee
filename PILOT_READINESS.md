@@ -1,9 +1,9 @@
 # Owmee pilot readiness
 
 Single-source list of what's shipped vs pending vs deferred, ahead of the
-Bengaluru hyperlocal pilot (Kanakapura Rd / Judicial Layout + Bannerghatta
-Rd / Vijaya Bank Layout). Replaces the stack-ranked list that used to
-live only in conversation context.
+Bengaluru pilot. As of 2026-05-02 the geo-fence covers all of Bengaluru
+(25 km radius from MG Road) — the original two micro-zones were lifted
+once ops confirmed routing economics held at city scale.
 
 **Pilot scope (locked):**
 - No platform fee.

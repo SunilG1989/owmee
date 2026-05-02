@@ -1,17 +1,18 @@
-"""Geo-fence — Owmee V1 hyperlocal pilot.
+"""Geo-fence — Owmee V1 city-wide pilot.
 
-V1 launch zones (per founder direction, 2026-05-01):
-  1. Kanakapura Road — Judicial Layout
-  2. Bannerghatta Road — Vijay Bank Layout
+History
+-------
+The original pilot was hyperlocal (two ~2 km micro-zones around
+Judicial Layout and Vijay Bank Layout). 2026-05-02: founder relaxed
+the constraint to all of Bengaluru — operations team confident routes
+remain manageable at city scale with the FE pool we have.
 
-Both seller's pickup address AND buyer's delivery address must fall
-within at least one zone for a transaction to proceed. This is the
-hard constraint that makes "no buyer-seller meetup, FE-managed pickup
-+ delivery" operationally feasible at launch — single FE pool, single
-hub, ~5 km routes max.
+Both seller's pickup address AND buyer's delivery address must still
+fall within at least one launch zone for a transaction to proceed.
 
-Zones use a simple lat/lng + radius model. Switch to polygons later if
-the radius approximation excludes / includes the wrong streets.
+Zones use a simple lat/lng + radius model — adequate at city scale.
+Switch to polygons later if a finer-grained boundary is needed (e.g.
+to exclude airport / military areas).
 """
 from __future__ import annotations
 
@@ -28,22 +29,17 @@ class Zone:
     radius_km: float
 
 
-# Centroids approximate; tighten / replace with polygon when ground-truth
-# data from the FE pilot comes in.
+# 25 km from MG Road covers the Bengaluru metro area — Whitefield in the
+# east, Yelahanka in the north, Kanakapura Road / Bannerghatta in the
+# south, Kengeri / Mysore Road in the west. Tighten or split if the FE
+# routing economics break at this scale.
 LAUNCH_ZONES: tuple[Zone, ...] = (
     Zone(
-        name="Kanakapura Road — Judicial Layout",
-        slug="judicial-layout",
-        lat=12.8732,
-        lng=77.5471,
-        radius_km=2.0,
-    ),
-    Zone(
-        name="Bannerghatta Road — Vijay Bank Layout",
-        slug="vijay-bank-layout",
-        lat=12.8841,
-        lng=77.5969,
-        radius_km=2.0,
+        name="Bengaluru",
+        slug="bengaluru",
+        lat=12.9716,
+        lng=77.5946,
+        radius_km=25.0,
     ),
 )
 
@@ -77,9 +73,8 @@ def out_of_service_message() -> dict:
     return {
         "error": "OUT_OF_SERVICE_AREA",
         "message": (
-            "Owmee currently serves Judicial Layout (Kanakapura Road) and "
-            "Vijay Bank Layout (Bannerghatta Road). We're expanding soon — "
-            "leave your email and we'll let you know when we cover your area."
+            "Owmee currently serves Bengaluru. We're expanding soon — "
+            "leave your email and we'll let you know when we cover your city."
         ),
         "zones": [
             {"slug": z.slug, "name": z.name, "lat": z.lat, "lng": z.lng, "radius_km": z.radius_km}
