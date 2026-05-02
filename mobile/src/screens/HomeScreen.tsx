@@ -24,8 +24,7 @@ import {
   ActivityIndicator, useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { C, T, S, R } from '../utils/tokens';
-import { C8 } from '../components/theme8';
+import { C, T, S, R, Home, pickAspectRatio } from '../utils/tokens';
 import type { TabScreen } from '../navigation/types';
 import { Feed, type FeedListing } from '../services/api';
 import { useAuthStore } from '../store/authStore';
@@ -33,7 +32,6 @@ import { useLocation } from '../hooks/useLocation';
 import BlockbusterDealsStrip from '../components/BlockbusterDealsStrip';
 import SellBlock from '../components/SellBlock';
 import { FeedCard } from '../components/OwmeeListingCard';
-import { pickAspectRatio } from '../components/theme8';
 
 const PAGE_LIMIT = 20;
 

@@ -7,8 +7,7 @@
  */
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { C } from '../utils/tokens';
-import { C8 } from './theme8';
+import { C, Home } from '../utils/tokens';
 
 interface Props {
   onPress: () => void;
@@ -48,7 +47,7 @@ const s = StyleSheet.create({
     paddingBottom: 8,
   },
   block: {
-    backgroundColor: C8.sellBgEnd,
+    backgroundColor: Home.sellBgEnd,
     borderRadius: 14,
     padding: 16,
     paddingRight: 14,
@@ -67,7 +66,7 @@ const s = StyleSheet.create({
     backgroundColor: C.white,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: C8.sellAccent,
+    shadowColor: Home.sellAccent,
     shadowOpacity: 0.15,
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 1 },
@@ -78,15 +77,15 @@ const s = StyleSheet.create({
   headline: {
     fontSize: 14,
     fontWeight: '700',
-    color: C8.sellTitle,
+    color: Home.sellTitle,
     marginBottom: 2,
   },
   subtitle: {
     fontSize: 11,
-    color: C8.sellAccent,
+    color: Home.sellAccent,
   },
   cta: {
-    backgroundColor: C8.sellCtaBg,
+    backgroundColor: Home.sellCtaBg,
     paddingHorizontal: 14,
     paddingVertical: 9,
     borderRadius: 8,
@@ -94,6 +93,6 @@ const s = StyleSheet.create({
   ctaText: {
     fontSize: 12,
     fontWeight: '600',
-    color: C8.sellCtaText,
+    color: Home.sellCtaText,
   },
 });

@@ -1,0 +1,77 @@
+# Design-system drift allow-list — Phase 1 baseline (2026-05-02)
+#
+# Files listed here have known drift from the design system (raw
+# <TouchableOpacity>, fontSize literals, hex colors, ad-hoc radii).
+# The lint at scripts/lint-design.sh fires only on files NOT in this
+# list, so adding *new* drift to a fresh file fails CI immediately.
+#
+# As Phases 2/3 migrate each file, REMOVE its line from this list.
+# When this file is empty, Phase 6 wires the lint into CI as a
+# permanent gate.
+#
+# Format: one path per line, relative to mobile/ root.
+# Lines starting with # and blank lines are comments.
+
+src/components/BlockbusterDealsStrip.tsx
+src/components/OwmeeListingCard.tsx
+src/components/SellBlock.tsx
+src/components/SplashScreen.tsx
+src/components/common/ErrorBoundary.tsx
+src/components/concierge/ExpertPricingPanel.tsx
+src/components/concierge/SpecialistProfileCard.tsx
+src/components/listing/ListingCard.tsx
+src/screens/HomeScreen.tsx
+src/screens/KycRequiredForActionScreen.tsx
+src/screens/OffersScreen.tsx
+src/screens/SearchScreen.tsx
+src/screens/TransactionDetailScreen.tsx
+src/screens/auth/KycFlowScreen.tsx
+src/screens/auth/LocationPickerScreen.tsx
+src/screens/auth/OnboardingScreen.tsx
+src/screens/auth/OtpPhoneScreen.tsx
+src/screens/auth/OtpVerifyScreen.tsx
+src/screens/auth/RegisterScreen.tsx
+src/screens/auth/VerificationWallScreen.tsx
+src/screens/auth/address/AddressDetailsScreen.tsx
+src/screens/auth/address/AddressPickerScreen.tsx
+src/screens/auth/address/LocationDetectScreen.tsx
+src/screens/auth/address/LocationMapScreen.tsx
+src/screens/community/CommunityProofScreen.tsx
+src/screens/fe/FeCaptureScreen.tsx
+src/screens/fe/FeHomeScreen.tsx
+src/screens/fe/FeOpsScreen.tsx
+src/screens/fe/FeVisitDetailScreen.tsx
+src/screens/fe/FeVisitHistoryScreen.tsx
+src/screens/fe/ReportIssueScreen.tsx
+src/screens/fe/SellerApprovalScreen.tsx
+src/screens/fe/VisitContinueScreen.tsx
+src/screens/kids/KidsSectionScreen.tsx
+src/screens/listings/CreateListingScreen.tsx
+src/screens/listings/EditListingScreen.tsx
+src/screens/listings/FeVisitConfirmationScreen.tsx
+src/screens/listings/ListingDetailScreen.tsx
+src/screens/listings/MyListingsScreen.tsx
+src/screens/listings/RequestFeVisitScreen.tsx
+src/screens/listings/SellModeForkScreen.tsx
+src/screens/listings/ai/AIListingCameraScreen.tsx
+src/screens/listings/ai/AIListingIdentifierScreen.tsx
+src/screens/listings/ai/AIListingSuggestScreen.tsx
+src/screens/listings/ai/SellTabRedirect.tsx
+src/screens/listings/ai/shared/ComparablesSheet.tsx
+src/screens/listings/ai/shared/EditDetailsSheet.tsx
+src/screens/listings/ai/shared/PriceSheet.tsx
+src/screens/listings/concierge/ArrivalVerificationScreen.tsx
+src/screens/listings/concierge/BookingConfirmedScreen.tsx
+src/screens/listings/concierge/BookingScreen.tsx
+src/screens/listings/concierge/MyConciergeScreen.tsx
+src/screens/listings/concierge/NpsScreen.tsx
+src/screens/listings/concierge/VisitDetailScreen.tsx
+src/screens/profile/EditProfileScreen.tsx
+src/screens/profile/MyFeVisitsScreen.tsx
+src/screens/profile/NotificationsScreen.tsx
+src/screens/profile/ProfileScreen.tsx
+src/screens/profile/SellerProfileScreen.tsx
+src/screens/profile/TransactionListScreen.tsx
+src/screens/profile/WishlistScreen.tsx
+src/screens/purchase/CheckoutScreen.tsx
+src/screens/purchase/OrderConfirmationScreen.tsx

@@ -9,8 +9,7 @@
  */
 import React from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
-import { C, T, S, R } from '../utils/tokens';
-import { C8, pickCardBg } from './theme8';
+import { C, T, S, R, Home, pickCardBg } from '../utils/tokens';
 import type { FeedListing } from '../services/api';
 
 interface Props {
@@ -204,7 +203,7 @@ const s = StyleSheet.create({
     position: 'absolute',
     top: 8,
     left: 8,
-    backgroundColor: C8.dealsBadgeBg,
+    backgroundColor: Home.dealsBadgeBg,
     paddingHorizontal: 9,
     paddingVertical: 4,
     borderRadius: 5,
@@ -213,7 +212,7 @@ const s = StyleSheet.create({
   discountText: {
     fontSize: 12,
     fontWeight: '700',
-    color: C8.dealsBadgeText,
+    color: Home.dealsBadgeText,
   },
   dealImg: {
     aspectRatio: 1,
@@ -250,7 +249,7 @@ const s = StyleSheet.create({
   dealSave: {
     fontSize: 11,
     fontWeight: '600',
-    color: C8.dealsSubtitle,
+    color: Home.dealsSubtitle,
   },
 
   // feed variant
@@ -273,7 +272,7 @@ const s = StyleSheet.create({
     position: 'absolute',
     top: 6,
     right: 6,
-    backgroundColor: C8.verifiedBg,
+    backgroundColor: Home.verifiedBg,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
@@ -282,7 +281,7 @@ const s = StyleSheet.create({
   verifiedText: {
     fontSize: 10,
     fontWeight: '600',
-    color: C8.verifiedText,
+    color: Home.verifiedText,
   },
   feedMeta: {
     padding: 10,
@@ -307,6 +306,6 @@ const s = StyleSheet.create({
   shipText: {
     fontSize: 10,
     fontWeight: '600',
-    color: C8.shipText,
+    color: Home.shipText,
   },
 });

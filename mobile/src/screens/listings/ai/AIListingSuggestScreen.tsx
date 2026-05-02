@@ -33,8 +33,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { C, T, S, R, Shadow, formatPrice, condStyle } from '../../../utils/tokens';
-import { C8 } from '../../../components/theme8';
+import { C, T, S, R, Shadow, Home, formatPrice, condStyle } from '../../../utils/tokens';
 import { AIListing } from '../../../services/api';
 import { BackButton } from '../../../components/ui';
 import type { AIDraftResponse } from '../../../services/api';
@@ -507,7 +506,7 @@ const st = StyleSheet.create({
   howTitle: {
     fontSize: T.size.sm,
     fontWeight: T.weight.bold,
-    color: C8.dealsAmberStart,
+    color: Home.dealsBgStart,
     letterSpacing: 1.5,
     marginBottom: S.md,
   },

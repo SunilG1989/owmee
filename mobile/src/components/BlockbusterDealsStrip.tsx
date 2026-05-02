@@ -9,8 +9,7 @@
  */
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
-import { C, T } from '../utils/tokens';
-import { C8 } from './theme8';
+import { C, Home } from '../utils/tokens';
 import { DealCard } from './OwmeeListingCard';
 import type { FeedListing } from '../services/api';
 
@@ -53,7 +52,7 @@ export default function BlockbusterDealsStrip({
 
       {loading && deals.length === 0 ? (
         <View style={s.loadingWrap}>
-          <ActivityIndicator color={C8.dealsAccent} size="small" />
+          <ActivityIndicator color={Home.dealsAccent} size="small" />
         </View>
       ) : (
         <>
@@ -88,7 +87,7 @@ export default function BlockbusterDealsStrip({
 
 const s = StyleSheet.create({
   wrap: {
-    backgroundColor: C8.dealsAmberStart,
+    backgroundColor: Home.dealsBgStart,
     paddingTop: 14,
     paddingBottom: 12,
   },
@@ -110,16 +109,16 @@ const s = StyleSheet.create({
   titleMain: {
     fontSize: 17,
     fontWeight: '700',
-    color: C8.dealsTitleText,
+    color: Home.dealsTitleText,
     letterSpacing: -0.3,
   },
   titleSub: {
     fontSize: 11,
-    color: C8.dealsSubtitle,
+    color: Home.dealsSubtitle,
     marginTop: 2,
   },
   countPill: {
-    backgroundColor: C8.dealsAccent,
+    backgroundColor: Home.dealsAccent,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 999,
@@ -144,6 +143,6 @@ const s = StyleSheet.create({
   allLink: {
     fontSize: 12,
     fontWeight: '600',
-    color: C8.dealsSubtitle,
+    color: Home.dealsSubtitle,
   },
 });

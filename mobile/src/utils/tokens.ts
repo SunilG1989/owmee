@@ -256,6 +256,60 @@ export function prettyStatus(status: string | null | undefined): string {
 }
 
 // ──────────────────────────────────────────────────────────────────────
+// HOME-FEED ACCENTS — folded in from the now-deleted components/theme8.ts.
+// All values v6-aligned (the legacy theme8 still emitted v4 warm-amber
+// hex, which is why home surfaces visibly diverged from the rest of the
+// app until 2026-05-02).
+//
+// Keep these few; resist the urge to add more. Brand cohesion comes
+// from the petrol primary + coral accent + bone canvas trio — that's
+// it. Anything else and the app starts to feel stitched together.
+// ──────────────────────────────────────────────────────────────────────
+export const Home = {
+  // Blockbuster deals — coral family, the v6 "spotlight / act now" surface
+  dealsBgStart:    C.coralLight,
+  dealsBgEnd:      '#FAD9CB',
+  dealsAccent:     C.coralDeep,
+  dealsTitleText:  C.coralDeep,
+  dealsSubtitle:   C.coralDeep,
+  dealsBadgeBg:    C.coral,
+  dealsBadgeText:  C.white,
+  dealsCardShadow: 'rgba(15, 26, 31, 0.10)',
+
+  // Sell block — petrol family (trust + grow)
+  sellBgStart:     C.petrolLight,
+  sellBgEnd:       C.aquaLight,
+  sellAccent:      C.petrol,
+  sellTitle:       C.petrolDeep,
+  sellCtaBg:       C.petrol,
+  sellCtaText:     C.white,
+
+  // Owmee Verified badge — petrol family
+  verifiedBg:      C.petrolLight,
+  verifiedText:    C.petrolText,
+  verifiedDot:     C.petrolMid,
+
+  // Ship indicator — petrol
+  shipText:        C.petrol,
+} as const;
+
+const HOME_CARD_BGS = [
+  C.cardBgGray, C.cardBgMauve, C.cardBgGreen,
+  C.cardBgPeach, C.cardBgAmber, C.cardBgStone,
+];
+
+/** Card background for masonry feed — index-stable so cards don't
+ *  re-color across re-renders. */
+export function pickCardBg(index: number): string {
+  return HOME_CARD_BGS[((index % HOME_CARD_BGS.length) + HOME_CARD_BGS.length) % HOME_CARD_BGS.length];
+}
+
+/** Alternating aspect ratios for masonry feel (every 3rd card is taller). */
+export function pickAspectRatio(index: number): number {
+  return index % 3 === 0 ? 4 / 5 : 1;
+}
+
+// ──────────────────────────────────────────────────────────────────────
 // SEMANTIC LAYER (NEW — prefer for new code)
 // Palette-swap-stable. Use these instead of raw C.* in new code.
 // ──────────────────────────────────────────────────────────────────────

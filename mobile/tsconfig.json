@@ -35,6 +35,10 @@
     "**/sprint4_pass2_backup_*",
     "**/sprint4_hf1_backup",
     "**/sprint4_p1_backup",
-    "**/*.preunpatch*"
+    "**/*.preunpatch*",
+    // Palette-migration snapshots kept for visual rollback reference.
+    // Not built, not type-checked.
+    "**/*.bak.tsx",
+    "**/*.bak.ts"
   ]
 }
