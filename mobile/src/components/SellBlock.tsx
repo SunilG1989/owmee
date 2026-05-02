@@ -7,7 +7,7 @@
  */
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { C, Home } from '../utils/tokens';
+import { C, T, S, R, Home } from '../utils/tokens';
 
 interface Props {
   onPress: () => void;
@@ -42,21 +42,19 @@ export default function SellBlock({ onPress, subtitle }: Props) {
 
 const s = StyleSheet.create({
   outer: {
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    paddingBottom: 8,
+    paddingHorizontal: S.md,
+    paddingTop: S.md,
+    paddingBottom: S.sm,
   },
   block: {
     backgroundColor: Home.sellBgEnd,
-    borderRadius: 14,
-    padding: 16,
-    paddingRight: 14,
+    borderRadius: R.md,
+    padding: S.lg,
+    paddingRight: S.md + 2,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    gap: S.md + 2,
     borderWidth: 1,
-    // v4: was a sky-blue tint to match the old SellBlock palette; now a
-    // soft warm border that matches the v4 forest-tinted background.
     borderColor: C.border,
   },
   iconCircle: {
@@ -72,27 +70,27 @@ const s = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     elevation: 2,
   },
-  iconEmoji: { fontSize: 22 },
+  iconEmoji: { fontSize: T.size.xxl - 2 },
   textBlock: { flex: 1 },
   headline: {
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: T.size.sm + 1,
+    fontWeight: T.weight.bold,
     color: Home.sellTitle,
     marginBottom: 2,
   },
   subtitle: {
-    fontSize: 11,
+    fontSize: T.size.sm,
     color: Home.sellAccent,
   },
   cta: {
     backgroundColor: Home.sellCtaBg,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 8,
+    paddingHorizontal: S.md + 2,
+    paddingVertical: S.sm + 1,
+    borderRadius: R.xs + 2,
   },
   ctaText: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: T.size.sm,
+    fontWeight: T.weight.semi,
     color: Home.sellCtaText,
   },
 });

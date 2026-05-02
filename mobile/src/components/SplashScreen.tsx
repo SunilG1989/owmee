@@ -12,7 +12,7 @@
  */
 import React, { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
-import { C } from '../utils/tokens';
+import { C, T } from '../utils/tokens';
 
 interface Props {
   /** When true, fades out and unmounts. Defaults to false (visible). */
@@ -77,14 +77,14 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   wordmark: {
-    fontSize: 48,
-    fontWeight: '700',
+    fontSize: T.size.display + 18,                                  // 48
+    fontWeight: T.weight.bold,
     color: C.petrol,
     textAlign: 'center',
     letterSpacing: -1,
   },
   tagline: {
-    fontSize: 15,
+    fontSize: T.size.md,
     color: C.text2,
     textAlign: 'center',
     marginTop: 6,
@@ -95,7 +95,7 @@ const s = StyleSheet.create({
     alignSelf: 'center',
   },
   footerText: {
-    fontSize: 12,
+    fontSize: T.size.sm,
     color: C.text2,
     opacity: 0.6,
     letterSpacing: 0.5,

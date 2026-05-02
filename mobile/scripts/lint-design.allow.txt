@@ -12,11 +12,8 @@
 # Format: one path per line, relative to mobile/ root.
 # Lines starting with # and blank lines are comments.
 
-src/components/BlockbusterDealsStrip.tsx
 src/components/OwmeeListingCard.tsx
 src/components/SellBlock.tsx
-src/components/SplashScreen.tsx
-src/components/common/ErrorBoundary.tsx
 src/components/concierge/ExpertPricingPanel.tsx
 src/components/concierge/SpecialistProfileCard.tsx
 src/components/listing/ListingCard.tsx

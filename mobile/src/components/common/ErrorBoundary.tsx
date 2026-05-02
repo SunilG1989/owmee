@@ -1,6 +1,7 @@
 import React, { Component, type ReactNode } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { C, R } from '../../utils/tokens';
+import { View, Text, StyleSheet } from 'react-native';
+import { C, T, S } from '../../utils/tokens';
+import { Button } from '../ui';
 
 export default class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   state = { hasError: false };
@@ -11,18 +12,23 @@ export default class ErrorBoundary extends Component<{ children: ReactNode }, { 
       <View style={s.c}>
         <Text style={s.e}>⚠️</Text>
         <Text style={s.t}>Something went wrong</Text>
-        <TouchableOpacity style={s.b} onPress={() => this.setState({ hasError: false })}>
-          <Text style={s.bt}>Try again</Text>
-        </TouchableOpacity>
+        <Button
+          label="Try again"
+          variant="primary"
+          onPress={() => this.setState({ hasError: false })}
+        />
       </View>
     );
     return this.props.children;
   }
 }
+
 const s = StyleSheet.create({
-  c: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, backgroundColor: C.bone },
-  e: { fontSize: 48, marginBottom: 16 },
-  t: { fontSize: 18, fontWeight: '600', color: C.text, marginBottom: 24 },
-  b: { backgroundColor: C.petrol, borderRadius: R.sm, paddingHorizontal: 24, paddingVertical: 12 },
-  bt: { fontSize: 15, color: C.white, fontWeight: '600' },
+  c: {
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    padding: S.xxxl,
+    backgroundColor: C.bone,
+  },
+  e: { fontSize: T.size.display + 18, marginBottom: S.lg },
+  t: { fontSize: T.size.lg + 1, fontWeight: T.weight.semi, color: C.text, marginBottom: S.xxl },
 });

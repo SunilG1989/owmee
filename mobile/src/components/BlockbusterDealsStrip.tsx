@@ -9,7 +9,7 @@
  */
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
-import { C, Home } from '../utils/tokens';
+import { C, T, S, Home } from '../utils/tokens';
 import { DealCard } from './OwmeeListingCard';
 import type { FeedListing } from '../services/api';
 
@@ -88,48 +88,48 @@ export default function BlockbusterDealsStrip({
 const s = StyleSheet.create({
   wrap: {
     backgroundColor: Home.dealsBgStart,
-    paddingTop: 14,
-    paddingBottom: 12,
+    paddingTop: S.md + 2,
+    paddingBottom: S.md,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    marginBottom: 12,
+    paddingHorizontal: S.lg,
+    marginBottom: S.md,
   },
   titleBlock: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   bolt: {
-    fontSize: 22,
+    fontSize: T.size.xxl - 2,
     lineHeight: 22,
   },
   titleMain: {
-    fontSize: 17,
-    fontWeight: '700',
+    fontSize: T.size.lg,
+    fontWeight: T.weight.bold,
     color: Home.dealsTitleText,
     letterSpacing: -0.3,
   },
   titleSub: {
-    fontSize: 11,
+    fontSize: T.size.sm,
     color: Home.dealsSubtitle,
     marginTop: 2,
   },
   countPill: {
     backgroundColor: Home.dealsAccent,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: S.sm + 2,
+    paddingVertical: S.xs,
     borderRadius: 999,
   },
   countText: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: T.size.sm,
+    fontWeight: T.weight.bold,
     color: C.white,
   },
   cardsWrap: {
-    paddingHorizontal: 16,
+    paddingHorizontal: S.lg,
   },
   loadingWrap: {
     height: 200,
@@ -138,11 +138,11 @@ const s = StyleSheet.create({
   },
   allLinkWrap: {
     alignItems: 'center',
-    paddingTop: 12,
+    paddingTop: S.md,
   },
   allLink: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: T.size.sm,
+    fontWeight: T.weight.semi,
     color: Home.dealsSubtitle,
   },
 });
