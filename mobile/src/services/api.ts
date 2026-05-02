@@ -292,13 +292,96 @@ export const Feed = {
 
 // ── Sprint 8: Geo (Nominatim proxy with backend caching) ────────────────────
 export const Geo = {
-  /** GET /v1/geo/reverse?lat=&lng= — reverse geocode coordinates */
+  /** GET /v1/geo/reverse?lat=&lng= — legacy Nominatim flat shape (used by old LocationPickerScreen). */
   reverse: (lat: number, lng: number) =>
     api.get<ReverseGeocodeResponse>('/v1/geo/reverse', { params: { lat, lng } }),
 
-  /** GET /v1/geo/search?q= — forward search, India-biased */
+  /** GET /v1/geo/search?q= — forward search, India-biased. */
   search: (q: string) =>
     api.get<{ results: GeoSearchResult[] }>('/v1/geo/search', { params: { q } }),
+
+  /**
+   * GET /v1/geo/reverse-geocode?lat=&lng=
+   * Address-PRD shape used by the new 3-screen address flow.
+   * Backed by Photon, cached 1h. Returns 503 if reverse-geocoding fails;
+   * caller should handle that by showing the map without auto-fill.
+   */
+  reverseGeocodeStructured: (lat: number, lng: number) =>
+    api.get<PhotonReverseResponse>('/v1/geo/reverse-geocode', {
+      params: { lat, lng },
+    }),
+};
+
+/** Response shape for /v1/geo/reverse-geocode (Photon-backed). */
+export interface PhotonReverseResponse {
+  approximate_address: string;
+  address_line_1: string | null;
+  locality: string | null;
+  city: string;
+  state: string;
+  country: string;
+  pincode: string | null;
+  in_service_area: boolean;
+  raw_provider_response?: unknown;
+}
+
+// ── Address-PRD: saved-address CRUD ─────────────────────────────────────────
+
+/** A saved address row, as returned by /v1/users/me/addresses. */
+export interface UserAddress {
+  id: string;
+  label: 'home' | 'work' | 'other';
+  custom_label: string | null;
+  lat: number;
+  lng: number;
+  flat_house_number: string;
+  building_name: string | null;
+  floor: string | null;
+  landmark: string | null;
+  address_line_1: string | null;
+  locality: string | null;
+  city: string;
+  state: string;
+  pincode: string | null;
+  is_default: boolean;
+  source: 'gps_detected' | 'manual' | 'imported_from_profile';
+}
+
+export interface CreateAddressRequest {
+  label: 'home' | 'work' | 'other';
+  custom_label?: string | null;
+  lat: number;
+  lng: number;
+  flat_house_number: string;
+  building_name?: string | null;
+  floor?: string | null;
+  landmark?: string | null;
+  address_line_1?: string | null;
+  locality?: string | null;
+  city: string;
+  state: string;
+  pincode?: string | null;
+  is_default?: boolean;
+  source?: 'gps_detected' | 'manual';
+}
+
+export const Addresses = {
+  /** GET /v1/users/me/addresses — default first, then created_at desc. */
+  list: () => api.get<UserAddress[]>('/v1/users/me/addresses'),
+
+  /** POST /v1/users/me/addresses — auto-defaults if user has none yet. */
+  create: (body: CreateAddressRequest) =>
+    api.post<UserAddress>('/v1/users/me/addresses', body),
+
+  /** PATCH /v1/users/me/addresses/{id} — partial update; flipping is_default
+   *  to true atomically demotes other defaults. */
+  update: (id: string, body: Partial<CreateAddressRequest>) =>
+    api.patch<UserAddress>(`/v1/users/me/addresses/${id}`, body),
+
+  /** DELETE /v1/users/me/addresses/{id} — promotes most-recent remaining
+   *  address to default if the deleted row was default. 204 on success. */
+  delete: (id: string) =>
+    api.delete<void>(`/v1/users/me/addresses/${id}`),
 };
 
 // ── Sprint 8: Profile location ──────────────────────────────────────────────

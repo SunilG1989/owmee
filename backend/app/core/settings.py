@@ -100,6 +100,13 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_vision_model: str = "gemini-2.5-flash"
     gemini_text_model: str = "gemini-2.0-flash-lite"
+
+    # ── Photon (reverse geocoding) ───────────────────────────────────────
+    # Public Photon (komoot.io) by default. If we hit fair-use limits in
+    # pilot, swap to self-hosted Photon by setting PHOTON_URL — the rest
+    # of the stack reads from this single env var.
+    photon_url: str = "https://photon.komoot.io"
+    photon_timeout_seconds: float = 6.0
 @lru_cache
 def get_settings() -> Settings:
     return Settings()

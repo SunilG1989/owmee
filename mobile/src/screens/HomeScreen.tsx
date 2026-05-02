@@ -194,7 +194,9 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
           <TouchableOpacity onPress={handleLocationPress} style={s.locPill}>
             <Text style={s.locPin}>📍</Text>
             <Text style={s.locName} numberOfLines={1}>
-              {location?.city || 'Set location'}
+              {location?.label && location?.locality
+                ? `${location.label} · ${location.locality}`
+                : location?.label || location?.locality || location?.city || 'Set location'}
             </Text>
             <Text style={s.locArrow}>▾</Text>
           </TouchableOpacity>

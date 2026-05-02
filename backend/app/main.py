@@ -27,6 +27,7 @@ if settings.sentry_dsn:
 from app.modules.geo import router as geo_router_mod  # SPRINT8_PHASE1_ROUTERS
 from app.modules.listings import feed_router as feed_router_mod  # SPRINT8_PHASE1_ROUTERS
 from app.modules.identity_auth import location_router as user_loc_router_mod  # SPRINT8_PHASE1_ROUTERS
+from app.modules.identity_auth import addresses_router as user_addresses_router_mod  # 0033 user_addresses
 from app.modules.ai_assistant.router import router as ai_assistant_router  # SPRINT8_PHASE2_AI
 
 logger = structlog.get_logger()
@@ -105,6 +106,7 @@ def create_app() -> FastAPI:
     app.include_router(feed_router_mod.router)
 
     app.include_router(user_loc_router_mod.router)
+    app.include_router(user_addresses_router_mod.router)
     app.include_router(kyc_router, prefix="/v1/kyc", tags=["kyc"])
     app.include_router(listings_router, prefix="/v1/listings", tags=["listings"])
     app.include_router(offers_router, prefix="/v1", tags=["offers"])

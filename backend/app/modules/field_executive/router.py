@@ -69,7 +69,13 @@ class RequestVisitRequest(BaseModel):
     requested_slot_end: datetime
     category_hint: str = Field(..., min_length=1, max_length=100)
     item_notes: Optional[str] = Field(None, max_length=2000)
-    address: AddressSnapshot
+    # Address PRD: prefer address_id (resolves to a saved user_addresses
+    # row owned by the requester). Legacy `address` payload still accepted
+    # so the existing RequestFeVisitScreen keeps working until Concierge
+    # Phase 1 ships its booking wizard. Exactly one of the two must be
+    # provided — handler validates this.
+    address_id: Optional[UUID] = None
+    address: Optional[AddressSnapshot] = None
 
 
 class VisitResponse(BaseModel):
@@ -179,6 +185,63 @@ class ImageConfirmRequest(BaseModel):
 
 def _address_to_dict(addr: AddressSnapshot) -> dict:
     return addr.model_dump(exclude_none=False)
+
+
+async def _resolve_address_id_to_snapshot(
+    db, address_id: UUID, owner_user_id: UUID
+) -> dict:
+    """Look up a saved address, assert ownership, freeze into a JSONB
+    snapshot suitable for the existing fe_visits.address_snapshot column.
+
+    Mapping notes
+    -------------
+    The legacy AddressSnapshot used flat field names (`house`, `street`,
+    `landmark`, etc.); UserAddress uses richer names (`flat_house_number`,
+    `building_name`, `address_line_1`). The snapshot keeps both old and
+    new shapes so downstream code (admin web Jinja templates, FE app
+    visit-detail screen, etc.) doesn't have to change in lockstep — they
+    can keep reading the legacy keys while new surfaces consume the
+    richer keys.
+    """
+    from app.modules.identity_auth.models import UserAddress
+
+    res = await db.execute(
+        select(UserAddress).where(
+            UserAddress.id == address_id,
+            UserAddress.user_id == owner_user_id,
+        )
+    )
+    row = res.scalar_one_or_none()
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "ADDRESS_NOT_FOUND"},
+        )
+
+    # New keys (preferred by anything new) + legacy keys (kept for
+    # backwards compat with screens that haven't been rewired yet).
+    return {
+        # Source pointer for forensics — never changes after snapshot.
+        "address_id": str(row.id),
+        "label": row.label,
+        "custom_label": row.custom_label,
+        "lat": float(row.lat),
+        "lng": float(row.lng),
+        # New richer fields
+        "flat_house_number": row.flat_house_number,
+        "building_name": row.building_name,
+        "floor": row.floor,
+        "address_line_1": row.address_line_1,
+        # Legacy field names — keep these populated for old consumers.
+        "house": row.flat_house_number,
+        "street": row.address_line_1,
+        "landmark": row.landmark,
+        # Shared
+        "locality": row.locality,
+        "city": row.city,
+        "state": row.state,
+        "pincode": row.pincode,
+    }
 
 
 async def _load_fe_by_id(db, fe_id: UUID) -> FieldExecutive:
@@ -373,13 +436,31 @@ async def request_visit(
     if seller is None:
         raise HTTPException(status_code=404, detail={"error": "USER_NOT_FOUND"})
 
+    # Resolve address: prefer address_id (new flow), fall back to embedded
+    # `address` payload (legacy RequestFeVisitScreen). Exactly one must be
+    # provided.
+    if body.address_id is not None:
+        addr_snapshot = await _resolve_address_id_to_snapshot(
+            db, body.address_id, current_user.user_id
+        )
+    elif body.address is not None:
+        addr_snapshot = _address_to_dict(body.address)
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "ADDRESS_REQUIRED",
+                "message": "Provide either address_id or address.",
+            },
+        )
+
     try:
         visit = await fe_service.create_visit_request(
             db,
             seller=seller,
             requested_start=body.requested_slot_start,
             requested_end=body.requested_slot_end,
-            address_snapshot=_address_to_dict(body.address),
+            address_snapshot=addr_snapshot,
             category_hint=body.category_hint,
             item_notes=body.item_notes,
         )

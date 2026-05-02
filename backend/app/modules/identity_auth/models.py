@@ -1,7 +1,7 @@
 import uuid
 from sqlalchemy import (
-    BigInteger, Boolean, Column, Date, DateTime, ForeignKey, Integer, SmallInteger,
-    String, Text, text,
+    BigInteger, Boolean, Column, Date, DateTime, ForeignKey, Integer, Numeric,
+    SmallInteger, String, Text, text,
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
@@ -80,6 +80,59 @@ class User(Base, TimestampMixin):
         cascade="all, delete-orphan",
         lazy="noload",
     )
+    addresses = relationship(
+        "UserAddress",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="noload",
+    )
+
+
+class UserAddress(Base, TimestampMixin):
+    """Saved address for a user. One row per address; many per user.
+
+    Replaces the embedded users.address_* fields for any flow that needs
+    multi-address, GPS coordinates, or labels. See migration
+    0033_user_addresses + docs/ADDRESS_LOCATION_PRD.md for the full design.
+
+    The `is_default` partial-unique index in 0033 guarantees at most one
+    default per user — promotion is done in the router by clearing the
+    flag elsewhere within a single transaction before flipping the new
+    row's flag.
+    """
+
+    __tablename__ = "user_addresses"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    label = Column(String(20), nullable=False)         # 'home' | 'work' | 'other'
+    custom_label = Column(String(50), nullable=True)   # used when label == 'other'
+
+    lat = Column(Numeric(10, 7), nullable=False)
+    lng = Column(Numeric(10, 7), nullable=False)
+
+    flat_house_number = Column(String(100), nullable=False)
+    building_name = Column(String(200), nullable=True)
+    floor = Column(String(20), nullable=True)
+    landmark = Column(String(200), nullable=True)
+
+    address_line_1 = Column(String(300), nullable=True)
+    locality = Column(String(200), nullable=True)
+    city = Column(String(100), nullable=False)
+    state = Column(String(100), nullable=False)
+    pincode = Column(String(10), nullable=True)
+
+    is_default = Column(Boolean, nullable=False, default=False)
+    source = Column(String(30), nullable=False, default="manual")
+    # 'gps_detected' | 'manual' | 'imported_from_profile'
+
+    user = relationship("User", back_populates="addresses")
 
 
 class Session(Base, TimestampMixin):

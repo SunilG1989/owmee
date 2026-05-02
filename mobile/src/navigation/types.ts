@@ -49,6 +49,28 @@ export type RootStackParams = {
   AIListingIdentifier: { draft: any; finalFields: any };
   EditListing: { listingId: string };
 
+  // ── Address PRD: 3-screen address flow ───────────────────────────────
+  // Each screen optionally carries `returnTo` (the screen that should
+  // own the user when the flow finishes). For onboarding-gate use it's
+  // 'MainTabs'. For "Add a new address" from a picker, the picker
+  // re-fetches its list on focus so returnTo is unset.
+  LocationDetect: { returnTo?: string } | undefined;
+  LocationMap: {
+    initialLat: number;
+    initialLng: number;
+    source?: 'gps_detected' | 'manual';
+    gpsAccuracy?: number;
+    returnTo?: string;
+  };
+  AddressDetails: {
+    lat: number;
+    lng: number;
+    source: 'gps_detected' | 'manual';
+    reverse: import('../services/api').PhotonReverseResponse | null;
+    returnTo?: string;
+  };
+  AddressPicker: { returnTo?: string } | undefined;
+
 };
 
 export type AuthStackParams = {

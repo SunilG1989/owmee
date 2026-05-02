@@ -33,6 +33,14 @@ import OtpVerifyScreen from '../screens/auth/OtpVerifyScreen';
 import KycFlowScreen from '../screens/auth/KycFlowScreen';
 import KycRequiredForActionScreen from '../screens/KycRequiredForActionScreen';
 import LocationPickerScreen from '../screens/auth/LocationPickerScreen';
+// Address PRD: 3-screen flow replaces LocationPickerScreen for the
+// post-auth onboarding gate. LocationPickerScreen kept temporarily as
+// fallback for unauthed-browse + the LocationPicker modal route until
+// the PRD's Phase 2 finishes its sweep.
+import LocationDetectScreen from '../screens/auth/address/LocationDetectScreen';
+import LocationMapScreen from '../screens/auth/address/LocationMapScreen';
+import AddressDetailsScreen from '../screens/auth/address/AddressDetailsScreen';
+import AddressPickerScreen from '../screens/auth/address/AddressPickerScreen';
 // Profile sub-screens
 import MyListingsScreen from '../screens/listings/MyListingsScreen';
 import MyFeVisitsScreen from '../screens/profile/MyFeVisitsScreen';
@@ -94,6 +102,55 @@ function AuthFlowNavigator() {
       <AuthStack.Screen name="OtpVerify" component={OtpVerifyScreen} />
     </AuthStack.Navigator>
   );
+}
+
+/**
+ * MainTabsWithAddressGate — Address PRD section 4.1
+ *
+ * Replaces the old "is locationSet AsyncStorage?" check with a real
+ * "does this user have at least one saved address?" API check that
+ * fires once after auth. If 0 addresses, the user is reset onto the
+ * LocationDetect screen with returnTo=MainTabs; AddressDetailsScreen
+ * then resets back here on save.
+ *
+ * The check fires once per authenticated session via a ref. Logging
+ * out resets the ref (via the isAuthenticated transition) so re-login
+ * re-checks. Errors don't gate — if the API is down we let the user
+ * into MainTabs and surface the prompt later via Profile (Phase 2).
+ */
+function MainTabsWithAddressGate() {
+  const { isAuthenticated } = useAuthStore();
+  const navigation = require('@react-navigation/native').useNavigation();
+  const checkedRef = React.useRef(false);
+
+  React.useEffect(() => {
+    // Reset the gate on logout so the next sign-in re-checks.
+    if (!isAuthenticated) {
+      checkedRef.current = false;
+      return;
+    }
+    if (checkedRef.current) return;
+    checkedRef.current = true;
+
+    (async () => {
+      try {
+        const { Addresses } = require('../services/api');
+        const res = await Addresses.list();
+        if (Array.isArray(res.data) && res.data.length === 0) {
+          navigation.reset({
+            index: 0,
+            routes: [
+              { name: 'LocationDetect', params: { returnTo: 'MainTabs' } },
+            ],
+          });
+        }
+      } catch {
+        // Silent — don't gate on transient API failures.
+      }
+    })();
+  }, [isAuthenticated, navigation]);
+
+  return <MainTabs />;
 }
 
 function MainTabs() {
@@ -259,7 +316,7 @@ export default function RootNavigator() {
   return (
     <NavigationContainer>
       <RootStack.Navigator screenOptions={{ headerShown: false }}>
-        <RootStack.Screen name="MainTabs" component={MainTabs} />
+        <RootStack.Screen name="MainTabs" component={MainTabsWithAddressGate} />
         <RootStack.Screen name="ListingDetail" component={ListingDetailScreen} options={{ animation: 'slide_from_right' }} />
         <RootStack.Screen name="TransactionDetail" component={TransactionDetailScreen} options={{ animation: 'slide_from_right' }} />
         <RootStack.Screen name="KidsSection" component={KidsSectionScreen} options={{ animation: 'slide_from_right' }} />
@@ -296,6 +353,11 @@ export default function RootNavigator() {
         <RootStack.Screen name="AIListingSuggest" component={AIListingSuggestScreen} options={{ animation: 'slide_from_right' }} />
         <RootStack.Screen name="AIListingIdentifier" component={AIListingIdentifierScreen} options={{ animation: 'slide_from_right' }} />
         <RootStack.Screen name="EditListing" component={EditListingScreen} options={{ animation: 'slide_from_right' }} />
+        {/* Address PRD: 3-screen flow + picker */}
+        <RootStack.Screen name="LocationDetect" component={LocationDetectScreen} options={{ animation: 'slide_from_right' }} />
+        <RootStack.Screen name="LocationMap" component={LocationMapScreen} options={{ animation: 'slide_from_right' }} />
+        <RootStack.Screen name="AddressDetails" component={AddressDetailsScreen} options={{ animation: 'slide_from_right' }} />
+        <RootStack.Screen name="AddressPicker" component={AddressPickerScreen} options={{ animation: 'slide_from_right' }} />
       </RootStack.Navigator>
     </NavigationContainer>
   );
