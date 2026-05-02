@@ -1,39 +1,49 @@
 /**
- * SellBlock — Sprint 8 Phase 1
+ * SellBlock — Sprint 8 / 2026-05-02 redesign
  *
- * Standalone "Got something to sell?" card that sits between the deals
- * strip and the explore feed. Tapping the CTA navigates to listing
- * creation (with auth/KYC gating handled by the consumer).
+ * Mint banner that sits below the category rail and invites the user to
+ * list. Tapping the CTA delegates to the consumer's onPress (auth/KYC
+ * gating still happens upstream).
+ *
+ * Copy is locked to the marketing-finalized version: no earnings claims,
+ * no internal jargon. If we surface real seller stats later, prefer a
+ * separate "social proof" surface rather than diluting this CTA.
  */
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { C, T, S, R, Home } from '../utils/tokens';
+import { C, T, S, R } from '../utils/tokens';
 
 interface Props {
   onPress: () => void;
-  /** Override the default subtitle; show real earnings stat if you have one */
-  subtitle?: string;
 }
 
-export default function SellBlock({ onPress, subtitle }: Props) {
+export default function SellBlock({ onPress }: Props) {
   return (
     <View style={s.outer}>
-      <View style={s.block}>
-        <View style={s.iconCircle}>
-          <Text style={s.iconEmoji}>💰</Text>
+      <View style={s.banner}>
+        <View style={s.iconWrap}>
+          <Text style={s.iconGlyph} allowFontScaling={false}>📦</Text>
+          <View style={s.shieldBadge}>
+            <Text style={s.shieldGlyph} allowFontScaling={false}>✓</Text>
+          </View>
         </View>
-        <View style={s.textBlock}>
-          <Text style={s.headline}>Got something to sell?</Text>
+
+        <View style={s.copy}>
+          <Text style={s.title}>Sell safely from home</Text>
           <Text style={s.subtitle}>
-            {subtitle || 'Sellers earned ₹22k avg last month'}
+            Get price help, verified buyers, and pickup support.
           </Text>
         </View>
+
         <TouchableOpacity
-          style={s.cta}
           onPress={onPress}
-          activeOpacity={0.85}
+          activeOpacity={0.88}
+          style={s.cta}
+          accessibilityRole="button"
+          accessibilityLabel="List now"
         >
-          <Text style={s.ctaText}>List in 2 min</Text>
+          <Text style={s.ctaText}>List now</Text>
+          <Text style={s.ctaArrow} allowFontScaling={false}>›</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -42,55 +52,80 @@ export default function SellBlock({ onPress, subtitle }: Props) {
 
 const s = StyleSheet.create({
   outer: {
-    paddingHorizontal: S.md,
+    paddingHorizontal: S.lg,
     paddingTop: S.md,
-    paddingBottom: S.sm,
   },
-  block: {
-    backgroundColor: Home.sellBgEnd,
-    borderRadius: R.md,
-    padding: S.lg,
-    paddingRight: S.md + 2,
+  banner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: S.md + 2,
+    paddingVertical: S.sm + 2,
+    paddingHorizontal: S.sm + 2,
+    borderRadius: R.md,
+    backgroundColor: C.mintSoft,
     borderWidth: 1,
-    borderColor: C.border,
+    borderColor: C.mintBorder,
   },
-  iconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  iconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: R.sm,
     backgroundColor: C.white,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: Home.sellAccent,
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 2,
+    marginRight: S.sm + 2,
   },
-  iconEmoji: { fontSize: T.size.xxl - 2 },
-  textBlock: { flex: 1 },
-  headline: {
-    fontSize: T.size.sm + 1,
-    fontWeight: T.weight.bold,
-    color: Home.sellTitle,
-    marginBottom: 2,
+  iconGlyph: { fontSize: T.size.lg },
+  shieldBadge: {
+    position: 'absolute',
+    right: -4,
+    bottom: -4,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: C.petrol,
+    borderWidth: 2,
+    borderColor: C.mintSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shieldGlyph: {
+    color: C.white,
+    fontSize: T.size.xs,
+    fontWeight: T.weight.heavy,
+  },
+  copy: {
+    flex: 1,
+  },
+  title: {
+    fontSize: T.size.md,
+    fontWeight: T.weight.heavy,
+    color: C.text,
+    letterSpacing: -0.2,
   },
   subtitle: {
+    marginTop: 2,
     fontSize: T.size.sm,
-    color: Home.sellAccent,
+    color: C.text2,
+    lineHeight: T.size.sm + 4,
+    fontWeight: T.weight.medium,
   },
   cta: {
-    backgroundColor: Home.sellCtaBg,
-    paddingHorizontal: S.md + 2,
-    paddingVertical: S.sm + 1,
-    borderRadius: R.xs + 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: C.petrolDeep,
+    paddingHorizontal: S.sm + 2,
+    paddingVertical: S.xs + 4,
+    borderRadius: R.sm,
+    gap: 2,
   },
   ctaText: {
-    fontSize: T.size.sm,
-    fontWeight: T.weight.semi,
-    color: Home.sellCtaText,
+    color: C.white,
+    fontSize: T.size.base,
+    fontWeight: T.weight.heavy,
+  },
+  ctaArrow: {
+    color: C.white,
+    fontSize: T.size.md,
+    fontWeight: T.weight.heavy,
   },
 });

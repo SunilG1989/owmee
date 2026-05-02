@@ -1,21 +1,19 @@
 /**
- * HomeScreen — Sprint 8 Phase 1 redesign
+ * HomeScreen — Sprint 8 / 2026-05-02 redesign
  *
  * Layout (top → bottom):
- *   1. Compact header: logo + location pill (tappable to re-pick) + bell
- *   2. Search bar
- *   3. Blockbuster deals strip (amber, hidden if <3 deals)
- *   4. Standalone sell block
- *   5. "Explore near you" section header with subtle radius hint
- *   6. Masonry feed (2 columns, varying card heights, infinite scroll)
- *
- * Data sources:
- *   - Feed.blockbusterDeals() on mount and on pull-to-refresh
- *   - Feed.explore(page, cursor) on mount, refresh, and end-reached
+ *   1. Header: logo · centered location chip · notifications bell
+ *   2. Hero card (deep petrol) — story + trust flow + 2 CTAs
+ *   3. Search bar (taps into Search tab)
+ *   4. Trust chips (mint / blue / amber)
+ *   5. Category rail — Mobiles · Laptops · Kids · Books · Home Appliances
+ *   6. Sell banner
+ *   7. "Verified deals near you" + Filter
+ *   8. Masonry feed (2 columns, infinite scroll)
  *
  * Auth & gating:
- *   - Header bell: AuthFlow modal if guest, else Notifications
- *   - Sell block CTA: AuthFlow if guest, KycRequiredForAction if not verified, else CreateListing
+ *   - Bell: AuthFlow if guest, else Notifications
+ *   - Hero "Sell from home" + SellBlock CTA: AuthFlow if guest, else Sell tab
  *   - Card tap: ListingDetail (works for guests too)
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -24,29 +22,23 @@ import {
   ActivityIndicator, useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { C, T, S, R, pickAspectRatio } from '../utils/tokens';
+import { C, T, S, R, Shadow, pickAspectRatio } from '../utils/tokens';
 import { IconButton } from '../components/ui';
 import type { TabScreen } from '../navigation/types';
 import { Feed, type FeedListing } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import { useLocation } from '../hooks/useLocation';
-import BlockbusterDealsStrip from '../components/BlockbusterDealsStrip';
+import HeroCard from '../components/HeroCard';
+import CategoryRail, { type CategoryDef } from '../components/CategoryRail';
 import SellBlock from '../components/SellBlock';
 import { FeedCard } from '../components/OwmeeListingCard';
 
-const PAGE_LIMIT = 20;
-
 export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
-  const { isAuthenticated, kycStatus } = useAuthStore();
+  const { isAuthenticated } = useAuthStore();
   const { location } = useLocation();
   const { width: sw } = useWindowDimensions();
 
-  // Card width: account for outer padding (8) + gap between columns (6)
-  const cardWidth = useMemo(() => Math.floor((sw - 8 * 2 - 6) / 2), [sw]);
-
-  // Deals strip state
-  const [deals, setDeals] = useState<FeedListing[]>([]);
-  const [dealsLoading, setDealsLoading] = useState(true);
+  const cardWidth = useMemo(() => Math.floor((sw - S.sm * 2 - (S.xs + 2)) / 2), [sw]);
 
   // Explore feed state
   const [feedItems, setFeedItems] = useState<FeedListing[]>([]);
@@ -59,24 +51,8 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
   const [currentRadius, setCurrentRadius] = useState<number>(15);
 
   const loadingMore = useRef(false);
-
-  const loadDeals = useCallback(async () => {
-    setDealsLoading(true);
-    try {
-      const res = await Feed.blockbusterDeals();
-      setDeals(res.data.items || []);
-    } catch (e: any) {
-      // SPRINT8_DEBUG
-      const msg =
-        e?.response?.status
-          ? `HTTP ${e.response.status}: ${JSON.stringify(e.response.data || {}).slice(0, 200)}`
-          : e?.message ? `JS: ${e.message}` : 'Unknown';
-      console.warn('[HomeScreen.loadDeals]', msg, e);
-      setDeals([]);
-    } finally {
-      setDealsLoading(false);
-    }
-  }, []);
+  const listRef = useRef<FlatList>(null);
+  const listingsOffsetY = useRef<number>(0);
 
   const loadFeed = useCallback(async (resetPage = false) => {
     if (resetPage) {
@@ -92,7 +68,6 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
       setHasMore(!!data.next_cursor);
       setCurrentRadius(data.current_radius_km);
     } catch (e: any) {
-      // SPRINT8_DEBUG: surface the actual error so we can see what's failing
       const msg =
         e?.response?.status
           ? `HTTP ${e.response.status}: ${JSON.stringify(e.response.data || {}).slice(0, 200)}`
@@ -114,10 +89,6 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
       const nextPage = page + 1;
       const res = await Feed.explore(nextPage, cursor);
       const data = res.data;
-      // Dedup by id — score-based cursor pagination can return rows
-      // that already appear on the previous page when scores tie or
-      // when listings are reordered between requests. Without this,
-      // React warns about duplicate keys and renders the row twice.
       setFeedItems(prev => {
         const seen = new Set(prev.map(i => i.id));
         const fresh = (data.items || []).filter(i => !seen.has(i.id));
@@ -136,14 +107,13 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([loadDeals(), loadFeed(true)]);
+    await loadFeed(true);
     setRefreshing(false);
-  }, [loadDeals, loadFeed]);
+  }, [loadFeed]);
 
   useEffect(() => {
-    loadDeals();
     loadFeed(true);
-  }, [loadDeals, loadFeed]);
+  }, [loadFeed]);
 
   // Refetch when location changes (after user picks a new one in LocationPickerScreen)
   const lastLocationKey = useRef<string>('');
@@ -151,11 +121,10 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
     if (!location) return;
     const key = `${location.city}-${location.lat?.toFixed(2)}-${location.lng?.toFixed(2)}`;
     if (lastLocationKey.current && lastLocationKey.current !== key) {
-      loadDeals();
       loadFeed(true);
     }
     lastLocationKey.current = key;
-  }, [location, loadDeals, loadFeed]);
+  }, [location, loadFeed]);
 
   const handleCardPress = (l: FeedListing) => {
     navigation.navigate('ListingDetail', { listingId: l.id });
@@ -166,17 +135,11 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
       navigation.navigate('AuthFlow');
       return;
     }
-    // Sprint 6a: phone OTP is sufficient to list. KYC is the badge, not a
-    // gate. The earlier kycStatus === 'verified' check here was a regression
-    // that blocked the entire listing funnel for new sellers.
+    // Sprint 6a: phone OTP is sufficient to list. KYC is the badge, not a gate.
     (navigation as any).navigate('Sell');
   };
 
   const handleLocationPress = () => {
-    // Re-entry to the location picker. Navigates to AuthFlow which is a
-    // catch-all modal, but we want LocationPicker. Instead, push the
-    // LocationPicker route name; if it exists in the stack it'll show,
-    // otherwise the user can use the city picker fallback.
     (navigation as any).navigate('LocationPicker');
   };
 
@@ -188,114 +151,121 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
     navigation.navigate('Notifications');
   };
 
-  // ── Header (rendered as ListHeaderComponent) ──────────────────────────────
+  const handleSearchPress = () => navigation.navigate('Search');
 
+  const handleCategoryPress = (cat: CategoryDef) => {
+    if (!cat.slug) return; // Books — slug not yet in backend taxonomy
+    navigation.navigate('Search', { category_slug: cat.slug });
+  };
+
+  const handleBrowsePress = () => {
+    listRef.current?.scrollToOffset({
+      offset: Math.max(0, listingsOffsetY.current - 12),
+      animated: true,
+    });
+  };
+
+  // Location label — fall back to "HSR Layout" per spec when no location set
+  const locationLabel = useMemo(() => {
+    if (location?.locality) return location.locality;
+    if (location?.label) return location.label;
+    if (location?.city) return location.city;
+    return 'HSR Layout';
+  }, [location]);
+
+  // ── Header section (rendered as ListHeaderComponent) ────────────────────
   const Header = useMemo(() => () => (
     <View>
-      {/* Top bar */}
+      {/* Top bar — logo + address (chip-next-to-logo) · bell right. */}
       <View style={s.hdr}>
-        <View style={s.hdrLeft}>
-          <Text style={s.logo}>
-            owm<Text style={s.logoAccent}>ee</Text>
-          </Text>
-          <TouchableOpacity onPress={handleLocationPress} style={s.locPill}>
-            <Text style={s.locPin}>📍</Text>
-            <Text style={s.locName} numberOfLines={1}>
-              {location?.label && location?.locality
-                ? `${location.label} · ${location.locality}`
-                : location?.label || location?.locality || location?.city || 'Set location'}
-            </Text>
-            <Text style={s.locArrow}>▾</Text>
-          </TouchableOpacity>
+        <Text style={s.logo}>owmee</Text>
+
+        <TouchableOpacity
+          onPress={handleLocationPress}
+          activeOpacity={0.85}
+          style={s.locChip}
+        >
+          <Text style={s.locPin} allowFontScaling={false}>📍</Text>
+          <Text style={s.locName} numberOfLines={1}>{locationLabel}</Text>
+          <Text style={s.locArrow} allowFontScaling={false}>▾</Text>
+        </TouchableOpacity>
+
+        <View style={s.hdrSpacer} />
+
+        <View style={s.bellWrap}>
+          <IconButton icon="🔔" onPress={handleNotifPress} a11y="Notifications" size="sm" />
+          <View style={s.bellDot} />
         </View>
-        <IconButton icon="🔔" onPress={handleNotifPress} a11y="Notifications" size="sm" />
       </View>
 
-      {/* Search */}
+      {/* Search bar at the top — Ajio/Myntra pattern: search is the
+          single most-used affordance, sits above the marketing hero. */}
       <TouchableOpacity
+        onPress={handleSearchPress}
+        activeOpacity={0.8}
         style={s.search}
-        onPress={() => navigation.navigate('Search')}
-        activeOpacity={0.7}
       >
-        <Text style={s.searchIcon}>🔍</Text>
-        <Text style={s.searchPh}>Search anything…</Text>
-        <Text style={s.searchMic}>🎤</Text>
+        <Text style={s.searchIcon} allowFontScaling={false}>🔍</Text>
+        <Text style={s.searchPh} numberOfLines={1}>
+          Search iPhone, laptop, books, appliances...
+        </Text>
+        <Text style={s.searchMic} allowFontScaling={false}>🎤</Text>
       </TouchableOpacity>
 
-      {/* Trust strip — Owmee's whole story is "FE-inspected + escrow +
-          no meetups". Surfacing it here means buyers see WHY Owmee is
-          different the moment they open the app, not three taps in. */}
-      <View style={s.trustStrip}>
-        <View style={s.trustPill}>
-          <Text style={s.trustIcon}>🛡️</Text>
-          <Text style={s.trustText}>FE-inspected</Text>
-        </View>
-        <View style={s.trustDot} />
-        <View style={s.trustPill}>
-          <Text style={s.trustIcon}>🔒</Text>
-          <Text style={s.trustText}>Escrow</Text>
-        </View>
-        <View style={s.trustDot} />
-        <View style={s.trustPill}>
-          <Text style={s.trustIcon}>🚚</Text>
-          <Text style={s.trustText}>Doorstep</Text>
-        </View>
-      </View>
+      <HeroCard onBrowse={handleBrowsePress} onSell={handleSellPress} />
 
-      {/* Blockbuster deals strip */}
-      <BlockbusterDealsStrip
-        deals={deals}
-        loading={dealsLoading}
-        onDealPress={handleCardPress}
-        onSeeAll={() => navigation.navigate('Search')}
+      <CategoryRail
+        onSeeAll={handleSearchPress}
+        onCategoryPress={handleCategoryPress}
       />
 
-      {/* Sell block */}
-      <SellBlock onPress={handleSellPress} />
-
-      {/* Section header */}
-      <View style={s.sectionHdr}>
-        <View>
-          <Text style={s.sectionTitle}>Explore near you</Text>
+      {/* Listings header */}
+      <View
+        style={s.listingsHdr}
+        onLayout={e => { listingsOffsetY.current = e.nativeEvent.layout.y; }}
+      >
+        <View style={{ flex: 1 }}>
+          <Text style={s.sectionTitle}>Verified deals near you</Text>
           <Text style={s.sectionSub}>
             {currentRadius >= 500
               ? 'Items from across your state'
-              : `Items within ${currentRadius}km, plus great deals from nearby cities`}
+              : `Trusted items available within ${currentRadius} km`}
           </Text>
         </View>
+        {/* Filter is a placeholder — bottom-sheet sort/filter UI is a
+            follow-up. Tapping does nothing today; do NOT route to Search
+            (that surprised users in testing). */}
+        <TouchableOpacity activeOpacity={0.85} style={s.filterBtn} onPress={() => { /* TODO: filter sheet */ }}>
+          <Text style={s.filterIcon} allowFontScaling={false}>≡</Text>
+          <Text style={s.filterText}>Filter</Text>
+        </TouchableOpacity>
       </View>
     </View>
-  ), [location, deals, dealsLoading, currentRadius, isAuthenticated, kycStatus]);
+  ), [locationLabel, currentRadius, isAuthenticated]);
 
-  // ── Footer (rendered as ListFooterComponent) ──────────────────────────────
-
-  const Footer = () => {
-    if (loadingMore.current) {
-      return (
+  // ── Footer ─────────────────────────────────────────────────────────────
+  // SellBlock lives below the feed: surface the "act as a seller" pitch
+  // after the user has seen actual listings — never push listings off the
+  // first viewport with marketing chrome.
+  const Footer = () => (
+    <View>
+      {feedItems.length > 0 && <SellBlock onPress={handleSellPress} />}
+      {loadingMore.current && (
         <View style={s.footerLoading}>
           <ActivityIndicator size="small" color={C.petrol} />
         </View>
-      );
-    }
-    if (!hasMore && feedItems.length > 0) {
-      return (
-        <Text style={s.endHint}>
-          ↑ that's everything for now — pull to refresh
-        </Text>
-      );
-    }
-    if (hasMore && feedItems.length > 0) {
-      return (
-        <Text style={s.endHint}>
-          ↓ keep scrolling — fresh listings load as you go
-        </Text>
-      );
-    }
-    return <View style={{ height: 60 }} />;
-  };
+      )}
+      {!loadingMore.current && !hasMore && feedItems.length > 0 && (
+        <Text style={s.endHint}>↑ that's everything for now — pull to refresh</Text>
+      )}
+      {!loadingMore.current && hasMore && feedItems.length > 0 && (
+        <Text style={s.endHint}>↓ keep scrolling — fresh listings load as you go</Text>
+      )}
+      {feedItems.length === 0 && <View style={{ height: 60 }} />}
+    </View>
+  );
 
-  // ── Empty / error states ──────────────────────────────────────────────────
-
+  // ── Empty / error states ───────────────────────────────────────────────
   const EmptyState = () => {
     if (feedLoading) {
       return (
@@ -322,28 +292,22 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
     );
   };
 
-  // ── Two-column masonry: split items into left/right columns ────────────────
-
+  // ── Two-column masonry split ───────────────────────────────────────────
   const { leftColumn, rightColumn } = useMemo(() => {
     const left: { item: FeedListing; idx: number }[] = [];
     const right: { item: FeedListing; idx: number }[] = [];
     feedItems.forEach((item, idx) => {
-      // Distribute by index parity for stable layout. Better than tracking
-      // column heights since aspect ratio is deterministic per index.
       if (idx % 2 === 0) left.push({ item, idx });
       else right.push({ item, idx });
     });
     return { leftColumn: left, rightColumn: right };
   }, [feedItems]);
 
-  // ── Render the masonry feed inside FlatList using a single "row" approach.
-  // We treat the entire two-column block as one FlatList "item" so infinite
-  // scroll, header, footer, refresh control all work naturally.
-
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <FlatList
-        data={[1]}  // Single placeholder — masonry is rendered inline
+        ref={listRef}
+        data={[1]}
         keyExtractor={() => 'masonry'}
         ListHeaderComponent={Header}
         ListFooterComponent={Footer}
@@ -392,7 +356,6 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
         showsVerticalScrollIndicator={false}
       />
 
-      {/* Guest sign-in nudge (matches existing pattern) */}
       {!isAuthenticated && (
         <TouchableOpacity
           style={s.guestBar}
@@ -406,126 +369,127 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
   );
 }
 
-// ── Styles ───────────────────────────────────────────────────────────────────
-
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bone },
 
-  // Header
+  // ── Header ──────────────────────────────────────────────────────────
   hdr: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: S.lg,
     paddingTop: S.sm,
-    paddingBottom: S.xs,
+    paddingBottom: S.sm,
     backgroundColor: C.bone,
+    gap: S.sm + 2,
   },
-  hdrLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: S.md,
-    flex: 1,
-  },
+  hdrSpacer: { flex: 1 },
   logo: {
-    fontSize: T.size.xl,
-    fontWeight: T.weight.bold,
-    color: C.text,
-    letterSpacing: -0.5,
+    fontSize: T.size.xl + 4,
+    fontWeight: T.weight.heavy,
+    color: C.petrolNight,
+    letterSpacing: -1,
   },
-  logoAccent: { color: C.petrol },
-  locPill: {
+  locChip: {
+    height: 34,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: S.xs,
-    flex: 1,
+    gap: S.xs + 1,
+    paddingHorizontal: S.sm + 2,
+    borderRadius: R.pill,
+    backgroundColor: C.white,
+    borderWidth: 1,
+    borderColor: C.border,
+    maxWidth: 160,
+    ...Shadow.subtle,
   },
-  locPin: { fontSize: T.size.sm },
+  locPin: { fontSize: T.size.base },
   locName: {
     fontSize: T.size.base,
-    fontWeight: T.weight.medium,
+    fontWeight: T.weight.bold,
     color: C.text,
-    flex: 1,
+    flexShrink: 1,
   },
-  locArrow: { fontSize: T.size.sm, color: C.text3 },
+  locArrow: { fontSize: T.size.sm, color: C.text2 },
+  bellWrap: { position: 'relative' },
+  bellDot: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: C.red,
+  },
 
-  // Search
+  // ── Search ──────────────────────────────────────────────────────────
   search: {
     marginHorizontal: S.lg,
-    marginTop: S.xs + 2,                     // 6 — between S.xs and S.sm; intentional
+    marginTop: S.xs,
     marginBottom: S.xs,
-    paddingVertical: S.sm + 2,               // 10
     paddingHorizontal: S.md,
-    // Sand-tinted instead of generic gray — matches the warm palette
-    // and reads as "input affordance" without competing with the trust
-    // strip directly below.
-    backgroundColor: C.bone2,
-    borderRadius: R.sm,
+    height: 50,
+    borderRadius: R.lg,
+    backgroundColor: C.white,
+    borderWidth: 1,
+    borderColor: C.border,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: S.sm,
-    borderWidth: 1,
-    borderColor: C.border2,
+    gap: S.sm + 2,
+    ...Shadow.subtle,
   },
-  searchIcon: { fontSize: T.size.sm + 1 },   // 14 — tuned for emoji rendering
+  searchIcon: { fontSize: T.size.md, color: C.text3 },
   searchPh: {
     flex: 1,
-    fontSize: T.size.base,
-    color: C.text3,  // bumped from text4 — was failing AA on sand
+    fontSize: T.size.md - 1,
+    color: C.text3,
+    fontWeight: T.weight.medium,
   },
-  searchMic: { fontSize: T.size.sm + 1 },
+  searchMic: { fontSize: T.size.md, color: C.text3 },
 
-  // Trust strip — single-line tag below search. Subtle so it doesn't compete
-  // with the deals strip / feed for visual weight, but always-visible so
-  // the trust story registers on every session.
-  trustStrip: {
-    marginHorizontal: S.lg,
-    marginTop: S.xs + 2,
-    marginBottom: S.sm,
-    paddingVertical: S.sm,
-    paddingHorizontal: S.md,
-    backgroundColor: C.petrolLight,
-    borderRadius: R.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: S.xs + 2,
-  },
-  trustPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: S.xs,
-  },
-  trustIcon: { fontSize: T.size.sm },
-  trustText: { fontSize: T.size.sm, color: C.petrolDeep, fontWeight: T.weight.semi },
-  trustDot: {
-    width: 3, height: 3, borderRadius: 1.5,
-    backgroundColor: C.petrolDeep,
-    opacity: 0.4,
-    marginHorizontal: 2,
-  },
-
-  // Section header (between sell block and feed)
-  sectionHdr: {
+  // ── Listings header ─────────────────────────────────────────────────
+  listingsHdr: {
+    marginTop: S.xl,
     paddingHorizontal: S.lg,
-    paddingTop: S.md + 2,                    // 14 — visual rhythm tuned to surrounding cards
     paddingBottom: S.sm,
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'baseline',
+    alignItems: 'flex-start',
   },
   sectionTitle: {
-    fontSize: T.size.md,
-    fontWeight: T.weight.semi,
+    fontSize: T.size.xl,
+    fontWeight: T.weight.heavy,
     color: C.text,
+    letterSpacing: -0.3,
   },
   sectionSub: {
-    fontSize: T.size.sm,
-    color: C.text3,
     marginTop: 2,
+    fontSize: T.size.base,
+    color: C.text3,
+    fontWeight: T.weight.medium,
+  },
+  filterBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: S.xs + 2,
+    height: 38,
+    paddingHorizontal: S.md,
+    borderRadius: R.md,
+    backgroundColor: C.white,
+    borderWidth: 1,
+    borderColor: C.border,
+    marginTop: 4,
+  },
+  filterIcon: {
+    fontSize: T.size.md,
+    color: C.text,
+    fontWeight: T.weight.heavy,
+  },
+  filterText: {
+    fontSize: T.size.base,
+    color: C.text,
+    fontWeight: T.weight.heavy,
   },
 
-  // Masonry grid
+  // ── Masonry grid ────────────────────────────────────────────────────
   masonry: {
     flexDirection: 'row',
     paddingHorizontal: S.sm,
@@ -536,7 +500,7 @@ const s = StyleSheet.create({
     gap: S.xs + 2,
   },
 
-  // Footer hint
+  // ── Footer / hints ──────────────────────────────────────────────────
   footerLoading: {
     paddingVertical: S.xl,
     alignItems: 'center',
@@ -549,7 +513,7 @@ const s = StyleSheet.create({
     fontSize: T.size.sm,
   },
 
-  // Empty / error
+  // ── Empty / error ───────────────────────────────────────────────────
   emptyWrap: {
     paddingVertical: S.xxxl + S.xxxl,
     alignItems: 'center',
@@ -569,7 +533,7 @@ const s = StyleSheet.create({
     lineHeight: 18,
   },
 
-  // Guest bar
+  // ── Guest bar ───────────────────────────────────────────────────────
   guestBar: {
     position: 'absolute',
     bottom: 0,
@@ -580,7 +544,7 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     gap: S.xs + 2,
     backgroundColor: C.ink,
-    paddingVertical: S.md + 2,               // 14
+    paddingVertical: S.md + 2,
     paddingHorizontal: S.lg,
   },
   guestText: {

@@ -147,6 +147,20 @@ export interface FeedListing {
   seller_name: string;
   is_owmee_verified: boolean;
   distance_km: number | null;
+
+  // ── 2026-05-03: trust attributes for Indian-marketplace cards ─────
+  // All optional. Backend can add any subset incrementally; the home
+  // FeedCard renders a corresponding pill the moment a flag turns true.
+  // Until then these are undefined and the pills don't render.
+  // BACKEND TICKET: surface these in /v1/feed/* responses, derived from
+  // the listing's seller-supplied fields + KYC + warranty registry.
+  bill_available?: boolean;
+  box_available?: boolean;
+  warranty_active?: boolean;
+  warranty_months_left?: number | null;
+  is_negotiable?: boolean;
+  returns_eligible?: boolean;
+  cod_available?: boolean;
 }
 
 export interface BlockbusterResponse {

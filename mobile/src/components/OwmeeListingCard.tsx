@@ -120,53 +120,170 @@ export function DealCard({ listing, onPress, index = 0 }: Props) {
 
 // ── FEED VARIANT (masonry) ───────────────────────────────────────────────────
 
-export function FeedCard({ listing, onPress, cardWidth, aspectRatio = 1, index = 0 }: Props) {
+export function FeedCard({ listing, onPress, cardWidth, index = 0 }: Props) {
   const img = firstImage(listing);
   const bg = pickCardBg(index);
   const emoji = fallbackEmojiForCategory(listing.category_slug);
 
-  const meta = (() => {
-    const parts: string[] = [];
-    if (listing.seller_name) parts.push(listing.seller_name);
-    if (listing.distance_km != null) {
-      parts.push(`${listing.distance_km.toFixed(1)}km`);
-    } else if (listing.shipping_eligible && listing.city) {
-      // Out-of-local listing — show city instead of distance
-      // handled separately below
-    }
-    const tAgo = timeAgo(listing.created_at);
-    if (tAgo) parts.push(tAgo);
-    return parts.join(' · ');
+  const distanceText =
+    listing.distance_km != null
+      ? `${listing.distance_km.toFixed(1)} km`
+      : listing.shipping_eligible && listing.city
+        ? listing.city
+        : null;
+
+  const showOriginal =
+    listing.original_price != null && listing.original_price > listing.price;
+
+  const showDiscount =
+    listing.discount_pct != null && listing.discount_pct > 0;
+
+  const fresh = (() => {
+    const ago = timeAgo(listing.created_at);
+    if (!ago) return null;
+    if (ago === 'just now') return 'Just listed';
+    return ago;
   })();
 
-  const showShipping = listing.shipping_eligible && listing.distance_km == null;
+  // Detail line — pulled from the seller's description when present.
+  // We don't fabricate specs we don't have; if the seller didn't write
+  // one, the row hides.
+  const detailLine = (() => {
+    const d = listing.description?.trim();
+    if (!d) return null;
+    return d.replace(/\s+/g, ' ').slice(0, 60);
+  })();
 
   return (
     <TouchableOpacity
-      activeOpacity={0.85}
+      activeOpacity={0.9}
       onPress={onPress}
       style={[s.feedCard, cardWidth ? { width: cardWidth } : null]}
     >
-      <View style={[s.feedImgWrap, { aspectRatio, backgroundColor: bg }]}>
+      <View style={[s.feedImgWrap, { backgroundColor: bg }]}>
         {img ? (
           <Image source={{ uri: img }} style={s.imgFill} resizeMode="cover" />
         ) : (
           <Text style={s.emojiFallback}>{emoji}</Text>
         )}
-        {listing.is_owmee_verified && (
-          <View style={s.verifiedBadge}>
-            <Text style={s.verifiedText}>✓ Verified</Text>
+
+        {/* Discount % overlay (top-left). High-attention coral pill — the
+            single most important conversion signal on the card. */}
+        {showDiscount && (
+          <View style={s.discountPill}>
+            <Text style={s.discountPillText}>-{Math.round(listing.discount_pct!)}%</Text>
           </View>
         )}
+
+        {/* Heart save — wishlist not yet wired; tap is a no-op. */}
+        <TouchableOpacity activeOpacity={0.7} style={s.heartBtn} onPress={() => { /* TODO: wishlist */ }}>
+          <Text style={s.heartGlyph} allowFontScaling={false}>♡</Text>
+        </TouchableOpacity>
       </View>
+
       <View style={s.feedMeta}>
         <Text style={s.feedTitle} numberOfLines={1}>{listing.title}</Text>
-        <Text style={s.feedPrice}>{formatPriceFull(listing.price)}</Text>
-        {showShipping ? (
-          <Text style={s.shipText}>📦 {listing.city || 'Other city'} · ships</Text>
-        ) : (
-          <Text style={s.feedMetaLine} numberOfLines={1}>{meta}</Text>
+
+        {/* Price block — Indian e-commerce convention:
+              ₹31,999                              ← big listed price
+              M.R.P. ₹38,000 · Save ₹6,001         ← MRP + savings line
+            Keeps two distinct levels of attention; the "Save" line
+            is the single biggest conversion lever for Indian buyers. */}
+        <View style={s.priceBlock}>
+          <Text style={s.feedPrice}>{formatPriceFull(listing.price)}</Text>
+          {showOriginal && (
+            <View style={s.mrpRow}>
+              <Text style={s.mrpLabel}>M.R.P.</Text>
+              <Text style={s.feedStrike}>{formatPriceFull(listing.original_price)}</Text>
+              <Text style={s.metaSep} allowFontScaling={false}>·</Text>
+              <Text style={s.savingsText} numberOfLines={1}>
+                Save {formatPrice(listing.original_price! - listing.price)}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* Pills row: condition (always-on green) + a curated set of
+            Indian-marketplace trust signals when backend supplies them.
+            Order = priority (anxiety-fighters first, convenience last).
+            Showing >4 pills clutters small cards, so we cap. */}
+        <View style={s.pillsRow}>
+          <View style={[s.pill, s.pillGreen]}>
+            <Text style={[s.pillText, s.pillTextGreen]}>Good condition</Text>
+          </View>
+          {listing.bill_available && (
+            <View style={[s.pill, s.pillGreen]}>
+              <Text style={[s.pillText, s.pillTextGreen]}>Bill</Text>
+            </View>
+          )}
+          {listing.warranty_active && (
+            <View style={[s.pill, s.pillBlue]}>
+              <Text style={[s.pillText, s.pillTextBlue]}>
+                {listing.warranty_months_left
+                  ? `Warranty ${listing.warranty_months_left}mo`
+                  : 'Warranty'}
+              </Text>
+            </View>
+          )}
+          {listing.box_available && (
+            <View style={[s.pill, s.pillAmber]}>
+              <Text style={[s.pillText, s.pillTextAmber]}>Box pack</Text>
+            </View>
+          )}
+          {listing.returns_eligible && (
+            <View style={[s.pill, s.pillBlue]}>
+              <Text style={[s.pillText, s.pillTextBlue]}>7-day return</Text>
+            </View>
+          )}
+          {listing.shipping_eligible ? (
+            <View style={[s.pill, s.pillBlue]}>
+              <Text style={[s.pillText, s.pillTextBlue]}>Ships free</Text>
+            </View>
+          ) : (
+            <View style={[s.pill, s.pillAmber]}>
+              <Text style={[s.pillText, s.pillTextAmber]}>Doorstep</Text>
+            </View>
+          )}
+          {listing.is_negotiable && (
+            <View style={[s.pill, s.pillAmber]}>
+              <Text style={[s.pillText, s.pillTextAmber]}>Negotiable</Text>
+            </View>
+          )}
+        </View>
+
+        {detailLine && (
+          <Text style={s.detailLine} numberOfLines={1}>{detailLine}</Text>
         )}
+
+        {/* Meta row: distance · ✓ verified · time freshness. Each part
+            is independently conditional, joined by middle-dots. */}
+        <View style={s.metaRow}>
+          {distanceText && (
+            <>
+              <Text style={s.metaPin} allowFontScaling={false}>📍</Text>
+              <Text style={s.metaText} numberOfLines={1}>{distanceText}</Text>
+            </>
+          )}
+          {distanceText && listing.is_owmee_verified && (
+            <Text style={s.metaSep} allowFontScaling={false}>·</Text>
+          )}
+          {listing.is_owmee_verified && (
+            <>
+              <Text style={s.metaShield} allowFontScaling={false}>✓</Text>
+              <Text style={s.metaVerified} numberOfLines={1}>Verified</Text>
+            </>
+          )}
+          {(distanceText || listing.is_owmee_verified) && fresh && (
+            <Text style={s.metaSep} allowFontScaling={false}>·</Text>
+          )}
+          {fresh && (
+            <Text style={s.metaText} numberOfLines={1}>{fresh}</Text>
+          )}
+        </View>
+
+        <TouchableOpacity activeOpacity={0.85} onPress={onPress} style={s.offerBtn}>
+          <Text style={s.offerText}>Buy safely</Text>
+        </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
@@ -255,7 +372,7 @@ const s = StyleSheet.create({
   // feed variant
   feedCard: {
     backgroundColor: C.white,
-    borderRadius: R.xs + 2,
+    borderRadius: R.md,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: C.border,
@@ -263,49 +380,152 @@ const s = StyleSheet.create({
   },
   feedImgWrap: {
     width: '100%',
+    aspectRatio: 4 / 3,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
     position: 'relative',
   },
-  verifiedBadge: {
+  discountPill: {
     position: 'absolute',
-    top: S.xs + 2,
-    right: S.xs + 2,
-    backgroundColor: Home.verifiedBg,
+    top: S.xs + 1,
+    left: S.xs + 1,
     paddingHorizontal: S.xs + 2,
     paddingVertical: 2,
-    borderRadius: R.xs - 2,
+    borderRadius: R.xs,
+    backgroundColor: C.coralBright,
     zIndex: 2,
   },
-  verifiedText: {
+  discountPillText: {
+    color: C.white,
     fontSize: T.size.xs,
-    fontWeight: T.weight.semi,
-    color: Home.verifiedText,
+    fontWeight: T.weight.heavy,
+    letterSpacing: 0.2,
+  },
+  heartBtn: {
+    position: 'absolute',
+    top: S.xs + 1,
+    right: S.xs + 1,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  heartGlyph: {
+    fontSize: T.size.md,
+    color: C.text,
+    fontWeight: T.weight.bold,
   },
   feedMeta: {
-    padding: S.sm + 2,
-    paddingTop: S.sm,
+    paddingHorizontal: S.sm + 2,
+    paddingVertical: S.sm,
   },
   feedTitle: {
     fontSize: T.size.base,
-    fontWeight: T.weight.semi,
-    color: C.ink,
-    marginBottom: S.xs,
-  },
-  feedPrice: {
-    fontSize: T.size.md,
     fontWeight: T.weight.bold,
     color: C.ink,
-    marginBottom: S.xs,
   },
-  feedMetaLine: {
-    fontSize: T.size.xs,
-    color: C.text3,
+  priceBlock: {
+    marginTop: 2,
   },
-  shipText: {
+  feedPrice: {
+    fontSize: T.size.md + 1,
+    fontWeight: T.weight.heavy,
+    color: C.ink,
+    letterSpacing: -0.2,
+  },
+  mrpRow: {
+    marginTop: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 4,
+  },
+  mrpLabel: {
     fontSize: T.size.xs,
     fontWeight: T.weight.semi,
-    color: Home.shipText,
+    color: C.text3,
+  },
+  feedStrike: {
+    fontSize: T.size.xs + 1,
+    fontWeight: T.weight.semi,
+    color: C.text3,
+    textDecorationLine: 'line-through',
+  },
+  savingsText: {
+    fontSize: T.size.xs,
+    fontWeight: T.weight.heavy,
+    color: C.green,
+  },
+  pillsRow: {
+    marginTop: S.xs,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: S.xs,
+  },
+  pill: {
+    paddingHorizontal: S.xs + 2,
+    paddingVertical: 2,
+    borderRadius: R.xs,
+  },
+  pillGreen: { backgroundColor: C.greenLight },
+  pillBlue:  { backgroundColor: C.blueSoft },
+  pillAmber: { backgroundColor: C.amberSoft },
+  pillText: {
+    fontSize: T.size.xs,
+    fontWeight: T.weight.heavy,
+    letterSpacing: 0.1,
+  },
+  pillTextGreen: { color: C.green },
+  pillTextBlue:  { color: C.blueDeep },
+  pillTextAmber: { color: C.amberDeep },
+  detailLine: {
+    marginTop: S.xs,
+    fontSize: T.size.xs,
+    color: C.text2,
+    fontWeight: T.weight.medium,
+  },
+  metaRow: {
+    marginTop: S.xs + 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  metaPin: { fontSize: T.size.xs - 1, color: C.text3 },
+  metaText: {
+    fontSize: T.size.xs,
+    color: C.text2,
+    fontWeight: T.weight.semi,
+  },
+  metaSep: {
+    fontSize: T.size.xs,
+    color: C.text3,
+    marginHorizontal: 1,
+  },
+  metaShield: {
+    fontSize: T.size.xs,
+    color: Home.verifiedDot,
+    fontWeight: T.weight.heavy,
+  },
+  metaVerified: {
+    fontSize: T.size.xs,
+    color: Home.verifiedText,
+    fontWeight: T.weight.semi,
+  },
+  offerBtn: {
+    marginTop: S.sm,
+    height: 32,
+    borderRadius: R.sm,
+    backgroundColor: C.petrol,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  offerText: {
+    color: C.white,
+    fontSize: T.size.base,
+    fontWeight: T.weight.heavy,
   },
 });

@@ -6,10 +6,13 @@
  * usually a sign that two patterns should be the same.
  *
  *   variants
- *     primary    amber CTA, the user's main action ("Send offer")
+ *     primary    petrol CTA, the user's main action ("Send offer")
  *     secondary  bordered, neutral action ("Cancel" / "Withdraw")
  *     ghost      borderless, low-emphasis ("Skip" / inline links)
  *     destructive  red CTA, irreversible ("Delete listing")
+ *     accent     coral "act now" CTA — used SPARINGLY (Sell from home)
+ *     inverse    white surface, deep teal text — for buttons sitting on
+ *                a dark hero / brand surface where primary would vanish
  *
  *   sizes
  *     sm   inline / table-row context (paddingV: S.sm)
@@ -25,9 +28,9 @@ import {
   ActivityIndicator, StyleSheet, Text, TouchableOpacity, View,
   ViewStyle, TextStyle, StyleProp,
 } from 'react-native';
-import { C, MIN_TAP, R, S, T } from '../../utils/tokens';
+import { C, MIN_TAP, R, S, Shadow, T } from '../../utils/tokens';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'destructive';
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'destructive' | 'accent' | 'inverse';
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
 interface Props {
@@ -126,5 +129,13 @@ const variantStyles: Record<ButtonVariant, { container: ViewStyle; text: TextSty
   destructive: {
     container: { backgroundColor: C.red },
     text: { color: C.white },
+  },
+  accent: {
+    container: { backgroundColor: C.coralBright, ...Shadow.coralGlow },
+    text: { color: C.white },
+  },
+  inverse: {
+    container: { backgroundColor: C.white },
+    text: { color: C.petrolNight },
   },
 };

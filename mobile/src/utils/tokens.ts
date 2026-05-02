@@ -29,6 +29,10 @@ export const C = {
   petrolGlow:    '#5FB8A8',
   petrolDeep:    '#134543',
   petrolText:    '#0B2D2C',
+  // Night petrol — used as the "hero card" surface on Home. Deeper than
+  // petrolDeep so white text + colored visuals pop against it without the
+  // teal flattening into the rest of the petrol family.
+  petrolNight:   '#003C39',
 
   // ── SECONDARY · aqua (lighter teal, hover/secondary) ─────────────────
   aqua:          '#5FB8A8',
@@ -41,6 +45,22 @@ export const C = {
   coral:         '#E87A5D',
   coralLight:    '#FCE8E0',
   coralDeep:     '#B85638',
+  // Brighter coral — used for the home Sell CTA (hero secondary + Sell FAB
+  // halo). Keeps the muted `coral` for in-feed badges so the spotlight
+  // hierarchy still reads.
+  coralBright:   '#FF6B55',
+
+  // ── TRUST CHIP PALETTE ──────────────────────────────────────────────
+  // Each pair (soft / deep / border) backs one trust chip on Home.
+  // Mint = "Owmee verified", Blue = "Payment protected", Amber = "Doorstep handover".
+  mintSoft:      '#E7F8F3',
+  mintBorder:    '#B9E6DC',
+  blueSoft:      '#EEF6FF',
+  blueDeep:      '#3B82F6',
+  blueBorder:    '#BFD9FF',
+  amberSoft:     '#FFF5DD',
+  amberDeep:     '#B7791F',
+  amberBorder:   '#F1D9A8',
 
   // ── SURFACES · warm bone canvas ──────────────────────────────────────
   bone:          '#F6F1E7',
@@ -295,6 +315,35 @@ export const Home = {
 
   // Ship indicator — petrol
   shipText:        C.petrol,
+
+  // ── 2026-05-02 redesign additions ────────────────────────────────────
+  // Hero card — deep petrol surface, white type, white-on-faint trust steps.
+  heroBg:          C.petrolNight,
+  heroSubText:     'rgba(255,255,255,0.82)',
+  heroStepBg:      'rgba(255,255,255,0.12)',
+  heroStepBorder:  'rgba(255,255,255,0.28)',
+  heroArrow:       'rgba(255,255,255,0.72)',
+
+  // Trust chips below search — three color families, one per trust pillar.
+  chipMintBg:      C.mintSoft,
+  chipMintBorder:  C.mintBorder,
+  chipMintIcon:    C.petrol,
+  chipBlueBg:      C.blueSoft,
+  chipBlueBorder:  C.blueBorder,
+  chipBlueIcon:    C.blueDeep,
+  chipAmberBg:     C.amberSoft,
+  chipAmberBorder: C.amberBorder,
+  chipAmberIcon:   C.amberDeep,
+
+  // Hero decorative vignette — a small shield+package+phone composition
+  // in the top-right of the hero card. These values are intentionally
+  // off the main palette (warm cardboard, near-white plastic, mint glow)
+  // so the vignette reads as illustration rather than UI chrome.
+  heroDecorShield:  '#DFF7EF',
+  heroDecorPackage: '#C99B64',
+  heroDecorPhone:   '#F4F6F5',
+  heroDecorRing:    'rgba(95,184,168,0.36)',
+  heroDecorRingDim: 'rgba(95,184,168,0.22)',
 } as const;
 
 const HOME_CARD_BGS = [

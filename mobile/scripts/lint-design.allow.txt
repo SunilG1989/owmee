@@ -40,6 +40,9 @@ src/components/OwmeeListingCard.tsx
 src/components/SellBlock.tsx
 src/components/listing/ListingCard.tsx
 src/components/concierge/ExpertPricingPanel.tsx
+# CategoryRail tiles are image+label cards (same shape as ListingCard);
+# "See all" header link is a chevron-suffixed text row, not a Button.
+src/components/CategoryRail.tsx
 
 # ── Top-traffic screens: full-card rows + image overlay tappables ─
 src/screens/HomeScreen.tsx

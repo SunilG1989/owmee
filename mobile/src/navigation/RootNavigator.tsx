@@ -240,16 +240,15 @@ function MainTabs() {
   // Sell.Icon is unused (SellFab renders its own Camera glyph) but
   // kept in the array shape so the index/layout math stays clean.
   //
-  // Label choices (research-driven, see commit notes):
-  //   "Browse" > "Search" — most marketplace users scroll, they don't query
-  //   "Alerts" > "Notifications" — fits in a tab, matches the bell icon, matches the route
-  //   "You" > "Profile" — modern convention (Instagram, YouTube, TikTok)
+  // Labels follow the locked product spec: Home / Search / Sell / Inbox /
+  // Profile. (An earlier iteration tried Browse/Alerts/You — reverted
+  // 2026-05-03 to match the home-redesign spec the design team signed off.)
   const tabs: { key: keyof TabParams; label: string; Icon: LucideIcon }[] = [
-    { key: 'Home',          label: 'Home',   Icon: HomeIcon    },
-    { key: 'Search',        label: 'Browse', Icon: CompassIcon },
-    { key: 'Sell',          label: 'Sell',   Icon: CameraIcon  },
-    { key: 'Notifications', label: 'Alerts', Icon: BellIcon    },
-    { key: 'Profile',       label: 'You',    Icon: UserIcon    },
+    { key: 'Home',          label: 'Home',    Icon: HomeIcon    },
+    { key: 'Search',        label: 'Search',  Icon: CompassIcon },
+    { key: 'Sell',          label: 'Sell',    Icon: CameraIcon  },
+    { key: 'Notifications', label: 'Inbox',   Icon: BellIcon    },
+    { key: 'Profile',       label: 'Profile', Icon: UserIcon    },
   ];
 
   return (
