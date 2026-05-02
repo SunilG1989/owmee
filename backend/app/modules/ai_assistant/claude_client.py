@@ -32,9 +32,13 @@ What v2 changes:
      with a `flags=['ai_failed:<reason>']` marker so the router/UI can
      show "AI couldn't read these photos" instead of silently empty fields.
 
-Models (latest GA defaults, override via .env):
-    Vision:  gemini-2.5-flash       (paid tier, multimodal-strong)
-    Text:    gemini-2.5-flash-lite  (paid tier, cheapest 2.5 GA)
+Models (latest preview defaults, override via .env):
+    Vision:  gemini-3.1-pro-preview         (top spec extraction)
+    Text:    gemini-3.1-flash-lite-preview  (cheap, multimodal)
+
+WARNING: the 3.1 line is PREVIEW — Google may change behaviour or
+remove these without notice. Pin to a 2.5 GA model
+(gemini-2.5-flash / gemini-2.5-flash-lite) if stability is critical.
 
 Privacy note: free-tier inputs may be used by Google for training.
 Acceptable for prototype; revisit before production with real seller data.
@@ -226,15 +230,15 @@ def _get_model(kind: str) -> str:
             return (
                 getattr(settings, "gemini_vision_model", "")
                 or os.environ.get("GEMINI_VISION_MODEL", "")
-                or "gemini-2.5-flash"
+                or "gemini-3.1-pro-preview"
             )
         return (
             getattr(settings, "gemini_text_model", "")
             or os.environ.get("GEMINI_TEXT_MODEL", "")
-            or "gemini-2.5-flash-lite"
+            or "gemini-3.1-flash-lite-preview"
         )
     except Exception:
-        return "gemini-2.5-flash" if kind == "vision" else "gemini-2.5-flash-lite"
+        return "gemini-3.1-pro-preview" if kind == "vision" else "gemini-3.1-flash-lite-preview"
 
 
 def _normalize_media_type(content_type: str) -> str:
