@@ -13,6 +13,14 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  Home as HomeIcon,
+  Compass as CompassIcon,
+  Camera as CameraIcon,
+  Bell as BellIcon,
+  User as UserIcon,
+} from 'lucide-react-native';
+import type { LucideIcon } from 'lucide-react-native';
 import { useAuthStore } from '../store/authStore';
 import { LOCATION_KEY, ONBOARDING_SEEN_KEY } from '../utils/storageKeys';
 import { C, T, S, R, Shadow } from '../utils/tokens';
@@ -98,19 +106,27 @@ const Tab = createBottomTabNavigator<TabParams>();
  * Inactive icons sit on a transparent pill so the active-state
  * transition is purely background — no icon hop. Inactive icon
  * color bumped from C.text4 → C.text2 (passes WCAG AA on white).
+ *
+ * Icons are Lucide line glyphs (proper SVG, tintable, OS-consistent)
+ * — replaces the emoji-as-icon shortcut that was rendering as Apple
+ * stickers on iOS / Material blobs on Android.
  */
 function TabCell({
-  label, icon, active, badge,
+  label, Icon, active, badge,
 }: {
   label: string;
-  icon: string;
+  Icon: LucideIcon;
   active: boolean;
   badge?: number;
 }) {
   return (
     <View style={st.cell}>
       <View style={[st.iconPill, active && st.iconPillActive]}>
-        <Text style={[st.cellIcon, active && st.cellIconActive]}>{icon}</Text>
+        <Icon
+          size={22}
+          strokeWidth={active ? 2.25 : 2}
+          color={active ? C.petrol : C.text2}
+        />
         {badge && badge > 0 ? (
           <View style={st.badge}>
             <Text style={st.badgeText}>{badge > 99 ? '99+' : badge}</Text>
@@ -140,7 +156,7 @@ function SellFab({ active }: { active: boolean }) {
   return (
     <View style={st.fabSlot}>
       <View style={[st.fab, active && st.fabActive]}>
-        <Text style={st.fabIcon} allowFontScaling={false}>📷</Text>
+        <CameraIcon size={26} strokeWidth={2.25} color={C.white} />
       </View>
       <Text style={[st.fabLabel, active && st.fabLabelActive]}>Sell</Text>
     </View>
@@ -221,14 +237,19 @@ function MainTabs() {
   // Placeholder — wire to a real unread-notifications source when ready.
   const notifBadge = 0;
 
-  // Sell.icon is unused (SellFab renders its own camera glyph) but
+  // Sell.Icon is unused (SellFab renders its own Camera glyph) but
   // kept in the array shape so the index/layout math stays clean.
-  const tabs: { key: keyof TabParams; label: string; icon: string }[] = [
-    { key: 'Home',          label: 'Home',          icon: '⌂' },
-    { key: 'Search',        label: 'Search',        icon: '🔍' },
-    { key: 'Sell',          label: 'Sell',          icon: '📷' },
-    { key: 'Notifications', label: 'Inbox',         icon: '🔔' },
-    { key: 'Profile',       label: 'Profile',       icon: '👤' },
+  //
+  // Label choices (research-driven, see commit notes):
+  //   "Browse" > "Search" — most marketplace users scroll, they don't query
+  //   "Alerts" > "Notifications" — fits in a tab, matches the bell icon, matches the route
+  //   "You" > "Profile" — modern convention (Instagram, YouTube, TikTok)
+  const tabs: { key: keyof TabParams; label: string; Icon: LucideIcon }[] = [
+    { key: 'Home',          label: 'Home',   Icon: HomeIcon    },
+    { key: 'Search',        label: 'Browse', Icon: CompassIcon },
+    { key: 'Sell',          label: 'Sell',   Icon: CameraIcon  },
+    { key: 'Notifications', label: 'Alerts', Icon: BellIcon    },
+    { key: 'Profile',       label: 'You',    Icon: UserIcon    },
   ];
 
   return (
@@ -265,7 +286,7 @@ function MainTabs() {
                 ) : (
                   <TabCell
                     label={tab.label}
-                    icon={tab.icon}
+                    Icon={tab.Icon}
                     active={active}
                     badge={tab.key === 'Notifications' ? notifBadge : undefined}
                   />
@@ -510,8 +531,6 @@ const st = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   iconPillActive: { backgroundColor: C.petrolLight },
-  cellIcon: { fontSize: T.size.lg, color: C.text2, lineHeight: 20 },
-  cellIconActive: { color: C.petrol },
   cellLabel: {
     fontSize: T.size.xs,
     fontWeight: T.weight.medium,
@@ -561,11 +580,6 @@ const st = StyleSheet.create({
   // activeOpacity on the wrapping TouchableOpacity. Keep this style
   // empty for now — added back if we introduce a darker coral later.
   fabActive: {},
-  fabIcon: {
-    fontSize: T.size.xl,
-    lineHeight: T.size.xl + 4,
-    marginTop: 1,
-  },
   fabLabel: {
     fontSize: T.size.xs,
     fontWeight: T.weight.medium,
