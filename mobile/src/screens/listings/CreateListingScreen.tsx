@@ -426,21 +426,21 @@ export default function CreateListingScreen({ navigation }: any) {
                 {u ? (
                   <>
                     <Image source={{ uri: u }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
-                    <View style={st.px}><Text style={{ fontSize: 10, color: C.white }}>✕</Text></View>
+                    <View style={st.px}><Text style={st.pxText}>✕</Text></View>
                   </>
                 ) : (
                   <View style={st.pe}>
-                    <Text style={{ fontSize: 22, color: C.text4 }}>+</Text>
-                    <Text style={{ fontSize: 10, color: C.text4 }}>{['Front', 'Back', 'Detail', 'Accessories', 'Box', 'Extra'][i]}</Text>
+                    <Text style={st.peIcon}>+</Text>
+                    <Text style={st.peLabel}>{['Front', 'Back', 'Detail', 'Accessories', 'Box', 'Extra'][i]}</Text>
                   </View>
                 )}
               </TouchableOpacity>
             ))}
           </View>
-          <Text style={{ fontSize: T.size.sm, color: C.text3, marginTop: 12, textAlign: 'center' }}>
+          <Text style={st.photosCount}>
             {valid.length}/6 · {valid.length < 3 ? `${3 - valid.length} more needed` : '✓ Ready'}
           </Text>
-          <View style={{ height: 100 }} />
+          <View style={st.bottomSpacer} />
         </ScrollView>
       )}
 
@@ -451,17 +451,17 @@ export default function CreateListingScreen({ navigation }: any) {
           <Text style={st.sub}>Choose a category</Text>
           {categories.map(c => (
             <TouchableOpacity key={c.id} style={[st.catCard, cat?.id === c.id && st.catCardActive]} onPress={() => setCat(c)}>
-              <Text style={[st.catName, cat?.id === c.id && { color: C.petrolDeep }]}>{c.name}</Text>
+              <Text style={[st.catName, cat?.id === c.id && st.catNameActive]}>{c.name}</Text>
               {c.imei_required && <Text style={st.catTag}>IMEI required</Text>}
             </TouchableOpacity>
           ))}
-          <View style={{ height: 100 }} />
+          <View style={st.bottomSpacer} />
         </ScrollView>
       )}
 
       {/* ═══ STEP 2: Category-specific details ═══ */}
       {step === 2 && (
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={st.flex1}>
           <ScrollView style={st.body}>
             <Text style={st.h}>Product details</Text>
 
@@ -527,13 +527,13 @@ export default function CreateListingScreen({ navigation }: any) {
             <Text style={st.lbl}>Listing Title *</Text>
             <TextInput style={st.inp} placeholder={catType === 'phone' ? 'Auto-filled from brand + model' : 'What are you selling?'} placeholderTextColor={C.text4} value={title} onChangeText={setTitle} maxLength={200} />
             <Text style={st.lbl}>Description</Text>
-            <TextInput style={[st.inp, { height: 80 }]} placeholder="Anything a buyer should know — what's included, any issues" placeholderTextColor={C.text4} value={desc} onChangeText={setDesc} multiline textAlignVertical="top" />
+            <TextInput style={[st.inp, st.inpMulti]} placeholder="Anything a buyer should know — what's included, any issues" placeholderTextColor={C.text4} value={desc} onChangeText={setDesc} multiline textAlignVertical="top" />
 
             {/* Purchase year */}
             <Text style={st.lbl}>Purchase Year</Text>
             <Chips options={PURCHASE_YEARS.map(String)} selected={purchaseYear ? String(purchaseYear) : ''} onSelect={v => setPurchaseYear(parseInt(v))} />
 
-            <View style={{ height: 100 }} />
+            <View style={st.bottomSpacer} />
           </ScrollView>
         </KeyboardAvoidingView>
       )}
@@ -546,9 +546,9 @@ export default function CreateListingScreen({ navigation }: any) {
 
           {CONDITION_OPTIONS.map(c => (
             <TouchableOpacity key={c.key} style={[st.condCard, condition === c.key && st.condCardActive]} onPress={() => setCondition(c.key)}>
-              <Text style={{ fontSize: 24 }}>{c.emoji}</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={[st.condLabel, condition === c.key && { color: C.petrolDeep }]}>{c.label}</Text>
+              <Text style={st.condEmoji}>{c.emoji}</Text>
+              <View style={st.flex1}>
+                <Text style={[st.condLabel, condition === c.key && st.condLabelActive]}>{c.label}</Text>
                 <Text style={st.condDesc}>{c.desc}</Text>
               </View>
               <View style={[st.radio, condition === c.key && st.radioActive]}>
@@ -560,7 +560,7 @@ export default function CreateListingScreen({ navigation }: any) {
           {/* Screen + body condition for electronics */}
           {(catType === 'phone' || catType === 'laptop') && (
             <>
-              <Text style={[st.lbl, { marginTop: 20 }]}>Screen Condition</Text>
+              <Text style={[st.lbl, st.lblSpaced]}>Screen Condition</Text>
               {SCREEN_CONDITIONS.map(c => (
                 <TouchableOpacity key={c.key} style={[st.miniCard, screenCond === c.key && st.miniCardActive]} onPress={() => setScreenCond(c.key)}>
                   <Text style={st.miniLabel}>{c.label}</Text>
@@ -580,7 +580,7 @@ export default function CreateListingScreen({ navigation }: any) {
               {DEFECT_OPTIONS.map(d => (
                 <TouchableOpacity key={d.key} style={[st.defectRow, defects.includes(d.key) && st.defectActive]} onPress={() => toggleDefect(d.key)}>
                   <View style={[st.checkbox, defects.includes(d.key) && st.checkboxActive]}>
-                    {defects.includes(d.key) && <Text style={{ color: C.white, fontSize: 12 }}>✓</Text>}
+                    {defects.includes(d.key) && <Text style={st.checkboxTick}>✓</Text>}
                   </View>
                   <Text style={st.defectLabel}>{d.label}</Text>
                 </TouchableOpacity>
@@ -589,52 +589,68 @@ export default function CreateListingScreen({ navigation }: any) {
           )}
 
           {/* Accessories + Warranty */}
-          <Text style={[st.lbl, { marginTop: 20 }]}>Accessories included</Text>
+          <Text style={[st.lbl, st.lblSpaced]}>Accessories included</Text>
           <TextInput style={st.inp} placeholder="e.g. Charger, box, case, earphones" placeholderTextColor={C.text4} value={accessories} onChangeText={setAccessories} />
           <Text style={st.lbl}>Warranty</Text>
           <TextInput style={st.inp} placeholder="e.g. 3 months remaining, No warranty" placeholderTextColor={C.text4} value={warrantyInfo} onChangeText={setWarrantyInfo} />
 
-          <View style={{ height: 100 }} />
+          <View style={st.bottomSpacer} />
         </ScrollView>
       )}
 
       {/* ═══ STEP 4: Price + Review ═══ */}
       {step === 4 && (
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={st.flex1}>
           <ScrollView style={st.body}>
             <Text style={st.h}>Set your price</Text>
 
             <Text style={st.lbl}>Your asking price *</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Text style={{ fontSize: 22, fontWeight: '700', color: C.text }}>₹</Text>
-              <TextInput style={[st.inp, { flex: 1, fontSize: 22, fontWeight: '700' }]} placeholder="0" placeholderTextColor={C.text4} keyboardType="numeric" value={price} onChangeText={setPrice} />
+            <View style={st.priceRow}>
+              <Text style={st.priceCurrencyBig}>₹</Text>
+              <TextInput
+                style={[st.inp, st.priceInputBig]}
+                placeholder="0"
+                placeholderTextColor={C.text4}
+                keyboardType="numeric"
+                value={price}
+                onChangeText={setPrice}
+              />
             </View>
 
             <Text style={st.lbl}>Original MRP (optional — shows "% off")</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Text style={{ fontSize: 14, color: C.text3 }}>₹</Text>
-              <TextInput style={[st.inp, { flex: 1 }]} placeholder="Price when new" placeholderTextColor={C.text4} keyboardType="numeric" value={originalPrice} onChangeText={setOriginalPrice} />
+            <View style={st.priceRow}>
+              <Text style={st.priceCurrencySmall}>₹</Text>
+              <TextInput
+                style={[st.inp, st.flex1]}
+                placeholder="Price when new"
+                placeholderTextColor={C.text4}
+                keyboardType="numeric"
+                value={originalPrice}
+                onChangeText={setOriginalPrice}
+              />
             </View>
 
             {originalPrice && price && parseFloat(originalPrice) > parseFloat(price) && (
-              <Text style={{ color: C.petrol, fontSize: 13, marginTop: 4 }}>
+              <Text style={st.discountHint}>
                 {Math.round((1 - parseFloat(price) / parseFloat(originalPrice)) * 100)}% off original price
               </Text>
             )}
 
-            <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 16 }} onPress={() => setNego(!nego)}>
+            <TouchableOpacity style={st.negoRow} onPress={() => setNego(!nego)}>
               <View style={[st.toggle, nego && st.toggleActive]}>
                 <View style={[st.toggleThumb, nego && st.toggleThumbOn]} />
               </View>
-              <Text style={{ fontSize: 14, color: C.text }}>Open to negotiation</Text>
+              <Text style={st.negoLabel}>Open to negotiation</Text>
             </TouchableOpacity>
 
             {/* Review summary */}
-            <View style={{ marginTop: 24, backgroundColor: C.surface, borderRadius: R.lg, padding: 16, ...Shadow.card }}>
-              <Text style={{ fontSize: 14, fontWeight: '700', color: C.text, marginBottom: 12 }}>Review</Text>
+            <View style={st.reviewCard}>
+              <Text style={st.reviewTitle}>Review</Text>
 
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
-                {valid.map((u, i) => <Image key={i} source={{ uri: u }} style={{ width: 70, height: 70, borderRadius: 8, marginRight: 8 }} resizeMode="cover" />)}
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={st.reviewThumbs}>
+                {valid.map((u, i) => (
+                  <Image key={i} source={{ uri: u }} style={st.reviewThumb} resizeMode="cover" />
+                ))}
               </ScrollView>
 
               {[
@@ -647,9 +663,9 @@ export default function CreateListingScreen({ navigation }: any) {
                 ['Condition', CONDITION_OPTIONS.find(c => c.key === condition)?.label],
                 ['Location', location?.city || 'Not set'],
               ].filter(([, v]) => v).map(([k, v]) => (
-                <View key={k as string} style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <Text style={{ fontSize: 12, color: C.text4 }}>{k}</Text>
-                  <Text style={{ fontSize: 12, color: C.text, fontWeight: '500' }}>{v}</Text>
+                <View key={k as string} style={st.reviewRow}>
+                  <Text style={st.reviewKey}>{k}</Text>
+                  <Text style={st.reviewVal}>{v}</Text>
                 </View>
               ))}
 
@@ -658,7 +674,7 @@ export default function CreateListingScreen({ navigation }: any) {
               </Text>
             </View>
 
-            <View style={{ height: 100 }} />
+            <View style={st.bottomSpacer} />
           </ScrollView>
         </KeyboardAvoidingView>
       )}
@@ -694,6 +710,70 @@ export default function CreateListingScreen({ navigation }: any) {
 // ── Styles ────────────────────────────────────────────────────────
 const st = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bone },
+  flex1: { flex: 1 },
+  bottomSpacer: { height: 100 },
+  lblSpaced: { marginTop: S.xl },
+  inpMulti: { height: 80 },
+
+  // Step 0 — Photos
+  photosCount: {
+    fontSize: T.size.sm,
+    color: C.text3,
+    marginTop: S.md,
+    textAlign: 'center',
+  },
+  pxText: { fontSize: T.size.xs, color: C.white },
+  peIcon: { fontSize: T.size.xxl - 2, color: C.text4 },
+  peLabel: { fontSize: T.size.xs, color: C.text4 },
+
+  // Step 1 — Category
+  catNameActive: { color: C.petrolDeep },
+
+  // Step 3 — Condition
+  condEmoji: { fontSize: T.size.xxl },
+  condLabelActive: { color: C.petrolDeep },
+  checkboxTick: { color: C.white, fontSize: T.size.sm },
+
+  // Step 4 — Price + Review
+  priceRow: { flexDirection: 'row', alignItems: 'center', gap: S.sm },
+  priceCurrencyBig: { fontSize: T.size.xxl - 2, fontWeight: T.weight.bold, color: C.text },
+  priceCurrencySmall: { fontSize: T.size.sm + 1, color: C.text3 },
+  priceInputBig: { flex: 1, fontSize: T.size.xxl - 2, fontWeight: T.weight.bold },
+  discountHint: { color: C.petrol, fontSize: T.size.base, marginTop: S.xs },
+  negoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: S.sm,
+    marginTop: S.lg,
+  },
+  negoLabel: { fontSize: T.size.sm + 1, color: C.text },
+  reviewCard: {
+    marginTop: S.xxl,
+    backgroundColor: C.surface,
+    borderRadius: R.lg,
+    padding: S.lg,
+    ...Shadow.card,
+  },
+  reviewTitle: {
+    fontSize: T.size.sm + 1,
+    fontWeight: T.weight.bold,
+    color: C.text,
+    marginBottom: S.md,
+  },
+  reviewThumbs: { marginBottom: S.md },
+  reviewThumb: {
+    width: 70,
+    height: 70,
+    borderRadius: R.xs + 2,
+    marginRight: S.sm,
+  },
+  reviewRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: S.xs,
+  },
+  reviewKey: { fontSize: T.size.sm, color: C.text4 },
+  reviewVal: { fontSize: T.size.sm, color: C.text, fontWeight: T.weight.medium },
   top: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: S.lg, paddingVertical: S.sm,
