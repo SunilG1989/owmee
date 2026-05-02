@@ -24,10 +24,11 @@
  *   Cost: one extra tap per Sell flow. Worth it for unbreakable UX.
  */
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { C, T, S, R, Shadow, MIN_TAP } from '../../../utils/tokens';
+import { C, T, S, R, Shadow } from '../../../utils/tokens';
+import { Button } from '../../../components/ui';
 
 export default function SellTabRedirect() {
   const navigation = useNavigation<any>();
@@ -45,13 +46,13 @@ export default function SellTabRedirect() {
           Take 4–6 photos of your item.{'\n'}AI fills in the rest.
         </Text>
 
-        <TouchableOpacity
-          style={st.cta}
+        <Button
+          label="Take photos →"
+          variant="primary"
+          size="lg"
           onPress={() => navigation.navigate('AIListingCamera')}
-          activeOpacity={0.85}
-        >
-          <Text style={st.ctaText}>Take photos →</Text>
-        </TouchableOpacity>
+          style={st.cta}
+        />
 
         <View style={st.tipsWrap}>
           <Tip emoji="💡" text="Show all sides — front, back, both edges" />
@@ -94,7 +95,7 @@ const st = StyleSheet.create({
     ...Shadow.glow,
   },
   cameraIcon: {
-    fontSize: 48,
+    fontSize: T.size.display + 18,                                  // 48
   },
   title: {
     fontSize: T.size.xxl,
@@ -111,20 +112,10 @@ const st = StyleSheet.create({
     marginBottom: S.xxxl,
   },
   cta: {
-    backgroundColor: C.petrol,
-    paddingHorizontal: S.xxxl,
-    paddingVertical: S.lg,
-    borderRadius: R.pill,
-    minHeight: MIN_TAP,
     minWidth: 220,
-    alignItems: 'center',
-    justifyContent: 'center',
+    paddingHorizontal: S.xxxl,
+    borderRadius: R.pill,
     ...Shadow.glow,
-  },
-  ctaText: {
-    color: C.white,
-    fontSize: T.size.lg,
-    fontWeight: T.weight.bold,
   },
   tipsWrap: {
     marginTop: S.xxxl,
@@ -137,7 +128,7 @@ const st = StyleSheet.create({
     marginBottom: S.md,
   },
   tipEmoji: {
-    fontSize: 18,
+    fontSize: T.size.lg + 1,
     marginRight: S.md,
     width: 24,
     textAlign: 'center',

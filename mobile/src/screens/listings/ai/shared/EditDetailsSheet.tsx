@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 
 import { C, T, S, R } from '../../../../utils/tokens';
+import { Button } from '../../../../components/ui';
 
 const CATEGORY_PICKS = [
   { slug: 'smartphones', label: 'Smartphone' },
@@ -64,7 +65,7 @@ export default function EditDetailsSheet({ initial, onSave, onClose }: Props) {
           <View style={st.handle} />
           <Text style={st.title}>Edit details</Text>
 
-          <ScrollView style={{ maxHeight: 460 }}>
+          <ScrollView style={st.scroll}>
             <Text style={st.label}>Category</Text>
             <View style={st.chipRow}>
               {CATEGORY_PICKS.map((c) => (
@@ -126,14 +127,18 @@ export default function EditDetailsSheet({ initial, onSave, onClose }: Props) {
           </ScrollView>
 
           <View style={st.ctaRow}>
-            <TouchableOpacity style={st.cancelBtn} onPress={onClose}>
-              <Text style={st.cancelBtnText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
+            <Button
+              label="Cancel"
+              variant="secondary"
+              onPress={onClose}
+              style={st.cancelBtn}
+            />
+            <Button
+              label="Save"
+              variant="primary"
+              onPress={() => onSave({ brand, model, storage, color, category_slug })}
               style={st.saveBtn}
-              onPress={() => onSave({ brand, model, storage, color, category_slug })}>
-              <Text style={st.saveBtnText}>Save</Text>
-            </TouchableOpacity>
+            />
           </View>
         </KeyboardAvoidingView>
       </View>
@@ -197,22 +202,8 @@ const st = StyleSheet.create({
     color: C.text,
     backgroundColor: C.bone,
   },
+  scroll: { maxHeight: 460 },
   ctaRow: { flexDirection: 'row', gap: S.md, marginTop: S.lg },
-  cancelBtn: {
-    flex: 1,
-    paddingVertical: S.md,
-    borderRadius: R.md,
-    borderWidth: 1,
-    borderColor: C.border,
-    alignItems: 'center',
-  },
-  cancelBtnText: { color: C.text2, fontSize: T.size.md, fontWeight: T.weight.semi },
-  saveBtn: {
-    flex: 2,
-    paddingVertical: S.md,
-    borderRadius: R.md,
-    backgroundColor: C.petrol,
-    alignItems: 'center',
-  },
-  saveBtnText: { color: C.surface, fontSize: T.size.md, fontWeight: T.weight.bold },
+  cancelBtn: { flex: 1 },
+  saveBtn: { flex: 2 },
 });

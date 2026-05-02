@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 
 import { C, T, S, R, formatPrice } from '../../../../utils/tokens';
+import { Button } from '../../../../components/ui';
 import type { AIComparable } from '../../../../services/api';
 
 interface Props {
@@ -71,7 +72,7 @@ export default function PriceSheet({
           {comparables.length > 0 && (
             <>
               <Text style={st.compsLabel}>Recent similar sales</Text>
-              <ScrollView style={{ maxHeight: 220 }} keyboardShouldPersistTaps="handled">
+              <ScrollView style={st.compsScroll} keyboardShouldPersistTaps="handled">
                 {comparables.map((c, i) => (
                   <View key={i} style={st.compRow}>
                     <Text style={st.compTitle} numberOfLines={1}>
@@ -91,20 +92,28 @@ export default function PriceSheet({
           )}
 
           {/* Actions */}
-          <TouchableOpacity onPress={onUseSuggested} style={st.useSuggestedBtn}>
-            <Text style={st.useSuggestedText}>Use suggested price</Text>
-          </TouchableOpacity>
+          <Button
+            label="Use suggested price"
+            variant="ghost"
+            size="sm"
+            onPress={onUseSuggested}
+            style={st.useSuggestedBtn}
+          />
 
           <View style={st.ctaRow}>
-            <TouchableOpacity style={st.cancelBtn} onPress={onClose}>
-              <Text style={st.cancelBtnText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[st.saveBtn, !valid && st.saveBtnDisabled]}
+            <Button
+              label="Cancel"
+              variant="secondary"
+              onPress={onClose}
+              style={st.cancelBtn}
+            />
+            <Button
+              label="Save"
+              variant="primary"
               disabled={!valid}
-              onPress={() => onSave(num)}>
-              <Text style={st.saveBtnText}>Save</Text>
-            </TouchableOpacity>
+              onPress={() => onSave(num)}
+              style={st.saveBtn}
+            />
           </View>
         </KeyboardAvoidingView>
       </View>
@@ -183,26 +192,10 @@ const st = StyleSheet.create({
   compPrice: { fontSize: T.size.md, fontWeight: T.weight.bold, color: C.text },
   compAge: { fontSize: T.size.xs, color: C.text3 },
 
-  useSuggestedBtn: { marginTop: S.lg, paddingVertical: S.sm, alignItems: 'center' },
-  useSuggestedText: { color: C.petrol, fontSize: T.size.md, fontWeight: T.weight.semi },
+  compsScroll: { maxHeight: 220 },
+  useSuggestedBtn: { marginTop: S.lg, alignSelf: 'center' },
 
   ctaRow: { flexDirection: 'row', gap: S.md, marginTop: S.lg },
-  cancelBtn: {
-    flex: 1,
-    paddingVertical: S.md,
-    borderRadius: R.md,
-    borderWidth: 1,
-    borderColor: C.border,
-    alignItems: 'center',
-  },
-  cancelBtnText: { color: C.text2, fontSize: T.size.md, fontWeight: T.weight.semi },
-  saveBtn: {
-    flex: 2,
-    paddingVertical: S.md,
-    borderRadius: R.md,
-    backgroundColor: C.petrol,
-    alignItems: 'center',
-  },
-  saveBtnDisabled: { opacity: 0.4 },
-  saveBtnText: { color: C.surface, fontSize: T.size.md, fontWeight: T.weight.bold },
+  cancelBtn: { flex: 1 },
+  saveBtn: { flex: 2 },
 });

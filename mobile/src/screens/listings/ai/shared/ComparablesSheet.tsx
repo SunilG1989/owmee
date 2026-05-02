@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 
 import { C, T, S, R, formatPrice } from '../../../../utils/tokens';
+import { Button, IconButton } from '../../../../components/ui';
 import type { AIComparable } from '../../../../services/api';
 
 interface Props {
@@ -32,21 +33,19 @@ export default function ComparablesSheet({ comparables, onSetMyPrice, onClose }:
           <View style={st.handle} />
           <View style={st.headerRow}>
             <Text style={st.title}>Recent similar sales</Text>
-            <TouchableOpacity onPress={onClose}>
-              <Text style={st.closeBtn}>✕</Text>
-            </TouchableOpacity>
+            <IconButton icon="✕" onPress={onClose} a11y="Close" size="sm" />
           </View>
 
           {comparables.length === 0 ? (
             <Text style={st.empty}>No similar sales found yet.</Text>
           ) : (
-            <ScrollView style={{ maxHeight: 460 }}>
+            <ScrollView style={st.scroll}>
               {comparables.map((c, i) => (
                 <View key={i} style={st.row}>
                   {c.image_url ? (
                     <Image source={{ uri: c.image_url }} style={st.thumb} />
                   ) : (
-                    <View style={[st.thumb, { backgroundColor: C.bone2 }]} />
+                    <View style={[st.thumb, st.thumbEmpty]} />
                   )}
                   <View style={st.info}>
                     <Text style={st.rowTitle} numberOfLines={1}>
@@ -63,9 +62,13 @@ export default function ComparablesSheet({ comparables, onSetMyPrice, onClose }:
             </ScrollView>
           )}
 
-          <TouchableOpacity onPress={onSetMyPrice} style={st.actionBtn}>
-            <Text style={st.actionText}>Set my own price →</Text>
-          </TouchableOpacity>
+          <Button
+            label="Set my own price →"
+            variant="primary"
+            onPress={onSetMyPrice}
+            fullWidth
+            style={st.actionBtn}
+          />
         </View>
       </View>
     </Modal>
@@ -98,7 +101,8 @@ const st = StyleSheet.create({
     marginBottom: S.lg,
   },
   title: { fontSize: T.size.xl, fontWeight: T.weight.bold, color: C.text },
-  closeBtn: { fontSize: 22, color: C.text2 },
+  scroll: { maxHeight: 460 },
+  thumbEmpty: { backgroundColor: C.bone2 },
   empty: {
     paddingVertical: S.xxl,
     textAlign: 'center',
@@ -118,12 +122,5 @@ const st = StyleSheet.create({
   rowMeta: { marginTop: 2, fontSize: T.size.sm, color: C.text3 },
   rowPrice: { fontSize: T.size.md, fontWeight: T.weight.bold, color: C.text },
 
-  actionBtn: {
-    marginTop: S.lg,
-    paddingVertical: S.md,
-    borderRadius: R.md,
-    backgroundColor: C.petrol,
-    alignItems: 'center',
-  },
-  actionText: { color: C.surface, fontSize: T.size.md, fontWeight: T.weight.bold },
+  actionBtn: { marginTop: S.lg },
 });

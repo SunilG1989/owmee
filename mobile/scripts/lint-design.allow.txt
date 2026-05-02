@@ -39,7 +39,6 @@ src/screens/listings/SellModeForkScreen.tsx
 src/screens/listings/ai/AIListingCameraScreen.tsx
 src/screens/listings/ai/AIListingIdentifierScreen.tsx
 src/screens/listings/ai/AIListingSuggestScreen.tsx
-src/screens/listings/ai/SellTabRedirect.tsx
 src/screens/listings/ai/shared/ComparablesSheet.tsx
 src/screens/listings/ai/shared/EditDetailsSheet.tsx
 src/screens/listings/ai/shared/PriceSheet.tsx
