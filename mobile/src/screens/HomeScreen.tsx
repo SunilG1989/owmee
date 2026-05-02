@@ -24,7 +24,8 @@ import {
   ActivityIndicator, useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { C, T, S, R, Home, pickAspectRatio } from '../utils/tokens';
+import { C, T, S, R, pickAspectRatio } from '../utils/tokens';
+import { IconButton } from '../components/ui';
 import type { TabScreen } from '../navigation/types';
 import { Feed, type FeedListing } from '../services/api';
 import { useAuthStore } from '../store/authStore';
@@ -187,7 +188,7 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
       <View style={s.hdr}>
         <View style={s.hdrLeft}>
           <Text style={s.logo}>
-            owm<Text style={{ color: C.honey }}>ee</Text>
+            owm<Text style={s.logoAccent}>ee</Text>
           </Text>
           <TouchableOpacity onPress={handleLocationPress} style={s.locPill}>
             <Text style={s.locPin}>📍</Text>
@@ -199,9 +200,7 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
             <Text style={s.locArrow}>▾</Text>
           </TouchableOpacity>
         </View>
-        <TouchableOpacity onPress={handleNotifPress}>
-          <Text style={s.bell}>🔔</Text>
-        </TouchableOpacity>
+        <IconButton icon="🔔" onPress={handleNotifPress} a11y="Notifications" size="sm" />
       </View>
 
       {/* Search */}
@@ -266,7 +265,7 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
     if (loadingMore.current) {
       return (
         <View style={s.footerLoading}>
-          <ActivityIndicator size="small" color={C.honey} />
+          <ActivityIndicator size="small" color={C.petrol} />
         </View>
       );
     }
@@ -293,7 +292,7 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
     if (feedLoading) {
       return (
         <View style={s.emptyWrap}>
-          <ActivityIndicator color={C.honey} />
+          <ActivityIndicator color={C.petrol} />
         </View>
       );
     }
@@ -377,7 +376,7 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor={C.honey}
+            tintColor={C.petrol}
           />
         }
         onEndReached={loadMore}
@@ -402,162 +401,162 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
 // ── Styles ───────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: C.cream },
+  safe: { flex: 1, backgroundColor: C.bone },
 
   // Header
   hdr: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 4,
-    backgroundColor: C.cream,
+    paddingHorizontal: S.lg,
+    paddingTop: S.sm,
+    paddingBottom: S.xs,
+    backgroundColor: C.bone,
   },
   hdrLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: S.md,
     flex: 1,
   },
   logo: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: C.ink || C.text,
+    fontSize: T.size.xl,
+    fontWeight: T.weight.bold,
+    color: C.text,
     letterSpacing: -0.5,
   },
+  logoAccent: { color: C.petrol },
   locPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: S.xs,
     flex: 1,
   },
-  locPin: { fontSize: 12 },
+  locPin: { fontSize: T.size.sm },
   locName: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: C.ink || C.text,
+    fontSize: T.size.base,
+    fontWeight: T.weight.medium,
+    color: C.text,
     flex: 1,
   },
-  locArrow: { fontSize: 11, color: C.text3 || C.text3 },
-  bell: { fontSize: 18 },
+  locArrow: { fontSize: T.size.sm, color: C.text3 },
 
   // Search
   search: {
-    marginHorizontal: 16,
-    marginTop: 6,
-    marginBottom: 4,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    marginHorizontal: S.lg,
+    marginTop: S.xs + 2,                     // 6 — between S.xs and S.sm; intentional
+    marginBottom: S.xs,
+    paddingVertical: S.sm + 2,               // 10
+    paddingHorizontal: S.md,
     // Sand-tinted instead of generic gray — matches the warm palette
     // and reads as "input affordance" without competing with the trust
     // strip directly below.
-    backgroundColor: C.sand,
-    borderRadius: 10,
+    backgroundColor: C.bone2,
+    borderRadius: R.sm,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: S.sm,
     borderWidth: 1,
     borderColor: C.border2,
   },
-  searchIcon: { fontSize: 14 },
+  searchIcon: { fontSize: T.size.sm + 1 },   // 14 — tuned for emoji rendering
   searchPh: {
     flex: 1,
-    fontSize: 13,
+    fontSize: T.size.base,
     color: C.text3,  // bumped from text4 — was failing AA on sand
   },
-  searchMic: { fontSize: 14 },
+  searchMic: { fontSize: T.size.sm + 1 },
 
   // Trust strip — single-line tag below search. Subtle so it doesn't compete
   // with the deals strip / feed for visual weight, but always-visible so
   // the trust story registers on every session.
   trustStrip: {
-    marginHorizontal: 16,
-    marginTop: 6,
-    marginBottom: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: C.honeyLight,
-    borderRadius: 10,
+    marginHorizontal: S.lg,
+    marginTop: S.xs + 2,
+    marginBottom: S.sm,
+    paddingVertical: S.sm,
+    paddingHorizontal: S.md,
+    backgroundColor: C.petrolLight,
+    borderRadius: R.sm,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: S.xs + 2,
   },
   trustPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: S.xs,
   },
-  trustIcon: { fontSize: 12 },
-  trustText: { fontSize: 11, color: C.honeyDeep, fontWeight: '600' },
+  trustIcon: { fontSize: T.size.sm },
+  trustText: { fontSize: T.size.sm, color: C.petrolDeep, fontWeight: T.weight.semi },
   trustDot: {
     width: 3, height: 3, borderRadius: 1.5,
-    backgroundColor: C.honeyDeep,
+    backgroundColor: C.petrolDeep,
     opacity: 0.4,
     marginHorizontal: 2,
   },
 
   // Section header (between sell block and feed)
   sectionHdr: {
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 8,
+    paddingHorizontal: S.lg,
+    paddingTop: S.md + 2,                    // 14 — visual rhythm tuned to surrounding cards
+    paddingBottom: S.sm,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'baseline',
   },
   sectionTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: C.ink || C.text,
+    fontSize: T.size.md,
+    fontWeight: T.weight.semi,
+    color: C.text,
   },
   sectionSub: {
-    fontSize: 11,
-    color: C.text3 || C.text3,
+    fontSize: T.size.sm,
+    color: C.text3,
     marginTop: 2,
   },
 
   // Masonry grid
   masonry: {
     flexDirection: 'row',
-    paddingHorizontal: 8,
-    gap: 6,
+    paddingHorizontal: S.sm,
+    gap: S.xs + 2,
   },
   masonryCol: {
     flex: 1,
-    gap: 6,
+    gap: S.xs + 2,
   },
 
   // Footer hint
   footerLoading: {
-    paddingVertical: 20,
+    paddingVertical: S.xl,
     alignItems: 'center',
   },
   endHint: {
     textAlign: 'center',
-    paddingVertical: 16,
-    paddingBottom: 24,
-    color: C.text4 || C.text3,
-    fontSize: 11,
+    paddingVertical: S.lg,
+    paddingBottom: S.xxl,
+    color: C.text4,
+    fontSize: T.size.sm,
   },
 
   // Empty / error
   emptyWrap: {
-    paddingVertical: 60,
+    paddingVertical: S.xxxl + S.xxxl,
     alignItems: 'center',
-    paddingHorizontal: 32,
+    paddingHorizontal: S.xxxl,
   },
-  emptyEmoji: { fontSize: 40, marginBottom: 12 },
+  emptyEmoji: { fontSize: T.size.display + 10, marginBottom: S.md },
   emptyTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: T.size.lg,
+    fontWeight: T.weight.semi,
     color: C.text,
-    marginBottom: 6,
+    marginBottom: S.xs + 2,
   },
   emptySub: {
-    fontSize: 13,
-    color: C.text3 || C.text3,
+    fontSize: T.size.base,
+    color: C.text3,
     textAlign: 'center',
     lineHeight: 18,
   },
@@ -571,15 +570,15 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: S.xs + 2,
     backgroundColor: C.ink,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    paddingVertical: S.md + 2,               // 14
+    paddingHorizontal: S.lg,
   },
   guestText: {
-    fontSize: 13,
+    fontSize: T.size.base,
     color: C.white,
-    fontWeight: '500',
+    fontWeight: T.weight.medium,
   },
-  guestArrow: { fontSize: 14, color: C.honey },
+  guestArrow: { fontSize: T.size.sm + 1, color: C.coral },
 });
