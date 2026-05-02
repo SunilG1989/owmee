@@ -25,7 +25,7 @@ import { C, T, S, R, formatPrice } from '../utils/tokens';
 import type { RootScreen } from '../navigation/types';
 import { Transactions, Disputes, Returns, type TrackingResponse, type Transaction } from '../services/api';
 import { useAuthStore } from '../store/authStore';
-import { BackButton } from '../components/ui';
+import { BackButton, Button } from '../components/ui';
 import { parseApiError } from '../utils/errors';
 
 const DISPUTE_REASONS: { key: string; label: string }[] = [
@@ -199,27 +199,37 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
 
         {isDelivered && isBuyer && (
           <View style={s.actions}>
-            <TouchableOpacity
-              style={[s.btnPrimary, acting && s.btnDisabled]}
+            <Button
+              label="Confirm receipt"
+              variant="primary"
+              size="lg"
+              loading={acting}
               disabled={acting}
               onPress={() => doAction(
                 () => Transactions.confirmDeal(transactionId),
                 'Receipt confirmed. Thanks!',
               )}
-            >
-              <Text style={s.btnPrimaryText}>Confirm receipt</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={s.btnSecondary} onPress={() => setShowDispute(true)}>
-              <Text style={s.btnSecondaryText}>Something's wrong</Text>
-            </TouchableOpacity>
+              fullWidth
+            />
+            <Button
+              label="Something's wrong"
+              variant="secondary"
+              size="lg"
+              onPress={() => setShowDispute(true)}
+              fullWidth
+            />
           </View>
         )}
 
         {isCompleted && !isDisputed && (
           <View style={s.actions}>
-            <TouchableOpacity style={s.btnPrimary} onPress={() => setShowRate(true)}>
-              <Text style={s.btnPrimaryText}>Rate this transaction</Text>
-            </TouchableOpacity>
+            <Button
+              label="Rate this transaction"
+              variant="primary"
+              size="lg"
+              onPress={() => setShowRate(true)}
+              fullWidth
+            />
           </View>
         )}
 
@@ -227,9 +237,13 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
             return already in flight. Eligibility computed server-side. */}
         {isBuyer && tracking.return_eligible && (
           <View style={s.actions}>
-            <TouchableOpacity style={s.btnSecondary} onPress={() => setShowReturn(true)}>
-              <Text style={s.btnSecondaryText}>Return this item</Text>
-            </TouchableOpacity>
+            <Button
+              label="Return this item"
+              variant="secondary"
+              size="lg"
+              onPress={() => setShowReturn(true)}
+              fullWidth
+            />
           </View>
         )}
 
@@ -284,9 +298,9 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
                 <Text style={s.reasonLabel}>{opt.label}</Text>
               </TouchableOpacity>
             ))}
-            <Text style={[s.rowLabel, { marginTop: 12 }]}>Tell us more</Text>
+            <Text style={[s.rowLabel, s.rowLabelSpaced]}>Tell us more</Text>
             <TextInput
-              style={[s.input, { minHeight: 100 }]}
+              style={[s.input, s.inputTaller]}
               placeholder="What happened? Be specific — this is the only context our reviewers have."
               placeholderTextColor={C.text4}
               value={disputeDesc}
@@ -294,13 +308,18 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
               multiline
               maxLength={1000}
             />
-            <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
-              <TouchableOpacity style={[s.btnSecondary, { flex: 1 }]} onPress={() => setShowDispute(false)}>
-                <Text style={s.btnSecondaryText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[s.btnPrimary, { flex: 2 }, (disputeDesc.length < 10 || acting) && s.btnDisabled]}
+            <View style={s.modalActions}>
+              <Button
+                label="Cancel"
+                variant="secondary"
+                onPress={() => setShowDispute(false)}
+                style={s.modalCancel}
+              />
+              <Button
+                label="Open dispute"
+                variant="primary"
                 disabled={disputeDesc.length < 10 || acting}
+                loading={acting}
                 onPress={async () => {
                   setShowDispute(false);
                   setActing(true);
@@ -310,7 +329,6 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
                     await reload();
                   } catch (e: any) {
                     if (e?.response?.status === 403) {
-                      // KYC not done — point them at the KYC-for-action screen.
                       (navigation as any).navigate('KycRequiredForAction', {
                         actionLabel: 'open this dispute', returnTo: 'TransactionDetail',
                       });
@@ -321,9 +339,8 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
                     setActing(false);
                   }
                 }}
-              >
-                <Text style={s.btnPrimaryText}>Open dispute</Text>
-              </TouchableOpacity>
+                style={s.modalSubmit}
+              />
             </View>
           </View>
         </View>
@@ -348,9 +365,9 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
                 <Text style={s.reasonLabel}>{opt.label}</Text>
               </TouchableOpacity>
             ))}
-            <Text style={[s.rowLabel, { marginTop: 12 }]}>Tell us more</Text>
+            <Text style={[s.rowLabel, s.rowLabelSpaced]}>Tell us more</Text>
             <TextInput
-              style={[s.input, { minHeight: 100 }]}
+              style={[s.input, s.inputTaller]}
               placeholder="What's wrong with it? Be specific."
               placeholderTextColor={C.text4}
               value={returnDesc}
@@ -358,13 +375,18 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
               multiline
               maxLength={1000}
             />
-            <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
-              <TouchableOpacity style={[s.btnSecondary, { flex: 1 }]} onPress={() => setShowReturn(false)}>
-                <Text style={s.btnSecondaryText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[s.btnPrimary, { flex: 2 }, (returnDesc.length < 10 || acting) && s.btnDisabled]}
+            <View style={s.modalActions}>
+              <Button
+                label="Cancel"
+                variant="secondary"
+                onPress={() => setShowReturn(false)}
+                style={s.modalCancel}
+              />
+              <Button
+                label="Request return"
+                variant="primary"
                 disabled={returnDesc.length < 10 || acting}
+                loading={acting}
                 onPress={async () => {
                   setShowReturn(false);
                   setActing(true);
@@ -384,9 +406,8 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
                     setActing(false);
                   }
                 }}
-              >
-                <Text style={s.btnPrimaryText}>Request return</Text>
-              </TouchableOpacity>
+                style={s.modalSubmit}
+              />
             </View>
           </View>
         </View>
@@ -411,9 +432,12 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
               onChangeText={setRatingNote}
               multiline
             />
-            <TouchableOpacity
-              style={[s.btnPrimary, rating === 0 && s.btnDisabled]}
+            <Button
+              label="Submit"
+              variant="primary"
+              size="lg"
               disabled={rating === 0 || acting}
+              loading={acting}
               onPress={() => {
                 setShowRate(false);
                 doAction(
@@ -421,9 +445,8 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
                   'Thanks for rating!',
                 );
               }}
-            >
-              <Text style={s.btnPrimaryText}>Submit</Text>
-            </TouchableOpacity>
+              fullWidth
+            />
           </View>
         </View>
       </Modal>
@@ -459,79 +482,113 @@ function labelForStatus(status: string, isBuyer: boolean): string {
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bone },
-  header: { paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  back: { fontSize: 14, color: C.text3 },
-  title: { fontSize: 18, fontWeight: '700', color: C.text },
+  header: {
+    paddingHorizontal: S.lg, paddingVertical: S.md,
+    flexDirection: 'row', alignItems: 'center', gap: S.md,
+  },
+  back: { fontSize: T.size.sm + 1, color: C.text3 },
+  title: { fontSize: T.size.lg + 1, fontWeight: T.weight.bold, color: C.text },
 
-  banner: { marginHorizontal: 16, padding: 16, borderRadius: 10, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
+  banner: {
+    marginHorizontal: S.lg, padding: S.lg,
+    borderRadius: R.sm,
+    backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
+  },
   bannerOK: { backgroundColor: C.greenLight, borderColor: C.green },
   bannerWarn: { backgroundColor: C.yellowLight, borderColor: C.yellow },
   bannerErr: { backgroundColor: C.redLight, borderColor: C.red },
-  bannerText: { fontSize: 14, color: C.text, lineHeight: 20 },
+  bannerText: { fontSize: T.size.sm + 1, color: C.text, lineHeight: 20 },
 
-  ackBox: { margin: 16, padding: 20, borderRadius: 12, backgroundColor: C.petrolLight, borderWidth: 2, borderColor: C.petrol, alignItems: 'center' },
-  ackLabel: { fontSize: 12, color: C.petrolText, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1, fontWeight: '600' },
-  ackCode: { fontSize: 36, fontWeight: '800', color: C.petrolText, letterSpacing: 8 },
-  ackHint: { fontSize: 12, color: C.petrolDeep, marginTop: 8, textAlign: 'center', lineHeight: 18 },
+  ackBox: {
+    margin: S.lg, padding: S.xl,
+    borderRadius: R.md,
+    backgroundColor: C.petrolLight,
+    borderWidth: 2, borderColor: C.petrol,
+    alignItems: 'center',
+  },
+  ackLabel: {
+    fontSize: T.size.sm, color: C.petrolText,
+    marginBottom: S.xs + 2,
+    textTransform: 'uppercase', letterSpacing: 1,
+    fontWeight: T.weight.semi,
+  },
+  ackCode: { fontSize: T.size.display + 6, fontWeight: T.weight.heavy, color: C.petrolText, letterSpacing: 8 },
+  ackHint: { fontSize: T.size.sm, color: C.petrolDeep, marginTop: S.sm, textAlign: 'center', lineHeight: 18 },
 
-  courierBox: { marginHorizontal: 16, marginBottom: 12, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: C.petrol, backgroundColor: C.petrolLight },
-  courierText: { fontSize: 14, color: C.petrolDeep, fontWeight: '600', textAlign: 'center' },
+  courierBox: {
+    marginHorizontal: S.lg, marginBottom: S.md,
+    padding: S.md, borderRadius: R.sm,
+    borderWidth: 1, borderColor: C.petrol,
+    backgroundColor: C.petrolLight,
+  },
+  courierText: { fontSize: T.size.sm + 1, color: C.petrolDeep, fontWeight: T.weight.semi, textAlign: 'center' },
 
-  timeline: { paddingHorizontal: 24, paddingVertical: 16 },
+  timeline: { paddingHorizontal: S.xxl, paddingVertical: S.lg },
   tlRow: { flexDirection: 'row', alignItems: 'flex-start' },
   tlGutter: { width: 18, alignItems: 'center' },
-  // Timeline dot uses surface (white) when inactive so it stands out against
-  // the cream canvas; honey when active. Color is the same regardless of theme.
-  tlDot: { width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: C.text4, backgroundColor: C.surface, alignItems: 'center', justifyContent: 'center', marginTop: 2 },
+  tlDot: {
+    width: 18, height: 18, borderRadius: 9,
+    borderWidth: 2, borderColor: C.text4,
+    backgroundColor: C.surface,
+    alignItems: 'center', justifyContent: 'center',
+    marginTop: 2,
+  },
   tlDotDone: { backgroundColor: C.petrol, borderColor: C.petrol },
-  tlTick: { fontSize: 11, color: C.white, fontWeight: '700' },
+  tlTick: { fontSize: T.size.sm, color: C.white, fontWeight: T.weight.bold },
   tlBar: { flex: 1, width: 2, backgroundColor: C.text4, marginTop: 2 },
   tlBarDone: { backgroundColor: C.petrol },
-  tlBody: { flex: 1, marginLeft: 12, paddingBottom: 20 },
-  tlLabel: { fontSize: 14, color: C.text3 },
-  tlLabelDone: { color: C.text, fontWeight: '600' },
-  tlAt: { fontSize: 11, color: C.text4, marginTop: 2 },
+  tlBody: { flex: 1, marginLeft: S.md, paddingBottom: S.xl },
+  tlLabel: { fontSize: T.size.sm + 1, color: C.text3 },
+  tlLabelDone: { color: C.text, fontWeight: T.weight.semi },
+  tlAt: { fontSize: T.size.sm, color: C.text4, marginTop: 2 },
 
-  priceBox: { margin: 16, padding: 16, backgroundColor: C.surface, borderRadius: 10, borderWidth: 1, borderColor: C.border },
-  priceRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  priceLabel: { fontSize: 13, color: C.text3 },
-  priceValue: { fontSize: 13, color: C.text },
+  priceBox: {
+    margin: S.lg, padding: S.lg,
+    backgroundColor: C.surface, borderRadius: R.sm,
+    borderWidth: 1, borderColor: C.border,
+  },
+  priceRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: S.xs + 2 },
+  priceLabel: { fontSize: T.size.base, color: C.text3 },
+  priceValue: { fontSize: T.size.base, color: C.text },
 
-  actions: { paddingHorizontal: 16, gap: 12 },
-  btnPrimary: { backgroundColor: C.petrol, borderRadius: 10, paddingVertical: 14, alignItems: 'center' },
-  btnPrimaryText: { color: C.white, fontSize: 15, fontWeight: '700' },
-  btnSecondary: { borderWidth: 1, borderColor: C.border, borderRadius: 10, paddingVertical: 14, alignItems: 'center', backgroundColor: C.surface },
-  btnSecondaryText: { color: C.text2, fontSize: 14, fontWeight: '500' },
-  btnDisabled: { opacity: 0.5 },
+  actions: { paddingHorizontal: S.lg, gap: S.md, marginTop: S.md },
 
-  // Refund box: amber while in-flight (matches "in progress" semantic in
-  // the rest of the app), green on completion, red on failure. Uses the
-  // v4 palette tokens — earlier these were Tailwind-default hex literals
-  // that didn't match the warm-trust aesthetic.
-  refundBox: { margin: 16, padding: 16, borderRadius: 10, backgroundColor: C.yellowLight, borderWidth: 1, borderColor: C.yellow },
+  rowLabelSpaced: { marginTop: S.md },
+  inputTaller: { minHeight: 100 },
+  modalActions: { flexDirection: 'row', gap: S.md, marginTop: S.sm },
+  modalCancel: { flex: 1 },
+  modalSubmit: { flex: 2 },
+
+  refundBox: {
+    margin: S.lg, padding: S.lg,
+    borderRadius: R.sm,
+    backgroundColor: C.yellowLight,
+    borderWidth: 1, borderColor: C.yellow,
+  },
   refundOK: { backgroundColor: C.greenLight, borderColor: C.green },
   refundErr: { backgroundColor: C.redLight, borderColor: C.red },
-  refundLabel: { fontSize: 13, fontWeight: '700', color: C.text, textTransform: 'uppercase', letterSpacing: 0.5 },
-  refundAmount: { fontSize: 20, fontWeight: '800', color: C.text, marginVertical: 4 },
-  refundHint: { fontSize: 12, color: C.text3, lineHeight: 18 },
-  refundReason: { fontSize: 11, color: C.text4, marginTop: 6, fontStyle: 'italic' },
+  refundLabel: { fontSize: T.size.base, fontWeight: T.weight.bold, color: C.text, textTransform: 'uppercase', letterSpacing: 0.5 },
+  refundAmount: { fontSize: T.size.xl, fontWeight: T.weight.heavy, color: C.text, marginVertical: S.xs },
+  refundHint: { fontSize: T.size.sm, color: C.text3, lineHeight: 18 },
+  refundReason: { fontSize: T.size.sm, color: C.text4, marginTop: S.xs + 2, fontStyle: 'italic' },
 
-  // rowLabel is the label-above-input style used inside the Dispute /
-  // Return modals. Matches sheetTitle's weight but smaller, so a label
-  // and the input it precedes feel like one component.
-  rowLabel: { fontSize: 13, fontWeight: '600', color: C.text2, marginTop: 8, marginBottom: 6 },
-  disputeHint: { fontSize: 13, color: C.text3, marginBottom: 16, lineHeight: 18 },
-  reasonRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, gap: 10 },
+  rowLabel: { fontSize: T.size.base, fontWeight: T.weight.semi, color: C.text2, marginTop: S.sm, marginBottom: S.xs + 2 },
+  disputeHint: { fontSize: T.size.base, color: C.text3, marginBottom: S.lg, lineHeight: 18 },
+  reasonRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: S.sm + 2, gap: S.sm + 2 },
   reasonRowOn: {},
   radio: { width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: C.text4 },
   radioOn: { borderColor: C.petrol, backgroundColor: C.petrol },
-  reasonLabel: { fontSize: 14, color: C.text },
+  reasonLabel: { fontSize: T.size.sm + 1, color: C.text },
 
   modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  modal: { backgroundColor: C.bone, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 24 },
-  modalTitle: { fontSize: 18, fontWeight: '700', color: C.text, marginBottom: 16 },
-  starsRow: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginBottom: 16 },
-  star: { fontSize: 36, color: C.text4 },
+  modal: { backgroundColor: C.bone, borderTopLeftRadius: R.lg, borderTopRightRadius: R.lg, padding: S.xxl },
+  modalTitle: { fontSize: T.size.lg + 1, fontWeight: T.weight.bold, color: C.text, marginBottom: S.lg },
+  starsRow: { flexDirection: 'row', justifyContent: 'center', gap: S.sm, marginBottom: S.lg },
+  star: { fontSize: T.size.display + 6, color: C.text4 },
   starOn: { color: C.petrol },
-  input: { borderWidth: 1, borderColor: C.border, borderRadius: 8, padding: 12, marginBottom: 16, color: C.text, minHeight: 80, textAlignVertical: 'top' },
+  input: {
+    borderWidth: 1, borderColor: C.border, borderRadius: R.xs + 2,
+    padding: S.md, marginBottom: S.lg,
+    color: C.text, minHeight: 80, textAlignVertical: 'top',
+  },
 });
