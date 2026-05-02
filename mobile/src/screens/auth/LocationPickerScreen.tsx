@@ -31,6 +31,7 @@ import { Profile } from '../../services/api'; // SPRINT8_LOCATION_BACKEND_SYNC
 import { LOCATION_KEY } from '../../utils/storageKeys';
 import Geolocation from '@react-native-community/geolocation';
 import { C, T, S, R, Shadow } from '../../utils/tokens';
+import { Button, IconButton } from '../../components/ui';
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -385,7 +386,7 @@ export default function LocationPickerScreen({ onLocationSet }: Props) {
             </>
           ) : (
             <>
-              <Text style={{ fontSize: 18 }}>🎯</Text>
+              <Text style={s.gpsBtnEmoji}>🎯</Text>
               <Text style={s.gpsBtnText}>Use my current location</Text>
             </>
           )}
@@ -402,7 +403,7 @@ export default function LocationPickerScreen({ onLocationSet }: Props) {
 
         {/* Search */}
         <View style={s.searchWrap}>
-          <Text style={{ fontSize: 16, color: C.text3 }}>🔍</Text>
+          <Text style={s.searchIcon}>🔍</Text>
           <TextInput
             style={s.searchInput}
             placeholder="Search area, street, landmark, or pincode..."
@@ -420,10 +421,10 @@ export default function LocationPickerScreen({ onLocationSet }: Props) {
           <View style={s.results}>
             {!searching && results.length === 0 && (
               <View style={s.noResults}>
-                <Text style={{ fontSize: T.size.base, color: C.text4 }}>
+                <Text style={s.noResultsTitle}>
                   No places found for "{search}"
                 </Text>
-                <Text style={{ fontSize: T.size.sm, color: C.text4, marginTop: 4 }}>
+                <Text style={s.noResultsHint}>
                   Try a different search or pick a popular city below.
                 </Text>
               </View>
@@ -444,9 +445,9 @@ export default function LocationPickerScreen({ onLocationSet }: Props) {
                   activeOpacity={0.75}
                 >
                   <View style={s.resultIcon}>
-                    <Text style={{ fontSize: 14 }}>📍</Text>
+                    <Text style={s.resultEmoji}>📍</Text>
                   </View>
-                  <View style={{ flex: 1 }}>
+                  <View style={s.flex1}>
                     <Text style={s.resultPrimary} numberOfLines={1}>{primary}</Text>
                     <Text style={s.resultSecondary} numberOfLines={2}>
                       {r.display_name}
@@ -535,26 +536,24 @@ function ConfirmAddressScreen({
     <SafeAreaView style={s.safe}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={{ flex: 1 }}
+        style={s.flex1}
       >
         <View style={s.confirmHeader}>
-          <TouchableOpacity onPress={onBack} style={s.backBtn}>
-            <Text style={{ fontSize: 20, color: C.text2 }}>←</Text>
-          </TouchableOpacity>
+          <IconButton icon="←" onPress={onBack} a11y="Back" size="sm" />
           <Text style={s.confirmTitle}>Confirm address</Text>
-          <View style={{ width: 40 }} />
+          <View style={s.confirmHeaderSpacer} />
         </View>
 
         <ScrollView
-          contentContainerStyle={{ padding: S.xl, paddingBottom: 100 }}
+          contentContainerStyle={s.confirmScroll}
           keyboardShouldPersistTaps="handled"
         >
           {/* Detected summary */}
           <View style={s.detectedCard}>
             <View style={s.detectedIcon}>
-              <Text style={{ fontSize: 18 }}>📍</Text>
+              <Text style={s.detectedEmoji}>📍</Text>
             </View>
-            <View style={{ flex: 1 }}>
+            <View style={s.flex1}>
               <Text style={s.detectedLabel}>Detected address</Text>
               <Text style={s.detectedAddr} numberOfLines={2}>
                 {initial.fullAddress || 'Tap fields below to fill in'}
@@ -590,8 +589,8 @@ function ConfirmAddressScreen({
             onChangeText={setLandmark}
           />
 
-          <View style={{ flexDirection: 'row', gap: S.sm }}>
-            <View style={{ flex: 1 }}>
+          <View style={s.row}>
+            <View style={s.flex1}>
               <Text style={s.fieldLabel}>City *</Text>
               <TextInput
                 style={s.field}
@@ -601,7 +600,7 @@ function ConfirmAddressScreen({
                 onChangeText={setCity}
               />
             </View>
-            <View style={{ flex: 1 }}>
+            <View style={s.flex1}>
               <Text style={s.fieldLabel}>Pincode</Text>
               <TextInput
                 style={s.field}
@@ -627,18 +626,16 @@ function ConfirmAddressScreen({
 
         {/* Fixed bottom CTA */}
         <View style={s.bottomBar}>
-          <TouchableOpacity
-            style={[s.saveBtn, !canSave && { opacity: 0.4 }]}
-            onPress={save}
+          <Button
+            label="Save and continue →"
+            variant="primary"
+            size="lg"
+            loading={saving}
             disabled={!canSave || saving}
-            activeOpacity={0.85}
-          >
-            {saving ? (
-              <ActivityIndicator color={C.white} />
-            ) : (
-              <Text style={s.saveBtnText}>Save and continue →</Text>
-            )}
-          </TouchableOpacity>
+            onPress={save}
+            fullWidth
+            style={s.saveBtn}
+          />
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -650,32 +647,36 @@ function ConfirmAddressScreen({
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bone },
   header: { paddingHorizontal: S.xl, paddingTop: S.md },
-  logo: { fontSize: 22, fontWeight: '700', color: C.ink, letterSpacing: -0.8 },
-  logoDot: { fontSize: 10, color: C.petrol },
+  logo: { fontSize: T.size.xxl - 2, fontWeight: T.weight.bold, color: C.ink, letterSpacing: -0.8 },
+  logoDot: { fontSize: T.size.xs, color: C.petrol },
 
-  hero: { alignItems: 'center', paddingVertical: 32 },
-  heroEmoji: { fontSize: 48, marginBottom: S.md },
-  heroTitle: { fontSize: T.size.xl, fontWeight: '700', color: C.ink },
+  flex1: { flex: 1 },
+
+  hero: { alignItems: 'center', paddingVertical: S.xxl + 8 },
+  heroEmoji: { fontSize: T.size.display + 18, marginBottom: S.md },          // 48
+  heroTitle: { fontSize: T.size.xl, fontWeight: T.weight.bold, color: C.ink },
   heroSub: { fontSize: T.size.base, color: C.text3, marginTop: S.xs },
 
   gpsBtn: {
     marginHorizontal: S.xl, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: S.sm, backgroundColor: C.petrolLight, borderRadius: R.lg, paddingVertical: 16,
+    gap: S.sm, backgroundColor: C.petrolLight, borderRadius: R.lg, paddingVertical: S.lg,
     borderWidth: 1.5, borderColor: C.petrol, ...Shadow.glow,
   },
-  gpsBtnText: { fontSize: T.size.md, fontWeight: '700', color: C.petrolDeep },
+  gpsBtnText: { fontSize: T.size.md, fontWeight: T.weight.bold, color: C.petrolDeep },
+  gpsBtnEmoji: { fontSize: T.size.lg + 1 },
   error: { fontSize: T.size.sm, color: C.red, textAlign: 'center', marginTop: S.sm, paddingHorizontal: S.xl },
 
   divider: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: S.xl, marginVertical: S.lg, gap: S.md },
   dividerLine: { flex: 1, height: 1, backgroundColor: C.border },
-  dividerText: { fontSize: T.size.sm, color: C.text4, fontWeight: '500' },
+  dividerText: { fontSize: T.size.sm, color: C.text4, fontWeight: T.weight.medium },
 
   searchWrap: {
     marginHorizontal: S.xl, flexDirection: 'row', alignItems: 'center',
     gap: S.sm, backgroundColor: C.surface, borderRadius: R.lg, paddingHorizontal: S.lg,
     borderWidth: 1, borderColor: C.border,
   },
-  searchInput: { flex: 1, fontSize: T.size.md, color: C.text, paddingVertical: 14 },
+  searchIcon: { fontSize: T.size.lg - 1, color: C.text3 },
+  searchInput: { flex: 1, fontSize: T.size.md, color: C.text, paddingVertical: S.md + 2 },
 
   results: { marginHorizontal: S.xl, marginTop: S.md },
   resultRow: {
@@ -686,13 +687,16 @@ const s = StyleSheet.create({
     width: 32, height: 32, borderRadius: 16, backgroundColor: C.petrolLight,
     alignItems: 'center', justifyContent: 'center', marginTop: 2,
   },
-  resultPrimary: { fontSize: T.size.md, fontWeight: '600', color: C.text },
+  resultEmoji: { fontSize: T.size.sm + 1 },
+  resultPrimary: { fontSize: T.size.md, fontWeight: T.weight.semi, color: C.text },
   resultSecondary: { fontSize: T.size.xs, color: C.text3, marginTop: 2, lineHeight: 16 },
   noResults: { alignItems: 'center', paddingVertical: S.xl },
+  noResultsTitle: { fontSize: T.size.base, color: C.text4 },
+  noResultsHint: { fontSize: T.size.sm, color: C.text4, marginTop: S.xs },
 
   popularWrap: { marginTop: S.xl, paddingHorizontal: S.xl },
   popularTitle: {
-    fontSize: T.size.base, fontWeight: '600', color: C.text3, marginBottom: S.md,
+    fontSize: T.size.base, fontWeight: T.weight.semi, color: C.text3, marginBottom: S.md,
     textTransform: 'uppercase', letterSpacing: 0.5,
   },
   popularGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: S.sm },
@@ -700,8 +704,8 @@ const s = StyleSheet.create({
     width: '23%', alignItems: 'center', paddingVertical: S.md, backgroundColor: C.surface,
     borderRadius: R.lg, borderWidth: 1, borderColor: C.border, ...Shadow.card,
   },
-  popularEmoji: { fontSize: 24, marginBottom: S.xs },
-  popularName: { fontSize: T.size.sm, fontWeight: '600', color: C.text2 },
+  popularEmoji: { fontSize: T.size.xxl, marginBottom: S.xs },
+  popularName: { fontSize: T.size.sm, fontWeight: T.weight.semi, color: C.text2 },
 
   // Confirm screen
   confirmHeader: {
@@ -709,8 +713,11 @@ const s = StyleSheet.create({
     paddingHorizontal: S.lg, paddingVertical: S.md,
     backgroundColor: C.surface, borderBottomWidth: 0.5, borderBottomColor: C.border,
   },
-  backBtn: { padding: 4, width: 40 },
-  confirmTitle: { fontSize: T.size.md, fontWeight: '600', color: C.text },
+  confirmHeaderSpacer: { width: 36 },
+  confirmTitle: { fontSize: T.size.md, fontWeight: T.weight.semi, color: C.text },
+  confirmScroll: { padding: S.xl, paddingBottom: 100 },
+
+  row: { flexDirection: 'row', gap: S.sm },
 
   detectedCard: {
     flexDirection: 'row', alignItems: 'flex-start', gap: S.md,
@@ -721,17 +728,18 @@ const s = StyleSheet.create({
     width: 36, height: 36, borderRadius: 18, backgroundColor: C.white,
     alignItems: 'center', justifyContent: 'center',
   },
-  detectedLabel: { fontSize: T.size.xs, fontWeight: '700', color: C.petrolDeep, textTransform: 'uppercase', letterSpacing: 0.5 },
+  detectedEmoji: { fontSize: T.size.lg + 1 },
+  detectedLabel: { fontSize: T.size.xs, fontWeight: T.weight.bold, color: C.petrolDeep, textTransform: 'uppercase', letterSpacing: 0.5 },
   detectedAddr: { fontSize: T.size.sm, color: C.text, marginTop: 2, lineHeight: 18 },
 
   fieldLabel: {
-    fontSize: 11, fontWeight: '700', color: C.text3,
+    fontSize: T.size.sm, fontWeight: T.weight.bold, color: C.text3,
     marginTop: S.md, marginBottom: S.xs,
     textTransform: 'uppercase', letterSpacing: 0.5,
   },
   field: {
     borderWidth: 1, borderColor: C.border, borderRadius: R.sm,
-    paddingHorizontal: S.md, paddingVertical: 12,
+    paddingHorizontal: S.md, paddingVertical: S.md,
     fontSize: T.size.md, color: C.text, backgroundColor: C.surface,
   },
 
