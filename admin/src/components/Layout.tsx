@@ -15,7 +15,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <header className="bg-white border-b border-ink4">
         <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-8">
-            <div className="font-bold text-lg text-honey-700 tracking-tight">
+            <div className="font-bold text-lg text-petrol-700 tracking-tight">
               Owmee <span className="text-ink3 font-normal">OPS6</span>
             </div>
             <nav className="flex gap-1 flex-wrap">
@@ -39,7 +39,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </header>
-      <main className="flex-1 bg-cream">
+      <main className="flex-1 bg-bone">
         <div className="max-w-7xl mx-auto px-6 py-6">
           {children}
         </div>
@@ -55,8 +55,8 @@ function Tab({ to, children }: { to: string; children: React.ReactNode }) {
       className={({ isActive }) =>
         `px-3 py-2 rounded-md text-sm font-medium transition ${
           isActive
-            ? 'bg-honey-50 text-honey-700'
-            : 'text-ink2 hover:bg-sand'
+            ? 'bg-petrol-50 text-petrol-700'
+            : 'text-ink2 hover:bg-bone2'
         }`
       }
     >

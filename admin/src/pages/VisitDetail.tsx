@@ -180,10 +180,10 @@ export default function VisitDetail() {
           <div className="flex items-center gap-2 mt-2">
             <span className="pill bg-gray-100 text-ink2 capitalize">{visit.status}</span>
             {visit.outcome && (
-              <span className="pill bg-sand text-ink2">outcome: {visit.outcome}</span>
+              <span className="pill bg-bone2 text-ink2">outcome: {visit.outcome}</span>
             )}
             {visit.workflow_id && (
-              <span className="pill bg-honey-50 text-honey-700">
+              <span className="pill bg-petrol-50 text-petrol-700">
                 ⚙ {visit.workflow_id}
               </span>
             )}
@@ -219,7 +219,7 @@ export default function VisitDetail() {
           {visit.fe_code && <Field label="FE">{visit.fe_code}</Field>}
           {visit.listing_id && (
             <Field label="Listing">
-              <Link to={`/listings`} className="text-honey-700 underline">
+              <Link to={`/listings`} className="text-petrol-700 underline">
                 {visit.listing_id.slice(0, 8)}…
               </Link>
             </Field>
@@ -311,7 +311,7 @@ export default function VisitDetail() {
               </div>
             )}
 
-            {msg && <div className="text-sm text-ink2 bg-sand rounded-md p-2">{msg}</div>}
+            {msg && <div className="text-sm text-ink2 bg-bone2 rounded-md p-2">{msg}</div>}
           </div>
         </div>
       </div>
@@ -321,7 +321,7 @@ export default function VisitDetail() {
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="py-1.5 border-b border-sand last:border-0">
+    <div className="py-1.5 border-b border-bone2 last:border-0">
       <div className="text-xs text-ink3 font-semibold">{label}</div>
       <div className="text-sm text-ink mt-0.5">{children}</div>
     </div>

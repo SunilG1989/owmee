@@ -12,25 +12,44 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Utility classes */
+/* ──────────────────────────────────────────────────────────────────────
+ * Utility component classes (mirror mobile/src/components/ui primitives)
+ *
+ * All references point at v6 petrol palette. The legacy `honey-*` /
+ * `cream` / `sand` Tailwind aliases still work (mapped in
+ * tailwind.config.js) so old call sites keep rendering correctly while
+ * new code uses the canonical names below.
+ * ────────────────────────────────────────────────────────────────────── */
+
 .btn {
   @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md font-semibold transition-colors;
 }
 .btn-primary {
-  @apply bg-honey-500 text-white hover:bg-honey-600 disabled:opacity-50 disabled:cursor-not-allowed;
+  @apply bg-petrol-500 text-white hover:bg-petrol-600 disabled:opacity-50 disabled:cursor-not-allowed;
 }
 .btn-secondary {
-  @apply bg-white border border-ink4 text-ink hover:bg-sand disabled:opacity-50;
+  @apply bg-white border border-ink4 text-ink hover:bg-bone2 disabled:opacity-50;
+}
+.btn-ghost {
+  @apply text-ink2 hover:bg-bone2 disabled:opacity-50;
 }
 .btn-danger {
   @apply bg-red-600 text-white hover:bg-red-700 disabled:opacity-50;
 }
+
 .card {
-  @apply bg-white rounded-lg border border-sand shadow-sm;
+  @apply bg-white rounded-lg border border-bone2 shadow-sm;
 }
+
 .pill {
   @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold;
 }
+.pill-brand   { @apply bg-petrol-50 text-petrol-700; }
+.pill-accent  { @apply bg-coral-50  text-coral-700;  }
+.pill-success { @apply bg-emerald-50 text-emerald-700; }
+.pill-warn    { @apply bg-amber-50   text-amber-700;   }
+.pill-danger  { @apply bg-red-50     text-red-700;     }
+
 .input {
-  @apply w-full px-3 py-2 bg-cream border border-ink4 rounded-md focus:outline-none focus:ring-2 focus:ring-honey-300;
+  @apply w-full px-3 py-2 bg-bone border border-ink4 rounded-md focus:outline-none focus:ring-2 focus:ring-petrol-300;
 }

@@ -99,20 +99,20 @@ export default function FeAssistedListings() {
         <div className="flex gap-1 bg-white rounded-md p-1 border border-ink4">
           <button
             onClick={() => setMode('queue')}
-            className={`px-3 py-1 text-sm rounded ${mode === 'queue' ? 'bg-honey-500 text-white' : 'text-ink2'}`}
+            className={`px-3 py-1 text-sm rounded ${mode === 'queue' ? 'bg-petrol-500 text-white' : 'text-ink2'}`}
           >
             Review queue
           </button>
           <button
             onClick={() => setMode('all')}
-            className={`px-3 py-1 text-sm rounded ${mode === 'all' ? 'bg-honey-500 text-white' : 'text-ink2'}`}
+            className={`px-3 py-1 text-sm rounded ${mode === 'all' ? 'bg-petrol-500 text-white' : 'text-ink2'}`}
           >
             All FE-assisted
           </button>
         </div>
       </div>
 
-      {msg && <div className="mb-4 text-sm bg-sand rounded p-3 text-ink2">{msg}</div>}
+      {msg && <div className="mb-4 text-sm bg-bone2 rounded p-3 text-ink2">{msg}</div>}
 
       {loading ? (
         <div className="text-ink3">Loading…</div>
@@ -129,9 +129,9 @@ export default function FeAssistedListings() {
               <div className="flex justify-between gap-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="pill bg-honey-50 text-honey-700">FE</span>
+                    <span className="pill bg-petrol-50 text-petrol-700">FE</span>
                     <span className="pill bg-gray-100 text-ink2 capitalize">{i.status}</span>
-                    <span className="pill bg-sand text-ink2">reviewed: {i.reviewed_by}</span>
+                    <span className="pill bg-bone2 text-ink2">reviewed: {i.reviewed_by}</span>
                     {i.is_kids_item && <span className="pill bg-blue-100 text-blue-800">kids</span>}
                   </div>
                   <div className="font-semibold text-ink">{i.title}</div>
@@ -147,7 +147,7 @@ export default function FeAssistedListings() {
                   </div>
 
                   {i.is_kids_item && i.kids_safety_checklist && (
-                    <div className="mt-3 bg-sand rounded-md p-3">
+                    <div className="mt-3 bg-bone2 rounded-md p-3">
                       <div className="text-xs font-semibold text-ink2 mb-2">Kids safety checklist</div>
                       <div className="grid grid-cols-2 gap-1 text-xs">
                         {KIDS_KEYS.map(({ key, label }) => {

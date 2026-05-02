@@ -47,10 +47,10 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-cream">
+    <div className="min-h-screen flex items-center justify-center bg-bone">
       <div className="w-full max-w-md card">
         <div className="text-center mb-6">
-          <div className="text-2xl font-bold text-honey-700">Owmee OPS6</div>
+          <div className="text-2xl font-bold text-petrol-700">Owmee OPS6</div>
           <div className="text-sm text-ink3 mt-1">Dispatch console</div>
         </div>
 
@@ -92,7 +92,7 @@ export default function Login() {
             {showBootstrap ? 'Hide' : 'Dev: bootstrap super admin'}
           </button>
           {showBootstrap && (
-            <div className="mt-3 space-y-3 bg-sand rounded-md p-3">
+            <div className="mt-3 space-y-3 bg-bone2 rounded-md p-3">
               <div className="text-xs text-ink3">
                 Non-prod only. Uses the email + password above. Enter a display name:
               </div>

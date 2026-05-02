@@ -68,8 +68,8 @@ export default function FeList() {
       </div>
 
       {/* Dev promote tool */}
-      <div className="card mb-5 bg-honey-50 border-honey-300">
-        <div className="text-sm font-semibold text-honey-700 mb-2">
+      <div className="card mb-5 bg-petrol-50 border-petrol-300">
+        <div className="text-sm font-semibold text-petrol-700 mb-2">
           Dev: promote existing user to FE
         </div>
         <div className="text-xs text-ink3 mb-3">
@@ -105,7 +105,7 @@ export default function FeList() {
       ) : (
         <div className="card p-0 overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="bg-sand text-ink2">
+            <thead className="bg-bone2 text-ink2">
               <tr>
                 <Th>FE code</Th>
                 <Th>City</Th>
@@ -116,7 +116,7 @@ export default function FeList() {
             </thead>
             <tbody>
               {fes.map((fe) => (
-                <tr key={fe.id} className="border-t border-sand">
+                <tr key={fe.id} className="border-t border-bone2">
                   <Td><span className="font-mono font-medium">{fe.fe_code}</span></Td>
                   <Td>{fe.city}</Td>
                   <Td className="capitalize">{fe.current_shift}</Td>

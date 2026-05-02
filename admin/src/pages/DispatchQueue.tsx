@@ -70,7 +70,7 @@ export default function DispatchQueue() {
             onClick={() => setFilter(f.key)}
             className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition ${
               filter === f.key
-                ? 'border-honey-500 text-honey-700'
+                ? 'border-petrol-500 text-petrol-700'
                 : 'border-transparent text-ink3 hover:text-ink'
             }`}
           >
@@ -120,7 +120,7 @@ function VisitRow({ v }: { v: Visit }) {
           <div className="flex items-center gap-2 mb-1">
             <span className={`pill ${statusColor}`}>{v.status}</span>
             {v.workflow_id && (
-              <span className="pill bg-honey-50 text-honey-700" title={v.workflow_id}>
+              <span className="pill bg-petrol-50 text-petrol-700" title={v.workflow_id}>
                 ⚙ workflow
               </span>
             )}
