@@ -72,8 +72,8 @@ const styles = StyleSheet.create({
 
 const variantStyles: Record<CardVariant, ViewStyle> = {
   default: { backgroundColor: C.surface, borderColor: C.border },
-  tinted:  { backgroundColor: C.cream, borderColor: C.border2 },
-  accent:  { backgroundColor: C.honeyLight, borderColor: C.honey },
+  tinted:  { backgroundColor: C.bone, borderColor: C.border2 },
+  accent:  { backgroundColor: C.petrolLight, borderColor: C.petrol },
   warning: { backgroundColor: C.yellowLight, borderColor: C.yellow },
   success: { backgroundColor: C.greenLight, borderColor: C.green },
   danger:  { backgroundColor: C.redLight, borderColor: C.red },

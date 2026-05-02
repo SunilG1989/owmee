@@ -43,21 +43,21 @@ function fmtSlot(iso: string | undefined | null): string {
 function statusMeta(status: string): { label: string; color: string; bg: string } {
   switch (status) {
     case 'requested':
-      return { label: 'Looking for a field executive', color: C.honeyText, bg: C.honeyLight };
+      return { label: 'Looking for a field executive', color: C.petrolText, bg: C.petrolLight };
     case 'scheduled':
-      return { label: 'Scheduled', color: C.forestText, bg: C.forestLight };
+      return { label: 'Scheduled', color: C.petrolText, bg: C.petrolLight };
     case 'in_progress':
-      return { label: 'In progress', color: C.forest, bg: C.forestLight };
+      return { label: 'In progress', color: C.petrol, bg: C.petrolLight };
     case 'completed':
-      return { label: 'Completed', color: C.forestText, bg: C.forestLight };
+      return { label: 'Completed', color: C.petrolText, bg: C.petrolLight };
     case 'cancelled':
       return { label: 'Cancelled', color: C.red, bg: C.redLight };
     case 'no_show':
       return { label: 'No-show', color: C.red, bg: C.redLight };
     case 'postponed':
-      return { label: 'Postponed', color: C.honeyText, bg: C.honeyLight };
+      return { label: 'Postponed', color: C.petrolText, bg: C.petrolLight };
     default:
-      return { label: status, color: C.text3, bg: C.sand };
+      return { label: status, color: C.text3, bg: C.bone2 };
   }
 }
 
@@ -125,7 +125,7 @@ export default function FeVisitConfirmationScreen({
     return (
       <SafeAreaView style={st.root}>
         <View style={st.center}>
-          <ActivityIndicator color={C.honey} />
+          <ActivityIndicator color={C.petrol} />
         </View>
       </SafeAreaView>
     );
@@ -139,7 +139,7 @@ export default function FeVisitConfirmationScreen({
     <SafeAreaView style={st.root}>
       <ScrollView
         contentContainerStyle={{ padding: S.xxxl, paddingBottom: S.xxl }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.honey} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.petrol} />}
       >
         <View style={st.check}>
           <Text style={st.checkIcon}>✓</Text>
@@ -224,17 +224,17 @@ export default function FeVisitConfirmationScreen({
 }
 
 const st = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.cream },
+  root: { flex: 1, backgroundColor: C.bone },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   check: {
     width: 72, height: 72, borderRadius: 36,
-    backgroundColor: C.forestLight,
+    backgroundColor: C.petrolLight,
     alignSelf: 'center',
     alignItems: 'center', justifyContent: 'center',
     marginBottom: S.xl,
     ...Shadow.glow,
   },
-  checkIcon: { fontSize: 36, color: C.forestText, fontWeight: '700' },
+  checkIcon: { fontSize: 36, color: C.petrolText, fontWeight: '700' },
   h1: { fontSize: T.h1, fontWeight: '700', color: C.text, textAlign: 'center', marginBottom: 6 },
   sub: { fontSize: T.body, color: C.text3, textAlign: 'center', marginBottom: S.lg },
   statusPill: {
@@ -260,7 +260,7 @@ const st = StyleSheet.create({
     marginBottom: S.xl,
   },
   primaryBtn: {
-    backgroundColor: C.honey, paddingVertical: S.md,
+    backgroundColor: C.petrol, paddingVertical: S.md,
     borderRadius: R.md, alignItems: 'center',
     ...Shadow.glow,
   },

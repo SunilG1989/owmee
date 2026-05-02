@@ -146,7 +146,7 @@ export default function LocationMapScreen({
       <View style={s.sheet}>
         {loadingReverse ? (
           <View style={s.sheetLoading}>
-            <ActivityIndicator color={C.honey} />
+            <ActivityIndicator color={C.petrol} />
             <Text style={s.sheetSub}>Reading location…</Text>
           </View>
         ) : reverseError ? (
@@ -182,7 +182,7 @@ export default function LocationMapScreen({
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: C.cream },
+  safe: { flex: 1, backgroundColor: C.bone },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -190,7 +190,7 @@ const s = StyleSheet.create({
     paddingTop: S.xs,
     paddingBottom: S.xs,
     gap: S.xs,
-    backgroundColor: C.cream,
+    backgroundColor: C.bone,
   },
   headerTitle: {
     fontSize: 16,
@@ -252,7 +252,7 @@ const s = StyleSheet.create({
   },
   sheetWarn: {
     fontSize: 12,
-    color: C.honeyDeep,
+    color: C.petrolDeep,
     fontStyle: 'italic',
     marginTop: S.xs,
   },

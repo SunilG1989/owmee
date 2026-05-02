@@ -95,7 +95,7 @@ export default function AddressPickerScreen({
       <SafeAreaView style={s.safe} edges={['top']}>
         {renderHeader()}
         <View style={s.center}>
-          <ActivityIndicator color={C.honey} />
+          <ActivityIndicator color={C.petrol} />
         </View>
       </SafeAreaView>
     );
@@ -198,7 +198,7 @@ function AddressCard({
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: C.cream },
+  safe: { flex: 1, backgroundColor: C.bone },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -238,7 +238,7 @@ const s = StyleSheet.create({
   },
   cardDefault: {
     fontSize: 12,
-    color: C.honeyDeep,
+    color: C.petrolDeep,
     fontWeight: '600',
   },
   cardLine: {
@@ -257,7 +257,7 @@ const s = StyleSheet.create({
   },
   addNewText: {
     fontSize: 16,
-    color: C.honey,
+    color: C.petrol,
     fontWeight: '600',
     textDecorationLine: 'underline',
   },

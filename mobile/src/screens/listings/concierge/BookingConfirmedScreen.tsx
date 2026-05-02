@@ -145,7 +145,7 @@ function formatAddressLine(address?: any): string {
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: C.cream },
+  safe: { flex: 1, backgroundColor: C.bone },
   body: {
     flex: 1,
     alignItems: 'center',
@@ -154,7 +154,7 @@ const s = StyleSheet.create({
   },
   tick: {
     fontSize: 56,
-    color: C.honey,
+    color: C.petrol,
     marginBottom: S.md,
   },
   title: {
@@ -178,7 +178,7 @@ const s = StyleSheet.create({
     marginBottom: S.lg,
   },
   matchingCard: {
-    backgroundColor: C.honeyLight,
+    backgroundColor: C.petrolLight,
     borderRadius: R.lg,
     padding: S.lg,
     marginTop: S.md,
@@ -186,7 +186,7 @@ const s = StyleSheet.create({
   },
   matchingMessage: {
     fontSize: 14,
-    color: C.honeyText,
+    color: C.petrolText,
     lineHeight: 20,
     textAlign: 'center',
   },

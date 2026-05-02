@@ -578,7 +578,7 @@ const styles = StyleSheet.create({
   },
   communityRowActive: {
     borderColor: C.primary,
-    backgroundColor: C.surfaceMuted,
+    backgroundColor: C.bone2,
   },
   communityName: {
     fontSize: T.body,

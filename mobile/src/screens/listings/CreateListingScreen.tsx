@@ -451,7 +451,7 @@ export default function CreateListingScreen({ navigation }: any) {
           <Text style={st.sub}>Choose a category</Text>
           {categories.map(c => (
             <TouchableOpacity key={c.id} style={[st.catCard, cat?.id === c.id && st.catCardActive]} onPress={() => setCat(c)}>
-              <Text style={[st.catName, cat?.id === c.id && { color: C.honeyDeep }]}>{c.name}</Text>
+              <Text style={[st.catName, cat?.id === c.id && { color: C.petrolDeep }]}>{c.name}</Text>
               {c.imei_required && <Text style={st.catTag}>IMEI required</Text>}
             </TouchableOpacity>
           ))}
@@ -548,7 +548,7 @@ export default function CreateListingScreen({ navigation }: any) {
             <TouchableOpacity key={c.key} style={[st.condCard, condition === c.key && st.condCardActive]} onPress={() => setCondition(c.key)}>
               <Text style={{ fontSize: 24 }}>{c.emoji}</Text>
               <View style={{ flex: 1 }}>
-                <Text style={[st.condLabel, condition === c.key && { color: C.honeyDeep }]}>{c.label}</Text>
+                <Text style={[st.condLabel, condition === c.key && { color: C.petrolDeep }]}>{c.label}</Text>
                 <Text style={st.condDesc}>{c.desc}</Text>
               </View>
               <View style={[st.radio, condition === c.key && st.radioActive]}>
@@ -617,7 +617,7 @@ export default function CreateListingScreen({ navigation }: any) {
             </View>
 
             {originalPrice && price && parseFloat(originalPrice) > parseFloat(price) && (
-              <Text style={{ color: C.forest, fontSize: 13, marginTop: 4 }}>
+              <Text style={{ color: C.petrol, fontSize: 13, marginTop: 4 }}>
                 {Math.round((1 - parseFloat(price) / parseFloat(originalPrice)) * 100)}% off original price
               </Text>
             )}

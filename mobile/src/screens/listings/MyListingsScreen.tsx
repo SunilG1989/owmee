@@ -9,14 +9,14 @@ import { useAuthStore } from '../../store/authStore';
 
 // FIX BUG-09: Add pending_moderation to match backend publish status
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
-  draft: { label: 'Draft', color: C.text3, bg: C.sand },
+  draft: { label: 'Draft', color: C.text3, bg: C.bone2 },
   pending_review: { label: 'In review', color: C.yellow, bg: C.yellowLight },
   pending_moderation: { label: 'In review', color: C.yellow, bg: C.yellowLight },
-  active: { label: 'Active', color: C.forest, bg: C.forestLight },
-  reserved: { label: 'Reserved', color: C.honey, bg: C.honeyLight },
-  sold: { label: 'Sold', color: C.text4, bg: C.sand },
+  active: { label: 'Active', color: C.petrol, bg: C.petrolLight },
+  reserved: { label: 'Reserved', color: C.petrol, bg: C.petrolLight },
+  sold: { label: 'Sold', color: C.text4, bg: C.bone2 },
   expired: { label: 'Expired', color: C.red, bg: C.redLight },
-  removed: { label: 'Removed', color: C.text4, bg: C.sand },
+  removed: { label: 'Removed', color: C.text4, bg: C.bone2 },
 };
 
 export default function MyListingsScreen({ navigation }: any) {
@@ -92,21 +92,21 @@ export default function MyListingsScreen({ navigation }: any) {
     );
   };
 
-  if (loading) return <SafeAreaView style={s.safe}><ActivityIndicator color={C.honey} style={{ marginTop: 60 }} /></SafeAreaView>;
+  if (loading) return <SafeAreaView style={s.safe}><ActivityIndicator color={C.petrol} style={{ marginTop: 60 }} /></SafeAreaView>;
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
         <BackButton onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>My Listings</Text>
-        <TouchableOpacity onPress={() => navigation.navigate('Sell')}><Text style={{ fontSize: 24, color: C.honey }}>+</Text></TouchableOpacity>
+        <TouchableOpacity onPress={() => navigation.navigate('Sell')}><Text style={{ fontSize: 24, color: C.petrol }}>+</Text></TouchableOpacity>
       </View>
       <FlatList
         data={listings}
         keyExtractor={i => i.id}
         renderItem={renderItem}
         contentContainerStyle={s.list}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={C.honey} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={C.petrol} />}
         ListEmptyComponent={
           <View style={s.empty}>
             <Text style={{ fontSize: 48, marginBottom: 16 }}>📦</Text>
@@ -124,16 +124,16 @@ export default function MyListingsScreen({ navigation }: any) {
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: C.cream },
+  safe: { flex: 1, backgroundColor: C.bone },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: C.surface, borderBottomWidth: 0.5, borderBottomColor: C.border },
   headerTitle: { fontSize: 16, fontWeight: '600', color: C.text },
   list: { padding: 16 },
   card: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.surface, borderRadius: R.lg, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: C.border, ...Shadow.card },
   thumb: { width: 72, height: 72, borderRadius: R.sm },
-  noImg: { backgroundColor: C.sand, alignItems: 'center', justifyContent: 'center' },
+  noImg: { backgroundColor: C.bone2, alignItems: 'center', justifyContent: 'center' },
   info: { flex: 1, marginLeft: 12 },
   title: { fontSize: 14, fontWeight: '600', color: C.text, marginBottom: 2 },
-  price: { fontSize: 16, fontWeight: '700', color: C.honey, marginBottom: 4 },
+  price: { fontSize: 16, fontWeight: '700', color: C.petrol, marginBottom: 4 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   statusBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
   statusText: { fontSize: 10, fontWeight: '700' },
@@ -143,5 +143,5 @@ const s = StyleSheet.create({
   empty: { alignItems: 'center', paddingTop: 80 },
   emptyTitle: { fontSize: 18, fontWeight: '600', color: C.text, marginBottom: 4 },
   emptySub: { fontSize: 13, color: C.text3, marginBottom: 20 },
-  emptyBtn: { backgroundColor: C.honey, borderRadius: R.sm, paddingHorizontal: 24, paddingVertical: 12 },
+  emptyBtn: { backgroundColor: C.petrol, borderRadius: R.sm, paddingHorizontal: 24, paddingVertical: 12 },
 });

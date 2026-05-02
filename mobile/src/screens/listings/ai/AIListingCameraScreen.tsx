@@ -275,7 +275,7 @@ export default function AIListingCameraScreen({ navigation }: RootScreen<'AIList
       {/* Uploading overlay */}
       {uploading && (
         <View style={st.uploadingOverlay}>
-          <ActivityIndicator size="large" color={C.honey} />
+          <ActivityIndicator size="large" color={C.petrol} />
           <Text style={st.uploadingText}>Analysing your photos...</Text>
           <Text style={st.uploadingSub}>This usually takes a few seconds.</Text>
         </View>
@@ -285,7 +285,7 @@ export default function AIListingCameraScreen({ navigation }: RootScreen<'AIList
 }
 
 const st = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.cream },
+  root: { flex: 1, backgroundColor: C.bone },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -306,7 +306,7 @@ const st = StyleSheet.create({
     width: '100%',
     aspectRatio: 1,
     borderRadius: R.lg,
-    backgroundColor: C.sand,
+    backgroundColor: C.bone2,
   },
   heroBadge: {
     position: 'absolute',
@@ -320,7 +320,7 @@ const st = StyleSheet.create({
   heroBadgeText: { color: C.white, fontSize: T.size.sm, fontWeight: T.weight.semi },
   thumbsRow: { paddingTop: S.md, paddingBottom: S.sm, gap: S.sm },
   thumbWrap: { position: 'relative', marginRight: S.sm },
-  thumb: { width: 64, height: 64, borderRadius: R.md, backgroundColor: C.sand },
+  thumb: { width: 64, height: 64, borderRadius: R.md, backgroundColor: C.bone2 },
   thumbX: {
     position: 'absolute',
     top: -6,
@@ -340,7 +340,7 @@ const st = StyleSheet.create({
     borderWidth: 2,
     borderStyle: 'dashed',
     borderColor: C.border,
-    backgroundColor: C.cream,
+    backgroundColor: C.bone,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -368,7 +368,7 @@ const st = StyleSheet.create({
     marginBottom: S.xxl,
   },
   openCameraBtn: {
-    backgroundColor: C.honey,
+    backgroundColor: C.petrol,
     paddingHorizontal: S.xxl,
     paddingVertical: S.lg,
     borderRadius: R.pill,
@@ -396,18 +396,18 @@ const st = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.border,
     alignItems: 'center',
-    backgroundColor: C.cream,
+    backgroundColor: C.bone,
   },
   secondaryBtnText: { color: C.text2, fontSize: T.size.md, fontWeight: T.weight.semi },
   primaryBtn: {
     flex: 2,
     paddingVertical: S.md,
     borderRadius: R.md,
-    backgroundColor: C.honey,
+    backgroundColor: C.petrol,
     alignItems: 'center',
     ...Shadow.card,
   },
-  primaryBtnDisabled: { backgroundColor: C.sand },
+  primaryBtnDisabled: { backgroundColor: C.bone2 },
   primaryBtnText: { color: C.surface, fontSize: T.size.md, fontWeight: T.weight.bold },
 
   uploadingOverlay: {

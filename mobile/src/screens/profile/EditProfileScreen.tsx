@@ -37,7 +37,7 @@ export default function EditProfileScreen({ navigation }: any) {
     } finally { setSaving(false); }
   };
 
-  if (loading) return <SafeAreaView style={s.safe}><ActivityIndicator color={C.honey} style={{ marginTop: 60 }} /></SafeAreaView>;
+  if (loading) return <SafeAreaView style={s.safe}><ActivityIndicator color={C.petrol} style={{ marginTop: 60 }} /></SafeAreaView>;
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
@@ -70,14 +70,14 @@ export default function EditProfileScreen({ navigation }: any) {
         <Text style={s.label}>Verification</Text>
         <View style={[s.input, s.readonly]}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <View style={[s.kycDot, kycStatus === 'verified' && { backgroundColor: C.forest }]} />
+            <View style={[s.kycDot, kycStatus === 'verified' && { backgroundColor: C.petrol }]} />
             <Text style={{ fontSize: 15, color: C.text }}>
               {kycStatus === 'verified' ? 'KYC Verified ✓' : kycStatus === 'in_progress' ? 'KYC In Progress' : 'Not Verified'}
             </Text>
           </View>
           {kycStatus !== 'verified' && (
             <TouchableOpacity onPress={() => navigation.navigate('KycFlow')}>
-              <Text style={{ fontSize: 13, color: C.honey, fontWeight: '600' }}>Complete →</Text>
+              <Text style={{ fontSize: 13, color: C.petrol, fontWeight: '600' }}>Complete →</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -91,7 +91,7 @@ export default function EditProfileScreen({ navigation }: any) {
             {INDIAN_CITIES.map(c => (
               <TouchableOpacity key={c.name} style={s.cityRow} onPress={() => { setCity(c.name); setShowCities(false); }}>
                 <Text style={{ fontSize: 15, color: C.text }}>{c.name}</Text>
-                {city === c.name && <Text style={{ fontSize: 16, color: C.honey }}>✓</Text>}
+                {city === c.name && <Text style={{ fontSize: 16, color: C.petrol }}>✓</Text>}
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -105,18 +105,18 @@ export default function EditProfileScreen({ navigation }: any) {
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: C.cream },
+  safe: { flex: 1, backgroundColor: C.bone },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: C.surface, borderBottomWidth: 0.5, borderBottomColor: C.border },
   headerTitle: { fontSize: 16, fontWeight: '600', color: C.text },
-  saveText: { fontSize: 15, color: C.honey, fontWeight: '600' },
+  saveText: { fontSize: 15, color: C.petrol, fontWeight: '600' },
   body: { flex: 1, padding: 16 },
   avatarWrap: { alignItems: 'center', marginBottom: 24 },
-  avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: C.honeyLight, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: 30, fontWeight: '700', color: C.honeyDeep },
+  avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: C.petrolLight, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontSize: 30, fontWeight: '700', color: C.petrolDeep },
   label: { fontSize: 12, fontWeight: '600', color: C.text3, marginTop: 16, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
   input: { backgroundColor: C.surface, borderRadius: R.sm, paddingHorizontal: 14, paddingVertical: 14, fontSize: 15, color: C.text, borderWidth: 0.5, borderColor: C.border },
-  readonly: { backgroundColor: C.sand, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  kycDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.honey },
+  readonly: { backgroundColor: C.bone2, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  kycDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.petrol },
   modalOv: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   modalC: { backgroundColor: C.surface, borderTopLeftRadius: R.xl, borderTopRightRadius: R.xl, padding: S.xl, maxHeight: '70%' },
   cityRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 0.5, borderBottomColor: C.border },

@@ -43,11 +43,11 @@ function formatSlot(iso: string | null): string {
 
 function StatusPill({ status }: { status: FEVisit['status'] }) {
   const map: Record<FEVisit['status'], { bg: string; fg: string; label: string }> = {
-    requested: { bg: C.sand, fg: C.text2, label: 'Requested' },
-    scheduled: { bg: C.honeyLight, fg: C.honeyText, label: 'Scheduled' },
-    in_progress: { bg: C.forestLight, fg: C.forestText, label: 'Active' },
-    completed: { bg: C.forestLight, fg: C.forest, label: 'Completed' },
-    postponed: { bg: C.sand, fg: C.text2, label: 'Postponed' },
+    requested: { bg: C.bone2, fg: C.text2, label: 'Requested' },
+    scheduled: { bg: C.petrolLight, fg: C.petrolText, label: 'Scheduled' },
+    in_progress: { bg: C.petrolLight, fg: C.petrolText, label: 'Active' },
+    completed: { bg: C.petrolLight, fg: C.petrol, label: 'Completed' },
+    postponed: { bg: C.bone2, fg: C.text2, label: 'Postponed' },
     cancelled: { bg: C.redLight, fg: C.red, label: 'Cancelled' },
     no_show: { bg: C.redLight, fg: C.red, label: 'No show' },
   };
@@ -138,7 +138,7 @@ export default function FeHomeScreen({ navigation }: RootScreen<'FeHome'>) {
 
       {loading ? (
         <View style={st.centerFill}>
-          <ActivityIndicator color={C.honey} />
+          <ActivityIndicator color={C.petrol} />
         </View>
       ) : error ? (
         <View style={st.centerFill}>
@@ -156,7 +156,7 @@ export default function FeHomeScreen({ navigation }: RootScreen<'FeHome'>) {
           data={filtered}
           keyExtractor={(v) => v.id}
           contentContainerStyle={{ padding: S.lg, paddingBottom: S.xxxl }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.honey} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.petrol} />}
           renderItem={({ item }) => (
             <TouchableOpacity
               style={st.card}
@@ -193,7 +193,7 @@ export default function FeHomeScreen({ navigation }: RootScreen<'FeHome'>) {
 }
 
 const st = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.cream },
+  root: { flex: 1, backgroundColor: C.bone },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: S.lg },
   h1: { fontSize: T.h2, fontWeight: '700', color: C.text },
   subtitle: { fontSize: T.body, color: C.text3, marginTop: 2 },
@@ -208,7 +208,7 @@ const st = StyleSheet.create({
     paddingHorizontal: S.md, paddingVertical: S.sm, marginRight: S.sm,
     borderRadius: R.pill, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
   },
-  tabActive: { backgroundColor: C.honey, borderColor: C.honey },
+  tabActive: { backgroundColor: C.petrol, borderColor: C.petrol },
   tabText: { fontSize: T.body, color: C.text2, fontWeight: '500' },
   tabTextActive: { color: C.white, fontWeight: '600' },
   card: {
@@ -218,13 +218,13 @@ const st = StyleSheet.create({
   cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   cardTitle: { fontSize: T.h3, fontWeight: '600', color: C.text, flex: 1, marginRight: S.sm },
   cardAddr: { fontSize: T.body, color: C.text2, marginTop: S.xs },
-  cardSlot: { fontSize: T.body, color: C.honeyText, fontWeight: '500', marginTop: S.xs },
+  cardSlot: { fontSize: T.body, color: C.petrolText, fontWeight: '500', marginTop: S.xs },
   cardNotes: { fontSize: T.small, color: C.text3, marginTop: S.sm, fontStyle: 'italic' },
   pill: { paddingHorizontal: S.sm, paddingVertical: 2, borderRadius: R.pill },
   pillText: { fontSize: T.small, fontWeight: '600' },
   centerFill: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: S.xl },
   err: { fontSize: T.body, color: C.text2, textAlign: 'center' },
-  retryBtn: { marginTop: S.md, paddingHorizontal: S.lg, paddingVertical: S.sm, backgroundColor: C.honey, borderRadius: R.md },
+  retryBtn: { marginTop: S.md, paddingHorizontal: S.lg, paddingVertical: S.sm, backgroundColor: C.petrol, borderRadius: R.md },
   retryBtnText: { color: C.white, fontWeight: '600' },
   empty: { fontSize: T.body, color: C.text3 },
   logout: { alignSelf: 'center', padding: S.md, marginBottom: S.md },

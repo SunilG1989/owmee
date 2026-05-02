@@ -234,7 +234,7 @@ export default function AIListingIdentifierScreen({
 
               {extracting && (
                 <View style={st.extractingRow}>
-                  <ActivityIndicator size="small" color={C.honey} />
+                  <ActivityIndicator size="small" color={C.petrol} />
                   <Text style={st.extractingText}>Reading number...</Text>
                 </View>
               )}
@@ -312,7 +312,7 @@ export default function AIListingIdentifierScreen({
 }
 
 const st = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.cream },
+  root: { flex: 1, backgroundColor: C.bone },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -342,7 +342,7 @@ const st = StyleSheet.create({
     width: '100%',
     aspectRatio: 1.5,
     borderRadius: R.md,
-    backgroundColor: C.sand,
+    backgroundColor: C.bone2,
     marginBottom: S.md,
   },
 
@@ -350,7 +350,7 @@ const st = StyleSheet.create({
   extractingText: { marginLeft: S.sm, color: C.text2, fontSize: T.size.base },
 
   cameraBtn: {
-    backgroundColor: C.honey,
+    backgroundColor: C.petrol,
     paddingVertical: S.lg,
     borderRadius: R.md,
     alignItems: 'center',
@@ -375,7 +375,7 @@ const st = StyleSheet.create({
   errText: { marginTop: S.sm, color: C.red, fontSize: T.size.sm },
 
   tryPhotoBtn: { marginTop: S.lg, paddingVertical: S.md, alignItems: 'center' },
-  tryPhotoText: { color: C.honey, fontSize: T.size.md, fontWeight: T.weight.semi },
+  tryPhotoText: { color: C.petrol, fontSize: T.size.md, fontWeight: T.weight.semi },
 
   ctaBar: {
     paddingHorizontal: S.lg,
@@ -386,7 +386,7 @@ const st = StyleSheet.create({
     borderTopColor: C.border,
   },
   primaryBtn: {
-    backgroundColor: C.honey,
+    backgroundColor: C.petrol,
     paddingVertical: S.lg,
     borderRadius: R.md,
     alignItems: 'center',
@@ -400,13 +400,13 @@ const st = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: C.border,
-    backgroundColor: C.cream,
+    backgroundColor: C.bone,
   },
   secondaryBtnText: { color: C.text2, fontSize: T.size.md, fontWeight: T.weight.semi },
 
   // Success
   successWrap: { flex: 1, padding: S.xxl, alignItems: 'center' },
-  successCheck: { fontSize: 64, color: C.forest, marginTop: S.xxl, marginBottom: S.lg },
+  successCheck: { fontSize: 64, color: C.petrol, marginTop: S.xxl, marginBottom: S.lg },
   successTitle: {
     fontSize: T.size.xxl,
     fontWeight: T.weight.bold,

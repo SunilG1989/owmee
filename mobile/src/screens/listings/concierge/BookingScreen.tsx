@@ -229,7 +229,7 @@ export default function BookingScreen({
           <Text style={s.headerTitle}>{STR.title}</Text>
         </View>
         <View style={s.center}>
-          <ActivityIndicator color={C.honey} />
+          <ActivityIndicator color={C.petrol} />
         </View>
       </SafeAreaView>
     );
@@ -459,7 +459,7 @@ function AddressDisplay({ address }: { address: UserAddress }) {
 // ── Styles ─────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: C.cream },
+  safe: { flex: 1, backgroundColor: C.bone },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -525,7 +525,7 @@ const s = StyleSheet.create({
   },
   changeBtnText: {
     fontSize: 13,
-    color: C.honey,
+    color: C.petrol,
     fontWeight: '600',
   },
   pickerBlock: {
@@ -544,7 +544,7 @@ const s = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: C.border,
   },
-  pickerRowOn: { backgroundColor: C.honeyLight },
+  pickerRowOn: { backgroundColor: C.petrolLight },
   pickerLabel: {
     fontSize: 14,
     fontWeight: '700',
@@ -557,7 +557,7 @@ const s = StyleSheet.create({
   },
   pickerTick: {
     fontSize: 18,
-    color: C.honeyDeep,
+    color: C.petrolDeep,
     fontWeight: '700',
   },
   addNewRow: {
@@ -566,7 +566,7 @@ const s = StyleSheet.create({
   },
   addNewText: {
     fontSize: 14,
-    color: C.honey,
+    color: C.petrol,
     fontWeight: '600',
   },
 
@@ -587,22 +587,22 @@ const s = StyleSheet.create({
     alignItems: 'center',
   },
   slotChipOn: {
-    backgroundColor: C.honeyLight,
-    borderColor: C.honey,
+    backgroundColor: C.petrolLight,
+    borderColor: C.petrol,
   },
   slotDay: {
     fontSize: 13,
     color: C.text2,
     fontWeight: '500',
   },
-  slotDayOn: { color: C.honeyDeep, fontWeight: '700' },
+  slotDayOn: { color: C.petrolDeep, fontWeight: '700' },
   slotTime: {
     fontSize: 15,
     color: C.text,
     fontWeight: '600',
     marginTop: 2,
   },
-  slotTimeOn: { color: C.honeyDeep },
+  slotTimeOn: { color: C.petrolDeep },
   fullyBooked: {
     fontSize: 14,
     color: C.text2,
@@ -616,7 +616,7 @@ const s = StyleSheet.create({
   },
   moreTimesText: {
     fontSize: 13,
-    color: C.honey,
+    color: C.petrol,
     fontWeight: '600',
   },
 
@@ -648,11 +648,11 @@ const s = StyleSheet.create({
     borderColor: C.border,
   },
   tagChipOn: {
-    backgroundColor: C.honeyLight,
-    borderColor: C.honey,
+    backgroundColor: C.petrolLight,
+    borderColor: C.petrol,
   },
   tagText: { fontSize: 13, color: C.text2 },
-  tagTextOn: { color: C.honeyDeep, fontWeight: '600' },
+  tagTextOn: { color: C.petrolDeep, fontWeight: '600' },
   notesInput: {
     backgroundColor: C.surface,
     borderRadius: R.md,
@@ -668,7 +668,7 @@ const s = StyleSheet.create({
   bottomBar: {
     paddingHorizontal: S.lg,
     paddingVertical: S.md,
-    backgroundColor: C.cream,
+    backgroundColor: C.bone,
     borderTopWidth: 1,
     borderTopColor: C.border,
   },

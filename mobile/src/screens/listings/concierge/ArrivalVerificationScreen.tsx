@@ -84,7 +84,7 @@ export default function ArrivalVerificationScreen({
     return (
       <SafeAreaView style={s.safe}>
         <View style={s.center}>
-          <ActivityIndicator color={C.honey} />
+          <ActivityIndicator color={C.petrol} />
         </View>
       </SafeAreaView>
     );
@@ -137,7 +137,7 @@ export default function ArrivalVerificationScreen({
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: C.cream },
+  safe: { flex: 1, backgroundColor: C.bone },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -176,7 +176,7 @@ const s = StyleSheet.create({
     backgroundColor: C.surface,
     borderRadius: R.lg,
     borderWidth: 2,
-    borderColor: C.honey,
+    borderColor: C.petrol,
     alignItems: 'center',
     justifyContent: 'center',
     ...Shadow.glow,
@@ -184,6 +184,6 @@ const s = StyleSheet.create({
   codeChar: {
     fontSize: 38,
     fontWeight: '800',
-    color: C.honeyDeep,
+    color: C.petrolDeep,
   },
 });

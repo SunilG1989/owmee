@@ -66,7 +66,7 @@ export default function FeVisitHistoryScreen({ navigation }: RootScreen<'FeVisit
       </View>
 
       {loading ? (
-        <View style={st.center}><ActivityIndicator color={C.honey} /></View>
+        <View style={st.center}><ActivityIndicator color={C.petrol} /></View>
       ) : visits.length === 0 ? (
         <View style={st.center}><Text style={st.empty}>No past visits yet.</Text></View>
       ) : (
@@ -75,7 +75,7 @@ export default function FeVisitHistoryScreen({ navigation }: RootScreen<'FeVisit
           keyExtractor={(v) => v.id}
           contentContainerStyle={{ padding: S.lg }}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={C.honey} />
+            <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={C.petrol} />
           }
           renderItem={({ item }) => (
             <TouchableOpacity
@@ -100,7 +100,7 @@ export default function FeVisitHistoryScreen({ navigation }: RootScreen<'FeVisit
 }
 
 const st = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.cream },
+  root: { flex: 1, backgroundColor: C.bone },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: S.lg },
   back: { fontSize: 28, color: C.text, paddingHorizontal: S.xs },
   h1: { fontSize: T.h3, fontWeight: '600', color: C.text },

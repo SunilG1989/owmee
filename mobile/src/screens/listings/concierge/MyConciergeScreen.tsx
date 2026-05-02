@@ -134,7 +134,7 @@ export default function MyConciergeScreen({
           <Text style={s.headerTitle}>My Concierge</Text>
         </View>
         <View style={s.center}>
-          <ActivityIndicator color={C.honey} />
+          <ActivityIndicator color={C.petrol} />
         </View>
       </SafeAreaView>
     );
@@ -273,16 +273,16 @@ function ItemRow({
   let statusColor: string;
   if (transaction?.status === 'completed') {
     statusLine = `✓ SOLD — ${formatPrice(Number((transaction as any).gross_amount || listing.price))}`;
-    statusColor = C.forest;
+    statusColor = C.petrol;
   } else if (transaction) {
     statusLine = `In progress · ${transaction.status.replace(/_/g, ' ')}`;
-    statusColor = C.honeyDeep;
+    statusColor = C.petrolDeep;
   } else if (listing.status === 'sold') {
     statusLine = '✓ SOLD';
-    statusColor = C.forest;
+    statusColor = C.petrol;
   } else if (listing.status === 'reserved') {
     statusLine = 'Reserved';
-    statusColor = C.honeyDeep;
+    statusColor = C.petrolDeep;
   } else if (listing.status === 'active' || listing.status === 'live') {
     statusLine = 'Live';
     statusColor = C.text2;
@@ -305,7 +305,7 @@ function ItemRow({
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: C.cream },
+  safe: { flex: 1, backgroundColor: C.bone },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -407,7 +407,7 @@ const s = StyleSheet.create({
   },
   earningsAmount: {
     fontSize: 16,
-    color: C.honeyDeep,
+    color: C.petrolDeep,
     fontWeight: '700',
   },
 });

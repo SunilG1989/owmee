@@ -50,7 +50,7 @@ export default function ProfileScreen({ navigation }: any) {
     </SafeAreaView>
   );
 
-  if (loading) return <SafeAreaView style={s.safe}><ActivityIndicator color={C.honey} style={{ marginTop: 60 }} /></SafeAreaView>;
+  if (loading) return <SafeAreaView style={s.safe}><ActivityIndicator color={C.petrol} style={{ marginTop: 60 }} /></SafeAreaView>;
 
   const displayName = profile?.name || phone || 'Owmee User';
   const displayCity = profile?.city || location?.city;
@@ -70,8 +70,8 @@ export default function ProfileScreen({ navigation }: any) {
             <Text style={s.name}>{displayName}</Text>
             <Text style={s.phone}>{phone}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
-              <View style={[s.trustBadge, isVerified && { backgroundColor: C.forestLight }]}>
-                <Text style={[s.trustText, isVerified && { color: C.forest }]}>{isVerified ? '✓ Verified' : 'Not verified'}</Text>
+              <View style={[s.trustBadge, isVerified && { backgroundColor: C.petrolLight }]}>
+                <Text style={[s.trustText, isVerified && { color: C.petrol }]}>{isVerified ? '✓ Verified' : 'Not verified'}</Text>
               </View>
               {displayCity && <Text style={{ fontSize: 11, color: C.text3 }}>📍 {displayCity}</Text>}
               {profile?.trust_score != null && <Text style={{ fontSize: 11, color: C.text3 }}>🛡️ {profile.trust_score}</Text>}
@@ -88,7 +88,7 @@ export default function ProfileScreen({ navigation }: any) {
               <Text style={s.kycTitle}>Get the Verified badge</Text>
               <Text style={{ fontSize: 11, color: C.text3, marginTop: 2 }}>Tap to verify — trusted sellers rank higher</Text>
             </View>
-            <Text style={{ fontSize: 18, color: C.honey }}>→</Text>
+            <Text style={{ fontSize: 18, color: C.petrol }}>→</Text>
           </TouchableOpacity>
         )}
 
@@ -144,19 +144,19 @@ export default function ProfileScreen({ navigation }: any) {
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: C.cream },
+  safe: { flex: 1, backgroundColor: C.bone },
   body: { flex: 1, paddingHorizontal: 16 },
   hdr: { fontSize: 22, fontWeight: '700', color: C.text, paddingTop: 8, marginBottom: 16 },
   userCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.surface, borderRadius: R.lg, padding: 16, borderWidth: 1, borderColor: C.border, marginBottom: 12 },
-  avatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: C.honeyLight, alignItems: 'center', justifyContent: 'center' },
-  avatarT: { fontSize: 22, fontWeight: '700', color: C.honeyDeep },
+  avatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: C.petrolLight, alignItems: 'center', justifyContent: 'center' },
+  avatarT: { fontSize: 22, fontWeight: '700', color: C.petrolDeep },
   name: { fontSize: 17, fontWeight: '700', color: C.text },
   phone: { fontSize: 12, color: C.text3, marginTop: 1 },
-  trustBadge: { backgroundColor: C.sand, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  trustBadge: { backgroundColor: C.bone2, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   trustText: { fontSize: 11, color: C.text3, fontWeight: '600' },
-  kycBanner: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.honeyLight, borderRadius: R.lg, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: C.honey },
+  kycBanner: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.petrolLight, borderRadius: R.lg, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: C.petrol },
   kycIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: C.white, alignItems: 'center', justifyContent: 'center' },
-  kycTitle: { fontSize: 15, fontWeight: '600', color: C.honeyDeep },
+  kycTitle: { fontSize: 15, fontWeight: '600', color: C.petrolDeep },
   statsGrid: { flexDirection: 'row', gap: 8, marginBottom: 16 },
   statCard: { flex: 1, backgroundColor: C.surface, borderRadius: R.sm, padding: 12, borderWidth: 1, borderColor: C.border, alignItems: 'center' },
   statNum: { fontSize: 18, fontWeight: '700', color: C.text },
@@ -168,5 +168,5 @@ const s = StyleSheet.create({
   gate: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
   gateH: { fontSize: 18, fontWeight: '600', color: C.text, marginBottom: 4 },
   gateSub: { fontSize: 12, color: C.text3, textAlign: 'center', lineHeight: 18 },
-  gateBtn: { marginTop: 20, backgroundColor: C.honey, borderRadius: R.sm, paddingHorizontal: 24, paddingVertical: 12 },
+  gateBtn: { marginTop: 20, backgroundColor: C.petrol, borderRadius: R.sm, paddingHorizontal: 24, paddingVertical: 12 },
 });

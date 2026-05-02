@@ -72,14 +72,14 @@ export default function SplashScreen({ hide = false, onFadeOut }: Props) {
 const s = StyleSheet.create({
   root: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: C.cream,
+    backgroundColor: C.bone,
     alignItems: 'center',
     justifyContent: 'center',
   },
   wordmark: {
     fontSize: 48,
     fontWeight: '700',
-    color: C.honey,
+    color: C.petrol,
     textAlign: 'center',
     letterSpacing: -1,
   },

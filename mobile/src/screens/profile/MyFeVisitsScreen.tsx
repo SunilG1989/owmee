@@ -47,15 +47,15 @@ function formatSlot(iso: string | null): string {
 
 function StatusPill({ status }: { status: string }) {
   const map: Record<string, { bg: string; fg: string; label: string }> = {
-    requested:   { bg: C.sand,        fg: C.text2,     label: 'Requested' },
-    scheduled:   { bg: C.honeyLight,  fg: C.honeyText, label: 'Scheduled' },
-    in_progress: { bg: C.forestLight,     fg: C.forestText,   label: 'In progress' },
-    completed:   { bg: C.forestLight,     fg: C.forest,   label: 'Completed' },
-    postponed:   { bg: C.sand,        fg: C.text2,     label: 'Postponed' },
+    requested:   { bg: C.bone2,        fg: C.text2,     label: 'Requested' },
+    scheduled:   { bg: C.petrolLight,  fg: C.petrolText, label: 'Scheduled' },
+    in_progress: { bg: C.petrolLight,     fg: C.petrolText,   label: 'In progress' },
+    completed:   { bg: C.petrolLight,     fg: C.petrol,   label: 'Completed' },
+    postponed:   { bg: C.bone2,        fg: C.text2,     label: 'Postponed' },
     cancelled:   { bg: C.redLight,     fg: C.red,   label: 'Cancelled' },
     no_show:     { bg: C.redLight,     fg: C.red,   label: 'No show' },
   };
-  const m = map[status] || { bg: C.sand, fg: C.text2, label: status };
+  const m = map[status] || { bg: C.bone2, fg: C.text2, label: status };
   return (
     <View style={[st.pill, { backgroundColor: m.bg }]}>
       <Text style={[st.pillText, { color: m.fg }]}>{m.label}</Text>
@@ -103,7 +103,7 @@ export default function MyFeVisitsScreen({ navigation }: RootScreen<'MyFeVisits'
 
       {loading ? (
         <View style={st.centerFill}>
-          <ActivityIndicator color={C.honey} />
+          <ActivityIndicator color={C.petrol} />
         </View>
       ) : error ? (
         <View style={st.centerFill}>
@@ -126,7 +126,7 @@ export default function MyFeVisitsScreen({ navigation }: RootScreen<'MyFeVisits'
           keyExtractor={(v) => v.id}
           contentContainerStyle={{ padding: S.lg, paddingBottom: S.xxxl }}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.honey} />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.petrol} />
           }
           renderItem={({ item }) => (
             <TouchableOpacity
@@ -166,7 +166,7 @@ export default function MyFeVisitsScreen({ navigation }: RootScreen<'MyFeVisits'
 }
 
 const st = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.cream },
+  root: { flex: 1, backgroundColor: C.bone },
   header: { flexDirection: 'row', alignItems: 'center', padding: S.lg, gap: S.md },
   backBtn: {
     width: 40, height: 40, borderRadius: R.md, backgroundColor: C.surface,
@@ -182,7 +182,7 @@ const st = StyleSheet.create({
   },
   cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   cardTitle: { fontSize: T.h3, fontWeight: '600', color: C.text, flex: 1, marginRight: S.sm },
-  cardSlot: { fontSize: T.body, color: C.honeyText, fontWeight: '500', marginTop: S.sm },
+  cardSlot: { fontSize: T.body, color: C.petrolText, fontWeight: '500', marginTop: S.sm },
   cardFe: { fontSize: T.body, color: C.text2, marginTop: S.xs },
   cardNotes: { fontSize: T.small, color: C.text3, marginTop: S.sm, fontStyle: 'italic' },
   pill: { paddingHorizontal: S.sm, paddingVertical: 2, borderRadius: R.pill },
@@ -191,7 +191,7 @@ const st = StyleSheet.create({
   err: { fontSize: T.body, color: C.text2, textAlign: 'center' },
   retryBtn: {
     marginTop: S.md, paddingHorizontal: S.lg, paddingVertical: S.sm,
-    backgroundColor: C.honey, borderRadius: R.md,
+    backgroundColor: C.petrol, borderRadius: R.md,
   },
   retryBtnText: { color: C.white, fontWeight: '600' },
   empty: { fontSize: T.h3, color: C.text, fontWeight: '600' },

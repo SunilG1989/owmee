@@ -243,7 +243,7 @@ export default function AddressDetailsScreen({
             <Switch
               value={setAsDefault}
               onValueChange={setSetAsDefault}
-              trackColor={{ false: C.border, true: C.honey }}
+              trackColor={{ false: C.border, true: C.petrol }}
             />
           </View>
 
@@ -303,7 +303,7 @@ function Field({
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: C.cream },
+  safe: { flex: 1, backgroundColor: C.bone },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -311,7 +311,7 @@ const s = StyleSheet.create({
     paddingTop: S.xs,
     paddingBottom: S.xs,
     gap: S.xs,
-    backgroundColor: C.cream,
+    backgroundColor: C.bone,
   },
   headerTitle: {
     fontSize: 18,
@@ -336,7 +336,7 @@ const s = StyleSheet.create({
     marginBottom: 6,
     fontWeight: '500',
   },
-  fieldReq: { color: C.honeyDeep },
+  fieldReq: { color: C.petrolDeep },
   input: {
     backgroundColor: C.surface,
     borderRadius: R.md,
@@ -365,12 +365,12 @@ const s = StyleSheet.create({
     borderColor: C.border,
   },
   labelBtnActive: {
-    backgroundColor: C.honeyLight,
-    borderColor: C.honey,
+    backgroundColor: C.petrolLight,
+    borderColor: C.petrol,
   },
   labelEmoji: { fontSize: 22, marginBottom: 4 },
   labelText: { fontSize: 13, color: C.text2, fontWeight: '500' },
-  labelTextActive: { color: C.honeyDeep, fontWeight: '600' },
+  labelTextActive: { color: C.petrolDeep, fontWeight: '600' },
   customLabelInput: {
     backgroundColor: C.surface,
     borderRadius: R.md,
@@ -379,7 +379,7 @@ const s = StyleSheet.create({
     fontSize: 15,
     color: C.text,
     borderWidth: 1,
-    borderColor: C.honey,
+    borderColor: C.petrol,
     marginTop: S.sm,
   },
   defaultRow: {
@@ -402,7 +402,7 @@ const s = StyleSheet.create({
   bottomBar: {
     paddingHorizontal: S.lg,
     paddingVertical: S.md,
-    backgroundColor: C.cream,
+    backgroundColor: C.bone,
     borderTopWidth: 1,
     borderTopColor: C.border,
   },

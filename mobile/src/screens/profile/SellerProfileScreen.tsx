@@ -106,7 +106,7 @@ export default function SellerProfileScreen({ navigation, route }: any) {
       </View>
 
       {loading ? (
-        <ActivityIndicator color={C.honey} style={{ marginTop: 60 }} />
+        <ActivityIndicator color={C.petrol} style={{ marginTop: 60 }} />
       ) : (
         <FlatList
           data={listings}
@@ -132,18 +132,18 @@ export default function SellerProfileScreen({ navigation, route }: any) {
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: C.cream },
+  safe: { flex: 1, backgroundColor: C.bone },
   headerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: C.surface, borderBottomWidth: 0.5, borderBottomColor: C.border },
   headerTitle: { fontSize: 16, fontWeight: '600', color: C.text },
   profileCard: { alignItems: 'center', backgroundColor: C.surface, margin: 16, borderRadius: R.xl, padding: 24, borderWidth: 1, borderColor: C.border, ...Shadow.card },
-  avatar: { width: 72, height: 72, borderRadius: 36, backgroundColor: C.honeyLight, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
-  avatarText: { fontSize: 28, fontWeight: '700', color: C.honeyDeep },
+  avatar: { width: 72, height: 72, borderRadius: 36, backgroundColor: C.petrolLight, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
+  avatarText: { fontSize: 28, fontWeight: '700', color: C.petrolDeep },
   name: { fontSize: 20, fontWeight: '700', color: C.ink },
   city: { fontSize: 13, color: C.text3, marginTop: 4 },
   badges: { flexDirection: 'row', gap: 8, marginTop: 12 },
-  kycBadge: { backgroundColor: C.forestLight, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8 },
-  kycBadgeText: { fontSize: 12, fontWeight: '700', color: C.forest },
-  trustBadge: { backgroundColor: C.sand, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8 },
+  kycBadge: { backgroundColor: C.petrolLight, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8 },
+  kycBadgeText: { fontSize: 12, fontWeight: '700', color: C.petrol },
+  trustBadge: { backgroundColor: C.bone2, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8 },
   trustBadgeText: { fontSize: 12, fontWeight: '600', color: C.text2 },
   stats: { flexDirection: 'row', marginTop: 20, width: '100%', justifyContent: 'space-around' },
   stat: { alignItems: 'center' },

@@ -114,7 +114,7 @@ export default function VisitContinueScreen({
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: C.cream },
+  safe: { flex: 1, backgroundColor: C.bone },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -128,7 +128,7 @@ const s = StyleSheet.create({
   },
   tick: {
     fontSize: 48,
-    color: C.forest,
+    color: C.petrol,
     textAlign: 'center',
     marginBottom: S.md,
   },

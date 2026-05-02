@@ -95,7 +95,7 @@ export default function ExpertPricingPanel({
   if (loading) {
     return (
       <View style={s.card}>
-        <ActivityIndicator color={C.honey} />
+        <ActivityIndicator color={C.petrol} />
       </View>
     );
   }
@@ -173,7 +173,7 @@ const s = StyleSheet.create({
     padding: S.lg,
     marginVertical: S.md,
     borderWidth: 1,
-    borderColor: C.honeyLight,
+    borderColor: C.petrolLight,
     ...Shadow.glow,
   },
   label: {
@@ -185,7 +185,7 @@ const s = StyleSheet.create({
   median: {
     fontSize: 36,
     fontWeight: '800',
-    color: C.honeyDeep,
+    color: C.petrolDeep,
     marginTop: 4,
   },
   medianHint: {
@@ -211,19 +211,19 @@ const s = StyleSheet.create({
   },
   chip: {
     flex: 1,
-    backgroundColor: C.honeyLight,
+    backgroundColor: C.petrolLight,
     borderRadius: R.md,
     padding: S.sm,
     alignItems: 'center',
   },
   chipLabel: {
     fontSize: 12,
-    color: C.honeyDeep,
+    color: C.petrolDeep,
     fontWeight: '600',
   },
   chipValue: {
     fontSize: 16,
-    color: C.honeyDeep,
+    color: C.petrolDeep,
     fontWeight: '800',
     marginTop: 2,
   },

@@ -150,7 +150,7 @@ export default function LocationDetectScreen({
 
       {probing ? (
         <View style={s.probingOverlay} pointerEvents="none">
-          <ActivityIndicator color={C.honey} />
+          <ActivityIndicator color={C.petrol} />
           <Text style={s.probingText}>Finding your location…</Text>
         </View>
       ) : null}
@@ -159,7 +159,7 @@ export default function LocationDetectScreen({
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: C.cream },
+  safe: { flex: 1, backgroundColor: C.bone },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',

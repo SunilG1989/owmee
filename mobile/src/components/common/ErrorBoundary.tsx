@@ -20,9 +20,9 @@ export default class ErrorBoundary extends Component<{ children: ReactNode }, { 
   }
 }
 const s = StyleSheet.create({
-  c: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, backgroundColor: C.cream },
+  c: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, backgroundColor: C.bone },
   e: { fontSize: 48, marginBottom: 16 },
   t: { fontSize: 18, fontWeight: '600', color: C.text, marginBottom: 24 },
-  b: { backgroundColor: C.honey, borderRadius: R.sm, paddingHorizontal: 24, paddingVertical: 12 },
+  b: { backgroundColor: C.petrol, borderRadius: R.sm, paddingHorizontal: 24, paddingVertical: 12 },
   bt: { fontSize: 15, color: C.white, fontWeight: '600' },
 });

@@ -58,7 +58,7 @@ export default function NotificationsScreen({ navigation }: any) {
     </TouchableOpacity>
   );
 
-  if (loading) return <SafeAreaView style={s.safe}><ActivityIndicator color={C.honey} style={{ marginTop: 60 }} /></SafeAreaView>;
+  if (loading) return <SafeAreaView style={s.safe}><ActivityIndicator color={C.petrol} style={{ marginTop: 60 }} /></SafeAreaView>;
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
@@ -72,7 +72,7 @@ export default function NotificationsScreen({ navigation }: any) {
         keyExtractor={i => i.id}
         renderItem={renderItem}
         contentContainerStyle={s.list}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={C.honey} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={C.petrol} />}
         ListEmptyComponent={
           <View style={s.empty}>
             <Text style={{ fontSize: 48, marginBottom: 16 }}>🔔</Text>
@@ -87,18 +87,18 @@ export default function NotificationsScreen({ navigation }: any) {
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: C.cream },
+  safe: { flex: 1, backgroundColor: C.bone },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: C.surface, borderBottomWidth: 0.5, borderBottomColor: C.border },
   headerTitle: { fontSize: 16, fontWeight: '600', color: C.text },
   list: { padding: 16 },
   card: { flexDirection: 'row', alignItems: 'flex-start', padding: 14, marginBottom: 8, backgroundColor: C.surface, borderRadius: R.lg, borderWidth: 0.5, borderColor: C.border },
-  unread: { backgroundColor: C.honeyLight, borderColor: C.honey },
-  iconWrap: { width: 40, height: 40, borderRadius: 20, backgroundColor: C.sand, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  unread: { backgroundColor: C.petrolLight, borderColor: C.petrol },
+  iconWrap: { width: 40, height: 40, borderRadius: 20, backgroundColor: C.bone2, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   content: { flex: 1 },
   title: { fontSize: 14, fontWeight: '500', color: C.text, marginBottom: 2 },
   body: { fontSize: 12, color: C.text3, lineHeight: 17, marginBottom: 4 },
   time: { fontSize: 10, color: C.text4 },
-  unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.honey, marginTop: 4 },
+  unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.petrol, marginTop: 4 },
   empty: { alignItems: 'center', paddingTop: 80 },
   emptyTitle: { fontSize: 18, fontWeight: '600', color: C.text, marginBottom: 4 },
   emptySub: { fontSize: 13, color: C.text3, textAlign: 'center' },

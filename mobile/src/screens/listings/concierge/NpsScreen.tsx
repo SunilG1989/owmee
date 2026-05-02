@@ -113,7 +113,7 @@ export default function NpsScreen({
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: C.cream },
+  safe: { flex: 1, backgroundColor: C.bone },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -158,11 +158,11 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   scoreChipOn: {
-    backgroundColor: C.honey,
-    borderColor: C.honey,
+    backgroundColor: C.petrol,
+    borderColor: C.petrol,
   },
   scoreText: { fontSize: 14, color: C.text, fontWeight: '600' },
-  scoreTextOn: { color: C.cream, fontWeight: '800' },
+  scoreTextOn: { color: C.bone, fontWeight: '800' },
   legendRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

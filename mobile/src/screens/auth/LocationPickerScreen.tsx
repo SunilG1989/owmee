@@ -358,7 +358,7 @@ export default function LocationPickerScreen({ onLocationSet }: Props) {
       >
         <View style={s.header}>
           <Text style={s.logo}>
-            owm<Text style={{ color: C.honey }}>ee</Text>
+            owm<Text style={{ color: C.petrol }}>ee</Text>
             <Text style={s.logoDot}>●</Text>
           </Text>
         </View>
@@ -380,7 +380,7 @@ export default function LocationPickerScreen({ onLocationSet }: Props) {
         >
           {detecting ? (
             <>
-              <ActivityIndicator color={C.honeyDeep} size="small" />
+              <ActivityIndicator color={C.petrolDeep} size="small" />
               <Text style={s.gpsBtnText}>Detecting location...</Text>
             </>
           ) : (
@@ -412,7 +412,7 @@ export default function LocationPickerScreen({ onLocationSet }: Props) {
             autoCapitalize="words"
             returnKeyType="search"
           />
-          {searching && <ActivityIndicator size="small" color={C.honey} />}
+          {searching && <ActivityIndicator size="small" color={C.petrol} />}
         </View>
 
         {/* Search results from Nominatim */}
@@ -648,10 +648,10 @@ function ConfirmAddressScreen({
 // ── Styles ───────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: C.cream },
+  safe: { flex: 1, backgroundColor: C.bone },
   header: { paddingHorizontal: S.xl, paddingTop: S.md },
   logo: { fontSize: 22, fontWeight: '700', color: C.ink, letterSpacing: -0.8 },
-  logoDot: { fontSize: 10, color: C.honey },
+  logoDot: { fontSize: 10, color: C.petrol },
 
   hero: { alignItems: 'center', paddingVertical: 32 },
   heroEmoji: { fontSize: 48, marginBottom: S.md },
@@ -660,10 +660,10 @@ const s = StyleSheet.create({
 
   gpsBtn: {
     marginHorizontal: S.xl, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: S.sm, backgroundColor: C.honeyLight, borderRadius: R.lg, paddingVertical: 16,
-    borderWidth: 1.5, borderColor: C.honey, ...Shadow.glow,
+    gap: S.sm, backgroundColor: C.petrolLight, borderRadius: R.lg, paddingVertical: 16,
+    borderWidth: 1.5, borderColor: C.petrol, ...Shadow.glow,
   },
-  gpsBtnText: { fontSize: T.size.md, fontWeight: '700', color: C.honeyDeep },
+  gpsBtnText: { fontSize: T.size.md, fontWeight: '700', color: C.petrolDeep },
   error: { fontSize: T.size.sm, color: C.red, textAlign: 'center', marginTop: S.sm, paddingHorizontal: S.xl },
 
   divider: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: S.xl, marginVertical: S.lg, gap: S.md },
@@ -683,7 +683,7 @@ const s = StyleSheet.create({
     paddingVertical: S.md, borderBottomWidth: 0.5, borderBottomColor: C.border,
   },
   resultIcon: {
-    width: 32, height: 32, borderRadius: 16, backgroundColor: C.forestLight,
+    width: 32, height: 32, borderRadius: 16, backgroundColor: C.petrolLight,
     alignItems: 'center', justifyContent: 'center', marginTop: 2,
   },
   resultPrimary: { fontSize: T.size.md, fontWeight: '600', color: C.text },
@@ -714,14 +714,14 @@ const s = StyleSheet.create({
 
   detectedCard: {
     flexDirection: 'row', alignItems: 'flex-start', gap: S.md,
-    padding: S.md, backgroundColor: C.honeyLight, borderRadius: R.md,
-    borderWidth: 1, borderColor: C.honey, marginBottom: S.xl,
+    padding: S.md, backgroundColor: C.petrolLight, borderRadius: R.md,
+    borderWidth: 1, borderColor: C.petrol, marginBottom: S.xl,
   },
   detectedIcon: {
     width: 36, height: 36, borderRadius: 18, backgroundColor: C.white,
     alignItems: 'center', justifyContent: 'center',
   },
-  detectedLabel: { fontSize: T.size.xs, fontWeight: '700', color: C.honeyDeep, textTransform: 'uppercase', letterSpacing: 0.5 },
+  detectedLabel: { fontSize: T.size.xs, fontWeight: '700', color: C.petrolDeep, textTransform: 'uppercase', letterSpacing: 0.5 },
   detectedAddr: { fontSize: T.size.sm, color: C.text, marginTop: 2, lineHeight: 18 },
 
   fieldLabel: {
@@ -741,7 +741,7 @@ const s = StyleSheet.create({
     padding: S.md,
   },
   saveBtn: {
-    backgroundColor: C.honey, borderRadius: R.sm, paddingVertical: 16,
+    backgroundColor: C.petrol, borderRadius: R.sm, paddingVertical: 16,
     alignItems: 'center', ...Shadow.glow,
   },
   saveBtnText: { fontSize: T.size.md, fontWeight: '700', color: C.white },

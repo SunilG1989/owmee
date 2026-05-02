@@ -46,7 +46,7 @@ export default function ComparablesSheet({ comparables, onSetMyPrice, onClose }:
                   {c.image_url ? (
                     <Image source={{ uri: c.image_url }} style={st.thumb} />
                   ) : (
-                    <View style={[st.thumb, { backgroundColor: C.sand }]} />
+                    <View style={[st.thumb, { backgroundColor: C.bone2 }]} />
                   )}
                   <View style={st.info}>
                     <Text style={st.rowTitle} numberOfLines={1}>
@@ -122,7 +122,7 @@ const st = StyleSheet.create({
     marginTop: S.lg,
     paddingVertical: S.md,
     borderRadius: R.md,
-    backgroundColor: C.honey,
+    backgroundColor: C.petrol,
     alignItems: 'center',
   },
   actionText: { color: C.surface, fontSize: T.size.md, fontWeight: T.weight.bold },

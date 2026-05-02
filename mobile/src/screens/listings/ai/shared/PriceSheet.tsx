@@ -134,14 +134,14 @@ const st = StyleSheet.create({
   title: { fontSize: T.size.xl, fontWeight: T.weight.bold, color: C.text, marginBottom: S.lg },
 
   suggestBox: {
-    backgroundColor: C.honeyLight,
+    backgroundColor: C.petrolLight,
     padding: S.md,
     borderRadius: R.md,
     alignItems: 'center',
     marginBottom: S.lg,
   },
-  suggestLabel: { fontSize: T.size.sm, color: C.honeyText, marginBottom: 2 },
-  suggestPrice: { fontSize: T.size.xxl, fontWeight: T.weight.bold, color: C.honeyText },
+  suggestLabel: { fontSize: T.size.sm, color: C.petrolText, marginBottom: 2 },
+  suggestPrice: { fontSize: T.size.xxl, fontWeight: T.weight.bold, color: C.petrolText },
 
   label: {
     fontSize: T.size.sm,
@@ -158,7 +158,7 @@ const st = StyleSheet.create({
     fontSize: T.size.xl,
     fontWeight: T.weight.bold,
     color: C.text,
-    backgroundColor: C.cream,
+    backgroundColor: C.bone,
     marginBottom: S.lg,
   },
 
@@ -184,7 +184,7 @@ const st = StyleSheet.create({
   compAge: { fontSize: T.size.xs, color: C.text3 },
 
   useSuggestedBtn: { marginTop: S.lg, paddingVertical: S.sm, alignItems: 'center' },
-  useSuggestedText: { color: C.honey, fontSize: T.size.md, fontWeight: T.weight.semi },
+  useSuggestedText: { color: C.petrol, fontSize: T.size.md, fontWeight: T.weight.semi },
 
   ctaRow: { flexDirection: 'row', gap: S.md, marginTop: S.lg },
   cancelBtn: {
@@ -200,7 +200,7 @@ const st = StyleSheet.create({
     flex: 2,
     paddingVertical: S.md,
     borderRadius: R.md,
-    backgroundColor: C.honey,
+    backgroundColor: C.petrol,
     alignItems: 'center',
   },
   saveBtnDisabled: { opacity: 0.4 },

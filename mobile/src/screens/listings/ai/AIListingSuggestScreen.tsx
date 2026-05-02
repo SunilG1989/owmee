@@ -386,7 +386,7 @@ function TrustRow({ text }: { text: string }) {
 }
 
 const st = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.cream },
+  root: { flex: 1, backgroundColor: C.bone },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -407,7 +407,7 @@ const st = StyleSheet.create({
     width: 160,
     height: 160,
     borderRadius: R.lg,
-    backgroundColor: C.sand,
+    backgroundColor: C.bone2,
   },
   photoHint: { marginTop: S.sm, fontSize: T.size.sm, color: C.text3 },
 
@@ -422,7 +422,7 @@ const st = StyleSheet.create({
   specsTitle: { fontSize: T.size.lg, fontWeight: T.weight.bold, color: C.text },
   specsSub: { marginTop: 2, fontSize: T.size.md, color: C.text2 },
   editLink: { marginTop: S.sm, paddingVertical: 4 },
-  editLinkText: { color: C.honey, fontSize: T.size.base, fontWeight: T.weight.semi },
+  editLinkText: { color: C.petrol, fontSize: T.size.base, fontWeight: T.weight.semi },
 
   // Price
   priceBlock: {
@@ -453,7 +453,7 @@ const st = StyleSheet.create({
     textAlign: 'center',
   },
   linkBtn: { marginTop: S.md, paddingVertical: 4 },
-  linkBtnText: { color: C.honey, fontSize: T.size.md, fontWeight: T.weight.semi },
+  linkBtnText: { color: C.petrol, fontSize: T.size.md, fontWeight: T.weight.semi },
   linkBtnTertiary: { marginTop: 4, paddingVertical: 4 },
   linkBtnTertiaryText: { color: C.text3, fontSize: T.size.sm, textDecorationLine: 'underline' },
 
@@ -479,9 +479,9 @@ const st = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.border,
     marginBottom: S.sm,
-    backgroundColor: C.cream,
+    backgroundColor: C.bone,
   },
-  condRowActive: { borderColor: C.honey, backgroundColor: C.honeyLight },
+  condRowActive: { borderColor: C.petrol, backgroundColor: C.petrolLight },
   radio: {
     width: 22,
     height: 22,
@@ -492,8 +492,8 @@ const st = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  radioActive: { borderColor: C.honey },
-  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: C.honey },
+  radioActive: { borderColor: C.petrol },
+  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: C.petrol },
   condLabel: { fontSize: T.size.md, fontWeight: T.weight.semi },
 
   // How it works
@@ -515,7 +515,7 @@ const st = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: C.honey,
+    backgroundColor: C.petrol,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: S.md,
@@ -525,7 +525,7 @@ const st = StyleSheet.create({
 
   // Trust
   trustBlock: {
-    backgroundColor: C.forestLight,
+    backgroundColor: C.petrolLight,
     paddingHorizontal: S.lg,
     paddingVertical: S.lg,
     marginTop: S.sm,
@@ -533,11 +533,11 @@ const st = StyleSheet.create({
   trustRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
   trustCheck: {
     fontSize: T.size.lg,
-    color: C.forest,
+    color: C.petrol,
     fontWeight: T.weight.bold,
     marginRight: S.md,
   },
-  trustText: { fontSize: T.size.md, color: C.forestText, fontWeight: T.weight.medium },
+  trustText: { fontSize: T.size.md, color: C.petrolText, fontWeight: T.weight.medium },
 
   legal: {
     marginTop: S.lg,
@@ -546,7 +546,7 @@ const st = StyleSheet.create({
     color: C.text3,
     textAlign: 'center',
   },
-  legalLink: { color: C.honey, textDecorationLine: 'underline' },
+  legalLink: { color: C.petrol, textDecorationLine: 'underline' },
 
   // CTA
   ctaBar: {
@@ -562,7 +562,7 @@ const st = StyleSheet.create({
     borderTopColor: C.border,
   },
   primaryBtn: {
-    backgroundColor: C.honey,
+    backgroundColor: C.petrol,
     paddingVertical: S.lg,
     borderRadius: R.md,
     alignItems: 'center',
@@ -576,7 +576,7 @@ const st = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: C.border,
-    backgroundColor: C.cream,
+    backgroundColor: C.bone,
   },
   secondaryBtnText: { color: C.text2, fontSize: T.size.md, fontWeight: T.weight.semi },
 
@@ -584,7 +584,7 @@ const st = StyleSheet.create({
   successWrap: { flex: 1, padding: S.xxl, alignItems: 'center' },
   successCheck: {
     fontSize: 64,
-    color: C.forest,
+    color: C.petrol,
     marginTop: S.xxl,
     marginBottom: S.lg,
   },

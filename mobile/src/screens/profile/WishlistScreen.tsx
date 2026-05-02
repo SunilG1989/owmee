@@ -31,7 +31,7 @@ export default function WishlistScreen({ navigation }: any) {
 
   useFocusEffect(useCallback(() => { load(); }, []));
 
-  if (loading) return <SafeAreaView style={s.safe}><ActivityIndicator color={C.honey} style={{ marginTop: 60 }} /></SafeAreaView>;
+  if (loading) return <SafeAreaView style={s.safe}><ActivityIndicator color={C.petrol} style={{ marginTop: 60 }} /></SafeAreaView>;
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
@@ -49,7 +49,7 @@ export default function WishlistScreen({ navigation }: any) {
         renderItem={({ item }) => (
           <ListingCard listing={item} onPress={l => navigation.navigate('ListingDetail', { listingId: l.id })} cardWidth={cardWidth} />
         )}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={C.honey} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={C.petrol} />}
         ListEmptyComponent={
           <View style={s.empty}>
             <Text style={{ fontSize: 48, marginBottom: 16 }}>♡</Text>
@@ -64,7 +64,7 @@ export default function WishlistScreen({ navigation }: any) {
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: C.cream },
+  safe: { flex: 1, backgroundColor: C.bone },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: C.surface, borderBottomWidth: 0.5, borderBottomColor: C.border },
   headerTitle: { fontSize: 16, fontWeight: '600', color: C.text },
   gridRow: { flexDirection: 'row', gap: S.sm, paddingHorizontal: S.xl },

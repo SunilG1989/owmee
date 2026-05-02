@@ -96,7 +96,7 @@ export default function SellModeForkScreen({ navigation }: any) {
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: C.cream },
+  safe: { flex: 1, backgroundColor: C.bone },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -119,11 +119,11 @@ const s = StyleSheet.create({
 
   // Hero card — Concierge
   heroCard: {
-    backgroundColor: C.cream,
+    backgroundColor: C.bone,
     borderRadius: R.xl,
     padding: S.xl,
     borderWidth: 2,
-    borderColor: C.honey,
+    borderColor: C.petrol,
     ...Shadow.glow,
     minHeight: 360,
     position: 'relative',
@@ -132,13 +132,13 @@ const s = StyleSheet.create({
     position: 'absolute',
     top: 14,
     right: 14,
-    backgroundColor: C.honey,
+    backgroundColor: C.petrol,
     paddingHorizontal: S.md,
     paddingVertical: 6,
     borderRadius: R.pill,
   },
   heroPillText: {
-    color: C.cream,
+    color: C.bone,
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.4,
@@ -170,7 +170,7 @@ const s = StyleSheet.create({
   },
   bulletTick: {
     fontSize: 14,
-    color: C.honeyDeep,
+    color: C.petrolDeep,
     fontWeight: '700',
     marginTop: 2,
   },
@@ -181,7 +181,7 @@ const s = StyleSheet.create({
     lineHeight: 20,
   },
   heroCta: {
-    backgroundColor: C.honey,
+    backgroundColor: C.petrol,
     borderRadius: R.pill,
     paddingVertical: S.md,
     alignItems: 'center',
@@ -190,7 +190,7 @@ const s = StyleSheet.create({
     marginTop: S.sm,
   },
   heroCtaText: {
-    color: C.cream,
+    color: C.bone,
     fontSize: 16,
     fontWeight: '700',
   },

@@ -47,7 +47,7 @@ export default function CheckoutScreen({ navigation, route }: any) {
   }, [listingId]);
 
   if (loading || !listing) {
-    return <SafeAreaView style={s.safe}><ActivityIndicator color={C.honey} style={{ marginTop: 60 }} /></SafeAreaView>;
+    return <SafeAreaView style={s.safe}><ActivityIndicator color={C.petrol} style={{ marginTop: 60 }} /></SafeAreaView>;
   }
 
   const itemPrice = listing.price;
@@ -111,7 +111,7 @@ export default function CheckoutScreen({ navigation, route }: any) {
             ) : (
               <Text style={s.addressText}>Add delivery address</Text>
             )}
-            <Text style={{ fontSize: 13, color: C.honey, fontWeight: '600' }}>Change ▾</Text>
+            <Text style={{ fontSize: 13, color: C.petrol, fontWeight: '600' }}>Change ▾</Text>
           </TouchableOpacity>
         </View>
 
@@ -119,7 +119,7 @@ export default function CheckoutScreen({ navigation, route }: any) {
         <View style={s.section}>
           <Text style={s.sectionTitle}>💳 Payment</Text>
           <View style={s.paymentCard}>
-            <View style={s.upiIcon}><Text style={{ fontSize: 16, fontWeight: '700', color: C.forest }}>UPI</Text></View>
+            <View style={s.upiIcon}><Text style={{ fontSize: 16, fontWeight: '700', color: C.petrol }}>UPI</Text></View>
             <View style={{ flex: 1 }}>
               <Text style={s.paymentLabel}>UPI Payment</Text>
               <Text style={s.paymentSub}>GPay, PhonePe, Paytm or any UPI app</Text>
@@ -167,46 +167,46 @@ export default function CheckoutScreen({ navigation, route }: any) {
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: C.cream },
+  safe: { flex: 1, backgroundColor: C.bone },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: C.surface, borderBottomWidth: 0.5, borderBottomColor: C.border },
   headerTitle: { fontSize: 16, fontWeight: '600', color: C.text },
   body: { flex: 1, paddingHorizontal: 16, paddingTop: 16 },
   itemCard: { flexDirection: 'row', gap: 14, backgroundColor: C.surface, borderRadius: R.lg, padding: 16, borderWidth: 1, borderColor: C.border, ...Shadow.card },
-  itemImagePlaceholder: { width: 80, height: 80, borderRadius: R.sm, backgroundColor: C.sand, alignItems: 'center', justifyContent: 'center' },
+  itemImagePlaceholder: { width: 80, height: 80, borderRadius: R.sm, backgroundColor: C.bone2, alignItems: 'center', justifyContent: 'center' },
   itemInfo: { flex: 1 },
   itemTitle: { fontSize: 15, fontWeight: '600', color: C.text, lineHeight: 20 },
-  itemPrice: { fontSize: 20, fontWeight: '800', color: C.honey, marginTop: 4 },
+  itemPrice: { fontSize: 20, fontWeight: '800', color: C.petrol, marginTop: 4 },
   itemCondition: { fontSize: 11, color: C.text3, textTransform: 'capitalize', marginTop: 2 },
-  sellerBadge: { marginTop: 6, alignSelf: 'flex-start', backgroundColor: C.forestLight, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
-  sellerBadgeText: { fontSize: 10, fontWeight: '700', color: C.forest },
+  sellerBadge: { marginTop: 6, alignSelf: 'flex-start', backgroundColor: C.petrolLight, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  sellerBadgeText: { fontSize: 10, fontWeight: '700', color: C.petrol },
   section: { marginTop: S.xl },
   sectionTitle: { fontSize: 14, fontWeight: '700', color: C.ink, marginBottom: S.sm },
   addressCard: { backgroundColor: C.surface, borderRadius: R.sm, padding: 14, borderWidth: 0.5, borderColor: C.border, flexDirection: 'column', gap: 2 },
   addressText: { fontSize: 14, color: C.text, fontWeight: '500' },
   addressCity: { fontSize: 12, color: C.text3 },
-  paymentCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.surface, borderRadius: R.sm, padding: 14, borderWidth: 1, borderColor: C.forest },
-  upiIcon: { width: 40, height: 40, borderRadius: 8, backgroundColor: C.forestLight, alignItems: 'center', justifyContent: 'center' },
+  paymentCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.surface, borderRadius: R.sm, padding: 14, borderWidth: 1, borderColor: C.petrol },
+  upiIcon: { width: 40, height: 40, borderRadius: 8, backgroundColor: C.petrolLight, alignItems: 'center', justifyContent: 'center' },
   paymentLabel: { fontSize: 14, fontWeight: '600', color: C.text },
   paymentSub: { fontSize: 11, color: C.text3, marginTop: 1 },
-  radioOn: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: C.forest, alignItems: 'center', justifyContent: 'center' },
-  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: C.forest },
+  radioOn: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: C.petrol, alignItems: 'center', justifyContent: 'center' },
+  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: C.petrol },
   priceCard: { backgroundColor: C.surface, borderRadius: R.sm, padding: 16, borderWidth: 0.5, borderColor: C.border },
   priceRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 },
   priceLabel: { fontSize: 13, color: C.text3 },
   priceValue: { fontSize: 13, color: C.text, fontWeight: '500' },
   priceDivider: { height: 1, backgroundColor: C.border, marginVertical: 8 },
   totalLabel: { fontSize: 15, fontWeight: '700', color: C.ink },
-  totalValue: { fontSize: 15, fontWeight: '700', color: C.honey },
-  guarantee: { flexDirection: 'row', gap: 12, backgroundColor: C.forestLight, borderRadius: R.lg, padding: 16, marginTop: S.xl, borderWidth: 1, borderColor: C.border },
-  guaranteeTitle: { fontSize: 14, fontWeight: '700', color: C.forest },
-  guaranteeSub: { fontSize: 12, color: C.forestText, lineHeight: 17, marginTop: 2 },
+  totalValue: { fontSize: 15, fontWeight: '700', color: C.petrol },
+  guarantee: { flexDirection: 'row', gap: 12, backgroundColor: C.petrolLight, borderRadius: R.lg, padding: 16, marginTop: S.xl, borderWidth: 1, borderColor: C.border },
+  guaranteeTitle: { fontSize: 14, fontWeight: '700', color: C.petrol },
+  guaranteeSub: { fontSize: 12, color: C.petrolText, lineHeight: 17, marginTop: 2 },
   bottomBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: C.surface, borderTopWidth: 1, borderTopColor: C.border },
   bottomTotal: { fontSize: 18, fontWeight: '800', color: C.ink },
   bottomSub: { fontSize: 11, color: C.text3 },
-  payBtn: { backgroundColor: C.honey, borderRadius: R.sm, paddingHorizontal: 28, paddingVertical: 14, ...Shadow.glow },
+  payBtn: { backgroundColor: C.petrol, borderRadius: R.sm, paddingHorizontal: 28, paddingVertical: 14, ...Shadow.glow },
   payBtnText: { fontSize: 15, fontWeight: '700', color: C.white },
   gate: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
   gateTitle: { fontSize: 20, fontWeight: '700', color: C.ink, marginBottom: 8 },
   gateSub: { fontSize: 13, color: C.text3, textAlign: 'center', lineHeight: 19, marginBottom: 20 },
-  gateCta: { backgroundColor: C.honey, borderRadius: R.sm, paddingHorizontal: 28, paddingVertical: 14 },
+  gateCta: { backgroundColor: C.petrol, borderRadius: R.sm, paddingHorizontal: 28, paddingVertical: 14 },
 });

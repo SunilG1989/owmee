@@ -57,7 +57,7 @@ export default function VisitDetailScreen({
     return (
       <SafeAreaView style={s.safe}>
         <View style={s.center}>
-          <ActivityIndicator color={C.honey} />
+          <ActivityIndicator color={C.petrol} />
         </View>
       </SafeAreaView>
     );
@@ -194,7 +194,7 @@ function formatAddress(snap: any): string {
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: C.cream },
+  safe: { flex: 1, backgroundColor: C.bone },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -242,18 +242,18 @@ const s = StyleSheet.create({
     marginBottom: S.sm,
   },
   matchingCard: {
-    backgroundColor: C.honeyLight,
+    backgroundColor: C.petrolLight,
     borderRadius: R.lg,
     padding: S.lg,
   },
   matchingTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: C.honeyText,
+    color: C.petrolText,
   },
   matchingBody: {
     fontSize: 13,
-    color: C.honeyText,
+    color: C.petrolText,
     marginTop: 4,
     lineHeight: 18,
   },
@@ -267,7 +267,7 @@ const s = StyleSheet.create({
   codeText: {
     fontSize: 36,
     fontWeight: '800',
-    color: C.honeyDeep,
+    color: C.petrolDeep,
     letterSpacing: 6,
   },
   codeHint: {

@@ -8,8 +8,8 @@ import { Transactions, type Transaction } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 
 const STATUS_COLORS: Record<string, string> = {
-  reserved: C.honey, meetup_scheduled: C.honey, payment_confirmed: C.forest,
-  completed: C.forest, cancelled: C.red, disputed: C.red,
+  reserved: C.petrol, meetup_scheduled: C.petrol, payment_confirmed: C.petrol,
+  completed: C.petrol, cancelled: C.red, disputed: C.red,
 };
 
 export default function TransactionListScreen({ navigation }: any) {
@@ -49,7 +49,7 @@ export default function TransactionListScreen({ navigation }: any) {
     );
   };
 
-  if (loading) return <SafeAreaView style={s.safe}><ActivityIndicator color={C.honey} style={{ marginTop: 60 }} /></SafeAreaView>;
+  if (loading) return <SafeAreaView style={s.safe}><ActivityIndicator color={C.petrol} style={{ marginTop: 60 }} /></SafeAreaView>;
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
@@ -60,7 +60,7 @@ export default function TransactionListScreen({ navigation }: any) {
       </View>
       <View style={{flexDirection:'row',marginBottom:12,gap:8}}>
           {(['buying','selling','completed'] as const).map(tab => (
-            <TouchableOpacity key={tab} style={{flex:1,paddingVertical:10,borderRadius:R.sm,backgroundColor:activeTab===tab?C.honey:C.surface,borderWidth:activeTab===tab?0:0.5,borderColor:C.border,alignItems:'center'}} onPress={()=>setActiveTab(tab)}>
+            <TouchableOpacity key={tab} style={{flex:1,paddingVertical:10,borderRadius:R.sm,backgroundColor:activeTab===tab?C.petrol:C.surface,borderWidth:activeTab===tab?0:0.5,borderColor:C.border,alignItems:'center'}} onPress={()=>setActiveTab(tab)}>
               <Text style={{fontSize:12,fontWeight:'600',color:activeTab===tab?C.white:C.text3,textTransform:'capitalize'}}>{tab}</Text>
             </TouchableOpacity>
           ))}
@@ -70,7 +70,7 @@ export default function TransactionListScreen({ navigation }: any) {
         keyExtractor={i => i.id}
         renderItem={renderItem}
         contentContainerStyle={s.list}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={C.honey} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={C.petrol} />}
         ListEmptyComponent={
           <View style={s.empty}>
             <Text style={{ fontSize: 48, marginBottom: 16 }}>🤝</Text>
@@ -85,15 +85,15 @@ export default function TransactionListScreen({ navigation }: any) {
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: C.cream },
+  safe: { flex: 1, backgroundColor: C.bone },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: C.surface, borderBottomWidth: 0.5, borderBottomColor: C.border },
   headerTitle: { fontSize: 16, fontWeight: '600', color: C.text },
   list: { padding: 16 },
   card: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.surface, borderRadius: R.lg, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: C.border },
-  iconWrap: { width: 48, height: 48, borderRadius: 24, backgroundColor: C.honeyLight, alignItems: 'center', justifyContent: 'center' },
+  iconWrap: { width: 48, height: 48, borderRadius: 24, backgroundColor: C.petrolLight, alignItems: 'center', justifyContent: 'center' },
   info: { flex: 1, marginLeft: 12 },
   title: { fontSize: 14, fontWeight: '600', color: C.text, marginBottom: 2 },
-  price: { fontSize: 16, fontWeight: '700', color: C.honey, marginBottom: 4 },
+  price: { fontSize: 16, fontWeight: '700', color: C.petrol, marginBottom: 4 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   dot: { width: 6, height: 6, borderRadius: 3 },
   status: { fontSize: 11, color: C.text3, textTransform: 'capitalize' },

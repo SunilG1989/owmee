@@ -211,7 +211,7 @@ export default function OffersScreen({ navigation }: any) {
                 </Text>
               )}
               {item.status === 'countered' && counterMins !== null && counterMins > 0 && (
-                <Text style={[s.exp, { color: C.honey }]}>
+                <Text style={[s.exp, { color: C.petrol }]}>
                   Counter: {counterMins < 60 ? `${counterMins}m` : `${Math.floor(counterMins / 60)}h`} to respond
                 </Text>
               )}
@@ -331,7 +331,7 @@ export default function OffersScreen({ navigation }: any) {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={() => { setRefreshing(true); load(); }}
-              tintColor={C.honey}
+              tintColor={C.petrol}
             />
           }
           ListEmptyComponent={<EmptyState {...emptyForTab} />}
@@ -345,7 +345,7 @@ export default function OffersScreen({ navigation }: any) {
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: C.cream },
+  safe: { flex: 1, backgroundColor: C.bone },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -368,28 +368,28 @@ const s = StyleSheet.create({
     minHeight: MIN_TAP / 1.4,  // tabs don't need full MIN_TAP
     justifyContent: 'center',
   },
-  tabOn: { backgroundColor: C.honeyLight, borderColor: C.honey },
+  tabOn: { backgroundColor: C.petrolLight, borderColor: C.petrol },
   tabText: { fontSize: T.size.base, color: C.text2 },
-  tabTextOn: { color: C.honeyDeep, fontWeight: T.weight.semi },
+  tabTextOn: { color: C.petrolDeep, fontWeight: T.weight.semi },
 
   list: { padding: S.lg },
   cardSpacing: { marginBottom: S.md },
 
   row: { flexDirection: 'row', gap: S.md },
   thumb: { width: 64, height: 64, borderRadius: R.sm },
-  thumbPlaceholder: { backgroundColor: C.sand, alignItems: 'center', justifyContent: 'center' },
+  thumbPlaceholder: { backgroundColor: C.bone2, alignItems: 'center', justifyContent: 'center' },
   thumbIcon: { fontSize: I.md },
 
   title: { fontSize: T.size.md, fontWeight: T.weight.semi, color: C.text, marginBottom: 2 },
   priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: S.sm },
-  amount: { fontSize: T.size.lg, fontWeight: T.weight.bold, color: C.honey },
+  amount: { fontSize: T.size.lg, fontWeight: T.weight.bold, color: C.petrol },
   // Was C.text4 + line-through; bumped to text3 for contrast on cream/sand backgrounds
   // and removed strike to avoid the price-confusion ambiguity ("Is it ₹X or ₹Y?").
   listed: { fontSize: T.size.sm, color: C.text3 },
   note: { fontSize: T.size.sm, color: C.text2, fontStyle: 'italic', marginTop: 2 },
   metaRow: { flexDirection: 'row', gap: S.md, marginTop: S.xs, flexWrap: 'wrap' },
   time: { fontSize: T.size.xs, color: C.text3 },
-  exp: { fontSize: T.size.xs, color: C.honey, fontWeight: T.weight.semi },
+  exp: { fontSize: T.size.xs, color: C.petrol, fontWeight: T.weight.semi },
 
   actions: {
     flexDirection: 'row', gap: S.sm, marginTop: S.md,

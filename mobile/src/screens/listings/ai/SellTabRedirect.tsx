@@ -75,7 +75,7 @@ function Tip({ emoji, text }: { emoji: string; text: string }) {
 const st = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: C.cream,
+    backgroundColor: C.bone,
   },
   center: {
     flex: 1,
@@ -87,7 +87,7 @@ const st = StyleSheet.create({
     width: 96,
     height: 96,
     borderRadius: 48,
-    backgroundColor: C.honeyLight,
+    backgroundColor: C.petrolLight,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: S.xl,
@@ -111,7 +111,7 @@ const st = StyleSheet.create({
     marginBottom: S.xxxl,
   },
   cta: {
-    backgroundColor: C.honey,
+    backgroundColor: C.petrol,
     paddingHorizontal: S.xxxl,
     paddingVertical: S.lg,
     borderRadius: R.pill,

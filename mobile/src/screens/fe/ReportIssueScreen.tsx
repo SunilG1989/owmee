@@ -127,7 +127,7 @@ export default function ReportIssueScreen({
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: C.cream },
+  safe: { flex: 1, backgroundColor: C.bone },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -159,8 +159,8 @@ const s = StyleSheet.create({
     gap: S.md,
   },
   rowOn: {
-    backgroundColor: C.honeyLight,
-    borderColor: C.honey,
+    backgroundColor: C.petrolLight,
+    borderColor: C.petrol,
   },
   emoji: { fontSize: 22 },
   rowLabel: {
@@ -169,7 +169,7 @@ const s = StyleSheet.create({
     fontWeight: '600',
   },
   rowLabelOn: {
-    color: C.honeyDeep,
+    color: C.petrolDeep,
   },
   rowHint: {
     fontSize: 12,
@@ -178,7 +178,7 @@ const s = StyleSheet.create({
   },
   tick: {
     fontSize: 18,
-    color: C.honeyDeep,
+    color: C.petrolDeep,
     fontWeight: '700',
   },
   input: {

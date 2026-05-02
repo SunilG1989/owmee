@@ -77,7 +77,7 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
   useFocusEffect(useCallback(() => { reload(); }, [reload]));
 
   if (loading) {
-    return <SafeAreaView style={s.safe}><ActivityIndicator color={C.honey} style={{ marginTop: 60 }} /></SafeAreaView>;
+    return <SafeAreaView style={s.safe}><ActivityIndicator color={C.petrol} style={{ marginTop: 60 }} /></SafeAreaView>;
   }
   if (!txn || !tracking) {
     return (
@@ -458,7 +458,7 @@ function labelForStatus(status: string, isBuyer: boolean): string {
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: C.cream },
+  safe: { flex: 1, backgroundColor: C.bone },
   header: { paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: 12 },
   back: { fontSize: 14, color: C.text3 },
   title: { fontSize: 18, fontWeight: '700', color: C.text },
@@ -469,13 +469,13 @@ const s = StyleSheet.create({
   bannerErr: { backgroundColor: C.redLight, borderColor: C.red },
   bannerText: { fontSize: 14, color: C.text, lineHeight: 20 },
 
-  ackBox: { margin: 16, padding: 20, borderRadius: 12, backgroundColor: C.honeyLight, borderWidth: 2, borderColor: C.honey, alignItems: 'center' },
-  ackLabel: { fontSize: 12, color: C.honeyText, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1, fontWeight: '600' },
-  ackCode: { fontSize: 36, fontWeight: '800', color: C.honeyText, letterSpacing: 8 },
-  ackHint: { fontSize: 12, color: C.honeyDeep, marginTop: 8, textAlign: 'center', lineHeight: 18 },
+  ackBox: { margin: 16, padding: 20, borderRadius: 12, backgroundColor: C.petrolLight, borderWidth: 2, borderColor: C.petrol, alignItems: 'center' },
+  ackLabel: { fontSize: 12, color: C.petrolText, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1, fontWeight: '600' },
+  ackCode: { fontSize: 36, fontWeight: '800', color: C.petrolText, letterSpacing: 8 },
+  ackHint: { fontSize: 12, color: C.petrolDeep, marginTop: 8, textAlign: 'center', lineHeight: 18 },
 
-  courierBox: { marginHorizontal: 16, marginBottom: 12, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: C.honey, backgroundColor: C.honeyLight },
-  courierText: { fontSize: 14, color: C.honeyDeep, fontWeight: '600', textAlign: 'center' },
+  courierBox: { marginHorizontal: 16, marginBottom: 12, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: C.petrol, backgroundColor: C.petrolLight },
+  courierText: { fontSize: 14, color: C.petrolDeep, fontWeight: '600', textAlign: 'center' },
 
   timeline: { paddingHorizontal: 24, paddingVertical: 16 },
   tlRow: { flexDirection: 'row', alignItems: 'flex-start' },
@@ -483,10 +483,10 @@ const s = StyleSheet.create({
   // Timeline dot uses surface (white) when inactive so it stands out against
   // the cream canvas; honey when active. Color is the same regardless of theme.
   tlDot: { width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: C.text4, backgroundColor: C.surface, alignItems: 'center', justifyContent: 'center', marginTop: 2 },
-  tlDotDone: { backgroundColor: C.honey, borderColor: C.honey },
+  tlDotDone: { backgroundColor: C.petrol, borderColor: C.petrol },
   tlTick: { fontSize: 11, color: C.white, fontWeight: '700' },
   tlBar: { flex: 1, width: 2, backgroundColor: C.text4, marginTop: 2 },
-  tlBarDone: { backgroundColor: C.honey },
+  tlBarDone: { backgroundColor: C.petrol },
   tlBody: { flex: 1, marginLeft: 12, paddingBottom: 20 },
   tlLabel: { fontSize: 14, color: C.text3 },
   tlLabelDone: { color: C.text, fontWeight: '600' },
@@ -498,7 +498,7 @@ const s = StyleSheet.create({
   priceValue: { fontSize: 13, color: C.text },
 
   actions: { paddingHorizontal: 16, gap: 12 },
-  btnPrimary: { backgroundColor: C.honey, borderRadius: 10, paddingVertical: 14, alignItems: 'center' },
+  btnPrimary: { backgroundColor: C.petrol, borderRadius: 10, paddingVertical: 14, alignItems: 'center' },
   btnPrimaryText: { color: C.white, fontSize: 15, fontWeight: '700' },
   btnSecondary: { borderWidth: 1, borderColor: C.border, borderRadius: 10, paddingVertical: 14, alignItems: 'center', backgroundColor: C.surface },
   btnSecondaryText: { color: C.text2, fontSize: 14, fontWeight: '500' },
@@ -524,14 +524,14 @@ const s = StyleSheet.create({
   reasonRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, gap: 10 },
   reasonRowOn: {},
   radio: { width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: C.text4 },
-  radioOn: { borderColor: C.honey, backgroundColor: C.honey },
+  radioOn: { borderColor: C.petrol, backgroundColor: C.petrol },
   reasonLabel: { fontSize: 14, color: C.text },
 
   modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  modal: { backgroundColor: C.cream, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 24 },
+  modal: { backgroundColor: C.bone, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 24 },
   modalTitle: { fontSize: 18, fontWeight: '700', color: C.text, marginBottom: 16 },
   starsRow: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginBottom: 16 },
   star: { fontSize: 36, color: C.text4 },
-  starOn: { color: C.honey },
+  starOn: { color: C.petrol },
   input: { borderWidth: 1, borderColor: C.border, borderRadius: 8, padding: 12, marginBottom: 16, color: C.text, minHeight: 80, textAlignVertical: 'top' },
 });

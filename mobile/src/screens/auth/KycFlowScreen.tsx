@@ -175,8 +175,8 @@ export default function KycFlowScreen({ navigation }: any) {
       <View style={s.progress}>
         {STEPS.map((l, i) => (
           <View key={i} style={{ alignItems: 'center', gap: 3, flex: 1 }}>
-            <View style={[s.bar, i <= step && { backgroundColor: C.honey }]} />
-            <Text style={[s.barL, i <= step && { color: C.honey }]}>{l}</Text>
+            <View style={[s.bar, i <= step && { backgroundColor: C.petrol }]} />
+            <Text style={[s.barL, i <= step && { color: C.petrol }]}>{l}</Text>
           </View>
         ))}
       </View>
@@ -323,7 +323,7 @@ export default function KycFlowScreen({ navigation }: any) {
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: C.cream },
+  safe: { flex: 1, backgroundColor: C.bone },
   top: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 10, backgroundColor: C.surface,
@@ -340,9 +340,9 @@ const s = StyleSheet.create({
   input: {
     width: '100%', borderWidth: 0.5, borderColor: C.border, borderRadius: R.sm,
     paddingHorizontal: 12, paddingVertical: 12, fontSize: 16, color: C.text,
-    textAlign: 'center', marginBottom: 16, backgroundColor: C.cream,
+    textAlign: 'center', marginBottom: 16, backgroundColor: C.bone,
   },
-  btn: { width: '100%', backgroundColor: C.honey, borderRadius: R.sm, paddingVertical: 14, alignItems: 'center' },
+  btn: { width: '100%', backgroundColor: C.petrol, borderRadius: R.sm, paddingVertical: 14, alignItems: 'center' },
   btnT: { fontSize: 14, color: C.white, fontWeight: '600' },
   footer: { textAlign: 'center', fontSize: 11, color: C.text4, marginTop: 20, lineHeight: 18 },
   // Address form
@@ -351,7 +351,7 @@ const s = StyleSheet.create({
   addrInput: {
     borderWidth: 0.5, borderColor: C.border, borderRadius: R.sm,
     paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: C.text,
-    backgroundColor: C.cream,
+    backgroundColor: C.bone,
   },
   addrRow: { flexDirection: 'row', gap: S.sm },
 });

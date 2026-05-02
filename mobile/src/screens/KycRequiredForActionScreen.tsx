@@ -96,7 +96,7 @@ const s = StyleSheet.create({
     paddingHorizontal: S.md,
   },
   primary: {
-    backgroundColor: C.honey,
+    backgroundColor: C.petrol,
     paddingVertical: 14,
     paddingHorizontal: SP_XXL,
     borderRadius: R.md,

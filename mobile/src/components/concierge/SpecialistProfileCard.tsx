@@ -63,7 +63,7 @@ export default function SpecialistProfileCard({
   if (loading) {
     return (
       <View style={s.card}>
-        <ActivityIndicator color={C.honey} />
+        <ActivityIndicator color={C.petrol} />
       </View>
     );
   }
@@ -157,14 +157,14 @@ const s = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: C.honeyLight,
+    backgroundColor: C.petrolLight,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarText: {
     fontSize: 22,
     fontWeight: '700',
-    color: C.honeyDeep,
+    color: C.petrolDeep,
   },
   name: {
     fontSize: 17,
@@ -183,14 +183,14 @@ const s = StyleSheet.create({
     marginTop: S.sm,
   },
   badge: {
-    backgroundColor: C.honeyLight,
+    backgroundColor: C.petrolLight,
     borderRadius: R.pill,
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
   badgeText: {
     fontSize: 12,
-    color: C.honeyDeep,
+    color: C.petrolDeep,
     fontWeight: '600',
   },
   seeBtn: {
@@ -201,7 +201,7 @@ const s = StyleSheet.create({
   },
   seeText: {
     fontSize: 13,
-    color: C.honey,
+    color: C.petrol,
     fontWeight: '600',
   },
 });

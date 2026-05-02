@@ -97,7 +97,7 @@ export default function SellerApprovalScreen({
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: C.cream },
+  safe: { flex: 1, backgroundColor: C.bone },
   body: {
     flex: 1,
     paddingHorizontal: S.xl,
@@ -107,7 +107,7 @@ const s = StyleSheet.create({
   eyebrow: {
     fontSize: 11,
     fontWeight: '700',
-    color: C.honeyDeep,
+    color: C.petrolDeep,
     letterSpacing: 0.6,
     marginBottom: S.lg,
     textAlign: 'center',
@@ -135,7 +135,7 @@ const s = StyleSheet.create({
   price: {
     fontSize: 38,
     fontWeight: '800',
-    color: C.honeyDeep,
+    color: C.petrolDeep,
     marginTop: S.md,
   },
   script: {

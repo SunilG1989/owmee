@@ -112,7 +112,7 @@ const sizeStyles: Record<ButtonSize, { container: ViewStyle; label: TextStyle }>
 
 const variantStyles: Record<ButtonVariant, { container: ViewStyle; text: TextStyle }> = {
   primary: {
-    container: { backgroundColor: C.honey },
+    container: { backgroundColor: C.petrol },
     text: { color: C.white },
   },
   secondary: {

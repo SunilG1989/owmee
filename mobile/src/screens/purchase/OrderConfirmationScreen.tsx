@@ -49,7 +49,7 @@ export default function OrderConfirmationScreen({ navigation, route }: any) {
             { step: '5', label: 'Confirm receipt', desc: 'Money released to seller after your confirmation', done: false },
           ].map((item, i) => (
             <View key={i} style={s.stepRow}>
-              <View style={[s.stepDot, item.done && { backgroundColor: C.forest }]}>
+              <View style={[s.stepDot, item.done && { backgroundColor: C.petrol }]}>
                 <Text style={{ fontSize: 10, color: item.done ? C.white : C.text4, fontWeight: '700' }}>{item.step}</Text>
               </View>
               {i < 4 && <View style={s.stepLine} />}
@@ -85,18 +85,18 @@ export default function OrderConfirmationScreen({ navigation, route }: any) {
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: C.cream },
+  safe: { flex: 1, backgroundColor: C.bone },
   scroll: { paddingHorizontal: S.xl, paddingTop: 40, alignItems: 'center' },
-  successCircle: { width: 100, height: 100, borderRadius: 50, backgroundColor: C.forestLight, alignItems: 'center', justifyContent: 'center', marginBottom: S.xl },
+  successCircle: { width: 100, height: 100, borderRadius: 50, backgroundColor: C.petrolLight, alignItems: 'center', justifyContent: 'center', marginBottom: S.xl },
   title: { fontSize: T.size.xl + 2, fontWeight: '800', color: C.ink, marginBottom: S.xs },
   sub: { fontSize: T.size.base, color: C.text3, textAlign: 'center', lineHeight: 19, marginBottom: S.xl },
-  idCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', backgroundColor: C.sand, borderRadius: R.sm, paddingHorizontal: 16, paddingVertical: 12, marginBottom: S.lg },
+  idCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', backgroundColor: C.bone2, borderRadius: R.sm, paddingHorizontal: 16, paddingVertical: 12, marginBottom: S.lg },
   idLabel: { fontSize: 12, color: C.text3, fontWeight: '600' },
   idValue: { fontSize: 14, fontWeight: '700', color: C.ink, fontFamily: 'monospace', letterSpacing: 1 },
   itemCard: { flexDirection: 'row', alignItems: 'center', gap: 14, width: '100%', backgroundColor: C.surface, borderRadius: R.lg, padding: 16, borderWidth: 1, borderColor: C.border, marginBottom: S.xl },
-  itemThumb: { width: 56, height: 56, borderRadius: R.sm, backgroundColor: C.sand, alignItems: 'center', justifyContent: 'center' },
+  itemThumb: { width: 56, height: 56, borderRadius: R.sm, backgroundColor: C.bone2, alignItems: 'center', justifyContent: 'center' },
   itemTitle: { fontSize: 14, fontWeight: '600', color: C.text },
-  itemPrice: { fontSize: 18, fontWeight: '700', color: C.honey, marginTop: 2 },
+  itemPrice: { fontSize: 18, fontWeight: '700', color: C.petrol, marginTop: 2 },
   nextCard: { width: '100%', backgroundColor: C.surface, borderRadius: R.lg, padding: 20, borderWidth: 1, borderColor: C.border, marginBottom: S.lg },
   nextTitle: { fontSize: 15, fontWeight: '700', color: C.ink, marginBottom: S.lg },
   stepRow: { flexDirection: 'row', position: 'relative', marginBottom: 4 },
@@ -105,10 +105,10 @@ const s = StyleSheet.create({
   stepContent: { flex: 1, marginLeft: 12, paddingBottom: 18 },
   stepLabel: { fontSize: 13, fontWeight: '600', color: C.text },
   stepDesc: { fontSize: 11, color: C.text3, marginTop: 1 },
-  guarantee: { flexDirection: 'row', alignItems: 'center', gap: 10, width: '100%', backgroundColor: C.forestLight, borderRadius: R.sm, paddingHorizontal: 16, paddingVertical: 12, marginBottom: S.xl },
-  guaranteeText: { flex: 1, fontSize: 12, color: C.forestText, fontWeight: '500', lineHeight: 17 },
-  primaryBtn: { width: '100%', backgroundColor: C.honey, borderRadius: R.sm, paddingVertical: 16, alignItems: 'center', marginBottom: S.sm },
+  guarantee: { flexDirection: 'row', alignItems: 'center', gap: 10, width: '100%', backgroundColor: C.petrolLight, borderRadius: R.sm, paddingHorizontal: 16, paddingVertical: 12, marginBottom: S.xl },
+  guaranteeText: { flex: 1, fontSize: 12, color: C.petrolText, fontWeight: '500', lineHeight: 17 },
+  primaryBtn: { width: '100%', backgroundColor: C.petrol, borderRadius: R.sm, paddingVertical: 16, alignItems: 'center', marginBottom: S.sm },
   primaryBtnText: { fontSize: 15, fontWeight: '700', color: C.white },
-  secondaryBtn: { width: '100%', borderRadius: R.sm, paddingVertical: 14, alignItems: 'center', borderWidth: 1, borderColor: C.honey },
-  secondaryBtnText: { fontSize: 14, fontWeight: '600', color: C.honey },
+  secondaryBtn: { width: '100%', borderRadius: R.sm, paddingVertical: 14, alignItems: 'center', borderWidth: 1, borderColor: C.petrol },
+  secondaryBtnText: { fontSize: 14, fontWeight: '600', color: C.petrol },
 });

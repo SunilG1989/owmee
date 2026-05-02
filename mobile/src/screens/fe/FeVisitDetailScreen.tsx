@@ -109,7 +109,7 @@ export default function FeVisitDetailScreen({ route, navigation }: RootScreen<'F
   if (loading) {
     return (
       <SafeAreaView style={st.root} edges={['top']}>
-        <View style={st.center}><ActivityIndicator color={C.honey} /></View>
+        <View style={st.center}><ActivityIndicator color={C.petrol} /></View>
       </SafeAreaView>
     );
   }
@@ -254,7 +254,7 @@ export default function FeVisitDetailScreen({ route, navigation }: RootScreen<'F
 }
 
 const st = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.cream },
+  root: { flex: 1, backgroundColor: C.bone },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: S.lg },
   back: { fontSize: 28, color: C.text, paddingHorizontal: S.xs },
   h1: { fontSize: T.h3, fontWeight: '600', color: C.text },
@@ -266,19 +266,19 @@ const st = StyleSheet.create({
   secondaryBtn: {
     marginTop: S.md, alignSelf: 'flex-start',
     paddingHorizontal: S.lg, paddingVertical: S.sm,
-    backgroundColor: C.honeyLight, borderRadius: R.md,
+    backgroundColor: C.petrolLight, borderRadius: R.md,
   },
-  secondaryBtnText: { color: C.honeyText, fontWeight: '600' },
-  footer: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: S.lg, backgroundColor: C.cream, borderTopWidth: 1, borderTopColor: C.border },
+  secondaryBtnText: { color: C.petrolText, fontWeight: '600' },
+  footer: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: S.lg, backgroundColor: C.bone, borderTopWidth: 1, borderTopColor: C.border },
   primaryBtn: {
-    backgroundColor: C.honey, paddingVertical: S.md, borderRadius: R.md,
+    backgroundColor: C.petrol, paddingVertical: S.md, borderRadius: R.md,
     alignItems: 'center', ...Shadow.glow,
   },
   primaryBtnText: { color: C.white, fontSize: T.body, fontWeight: '700' },
-  infoBox: { backgroundColor: C.sand, padding: S.md, borderRadius: R.md },
+  infoBox: { backgroundColor: C.bone2, padding: S.md, borderRadius: R.md },
   infoText: { color: C.text2, textAlign: 'center' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: S.xl },
   err: { fontSize: T.body, color: C.text2, textAlign: 'center' },
-  retryBtn: { marginTop: S.md, paddingHorizontal: S.lg, paddingVertical: S.sm, backgroundColor: C.honey, borderRadius: R.md },
+  retryBtn: { marginTop: S.md, paddingHorizontal: S.lg, paddingVertical: S.sm, backgroundColor: C.petrol, borderRadius: R.md },
   retryBtnText: { color: C.white, fontWeight: '600' },
 });

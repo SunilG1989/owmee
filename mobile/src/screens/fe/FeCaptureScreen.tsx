@@ -419,7 +419,7 @@ export default function FeCaptureScreen({ route, navigation }: RootScreen<'FeCap
     return (
       <SafeAreaView style={st.root} edges={['top']}>
         <View style={st.center}>
-          <ActivityIndicator color={C.honey} />
+          <ActivityIndicator color={C.petrol} />
           <Text style={{ color: C.text3, marginTop: 8 }}>Loading visit…</Text>
         </View>
       </SafeAreaView>
@@ -479,7 +479,7 @@ export default function FeCaptureScreen({ route, navigation }: RootScreen<'FeCap
                   </TouchableOpacity>
                 ) : uploadingSlot === i ? (
                   <View style={[st.photoAddBtn, { opacity: 0.6 }]}>
-                    <ActivityIndicator color={C.honey} />
+                    <ActivityIndicator color={C.petrol} />
                   </View>
                 ) : (
                   <TouchableOpacity onPress={() => capturePhoto(i)} style={st.photoAddBtn}>
@@ -648,9 +648,9 @@ function OutcomeBtn({ label, onPress }: { label: string; onPress: () => void }) 
 }
 
 const st = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.cream },
+  root: { flex: 1, backgroundColor: C.bone },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: S.lg, backgroundColor: C.cream },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: S.lg, backgroundColor: C.bone },
   back: { fontSize: 28, color: C.text, paddingHorizontal: S.xs },
   h1: { fontSize: T.h3, fontWeight: '600', color: C.text },
   section: { backgroundColor: C.surface, borderRadius: R.lg, padding: S.lg, marginBottom: S.md, ...Shadow.glow },
@@ -658,20 +658,20 @@ const st = StyleSheet.create({
   sectionHint: { fontSize: T.small, color: C.text3, marginBottom: S.md },
   photoRow: { marginBottom: S.sm },
   photoLabel: { fontSize: T.body, color: C.text2, marginBottom: 4 },
-  photoAddBtn: { padding: S.md, backgroundColor: C.honeyLight, borderRadius: R.md, borderWidth: 1, borderColor: C.honey, borderStyle: 'dashed', alignItems: 'center' },
-  photoAddText: { color: C.honeyText, fontWeight: '600', textAlign: 'center' },
-  photoTakenBtn: { padding: S.md, backgroundColor: C.forestLight, borderRadius: R.md },
-  photoTakenText: { color: C.forestText, fontWeight: '600', textAlign: 'center' },
+  photoAddBtn: { padding: S.md, backgroundColor: C.petrolLight, borderRadius: R.md, borderWidth: 1, borderColor: C.petrol, borderStyle: 'dashed', alignItems: 'center' },
+  photoAddText: { color: C.petrolText, fontWeight: '600', textAlign: 'center' },
+  photoTakenBtn: { padding: S.md, backgroundColor: C.petrolLight, borderRadius: R.md },
+  photoTakenText: { color: C.petrolText, fontWeight: '600', textAlign: 'center' },
   inputLabel: { fontSize: T.small, color: C.text3, fontWeight: '600', marginBottom: 4 },
-  input: { backgroundColor: C.cream, borderRadius: R.md, padding: S.md, fontSize: T.body, color: C.text, borderWidth: 1, borderColor: C.border },
-  chip: { paddingHorizontal: S.md, paddingVertical: 6, borderRadius: R.pill, backgroundColor: C.cream, borderWidth: 1, borderColor: C.border, marginRight: S.sm, marginBottom: S.sm },
-  chipActive: { backgroundColor: C.honey, borderColor: C.honey },
+  input: { backgroundColor: C.bone, borderRadius: R.md, padding: S.md, fontSize: T.body, color: C.text, borderWidth: 1, borderColor: C.border },
+  chip: { paddingHorizontal: S.md, paddingVertical: 6, borderRadius: R.pill, backgroundColor: C.bone, borderWidth: 1, borderColor: C.border, marginRight: S.sm, marginBottom: S.sm },
+  chipActive: { backgroundColor: C.petrol, borderColor: C.petrol },
   chipText: { color: C.text2, fontSize: T.small, fontWeight: '500' },
   chipTextActive: { color: C.white, fontWeight: '600' },
-  outcomeBtn: { padding: S.md, backgroundColor: C.sand, borderRadius: R.md, marginTop: S.sm },
+  outcomeBtn: { padding: S.md, backgroundColor: C.bone2, borderRadius: R.md, marginTop: S.sm },
   outcomeBtnText: { color: C.text2, fontWeight: '500' },
-  footer: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: S.lg, backgroundColor: C.cream, borderTopWidth: 1, borderTopColor: C.border },
-  primaryBtn: { backgroundColor: C.honey, paddingVertical: S.md, borderRadius: R.md, alignItems: 'center', ...Shadow.glow },
+  footer: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: S.lg, backgroundColor: C.bone, borderTopWidth: 1, borderTopColor: C.border },
+  primaryBtn: { backgroundColor: C.petrol, paddingVertical: S.md, borderRadius: R.md, alignItems: 'center', ...Shadow.glow },
   primaryBtnText: { color: C.white, fontSize: T.body, fontWeight: '700' },
   checklistRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8 },
   checkbox: {
@@ -679,9 +679,9 @@ const st = StyleSheet.create({
     borderWidth: 1.5, borderColor: C.border,
     alignItems: 'center', justifyContent: 'center',
     marginRight: S.md,
-    backgroundColor: C.cream,
+    backgroundColor: C.bone,
   },
-  checkboxChecked: { backgroundColor: C.honey, borderColor: C.honey },
+  checkboxChecked: { backgroundColor: C.petrol, borderColor: C.petrol },
   checkMark: { color: C.white, fontWeight: '700', fontSize: 14 },
   checklistLabel: { flex: 1, color: C.text2, fontSize: T.small },
 });

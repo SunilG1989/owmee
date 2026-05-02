@@ -127,7 +127,7 @@ export default function EditListingScreen({ route, navigation }: RootScreen<'Edi
     return (
       <SafeAreaView style={st.root}>
         <View style={st.loadingWrap}>
-          <ActivityIndicator size="large" color={C.honey} />
+          <ActivityIndicator size="large" color={C.petrol} />
         </View>
       </SafeAreaView>
     );
@@ -304,7 +304,7 @@ export default function EditListingScreen({ route, navigation }: RootScreen<'Edi
 }
 
 const st = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.cream },
+  root: { flex: 1, backgroundColor: C.bone },
   loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: {
     flexDirection: 'row',
@@ -345,9 +345,9 @@ const st = StyleSheet.create({
     paddingHorizontal: S.sm,
     paddingVertical: 4,
     borderRadius: R.sm,
-    backgroundColor: C.honeyLight,
+    backgroundColor: C.petrolLight,
   },
-  regenBtnText: { color: C.honey, fontSize: T.size.sm, fontWeight: T.weight.semi },
+  regenBtnText: { color: C.petrol, fontSize: T.size.sm, fontWeight: T.weight.semi },
   input: {
     borderWidth: 1,
     borderColor: C.border,
@@ -370,9 +370,9 @@ const st = StyleSheet.create({
     borderColor: C.border,
     backgroundColor: C.surface,
   },
-  chipActive: { backgroundColor: C.honeyLight, borderColor: C.honey },
+  chipActive: { backgroundColor: C.petrolLight, borderColor: C.petrol },
   chipText: { color: C.text2, fontSize: T.size.base, fontWeight: T.weight.medium },
-  chipTextActive: { color: C.honeyText, fontWeight: T.weight.bold },
+  chipTextActive: { color: C.petrolText, fontWeight: T.weight.bold },
 
   row2: { flexDirection: 'row' },
 
@@ -385,7 +385,7 @@ const st = StyleSheet.create({
     borderTopColor: C.border,
   },
   saveBtn: {
-    backgroundColor: C.honey,
+    backgroundColor: C.petrol,
     paddingVertical: S.lg,
     borderRadius: R.md,
     alignItems: 'center',
