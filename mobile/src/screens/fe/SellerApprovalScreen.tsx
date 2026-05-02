@@ -11,12 +11,12 @@
  * defining services obsess over moments like this.
  */
 import React, { useState } from 'react';
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { FE } from '../../services/api';
 import { Button } from '../../components/ui';
-import { C, MIN_TAP, R, S, Shadow, formatPrice } from '../../utils/tokens';
+import { C, R, S, T, Shadow, formatPrice } from '../../utils/tokens';
 import type { RootScreen } from '../../navigation/types';
 
 export default function SellerApprovalScreen({
@@ -74,23 +74,23 @@ export default function SellerApprovalScreen({
           Sound good?"
         </Text>
 
-        <View style={{ flex: 1 }} />
+        <View style={s.flex} />
 
         <Button
           label="✓ Seller approved — list it"
           onPress={onApprove}
           loading={submitting}
           disabled={submitting}
+          fullWidth
           style={s.cta}
         />
-        <TouchableOpacity
+        <Button
+          label="Edit before listing"
+          variant="ghost"
           onPress={onEdit}
           disabled={submitting}
-          style={s.editBtn}
-          activeOpacity={0.7}
-        >
-          <Text style={s.editText}>Edit before listing</Text>
-        </TouchableOpacity>
+          fullWidth
+        />
       </View>
     </SafeAreaView>
   );
@@ -98,6 +98,7 @@ export default function SellerApprovalScreen({
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bone },
+  flex: { flex: 1 },
   body: {
     flex: 1,
     paddingHorizontal: S.xl,
@@ -105,8 +106,8 @@ const s = StyleSheet.create({
     paddingBottom: S.lg,
   },
   eyebrow: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: T.size.sm,
+    fontWeight: T.weight.bold,
     color: C.petrolDeep,
     letterSpacing: 0.6,
     marginBottom: S.lg,
@@ -120,26 +121,26 @@ const s = StyleSheet.create({
     ...Shadow.glow,
   },
   title: {
-    fontSize: 22,
-    fontWeight: '700',
+    fontSize: T.size.xxl - 2,
+    fontWeight: T.weight.bold,
     color: C.text,
     textAlign: 'center',
     lineHeight: 28,
   },
   condition: {
-    fontSize: 14,
+    fontSize: T.size.sm + 1,
     color: C.text2,
     fontStyle: 'italic',
     marginTop: S.sm,
   },
   price: {
-    fontSize: 38,
-    fontWeight: '800',
+    fontSize: T.size.display + 8,
+    fontWeight: T.weight.heavy,
     color: C.petrolDeep,
     marginTop: S.md,
   },
   script: {
-    fontSize: 14,
+    fontSize: T.size.sm + 1,
     color: C.text2,
     textAlign: 'center',
     fontStyle: 'italic',
@@ -147,18 +148,5 @@ const s = StyleSheet.create({
     lineHeight: 21,
     paddingHorizontal: S.md,
   },
-  cta: {
-    width: '100%',
-    marginBottom: S.sm,
-  },
-  editBtn: {
-    minHeight: MIN_TAP,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  editText: {
-    fontSize: 14,
-    color: C.text2,
-    fontWeight: '500',
-  },
+  cta: { marginBottom: S.sm },
 });

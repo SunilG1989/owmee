@@ -24,7 +24,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { FE } from '../../services/api';
 import { BackButton, Button } from '../../components/ui';
 import { parseApiError } from '../../utils/errors';
-import { C, R, S, Shadow } from '../../utils/tokens';
+import { C, R, S, T } from '../../utils/tokens';
 import type { RootScreen } from '../../navigation/types';
 
 const CATEGORIES: Array<{
@@ -92,7 +92,7 @@ export default function ReportIssueScreen({
               activeOpacity={0.85}
             >
               <Text style={s.emoji}>{c.emoji}</Text>
-              <View style={{ flex: 1 }}>
+              <View style={s.flex1}>
                 <Text style={[s.rowLabel, isOn && s.rowLabelOn]}>{c.label}</Text>
                 <Text style={s.rowHint}>{c.hint}</Text>
               </View>
@@ -101,7 +101,7 @@ export default function ReportIssueScreen({
           );
         })}
 
-        <Text style={[s.label, { marginTop: S.lg }]}>Tell us more</Text>
+        <Text style={[s.label, s.labelSpaced]}>Tell us more</Text>
         <TextInput
           value={description}
           onChangeText={setDescription}
@@ -113,7 +113,7 @@ export default function ReportIssueScreen({
           textAlignVertical="top"
         />
 
-        <View style={{ height: S.lg }} />
+        <View style={s.gap} />
 
         <Button
           label="Submit report"
@@ -136,17 +136,20 @@ const s = StyleSheet.create({
     gap: S.xs,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: T.size.lg + 1,
+    fontWeight: T.weight.bold,
     color: C.text,
   },
   body: { padding: S.lg },
+  flex1: { flex: 1 },
+  gap: { height: S.lg },
   label: {
-    fontSize: 13,
+    fontSize: T.size.base,
     color: C.text2,
-    fontWeight: '600',
+    fontWeight: T.weight.semi,
     marginBottom: S.sm,
   },
+  labelSpaced: { marginTop: S.lg },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -162,24 +165,22 @@ const s = StyleSheet.create({
     backgroundColor: C.petrolLight,
     borderColor: C.petrol,
   },
-  emoji: { fontSize: 22 },
+  emoji: { fontSize: T.size.xxl - 2 },
   rowLabel: {
-    fontSize: 14,
+    fontSize: T.size.sm + 1,
     color: C.text,
-    fontWeight: '600',
+    fontWeight: T.weight.semi,
   },
-  rowLabelOn: {
-    color: C.petrolDeep,
-  },
+  rowLabelOn: { color: C.petrolDeep },
   rowHint: {
-    fontSize: 12,
+    fontSize: T.size.sm,
     color: C.text3,
     marginTop: 2,
   },
   tick: {
-    fontSize: 18,
+    fontSize: T.size.lg + 1,
     color: C.petrolDeep,
-    fontWeight: '700',
+    fontWeight: T.weight.bold,
   },
   input: {
     backgroundColor: C.surface,
@@ -188,7 +189,7 @@ const s = StyleSheet.create({
     borderColor: C.border,
     minHeight: 100,
     padding: S.md,
-    fontSize: 14,
+    fontSize: T.size.sm + 1,
     color: C.text,
   },
 });

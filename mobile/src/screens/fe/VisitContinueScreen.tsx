@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { FE } from '../../services/api';
 import { BackButton, Button } from '../../components/ui';
-import { C, R, S, Shadow } from '../../utils/tokens';
+import { C, R, S, T, Shadow } from '../../utils/tokens';
 import type { RootScreen } from '../../navigation/types';
 
 export default function VisitContinueScreen({
@@ -84,7 +84,7 @@ export default function VisitContinueScreen({
             label="+ Add another item"
             onPress={onAddAnother}
             disabled={closing}
-            style={{ width: '100%' }}
+            fullWidth
           />
           {count !== null ? (
             <Text style={s.countLine}>
@@ -93,7 +93,7 @@ export default function VisitContinueScreen({
           ) : null}
         </View>
 
-        <View style={{ height: S.lg }} />
+        <View style={s.gap} />
 
         <View style={s.actionCard}>
           <Button
@@ -102,7 +102,7 @@ export default function VisitContinueScreen({
             loading={closing}
             disabled={closing}
             variant="secondary"
-            style={{ width: '100%' }}
+            fullWidth
           />
           <Text style={s.doneHint}>
             Phase 5 will add a chain-of-custody photo step here.
@@ -127,24 +127,25 @@ const s = StyleSheet.create({
     paddingTop: S.xl,
   },
   tick: {
-    fontSize: 48,
+    fontSize: T.size.display + 18,
     color: C.petrol,
     textAlign: 'center',
     marginBottom: S.md,
   },
   title: {
-    fontSize: 22,
-    fontWeight: '700',
+    fontSize: T.size.xxl - 2,
+    fontWeight: T.weight.bold,
     color: C.text,
     textAlign: 'center',
-    marginBottom: 4,
+    marginBottom: S.xs,
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: T.size.sm + 1,
     color: C.text2,
     textAlign: 'center',
     marginBottom: S.xl,
   },
+  gap: { height: S.lg },
   actionCard: {
     backgroundColor: C.surface,
     borderRadius: R.lg,
@@ -152,13 +153,13 @@ const s = StyleSheet.create({
     ...Shadow.glow,
   },
   countLine: {
-    fontSize: 12,
+    fontSize: T.size.sm,
     color: C.text3,
     textAlign: 'center',
     marginTop: S.sm,
   },
   doneHint: {
-    fontSize: 11,
+    fontSize: T.size.sm,
     color: C.text3,
     fontStyle: 'italic',
     textAlign: 'center',

@@ -35,8 +35,6 @@ src/screens/fe/FeOpsScreen.tsx
 src/screens/fe/FeVisitDetailScreen.tsx
 src/screens/fe/FeVisitHistoryScreen.tsx
 src/screens/fe/ReportIssueScreen.tsx
-src/screens/fe/SellerApprovalScreen.tsx
-src/screens/fe/VisitContinueScreen.tsx
 src/screens/kids/KidsSectionScreen.tsx
 src/screens/listings/CreateListingScreen.tsx
 src/screens/listings/EditListingScreen.tsx

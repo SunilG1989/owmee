@@ -16,6 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { FE, type FEVisit } from '../../services/api';
+import { IconButton } from '../../components/ui';
 import { C, S, R, T, Shadow } from '../../utils/tokens';
 import type { RootScreen } from '../../navigation/types';
 
@@ -58,11 +59,9 @@ export default function FeVisitHistoryScreen({ navigation }: RootScreen<'FeVisit
   return (
     <SafeAreaView style={st.root} edges={['top']}>
       <View style={st.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Text style={st.back}>‹</Text>
-        </TouchableOpacity>
+        <IconButton icon="←" onPress={() => navigation.goBack()} a11y="Back" size="sm" />
         <Text style={st.h1}>Visit history</Text>
-        <View style={{ width: 24 }} />
+        <View style={st.headerSpacer} />
       </View>
 
       {loading ? (
@@ -73,7 +72,7 @@ export default function FeVisitHistoryScreen({ navigation }: RootScreen<'FeVisit
         <FlatList
           data={visits}
           keyExtractor={(v) => v.id}
-          contentContainerStyle={{ padding: S.lg }}
+          contentContainerStyle={st.listPadding}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={C.petrol} />
           }
@@ -90,7 +89,7 @@ export default function FeVisitHistoryScreen({ navigation }: RootScreen<'FeVisit
               <Text style={st.addr} numberOfLines={1}>
                 {[item.address?.locality, item.address?.city].filter(Boolean).join(', ') || '—'}
               </Text>
-              <Text style={st.outcome}>Outcome: <Text style={{ color: C.text }}>{outcomeLabel(item.outcome)}</Text></Text>
+              <Text style={st.outcome}>Outcome: <Text style={st.outcomeStrong}>{outcomeLabel(item.outcome)}</Text></Text>
             </TouchableOpacity>
           )}
         />
@@ -102,14 +101,16 @@ export default function FeVisitHistoryScreen({ navigation }: RootScreen<'FeVisit
 const st = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bone },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: S.lg },
-  back: { fontSize: 28, color: C.text, paddingHorizontal: S.xs },
-  h1: { fontSize: T.h3, fontWeight: '600', color: C.text },
+  headerSpacer: { width: 24 },
+  h1: { fontSize: T.h3, fontWeight: T.weight.semi, color: C.text },
+  listPadding: { padding: S.lg },
   card: { backgroundColor: C.surface, borderRadius: R.lg, padding: S.lg, marginBottom: S.md, ...Shadow.glow },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  category: { fontSize: T.h3, fontWeight: '600', color: C.text },
+  category: { fontSize: T.h3, fontWeight: T.weight.semi, color: C.text },
   date: { fontSize: T.small, color: C.text3 },
   addr: { fontSize: T.body, color: C.text2, marginTop: 4 },
   outcome: { fontSize: T.small, color: C.text3, marginTop: S.xs, textTransform: 'capitalize' },
+  outcomeStrong: { color: C.text },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: S.xl },
   empty: { fontSize: T.body, color: C.text3 },
 });
