@@ -32,7 +32,6 @@ src/screens/community/CommunityProofScreen.tsx
 src/screens/fe/FeCaptureScreen.tsx
 src/screens/fe/FeHomeScreen.tsx
 src/screens/fe/FeOpsScreen.tsx
-src/screens/fe/FeVisitDetailScreen.tsx
 src/screens/fe/FeVisitHistoryScreen.tsx
 src/screens/fe/ReportIssueScreen.tsx
 src/screens/kids/KidsSectionScreen.tsx

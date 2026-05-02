@@ -19,6 +19,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { FE, type FEVisit } from '../../services/api';
+import { Button, IconButton } from '../../components/ui';
 import { C, S, R, T, Shadow } from '../../utils/tokens';
 import type { RootScreen } from '../../navigation/types';
 
@@ -119,9 +120,7 @@ export default function FeVisitDetailScreen({ route, navigation }: RootScreen<'F
       <SafeAreaView style={st.root} edges={['top']}>
         <View style={st.center}>
           <Text style={st.err}>{error || 'Visit not found.'}</Text>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={st.retryBtn}>
-            <Text style={st.retryBtnText}>Back</Text>
-          </TouchableOpacity>
+          <Button label="Back" variant="primary" onPress={() => navigation.goBack()} style={st.retryBtn} />
         </View>
       </SafeAreaView>
     );
@@ -134,20 +133,19 @@ export default function FeVisitDetailScreen({ route, navigation }: RootScreen<'F
   return (
     <SafeAreaView style={st.root} edges={['top']}>
       <View style={st.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Text style={st.back}>‹</Text>
-        </TouchableOpacity>
+        <IconButton icon="←" onPress={() => navigation.goBack()} a11y="Back" size="sm" />
         <Text style={st.h1}>Visit details</Text>
         {/* Concierge Phase 5 — Report issue corner */}
-        <TouchableOpacity
+        <IconButton
+          icon="⚠"
           onPress={() => navigation.navigate('ReportIssue', { visitId: visit.id })}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Text style={[st.back, { fontSize: 18, color: C.red }]}>⚠</Text>
-        </TouchableOpacity>
+          a11y="Report issue"
+          variant="danger"
+          size="sm"
+        />
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: S.lg, paddingBottom: 120 }}>
+      <ScrollView contentContainerStyle={st.scrollPad}>
         <View style={st.card}>
           <Text style={st.label}>Category</Text>
           <Text style={st.value}>{visit.category_hint}</Text>
@@ -158,7 +156,7 @@ export default function FeVisitDetailScreen({ route, navigation }: RootScreen<'F
           <Text style={st.value}>
             {formatSlot(visit.scheduled_slot_start)} – {formatSlot(visit.scheduled_slot_end)}
           </Text>
-          <Text style={[st.subLabel, { marginTop: S.sm }]}>Seller requested</Text>
+          <Text style={[st.subLabel, st.spacedSm]}>Seller requested</Text>
           <Text style={st.subValue}>
             {formatSlot(visit.requested_slot_start)} – {formatSlot(visit.requested_slot_end)}
           </Text>
@@ -173,13 +171,17 @@ export default function FeVisitDetailScreen({ route, navigation }: RootScreen<'F
             {[addr.locality, addr.city, addr.pincode].filter(Boolean).join(', ') || '—'}
           </Text>
           {addr.landmark ? (
-            <Text style={[st.subLabel, { marginTop: S.sm }]}>Landmark</Text>
+            <Text style={[st.subLabel, st.spacedSm]}>Landmark</Text>
           ) : null}
           {addr.landmark ? <Text style={st.subValue}>{addr.landmark}</Text> : null}
 
-          <TouchableOpacity style={st.secondaryBtn} onPress={onMaps}>
-            <Text style={st.secondaryBtnText}>Open in Maps</Text>
-          </TouchableOpacity>
+          <Button
+            label="Open in Maps"
+            variant="secondary"
+            size="sm"
+            onPress={onMaps}
+            style={st.secondaryBtn}
+          />
         </View>
 
         {/* Concierge Phase 3 — pre-visit briefing block.
@@ -189,7 +191,7 @@ export default function FeVisitDetailScreen({ route, navigation }: RootScreen<'F
           <View style={st.card}>
             <Text style={st.label}>Seller notes</Text>
             {visit.notes_tags && visit.notes_tags.length > 0 ? (
-              <Text style={[st.subValue, { marginBottom: S.sm }]}>
+              <Text style={[st.subValue, st.tagsSpaced]}>
                 Tags: {visit.notes_tags.join(', ')}
               </Text>
             ) : null}
@@ -202,7 +204,7 @@ export default function FeVisitDetailScreen({ route, navigation }: RootScreen<'F
         {visit.arrival_verification_code ? (
           <View style={st.card}>
             <Text style={st.label}>Verification code</Text>
-            <Text style={[st.value, { fontSize: 28, letterSpacing: 6, fontWeight: '700' }]}>
+            <Text style={[st.value, st.verificationCode]}>
               {visit.arrival_verification_code}
             </Text>
             <Text style={st.subValue}>
@@ -215,32 +217,45 @@ export default function FeVisitDetailScreen({ route, navigation }: RootScreen<'F
         {canStart ? (
           <View style={st.card}>
             <Text style={st.label}>Notify seller</Text>
-            <TouchableOpacity style={st.secondaryBtn} onPress={onStartRoute}>
-              <Text style={st.secondaryBtnText}>📍 I'm starting my route</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[st.secondaryBtn, { marginTop: S.sm }]} onPress={onArrivingSoon}>
-              <Text style={st.secondaryBtnText}>⏱ I'm 30 mins away</Text>
-            </TouchableOpacity>
+            <Button
+              label="📍 I'm starting my route"
+              variant="secondary"
+              size="sm"
+              onPress={onStartRoute}
+              style={st.secondaryBtn}
+            />
+            <Button
+              label="⏱ I'm 30 mins away"
+              variant="secondary"
+              size="sm"
+              onPress={onArrivingSoon}
+              style={[st.secondaryBtn, st.spacedSm]}
+            />
           </View>
         ) : null}
       </ScrollView>
 
       <View style={st.footer}>
         {inProgress ? (
-          <TouchableOpacity
-            style={st.primaryBtn}
+          <Button
+            label="Continue capture"
+            variant="primary"
+            size="lg"
             onPress={() => navigation.navigate('FeCapture', { visitId: visit.id })}
-          >
-            <Text style={st.primaryBtnText}>Continue capture</Text>
-          </TouchableOpacity>
+            fullWidth
+            style={st.primaryBtn}
+          />
         ) : canStart ? (
-          <TouchableOpacity
-            style={[st.primaryBtn, starting && { opacity: 0.6 }]}
+          <Button
+            label={starting ? 'Starting…' : 'Start visit'}
+            variant="primary"
+            size="lg"
             onPress={onStart}
+            loading={starting}
             disabled={starting}
-          >
-            <Text style={st.primaryBtnText}>{starting ? 'Starting…' : 'Start visit'}</Text>
-          </TouchableOpacity>
+            fullWidth
+            style={st.primaryBtn}
+          />
         ) : (
           <View style={st.infoBox}>
             <Text style={st.infoText}>
@@ -256,29 +271,29 @@ export default function FeVisitDetailScreen({ route, navigation }: RootScreen<'F
 const st = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bone },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: S.lg },
-  back: { fontSize: 28, color: C.text, paddingHorizontal: S.xs },
-  h1: { fontSize: T.h3, fontWeight: '600', color: C.text },
+  h1: { fontSize: T.h3, fontWeight: T.weight.semi, color: C.text },
+
+  scrollPad: { padding: S.lg, paddingBottom: 120 },
   card: { backgroundColor: C.surface, borderRadius: R.lg, padding: S.lg, marginBottom: S.md, ...Shadow.glow },
-  label: { fontSize: T.small, color: C.text3, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
+  label: { fontSize: T.small, color: C.text3, fontWeight: T.weight.semi, textTransform: 'uppercase', letterSpacing: 0.5 },
   value: { fontSize: T.body, color: C.text, marginTop: S.xs, lineHeight: 22 },
   subLabel: { fontSize: T.small, color: C.text3 },
   subValue: { fontSize: T.body, color: C.text2 },
-  secondaryBtn: {
-    marginTop: S.md, alignSelf: 'flex-start',
-    paddingHorizontal: S.lg, paddingVertical: S.sm,
-    backgroundColor: C.petrolLight, borderRadius: R.md,
-  },
-  secondaryBtnText: { color: C.petrolText, fontWeight: '600' },
+
+  spacedSm: { marginTop: S.sm },
+  tagsSpaced: { marginBottom: S.sm },
+
+  verificationCode: { fontSize: T.size.display - 2, letterSpacing: 6, fontWeight: T.weight.bold },
+
+  secondaryBtn: { marginTop: S.md, alignSelf: 'flex-start' },
+
   footer: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: S.lg, backgroundColor: C.bone, borderTopWidth: 1, borderTopColor: C.border },
-  primaryBtn: {
-    backgroundColor: C.petrol, paddingVertical: S.md, borderRadius: R.md,
-    alignItems: 'center', ...Shadow.glow,
-  },
-  primaryBtnText: { color: C.white, fontSize: T.body, fontWeight: '700' },
+  primaryBtn: { ...Shadow.glow },
+
   infoBox: { backgroundColor: C.bone2, padding: S.md, borderRadius: R.md },
   infoText: { color: C.text2, textAlign: 'center' },
+
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: S.xl },
   err: { fontSize: T.body, color: C.text2, textAlign: 'center' },
-  retryBtn: { marginTop: S.md, paddingHorizontal: S.lg, paddingVertical: S.sm, backgroundColor: C.petrol, borderRadius: R.md },
-  retryBtnText: { color: C.white, fontWeight: '600' },
+  retryBtn: { marginTop: S.md },
 });

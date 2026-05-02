@@ -23,7 +23,7 @@
 import React from 'react';
 import {
   ActivityIndicator, StyleSheet, Text, TouchableOpacity, View,
-  ViewStyle, TextStyle,
+  ViewStyle, TextStyle, StyleProp,
 } from 'react-native';
 import { C, MIN_TAP, R, S, T } from '../../utils/tokens';
 
@@ -39,7 +39,7 @@ interface Props {
   loading?: boolean;
   fullWidth?: boolean;
   leftIcon?: string;        // emoji or single glyph
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   /** Pass-through accessibility label; defaults to `label`. */
   a11y?: string;
 }

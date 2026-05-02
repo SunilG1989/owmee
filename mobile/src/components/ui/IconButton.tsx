@@ -23,7 +23,7 @@
  */
 import React from 'react';
 import {
-  ActivityIndicator, StyleSheet, Text, TouchableOpacity, ViewStyle,
+  ActivityIndicator, StyleSheet, Text, TouchableOpacity, ViewStyle, StyleProp,
 } from 'react-native';
 import { C, MIN_TAP, T } from '../../utils/tokens';
 
@@ -38,7 +38,7 @@ interface Props {
   size?: IconButtonSize;
   disabled?: boolean;
   loading?: boolean;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   /** Mandatory — icon-only buttons must have a screen-reader label. */
   a11y: string;
 }

@@ -20,7 +20,7 @@
  */
 import React from 'react';
 import {
-  StyleSheet, Text, TouchableOpacity, View, ViewStyle, TextStyle,
+  StyleSheet, Text, TouchableOpacity, View, ViewStyle, TextStyle, StyleProp,
 } from 'react-native';
 import { C, R, S, T } from '../../utils/tokens';
 
@@ -35,7 +35,7 @@ interface Props {
   size?: ChipSize;
   disabled?: boolean;
   leftIcon?: string;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
 }
 
 export default function Chip({
