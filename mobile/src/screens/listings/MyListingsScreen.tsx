@@ -1,22 +1,23 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, ActivityIndicator, Alert, Image } from 'react-native';
+import {
+  View, Text, StyleSheet, FlatList, TouchableOpacity,
+  RefreshControl, ActivityIndicator, Alert, Image,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { BackButton } from '../../components/ui';
+import { BackButton, Button, IconButton } from '../../components/ui';
 import { useFocusEffect } from '@react-navigation/native';
 import { C, T, S, R, Shadow, formatPrice, timeAgo } from '../../utils/tokens';
 import { Listings, type Listing } from '../../services/api';
-import { useAuthStore } from '../../store/authStore';
 
-// FIX BUG-09: Add pending_moderation to match backend publish status
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
-  draft: { label: 'Draft', color: C.text3, bg: C.bone2 },
-  pending_review: { label: 'In review', color: C.yellow, bg: C.yellowLight },
-  pending_moderation: { label: 'In review', color: C.yellow, bg: C.yellowLight },
-  active: { label: 'Active', color: C.petrol, bg: C.petrolLight },
-  reserved: { label: 'Reserved', color: C.petrol, bg: C.petrolLight },
-  sold: { label: 'Sold', color: C.text4, bg: C.bone2 },
-  expired: { label: 'Expired', color: C.red, bg: C.redLight },
-  removed: { label: 'Removed', color: C.text4, bg: C.bone2 },
+  draft:              { label: 'Draft',     color: C.text3,  bg: C.bone2        },
+  pending_review:     { label: 'In review', color: C.yellow, bg: C.yellowLight  },
+  pending_moderation: { label: 'In review', color: C.yellow, bg: C.yellowLight  },
+  active:             { label: 'Active',    color: C.petrol, bg: C.petrolLight  },
+  reserved:           { label: 'Reserved',  color: C.petrol, bg: C.petrolLight  },
+  sold:               { label: 'Sold',      color: C.text4,  bg: C.bone2        },
+  expired:            { label: 'Expired',   color: C.red,    bg: C.redLight     },
+  removed:            { label: 'Removed',   color: C.text4,  bg: C.bone2        },
 };
 
 export default function MyListingsScreen({ navigation }: any) {
@@ -26,11 +27,9 @@ export default function MyListingsScreen({ navigation }: any) {
 
   const load = useCallback(async () => {
     try {
-      // FIX BUG-02 + BUG-03: Use dedicated my-listings endpoint (returns all statuses)
       const res = await Listings.myListings();
       setListings(res.data?.listings || res.data || []);
     } catch (e: any) {
-      // Fix #39: Surface error instead of silent swallow
       const { parseApiError } = require('../../utils/errors');
       Alert.alert('Could not load listings', parseApiError(e));
     } finally { setLoading(false); setRefreshing(false); }
@@ -42,39 +41,41 @@ export default function MyListingsScreen({ navigation }: any) {
     const st = STATUS_MAP[item.status] || STATUS_MAP.draft;
     const img = item.thumbnail_url || (item.image_urls || item.images)?.[0];
     return (
-      <TouchableOpacity style={s.card} 
-          onPress={() => navigation.navigate('ListingDetail', { listingId: item.id })}
-          onLongPress={() => {
-            if (item.status === 'active') {
-              Alert.alert('Manage listing', 'What would you like to do?', [
-                { text: 'Cancel', style: 'cancel' },
-                // FIX BUG-05: Remove "Pause listing" — no PATCH endpoint exists
-                { text: 'Delete listing', style: 'destructive', onPress: async () => {
-                  Alert.alert('Delete?', 'This cannot be undone.', [
-                    { text: 'Cancel', style: 'cancel' },
-                    { text: 'Delete', style: 'destructive', onPress: async () => {
-                      try { await Listings.delete(item.id); load(); }
-                      catch { Alert.alert('Error', 'Failed to delete listing'); }
-                    }},
-                  ]);
-                }},
-                // FIX BUG-04: Send correct values matching backend regex
-                { text: 'Sold on Owmee', onPress: async () => {
-                  try { await Listings.markSold(item.id, 'on_owmee'); load(); }
-                  catch { Alert.alert('Error', 'Failed'); }
-                }},
-                { text: 'Sold elsewhere', onPress: async () => {
-                  try { await Listings.markSold(item.id, 'elsewhere'); load(); }
-                  catch { Alert.alert('Error', 'Failed'); }
-                }},
-              ]);
-            }
-          }}
-          activeOpacity={0.85}>
+      <TouchableOpacity
+        style={s.card}
+        onPress={() => navigation.navigate('ListingDetail', { listingId: item.id })}
+        onLongPress={() => {
+          if (item.status === 'active') {
+            Alert.alert('Manage listing', 'What would you like to do?', [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Delete listing', style: 'destructive', onPress: async () => {
+                Alert.alert('Delete?', 'This cannot be undone.', [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Delete', style: 'destructive', onPress: async () => {
+                    try { await Listings.delete(item.id); load(); }
+                    catch { Alert.alert('Error', 'Failed to delete listing'); }
+                  }},
+                ]);
+              }},
+              { text: 'Sold on Owmee', onPress: async () => {
+                try { await Listings.markSold(item.id, 'on_owmee'); load(); }
+                catch { Alert.alert('Error', 'Failed'); }
+              }},
+              { text: 'Sold elsewhere', onPress: async () => {
+                try { await Listings.markSold(item.id, 'elsewhere'); load(); }
+                catch { Alert.alert('Error', 'Failed'); }
+              }},
+            ]);
+          }
+        }}
+        activeOpacity={0.85}
+      >
         {img ? (
-          <Image source={{ uri: img }} style={s.thumb} resizeMode={"cover"} />
+          <Image source={{ uri: img }} style={s.thumb} resizeMode="cover" />
         ) : (
-          <View style={[s.thumb, s.noImg]}><Text style={{ fontSize: 24 }}>📦</Text></View>
+          <View style={[s.thumb, s.noImg]}>
+            <Text style={s.noImgIcon}>📦</Text>
+          </View>
         )}
         <View style={s.info}>
           <Text style={s.title} numberOfLines={2}>{item.title}</Text>
@@ -92,14 +93,26 @@ export default function MyListingsScreen({ navigation }: any) {
     );
   };
 
-  if (loading) return <SafeAreaView style={s.safe}><ActivityIndicator color={C.petrol} style={{ marginTop: 60 }} /></SafeAreaView>;
+  if (loading) {
+    return (
+      <SafeAreaView style={s.safe}>
+        <ActivityIndicator color={C.petrol} style={s.loading} />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
         <BackButton onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>My Listings</Text>
-        <TouchableOpacity onPress={() => navigation.navigate('Sell')}><Text style={{ fontSize: 24, color: C.petrol }}>+</Text></TouchableOpacity>
+        <IconButton
+          icon="+"
+          onPress={() => navigation.navigate('Sell')}
+          a11y="Create listing"
+          variant="solid"
+          size="sm"
+        />
       </View>
       <FlatList
         data={listings}
@@ -109,12 +122,14 @@ export default function MyListingsScreen({ navigation }: any) {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={C.petrol} />}
         ListEmptyComponent={
           <View style={s.empty}>
-            <Text style={{ fontSize: 48, marginBottom: 16 }}>📦</Text>
+            <Text style={s.emptyEmoji}>📦</Text>
             <Text style={s.emptyTitle}>No listings yet</Text>
             <Text style={s.emptySub}>Tap + to list your first item</Text>
-            <TouchableOpacity style={s.emptyBtn} onPress={() => navigation.navigate('Sell')}>
-              <Text style={{ fontSize: 14, color: C.white, fontWeight: '600' }}>Create listing</Text>
-            </TouchableOpacity>
+            <Button
+              label="Create listing"
+              variant="primary"
+              onPress={() => navigation.navigate('Sell')}
+            />
           </View>
         }
         removeClippedSubviews maxToRenderPerBatch={8} windowSize={5}
@@ -125,23 +140,39 @@ export default function MyListingsScreen({ navigation }: any) {
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bone },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: C.surface, borderBottomWidth: 0.5, borderBottomColor: C.border },
-  headerTitle: { fontSize: 16, fontWeight: '600', color: C.text },
-  list: { padding: 16 },
-  card: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.surface, borderRadius: R.lg, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: C.border, ...Shadow.card },
+  loading: { marginTop: S.xxxl + S.xxxl },
+
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: S.lg, paddingVertical: S.sm + 2,
+    backgroundColor: C.surface,
+    borderBottomWidth: 0.5, borderBottomColor: C.border,
+  },
+  headerTitle: { fontSize: T.size.lg - 1, fontWeight: T.weight.semi, color: C.text },
+
+  list: { padding: S.lg },
+  card: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: C.surface, borderRadius: R.lg,
+    padding: S.md, marginBottom: S.sm + 2,
+    borderWidth: 1, borderColor: C.border,
+    ...Shadow.card,
+  },
   thumb: { width: 72, height: 72, borderRadius: R.sm },
   noImg: { backgroundColor: C.bone2, alignItems: 'center', justifyContent: 'center' },
-  info: { flex: 1, marginLeft: 12 },
-  title: { fontSize: 14, fontWeight: '600', color: C.text, marginBottom: 2 },
-  price: { fontSize: 16, fontWeight: '700', color: C.petrol, marginBottom: 4 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  statusBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
-  statusText: { fontSize: 10, fontWeight: '700' },
-  views: { fontSize: 10, color: C.text3 },
-  time: { fontSize: 10, color: C.text4 },
-  arrow: { fontSize: 20, color: C.text4, marginLeft: 4 },
-  empty: { alignItems: 'center', paddingTop: 80 },
-  emptyTitle: { fontSize: 18, fontWeight: '600', color: C.text, marginBottom: 4 },
-  emptySub: { fontSize: 13, color: C.text3, marginBottom: 20 },
-  emptyBtn: { backgroundColor: C.petrol, borderRadius: R.sm, paddingHorizontal: 24, paddingVertical: 12 },
+  noImgIcon: { fontSize: T.size.xxl },
+  info: { flex: 1, marginLeft: S.md },
+  title: { fontSize: T.size.sm + 1, fontWeight: T.weight.semi, color: C.text, marginBottom: 2 },
+  price: { fontSize: T.size.lg - 1, fontWeight: T.weight.bold, color: C.petrol, marginBottom: S.xs },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: S.sm },
+  statusBadge: { paddingHorizontal: S.sm, paddingVertical: 2, borderRadius: R.xs },
+  statusText: { fontSize: T.size.xs, fontWeight: T.weight.bold },
+  views: { fontSize: T.size.xs, color: C.text3 },
+  time: { fontSize: T.size.xs, color: C.text4 },
+  arrow: { fontSize: T.size.xl, color: C.text4, marginLeft: S.xs },
+
+  empty: { alignItems: 'center', paddingTop: S.xxxl + S.xxl },
+  emptyEmoji: { fontSize: T.size.display + 18, marginBottom: S.lg },
+  emptyTitle: { fontSize: T.size.lg + 1, fontWeight: T.weight.semi, color: C.text, marginBottom: S.xs },
+  emptySub: { fontSize: T.size.base, color: C.text3, marginBottom: S.xl },
 });

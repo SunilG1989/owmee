@@ -39,7 +39,7 @@ export default function SellModeForkScreen({ navigation }: any) {
       </View>
 
       <ScrollView
-        style={{ flex: 1 }}
+        style={s.flex}
         contentContainerStyle={s.body}
         showsVerticalScrollIndicator={false}
       >
@@ -89,7 +89,7 @@ export default function SellModeForkScreen({ navigation }: any) {
           <Text style={s.subCardCta}>{C_STR.selfService.cta} →</Text>
         </TouchableOpacity>
 
-        <View style={{ height: S.xl }} />
+        <View style={s.gap} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -106,11 +106,13 @@ const s = StyleSheet.create({
     gap: S.xs,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: T.size.lg + 1,
+    fontWeight: T.weight.bold,
     color: C.text,
     flex: 1,
   },
+  flex: { flex: 1 },
+  gap: { height: S.xl },
   body: {
     paddingHorizontal: S.lg,
     paddingTop: S.md,
@@ -130,52 +132,52 @@ const s = StyleSheet.create({
   },
   heroPill: {
     position: 'absolute',
-    top: 14,
-    right: 14,
+    top: S.md + 2,
+    right: S.md + 2,
     backgroundColor: C.petrol,
     paddingHorizontal: S.md,
-    paddingVertical: 6,
+    paddingVertical: S.xs + 2,
     borderRadius: R.pill,
   },
   heroPillText: {
     color: C.bone,
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: T.size.sm,
+    fontWeight: T.weight.bold,
     letterSpacing: 0.4,
   },
   heroSparkle: {
-    fontSize: 36,
+    fontSize: T.size.display + 6,
     marginBottom: S.sm,
   },
   heroHeading: {
-    fontSize: 26,
-    fontWeight: '700',
+    fontSize: T.size.display - 4,
+    fontWeight: T.weight.bold,
     color: C.text,
     marginBottom: S.sm,
   },
   heroTagline: {
-    fontSize: 15,
+    fontSize: T.size.md,
     color: C.text2,
     lineHeight: 22,
     marginBottom: S.lg,
   },
   bulletList: {
-    gap: 8,
+    gap: S.sm,
     marginBottom: S.lg,
   },
   bulletRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 8,
+    gap: S.sm,
   },
   bulletTick: {
-    fontSize: 14,
+    fontSize: T.size.sm + 1,
     color: C.petrolDeep,
-    fontWeight: '700',
+    fontWeight: T.weight.bold,
     marginTop: 2,
   },
   bulletText: {
-    fontSize: 14,
+    fontSize: T.size.sm + 1,
     color: C.text,
     flex: 1,
     lineHeight: 20,
@@ -191,8 +193,8 @@ const s = StyleSheet.create({
   },
   heroCtaText: {
     color: C.bone,
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: T.size.lg - 1,
+    fontWeight: T.weight.bold,
   },
 
   // Sub card — self-service
@@ -210,22 +212,22 @@ const s = StyleSheet.create({
     gap: S.sm,
     marginBottom: S.sm,
   },
-  subCardEmoji: { fontSize: 22 },
+  subCardEmoji: { fontSize: T.size.xxl - 2 },
   subCardHeading: {
-    fontSize: 17,
-    fontWeight: '600',
+    fontSize: T.size.lg,
+    fontWeight: T.weight.semi,
     color: C.text2,
   },
   subCardTagline: {
-    fontSize: 13,
+    fontSize: T.size.base,
     color: C.text3,
     lineHeight: 19,
     marginBottom: S.md,
   },
   subCardCta: {
-    fontSize: 14,
+    fontSize: T.size.sm + 1,
     color: C.text2,
-    fontWeight: '500',
+    fontWeight: T.weight.medium,
     alignSelf: 'flex-end',
   },
 });
