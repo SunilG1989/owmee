@@ -18,7 +18,7 @@ listing without client-side category resolution.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import UUID
 
@@ -124,6 +124,15 @@ async def create_visit_request(
 ) -> FEVisit:
     if requested_end <= requested_start:
         raise ValueError("requested_slot_end must be after requested_slot_start")
+
+    # Block bookings in the past. Mobile slot picker hides past slots
+    # already, but the API was unguarded until QA flagged it (a malicious
+    # or out-of-sync client could schedule a visit "yesterday"). 30 min
+    # of grace lets a slow round-trip during a slot's first minute still
+    # succeed; anything older than that is clearly a mistake or attack.
+    now_utc = datetime.now(timezone.utc)
+    if requested_start < now_utc - timedelta(minutes=30):
+        raise ValueError("requested_slot_start cannot be in the past")
 
     # Concierge Phase 2: generate the 4-digit at-door verification code
     # right here so it's stable from booking through visit-day. Zero-pad
