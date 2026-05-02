@@ -6,9 +6,6 @@
  *   1. Self-verify (KYC flow) — recommended for most users
  *   2. Book an Owmee Field Executive (FE visit) — for sellers who want
  *      a human to come to their house and handle everything
- *
- * Intent-driven copy: the wording adapts to the triggering action so the
- * user knows exactly why they've been routed here.
  */
 import React from 'react';
 import {
@@ -16,6 +13,7 @@ import {
 } from 'react-native';
 
 import { C, T, S, R, Shadow } from '../../utils/tokens';
+import { Button, IconButton } from '../../components/ui';
 import type { RootScreen } from '../../navigation/types';
 
 type Intent = 'buy' | 'sell' | 'publish' | undefined;
@@ -55,35 +53,21 @@ export default function VerificationWallScreen({
   const intent: Intent = route.params?.intent;
   const copy = COPY[intent || 'default'] || COPY.default;
 
-  const bookFeVisit = () => {
-    navigation.replace('RequestFeVisit', { categoryHint: undefined });
-  };
-
-  const startKyc = () => {
-    navigation.replace('KycFlow', { returnTo: intent });
-  };
-
+  const bookFeVisit = () => navigation.replace('RequestFeVisit', { categoryHint: undefined });
+  const startKyc = () => navigation.replace('KycFlow', { returnTo: intent });
   const close = () => {
-    if (navigation.canGoBack()) {
-      navigation.goBack();
-    } else {
-      navigation.navigate('MainTabs' as never);
-    }
+    if (navigation.canGoBack()) navigation.goBack();
+    else navigation.navigate('MainTabs' as never);
   };
 
   return (
     <SafeAreaView style={st.root}>
       <View style={st.headerRow}>
-        <TouchableOpacity
-          onPress={close}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-        >
-          <Text style={st.closeX}>×</Text>
-        </TouchableOpacity>
+        <IconButton icon="✕" onPress={close} a11y="Close" size="sm" />
       </View>
 
       <ScrollView
-        contentContainerStyle={{ padding: S.xxxl, paddingBottom: S.xxl }}
+        contentContainerStyle={st.scroll}
         showsVerticalScrollIndicator={false}
       >
         <View style={st.shield}>
@@ -99,9 +83,14 @@ export default function VerificationWallScreen({
           <Bullet text="Verified users get a blue check across the app" />
         </View>
 
-        <TouchableOpacity style={st.primaryBtn} onPress={startKyc}>
-          <Text style={st.primaryBtnText}>{copy.cta}</Text>
-        </TouchableOpacity>
+        <Button
+          label={copy.cta}
+          variant="primary"
+          size="lg"
+          onPress={startKyc}
+          fullWidth
+          style={st.primaryBtn}
+        />
 
         {(intent === 'sell' || intent === 'publish' || intent === undefined) && (
           <>
@@ -120,9 +109,9 @@ export default function VerificationWallScreen({
           </>
         )}
 
-        <TouchableOpacity onPress={close} style={{ marginTop: S.lg, alignSelf: 'center' }}>
-          <Text style={st.laterLink}>I’ll do this later</Text>
-        </TouchableOpacity>
+        <Text style={st.laterLink} onPress={close} accessibilityRole="button">
+          I’ll do this later
+        </Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -138,31 +127,35 @@ function Bullet({ text }: { text: string }) {
 }
 
 const st = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.cream },
+  root: { flex: 1, backgroundColor: C.bone },
+
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
     paddingHorizontal: S.lg,
     paddingTop: S.sm,
   },
-  closeX: { fontSize: 30, color: C.text3, fontWeight: '300' },
+  scroll: { padding: S.xxxl, paddingBottom: S.xxl },
+
   shield: {
     width: 80, height: 80, borderRadius: 40,
-    backgroundColor: C.honeyLight,
+    backgroundColor: C.petrolLight,
     alignSelf: 'center',
     alignItems: 'center', justifyContent: 'center',
     marginBottom: S.xl,
     ...Shadow.glow,
   },
-  shieldIcon: { fontSize: 40 },
+  shieldIcon: { fontSize: T.size.display + 10 },                     // 40
+
   h1: {
-    fontSize: T.h1, fontWeight: '700', color: C.text,
+    fontSize: T.h1, fontWeight: T.weight.bold, color: C.text,
     textAlign: 'center', marginBottom: S.md,
   },
   body: {
-    fontSize: T.body, color: C.text2, textAlign: 'center',
-    lineHeight: 22, marginBottom: S.xl,
+    fontSize: T.body, color: C.text2,
+    textAlign: 'center', lineHeight: 22, marginBottom: S.xl,
   },
+
   bulletBox: {
     backgroundColor: C.surface,
     borderRadius: R.lg,
@@ -171,37 +164,29 @@ const st = StyleSheet.create({
     ...Shadow.glow,
   },
   bulletRow: { flexDirection: 'row', marginBottom: 6 },
-  bulletDot: { color: C.honey, fontSize: T.body, marginRight: 8, lineHeight: 22 },
+  bulletDot: { color: C.petrol, fontSize: T.body, marginRight: S.sm, lineHeight: 22 },
   bulletText: { color: C.text2, fontSize: T.small, flex: 1, lineHeight: 20 },
-  primaryBtn: {
-    backgroundColor: C.honey,
-    paddingVertical: S.md,
-    borderRadius: R.md,
-    alignItems: 'center',
-    ...Shadow.glow,
-  },
-  primaryBtnText: { color: C.white, fontSize: T.body, fontWeight: '700' },
-  orRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: S.lg,
-  },
+
+  primaryBtn: { ...Shadow.glow },
+
+  orRow: { flexDirection: 'row', alignItems: 'center', marginVertical: S.lg },
   orLine: { flex: 1, height: 1, backgroundColor: C.border },
   orText: {
     marginHorizontal: S.md,
     color: C.text3,
     fontSize: T.small,
-    fontWeight: '600',
+    fontWeight: T.weight.semi,
   },
+
   secondaryBtn: {
     backgroundColor: C.surface,
     borderWidth: 1.5,
-    borderColor: C.honey,
+    borderColor: C.petrol,
     borderRadius: R.md,
     padding: S.lg,
     alignItems: 'center',
   },
-  secondaryBtnText: { color: C.honeyText, fontSize: T.body, fontWeight: '700' },
+  secondaryBtnText: { color: C.petrolText, fontSize: T.body, fontWeight: T.weight.bold },
   secondaryBtnSub: {
     color: C.text3,
     fontSize: T.small,
@@ -209,5 +194,10 @@ const st = StyleSheet.create({
     marginTop: 4,
     lineHeight: 18,
   },
-  laterLink: { color: C.text3, fontSize: T.small, textDecorationLine: 'underline' },
+
+  laterLink: {
+    color: C.text3, fontSize: T.small,
+    textDecorationLine: 'underline',
+    marginTop: S.lg, alignSelf: 'center',
+  },
 });

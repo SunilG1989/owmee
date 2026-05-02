@@ -27,9 +27,6 @@ src/screens/SearchScreen.tsx
 src/screens/TransactionDetailScreen.tsx
 src/screens/auth/KycFlowScreen.tsx
 src/screens/auth/LocationPickerScreen.tsx
-src/screens/auth/OnboardingScreen.tsx
-src/screens/auth/OtpPhoneScreen.tsx
-src/screens/auth/OtpVerifyScreen.tsx
 src/screens/auth/VerificationWallScreen.tsx
 src/screens/auth/address/AddressDetailsScreen.tsx
 src/screens/auth/address/AddressPickerScreen.tsx
