@@ -34,30 +34,18 @@ export default function BookingConfirmedScreen({
   );
   const addressLine = formatAddressLine(visit?.address);
 
-  const onAddToCalendar = async () => {
-    try {
-      // Optional dep — only call if installed. Avoids hard-failing if the
-      // host repo doesn't have it yet.
-      const mod = require('react-native-add-calendar-event');
-      const start = visit?.requested_slot_start
-        ? new Date(visit.requested_slot_start)
-        : new Date();
-      const end = visit?.requested_slot_end
-        ? new Date(visit.requested_slot_end)
-        : new Date(start.getTime() + 2 * 60 * 60 * 1000);
-      await mod.presentEventCreatingDialog({
-        title: 'Owmee Specialist visit',
-        startDate: start.toISOString(),
-        endDate: end.toISOString(),
-        location: addressLine,
-        notes: 'An Owmee Specialist will visit to photograph + list your items.',
-      });
-    } catch {
-      Alert.alert(
-        'Calendar',
-        'Calendar add-on not installed yet. The visit details are saved in My Concierge.',
-      );
-    }
+  const onAddToCalendar = () => {
+    // react-native-add-calendar-event isn't installed in this repo. Metro
+    // can't statically resolve `require('react-native-add-calendar-event')`
+    // at bundle time, which shifted the dep map and broke every other
+    // require in this module — that's the root cause of the
+    // "Cannot read property 'cream' of undefined" boot crash this screen
+    // surfaced. Re-enable the calendar pipe by adding the dep + replacing
+    // this stub with the real call (master spec section 4.4 calendar CTA).
+    Alert.alert(
+      'Calendar',
+      'Calendar add-on lands in the next pass. The visit details are saved in My Concierge.',
+    );
   };
 
   const onTrackVisit = () => {
