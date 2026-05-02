@@ -4,10 +4,12 @@
   "private": true,
   "scripts": {
     "start": "react-native start",
+    "start:reset": "react-native start --reset-cache",
     "android": "react-native run-android",
     "ios": "react-native run-ios",
     "tsc": "tsc --noEmit",
-    "lint:design": "bash scripts/lint-design.sh"
+    "lint:design": "bash scripts/lint-design.sh",
+    "clean": "bash scripts/clean-rebuild.sh"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^1.22.3",
