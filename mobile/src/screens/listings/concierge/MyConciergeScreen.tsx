@@ -36,7 +36,7 @@ import {
   type Transaction,
 } from '../../../services/api';
 import { BackButton, Button } from '../../../components/ui';
-import { C, R, S, Shadow, formatPrice } from '../../../utils/tokens';
+import { C, R, S, T, Shadow, formatPrice } from '../../../utils/tokens';
 import type { RootScreen } from '../../../navigation/types';
 
 interface MyListing {
@@ -293,7 +293,7 @@ function ItemRow({
 
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.85} style={s.itemRow}>
-      <View style={{ flex: 1 }}>
+      <View style={s.itemFlex}>
         <Text style={s.itemTitle} numberOfLines={2}>
           {listing.title}
         </Text>
@@ -315,8 +315,8 @@ const s = StyleSheet.create({
     gap: S.xs,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: T.size.lg + 1,
+    fontWeight: T.weight.bold,
     color: C.text,
   },
   center: {
@@ -325,15 +325,15 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: S.xxl,
   },
-  emoji: { fontSize: 56, marginBottom: S.md },
+  emoji: { fontSize: T.size.display + 26, marginBottom: S.md },     // 56
   emptyTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: T.size.lg + 1,
+    fontWeight: T.weight.bold,
     color: C.text,
     textAlign: 'center',
   },
   emptyBody: {
-    fontSize: 14,
+    fontSize: T.size.sm + 1,
     color: C.text2,
     textAlign: 'center',
     marginTop: S.sm,
@@ -353,17 +353,17 @@ const s = StyleSheet.create({
     marginBottom: S.md,
   },
   dayLabel: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: T.size.lg - 1,
+    fontWeight: T.weight.bold,
     color: C.text,
   },
   itemsCount: {
-    fontSize: 12,
+    fontSize: T.size.sm,
     color: C.text3,
-    fontWeight: '500',
+    fontWeight: T.weight.medium,
   },
   noItems: {
-    fontSize: 13,
+    fontSize: T.size.base,
     color: C.text3,
     fontStyle: 'italic',
     paddingVertical: S.sm,
@@ -376,20 +376,21 @@ const s = StyleSheet.create({
     borderTopColor: C.border,
     gap: S.md,
   },
+  itemFlex: { flex: 1 },
   itemTitle: {
-    fontSize: 14,
+    fontSize: T.size.sm + 1,
     color: C.text,
-    fontWeight: '600',
+    fontWeight: T.weight.semi,
   },
   itemStatus: {
-    fontSize: 12,
-    fontWeight: '500',
+    fontSize: T.size.sm,
+    fontWeight: T.weight.medium,
     marginTop: 2,
   },
   itemPrice: {
-    fontSize: 14,
+    fontSize: T.size.sm + 1,
     color: C.text,
-    fontWeight: '700',
+    fontWeight: T.weight.bold,
   },
   earningsRow: {
     flexDirection: 'row',
@@ -401,13 +402,13 @@ const s = StyleSheet.create({
     borderTopColor: C.border,
   },
   earningsLabel: {
-    fontSize: 13,
+    fontSize: T.size.base,
     color: C.text2,
-    fontWeight: '500',
+    fontWeight: T.weight.medium,
   },
   earningsAmount: {
-    fontSize: 16,
+    fontSize: T.size.lg - 1,
     color: C.petrolDeep,
-    fontWeight: '700',
+    fontWeight: T.weight.bold,
   },
 });
