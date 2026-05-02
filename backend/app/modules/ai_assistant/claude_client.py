@@ -32,9 +32,9 @@ What v2 changes:
      with a `flags=['ai_failed:<reason>']` marker so the router/UI can
      show "AI couldn't read these photos" instead of silently empty fields.
 
-Models (free-tier defaults, override via .env):
-    Vision:  gemini-2.5-flash
-    Text:    gemini-2.0-flash-lite
+Models (latest GA defaults, override via .env):
+    Vision:  gemini-2.5-flash       (paid tier, multimodal-strong)
+    Text:    gemini-2.5-flash-lite  (paid tier, cheapest 2.5 GA)
 
 Privacy note: free-tier inputs may be used by Google for training.
 Acceptable for prototype; revisit before production with real seller data.
@@ -231,10 +231,10 @@ def _get_model(kind: str) -> str:
         return (
             getattr(settings, "gemini_text_model", "")
             or os.environ.get("GEMINI_TEXT_MODEL", "")
-            or "gemini-2.0-flash-lite"
+            or "gemini-2.5-flash-lite"
         )
     except Exception:
-        return "gemini-2.5-flash" if kind == "vision" else "gemini-2.0-flash-lite"
+        return "gemini-2.5-flash" if kind == "vision" else "gemini-2.5-flash-lite"
 
 
 def _normalize_media_type(content_type: str) -> str:
