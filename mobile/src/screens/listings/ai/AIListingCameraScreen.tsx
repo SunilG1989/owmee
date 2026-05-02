@@ -43,6 +43,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 
 import { C, T, S, R, Shadow } from '../../../utils/tokens';
+import { Button, IconButton } from '../../../components/ui';
 import { AIListing } from '../../../services/api';
 import { parseApiError } from '../../../utils/errors';
 import type { RootScreen } from '../../../navigation/types';
@@ -189,13 +190,11 @@ export default function AIListingCameraScreen({ navigation }: RootScreen<'AIList
 
   return (
     <SafeAreaView style={st.root}>
-      {/* Header — real back button that exits the flow */}
+      {/* Header — real close button that exits the flow */}
       <View style={st.header}>
-        <TouchableOpacity onPress={exitFlow} style={st.headerBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-          <Text style={st.headerBtnText}>✕</Text>
-        </TouchableOpacity>
+        <IconButton icon="✕" onPress={exitFlow} a11y="Exit" size="sm" />
         <Text style={st.headerTitle}>Sell an item</Text>
-        <View style={st.headerBtn} />
+        <View style={st.headerSpacer} />
       </View>
 
       {/* Body */}
@@ -243,32 +242,40 @@ export default function AIListingCameraScreen({ navigation }: RootScreen<'AIList
           <Text style={st.emptySub}>
             Front, back, both sides, and any damage. {MIN_PHOTOS}-{MAX_PHOTOS} photos.
           </Text>
-          <TouchableOpacity onPress={openCamera} style={st.openCameraBtn}>
-            <Text style={st.openCameraBtnText}>Take a photo</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={openGallery} style={st.galleryBtn}>
-            <Text style={st.galleryBtnText}>Choose from gallery</Text>
-          </TouchableOpacity>
+          <Button
+            label="Take a photo"
+            variant="primary"
+            size="lg"
+            onPress={openCamera}
+            style={st.openCameraBtn}
+          />
+          <Button
+            label="Choose from gallery"
+            variant="ghost"
+            size="sm"
+            onPress={openGallery}
+            style={st.galleryBtn}
+          />
         </View>
       )}
 
       {/* CTA bar — appears only when at least one photo present */}
       {photos.length > 0 && !uploading && (
         <View style={st.ctaBar}>
-          <TouchableOpacity onPress={openCamera} style={st.secondaryBtn} disabled={!canAddMore}>
-            <Text style={[st.secondaryBtnText, !canAddMore && { opacity: 0.4 }]}>
-              + Add photo
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={submit}
-            style={[st.primaryBtn, !canSubmit && st.primaryBtnDisabled]}
+          <Button
+            label="+ Add photo"
+            variant="secondary"
+            disabled={!canAddMore}
+            onPress={openCamera}
+            style={st.secondaryBtn}
+          />
+          <Button
+            label={canSubmit ? 'Done — analyse →' : `Need ${MIN_PHOTOS - photos.length} more`}
+            variant="primary"
             disabled={!canSubmit}
-          >
-            <Text style={st.primaryBtnText}>
-              {canSubmit ? 'Done — analyse →' : `Need ${MIN_PHOTOS - photos.length} more`}
-            </Text>
-          </TouchableOpacity>
+            onPress={submit}
+            style={st.primaryBtn}
+          />
         </View>
       )}
 
@@ -296,8 +303,7 @@ const st = StyleSheet.create({
     borderBottomColor: C.border,
     backgroundColor: C.surface,
   },
-  headerBtn: { minWidth: 32, height: 32, justifyContent: 'center' },
-  headerBtnText: { fontSize: 22, color: C.text2 },
+  headerSpacer: { width: 36 },
   headerTitle: { fontSize: T.size.lg, fontWeight: T.weight.semi, color: C.text },
 
   previewBlock: { flex: 1, padding: S.lg },
@@ -332,7 +338,7 @@ const st = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  thumbXText: { color: C.white, fontSize: 14, lineHeight: 14 },
+  thumbXText: { color: C.white, fontSize: T.size.sm + 1, lineHeight: 14 },
   thumbAdd: {
     width: 64,
     height: 64,
@@ -344,7 +350,7 @@ const st = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  thumbAddText: { color: C.text2, fontSize: 28, lineHeight: 28 },
+  thumbAddText: { color: C.text2, fontSize: T.size.xxl + 4, lineHeight: 28 },
   previewHint: {
     marginTop: S.md,
     color: C.text3,
@@ -353,7 +359,7 @@ const st = StyleSheet.create({
   },
 
   emptyBlock: { flex: 1, paddingHorizontal: S.xxl, justifyContent: 'center', alignItems: 'center' },
-  emptyEmoji: { fontSize: 56, marginBottom: S.lg },
+  emptyEmoji: { fontSize: T.size.display + 26, marginBottom: S.lg },
   emptyTitle: {
     fontSize: T.size.xl,
     fontWeight: T.weight.bold,
@@ -368,17 +374,12 @@ const st = StyleSheet.create({
     marginBottom: S.xxl,
   },
   openCameraBtn: {
-    backgroundColor: C.petrol,
-    paddingHorizontal: S.xxl,
-    paddingVertical: S.lg,
-    borderRadius: R.pill,
     minWidth: 220,
-    alignItems: 'center',
+    paddingHorizontal: S.xxl,
+    borderRadius: R.pill,
     ...Shadow.glow,
   },
-  openCameraBtnText: { color: C.surface, fontSize: T.size.lg, fontWeight: T.weight.bold },
-  galleryBtn: { marginTop: S.md, paddingVertical: S.sm, paddingHorizontal: S.lg },
-  galleryBtnText: { color: C.text2, fontSize: T.size.md, textDecorationLine: 'underline' },
+  galleryBtn: { marginTop: S.md },
 
   ctaBar: {
     flexDirection: 'row',
@@ -389,26 +390,8 @@ const st = StyleSheet.create({
     backgroundColor: C.surface,
     gap: S.md,
   },
-  secondaryBtn: {
-    flex: 1,
-    paddingVertical: S.md,
-    borderRadius: R.md,
-    borderWidth: 1,
-    borderColor: C.border,
-    alignItems: 'center',
-    backgroundColor: C.bone,
-  },
-  secondaryBtnText: { color: C.text2, fontSize: T.size.md, fontWeight: T.weight.semi },
-  primaryBtn: {
-    flex: 2,
-    paddingVertical: S.md,
-    borderRadius: R.md,
-    backgroundColor: C.petrol,
-    alignItems: 'center',
-    ...Shadow.card,
-  },
-  primaryBtnDisabled: { backgroundColor: C.bone2 },
-  primaryBtnText: { color: C.surface, fontSize: T.size.md, fontWeight: T.weight.bold },
+  secondaryBtn: { flex: 1 },
+  primaryBtn: { flex: 2, ...Shadow.card },
 
   uploadingOverlay: {
     ...StyleSheet.absoluteFillObject,

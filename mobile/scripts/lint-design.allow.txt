@@ -14,8 +14,8 @@
 
 src/components/OwmeeListingCard.tsx
 src/components/SellBlock.tsx
-src/components/concierge/ExpertPricingPanel.tsx
 src/components/listing/ListingCard.tsx
+src/components/concierge/ExpertPricingPanel.tsx
 src/screens/HomeScreen.tsx
 src/screens/SearchScreen.tsx
 src/screens/TransactionDetailScreen.tsx
@@ -28,7 +28,6 @@ src/screens/fe/FeHomeScreen.tsx
 src/screens/fe/FeOpsScreen.tsx
 src/screens/fe/FeVisitHistoryScreen.tsx
 src/screens/fe/ReportIssueScreen.tsx
-src/screens/kids/KidsSectionScreen.tsx
 src/screens/listings/CreateListingScreen.tsx
 src/screens/listings/EditListingScreen.tsx
 src/screens/listings/ListingDetailScreen.tsx
