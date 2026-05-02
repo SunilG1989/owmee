@@ -103,6 +103,10 @@ export default function ProfileScreen({ navigation }: any) {
         )}
 
         {/* Menu items — ALL WIRED */}
+        {/* Concierge master spec section 7: top-level "My Concierge" entry. */}
+        <TouchableOpacity style={s.menuRow} onPress={() => navigation.navigate('MyConcierge')}>
+          <Text style={{ fontSize: 16 }}>🚚</Text><Text style={s.menuLabel}>My Concierge</Text><Text style={s.menuArrow}>›</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={s.menuRow} onPress={() => navigation.navigate('MyListings')}>
           <Text style={{ fontSize: 16 }}>📦</Text><Text style={s.menuLabel}>My listings</Text><Text style={s.menuArrow}>›</Text>
         </TouchableOpacity>

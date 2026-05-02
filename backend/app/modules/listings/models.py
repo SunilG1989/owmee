@@ -86,6 +86,15 @@ class Listing(Base, TimestampMixin):
         ForeignKey("fe_visits.id", ondelete="SET NULL"),
         nullable=True,
     )
+    # Concierge Phase 4: clearer-named pointer used by the timeline view.
+    # Backfilled from fe_visit_id by migration 0036; new submit-listing
+    # writes both columns so legacy code that still reads fe_visit_id
+    # keeps working.
+    created_via_fe_visit_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("fe_visits.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     reviewed_by = Column(String(32), nullable=False, default="none")
     # none | fe | ops | fe_and_ops
     ops_reviewed_at = Column(DateTime(timezone=True), nullable=True)

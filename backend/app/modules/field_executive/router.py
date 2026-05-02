@@ -1055,6 +1055,7 @@ async def submit_listing(
         locality=body.locality,
         listing_source="fe_assisted",
         fe_visit_id=visit.id,
+        created_via_fe_visit_id=visit.id,  # Concierge Phase 4 timeline
         reviewed_by="fe",
         is_kids_item=bool(body.is_kids_item),
         kids_safety_checklist=body.kids_safety_checklist,

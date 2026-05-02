@@ -240,6 +240,12 @@ def _fmt_my(listing: Listing) -> dict:
         "reviewed_by": listing.reviewed_by,
         "created_at": listing.created_at.isoformat() if listing.created_at else None,
         "published_at": listing.published_at.isoformat() if listing.published_at else None,
+        # Concierge Phase 4 timeline grouping pointer.
+        "created_via_fe_visit_id": (
+            str(listing.created_via_fe_visit_id)
+            if listing.created_via_fe_visit_id
+            else (str(listing.fe_visit_id) if listing.fe_visit_id else None)
+        ),
     }
 
 

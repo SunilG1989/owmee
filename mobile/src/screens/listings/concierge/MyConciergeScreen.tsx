@@ -1,13 +1,22 @@
 /**
- * MyConciergeScreen — Phase 1 placeholder; Phase 4 implements the real
- * timeline view (master spec section 7).
+ * MyConciergeScreen — Concierge master spec section 7.2
  *
- * For Phase 1 we just need the route to exist so BookingConfirmedScreen's
- * "Track visit" CTA has a target. The placeholder copy reflects the
- * "matching specialist" state since that's the only thing currently
- * happening.
+ * The seller's home base after the visit. Each visit becomes a card
+ * containing the items it produced; each item shows its current status
+ * (Live / SOLD / Pending pickup) and tappable navigation to the right
+ * detail screen (ListingDetail or TransactionDetail).
+ *
+ * Pending earnings = sum of (transaction.gross_amount -
+ * transaction.tds_withheld) across completed sales the seller hasn't
+ * been paid out for yet. We compute this client-side because at pilot
+ * scale a single composite endpoint isn't worth the round-trip savings.
+ *
+ * Data sources (existing endpoints):
+ *   GET /v1/fe-visits/me        — seller's visits
+ *   GET /v1/listings/me/listings — seller's listings (filter clientside)
+ *   GET /v1/transactions         — seller's transactions
  */
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -19,23 +28,60 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 
+import {
+  FEVisits,
+  Listings,
+  Transactions,
+  type FEVisit,
+  type Transaction,
+} from '../../../services/api';
 import { BackButton, Button } from '../../../components/ui';
-import { FEVisits, type FEVisit } from '../../../services/api';
-import { C, R, S, Shadow } from '../../../utils/tokens';
+import { C, R, S, Shadow, formatPrice } from '../../../utils/tokens';
 import type { RootScreen } from '../../../navigation/types';
+
+interface MyListing {
+  id: string;
+  title: string;
+  price: string | number;
+  status: string;
+  thumbnail_url?: string | null;
+  created_via_fe_visit_id?: string | null;
+}
+
+interface VisitGroup {
+  visit: FEVisit;
+  listings: MyListing[];
+  /** Active sales (paid, not yet completed) */
+  activeSales: Transaction[];
+  /** Completed sales (settled or pending payout) */
+  completedSales: Transaction[];
+  pendingEarnings: number;
+}
 
 export default function MyConciergeScreen({
   navigation,
 }: RootScreen<'MyConcierge'>) {
   const [visits, setVisits] = useState<FEVisit[]>([]);
+  const [listings, setListings] = useState<MyListing[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     try {
-      const r = await FEVisits.mine();
-      setVisits(r.data);
+      const [vR, lR, tR] = await Promise.all([
+        FEVisits.mine(),
+        Listings.myListings(),
+        Transactions.list().catch(() => ({ data: [] as Transaction[] })),
+      ]);
+      setVisits(vR.data);
+      setListings((lR.data?.listings as MyListing[]) || []);
+      setTransactions(
+        Array.isArray(tR.data) ? (tR.data as Transaction[]) : (tR.data as any)?.transactions || [],
+      );
     } catch {
       setVisits([]);
+      setListings([]);
+      setTransactions([]);
     } finally {
       setLoading(false);
     }
@@ -46,6 +92,39 @@ export default function MyConciergeScreen({
       load();
     }, [load]),
   );
+
+  const groups: VisitGroup[] = useMemo(() => {
+    return visits.map((visit) => {
+      const visitListings = listings.filter(
+        (l) => l.created_via_fe_visit_id === visit.id,
+      );
+      const listingIds = new Set(visitListings.map((l) => l.id));
+
+      const sales = transactions.filter((t) => listingIds.has((t as any).listing_id));
+      const activeSales = sales.filter(
+        (t) => !['completed', 'cancelled', 'refunded'].includes(t.status),
+      );
+      const completedSales = sales.filter((t) => t.status === 'completed');
+
+      // Pending = sales with payout_eligible status or earlier
+      const pendingEarnings = sales
+        .filter((t) => !['completed', 'cancelled', 'refunded'].includes(t.status))
+        .reduce((sum, t) => {
+          const gross = Number((t as any).gross_amount || 0);
+          const tds = Number((t as any).tds_withheld || 0);
+          const delivery = Number((t as any).delivery_fee || 0);
+          return sum + Math.max(0, gross - tds - delivery);
+        }, 0);
+
+      return {
+        visit,
+        listings: visitListings,
+        activeSales,
+        completedSales,
+        pendingEarnings,
+      };
+    });
+  }, [visits, listings, transactions]);
 
   if (loading) {
     return (
@@ -72,7 +151,7 @@ export default function MyConciergeScreen({
           <Text style={s.emoji}>📦</Text>
           <Text style={s.emptyTitle}>No visits yet</Text>
           <Text style={s.emptyBody}>
-            Book a free Owmee Specialist visit to get started.
+            Book a free Owmee Specialist visit and we'll come to your home.
           </Text>
           <View style={{ height: S.xl }} />
           <Button
@@ -92,67 +171,136 @@ export default function MyConciergeScreen({
       </View>
 
       <ScrollView contentContainerStyle={{ padding: S.lg }}>
-        {visits.map((v) => (
-          <TouchableOpacity
-            key={v.id}
-            style={s.visitCard}
-            onPress={() => navigation.navigate('VisitDetail', { visit_id: v.id })}
-            activeOpacity={0.85}
-          >
-            <View style={s.visitHead}>
-              <Text style={s.visitDate}>{summary(v)}</Text>
-              <StatusPill status={v.status} />
-            </View>
-            <Text style={s.visitAddress} numberOfLines={1}>
-              {addressLine(v.address)}
-            </Text>
-            {v.notes_tags?.length ? (
-              <Text style={s.visitTags}>{v.notes_tags.join(' · ')}</Text>
-            ) : null}
-          </TouchableOpacity>
+        {groups.map((g) => (
+          <VisitCard
+            key={g.visit.id}
+            group={g}
+            navigation={navigation}
+            transactions={transactions}
+          />
         ))}
-
-        <Text style={s.footnote}>
-          The full timeline view (live items, sales, payouts) lands in the next update.
-        </Text>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function summary(visit: FEVisit): string {
-  const iso = visit.scheduled_slot_start || visit.requested_slot_start;
-  if (!iso) return 'Visit';
-  const d = new Date(iso);
-  return d.toLocaleDateString('en-IN', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-  });
-}
+function VisitCard({
+  group,
+  navigation,
+  transactions,
+}: {
+  group: VisitGroup;
+  navigation: any;
+  transactions: Transaction[];
+}) {
+  const { visit, listings, pendingEarnings } = group;
 
-function addressLine(snap: any): string {
-  if (!snap) return '—';
-  return [snap.flat_house_number || snap.house, snap.locality || snap.city]
-    .filter(Boolean)
-    .join(', ');
-}
+  const dayLabel = (() => {
+    const iso = visit.scheduled_slot_start || visit.requested_slot_start;
+    if (!iso) return 'Visit';
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-IN', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'short',
+    });
+  })();
 
-function StatusPill({ status }: { status: FEVisit['status'] }) {
-  const map: Record<FEVisit['status'], { bg: string; fg: string; label: string }> = {
-    requested: { bg: C.honeyLight, fg: C.honeyText, label: 'Matching' },
-    scheduled: { bg: C.honeyLight, fg: C.honeyText, label: 'Scheduled' },
-    in_progress: { bg: C.forestLight, fg: C.forest, label: 'In progress' },
-    completed: { bg: C.forestLight, fg: C.forest, label: 'Completed' },
-    postponed: { bg: C.sand, fg: C.text2, label: 'Postponed' },
-    cancelled: { bg: C.redLight, fg: C.red, label: 'Cancelled' },
-    no_show: { bg: C.redLight, fg: C.red, label: 'No show' },
-  };
-  const m = map[status] ?? { bg: C.sand, fg: C.text2, label: status };
   return (
-    <View style={[s.pill, { backgroundColor: m.bg }]}>
-      <Text style={[s.pillText, { color: m.fg }]}>{m.label}</Text>
+    <View style={s.card}>
+      <TouchableOpacity
+        onPress={() => navigation.navigate('VisitDetail', { visit_id: visit.id })}
+        activeOpacity={0.85}
+      >
+        <View style={s.cardHead}>
+          <Text style={s.dayLabel}>🚚 {dayLabel}</Text>
+          <Text style={s.itemsCount}>
+            {listings.length} {listings.length === 1 ? 'item' : 'items'}
+          </Text>
+        </View>
+      </TouchableOpacity>
+
+      {listings.length === 0 ? (
+        <Text style={s.noItems}>
+          {visit.status === 'completed'
+            ? 'No items listed from this visit.'
+            : 'Items from this visit will appear here once your specialist lists them.'}
+        </Text>
+      ) : (
+        listings.map((l) => {
+          const sale = transactions.find(
+            (t) => (t as any).listing_id === l.id,
+          );
+          return (
+            <ItemRow
+              key={l.id}
+              listing={l}
+              transaction={sale}
+              onPress={() => {
+                if (sale) {
+                  navigation.navigate('TransactionDetail', {
+                    transactionId: sale.id,
+                  });
+                } else {
+                  navigation.navigate('ListingDetail', { listingId: l.id });
+                }
+              }}
+            />
+          );
+        })
+      )}
+
+      {pendingEarnings > 0 ? (
+        <View style={s.earningsRow}>
+          <Text style={s.earningsLabel}>Pending earnings</Text>
+          <Text style={s.earningsAmount}>{formatPrice(pendingEarnings)}</Text>
+        </View>
+      ) : null}
     </View>
+  );
+}
+
+function ItemRow({
+  listing,
+  transaction,
+  onPress,
+}: {
+  listing: MyListing;
+  transaction?: Transaction;
+  onPress: () => void;
+}) {
+  let statusLine: string;
+  let statusColor: string;
+  if (transaction?.status === 'completed') {
+    statusLine = `✓ SOLD — ${formatPrice(Number((transaction as any).gross_amount || listing.price))}`;
+    statusColor = C.forest;
+  } else if (transaction) {
+    statusLine = `In progress · ${transaction.status.replace(/_/g, ' ')}`;
+    statusColor = C.honeyDeep;
+  } else if (listing.status === 'sold') {
+    statusLine = '✓ SOLD';
+    statusColor = C.forest;
+  } else if (listing.status === 'reserved') {
+    statusLine = 'Reserved';
+    statusColor = C.honeyDeep;
+  } else if (listing.status === 'active' || listing.status === 'live') {
+    statusLine = 'Live';
+    statusColor = C.text2;
+  } else {
+    statusLine = listing.status;
+    statusColor = C.text3;
+  }
+
+  return (
+    <TouchableOpacity onPress={onPress} activeOpacity={0.85} style={s.itemRow}>
+      <View style={{ flex: 1 }}>
+        <Text style={s.itemTitle} numberOfLines={2}>
+          {listing.title}
+        </Text>
+        <Text style={[s.itemStatus, { color: statusColor }]}>{statusLine}</Text>
+      </View>
+      <Text style={s.itemPrice}>{formatPrice(Number(listing.price))}</Text>
+    </TouchableOpacity>
   );
 }
 
@@ -191,45 +339,75 @@ const s = StyleSheet.create({
     marginTop: S.sm,
     lineHeight: 20,
   },
-  visitCard: {
+  card: {
     backgroundColor: C.surface,
     borderRadius: R.lg,
     padding: S.lg,
     marginBottom: S.md,
     ...Shadow.glow,
   },
-  visitHead: {
+  cardHead: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    marginBottom: S.md,
   },
-  visitDate: {
+  dayLabel: {
     fontSize: 16,
     fontWeight: '700',
     color: C.text,
   },
-  visitAddress: {
-    fontSize: 13,
-    color: C.text2,
-  },
-  visitTags: {
+  itemsCount: {
     fontSize: 12,
     color: C.text3,
-    marginTop: 4,
     fontWeight: '500',
   },
-  pill: {
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: R.pill,
-  },
-  pillText: { fontSize: 11, fontWeight: '700' },
-  footnote: {
-    fontSize: 12,
+  noItems: {
+    fontSize: 13,
     color: C.text3,
-    textAlign: 'center',
-    marginTop: S.md,
     fontStyle: 'italic',
+    paddingVertical: S.sm,
+  },
+  itemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: S.sm,
+    borderTopWidth: 1,
+    borderTopColor: C.border,
+    gap: S.md,
+  },
+  itemTitle: {
+    fontSize: 14,
+    color: C.text,
+    fontWeight: '600',
+  },
+  itemStatus: {
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  itemPrice: {
+    fontSize: 14,
+    color: C.text,
+    fontWeight: '700',
+  },
+  earningsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: S.md,
+    paddingTop: S.sm,
+    borderTopWidth: 1,
+    borderTopColor: C.border,
+  },
+  earningsLabel: {
+    fontSize: 13,
+    color: C.text2,
+    fontWeight: '500',
+  },
+  earningsAmount: {
+    fontSize: 16,
+    color: C.honeyDeep,
+    fontWeight: '700',
   },
 });
