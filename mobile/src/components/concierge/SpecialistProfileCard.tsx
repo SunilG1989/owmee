@@ -20,7 +20,8 @@ import {
 } from 'react-native';
 
 import { FEVisits, type SpecialistProfile } from '../../services/api';
-import { C, R, S, Shadow } from '../../utils/tokens';
+import { C, R, S, T, Shadow } from '../../utils/tokens';
+import { Button } from '../ui';
 
 interface Props {
   visitId: string;
@@ -117,13 +118,13 @@ export default function SpecialistProfileCard({
       </View>
 
       {onSeeProfile ? (
-        <TouchableOpacity
+        <Button
+          label="See profile →"
+          variant="ghost"
+          size="sm"
           onPress={onSeeProfile}
           style={s.seeBtn}
-          activeOpacity={0.7}
-        >
-          <Text style={s.seeText}>See profile →</Text>
-        </TouchableOpacity>
+        />
       ) : null}
     </View>
   );
@@ -138,12 +139,12 @@ const s = StyleSheet.create({
     gap: S.sm,
   },
   matchingTitle: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: T.size.lg - 1,
+    fontWeight: T.weight.bold,
     color: C.text,
   },
   matchingBody: {
-    fontSize: 13,
+    fontSize: T.size.base,
     color: C.text2,
     marginTop: 4,
     lineHeight: 18,
@@ -162,17 +163,17 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   avatarText: {
-    fontSize: 22,
-    fontWeight: '700',
+    fontSize: T.size.xxl - 2,
+    fontWeight: T.weight.bold,
     color: C.petrolDeep,
   },
   name: {
-    fontSize: 17,
-    fontWeight: '700',
+    fontSize: T.size.lg,
+    fontWeight: T.weight.bold,
     color: C.text,
   },
   metaLine: {
-    fontSize: 13,
+    fontSize: T.size.base,
     color: C.text2,
     marginTop: 2,
   },
@@ -185,23 +186,16 @@ const s = StyleSheet.create({
   badge: {
     backgroundColor: C.petrolLight,
     borderRadius: R.pill,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: S.sm + 2,
+    paddingVertical: S.xs,
   },
   badgeText: {
-    fontSize: 12,
+    fontSize: T.size.sm,
     color: C.petrolDeep,
-    fontWeight: '600',
+    fontWeight: T.weight.semi,
   },
   seeBtn: {
     marginTop: S.sm,
     alignSelf: 'flex-start',
-    paddingHorizontal: 4,
-    paddingVertical: 4,
-  },
-  seeText: {
-    fontSize: 13,
-    color: C.petrol,
-    fontWeight: '600',
   },
 });

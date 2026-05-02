@@ -30,8 +30,7 @@ import {
 } from 'react-native';
 
 import { FE } from '../../services/api';
-import { C, R, S, Shadow } from '../../utils/tokens';
-import { formatPrice } from '../../utils/tokens';
+import { C, R, S, T, Shadow, formatPrice } from '../../utils/tokens';
 
 interface Props {
   categoryId: string | null;
@@ -177,19 +176,19 @@ const s = StyleSheet.create({
     ...Shadow.glow,
   },
   label: {
-    fontSize: 13,
+    fontSize: T.size.base,
     color: C.text2,
-    fontWeight: '600',
-    marginBottom: 4,
+    fontWeight: T.weight.semi,
+    marginBottom: S.xs,
   },
   median: {
-    fontSize: 36,
-    fontWeight: '800',
+    fontSize: T.size.display + 6,
+    fontWeight: T.weight.heavy,
     color: C.petrolDeep,
-    marginTop: 4,
+    marginTop: S.xs,
   },
   medianHint: {
-    fontSize: 12,
+    fontSize: T.size.sm,
     color: C.text3,
     marginTop: 2,
     fontStyle: 'italic',
@@ -200,9 +199,9 @@ const s = StyleSheet.create({
     marginVertical: S.md,
   },
   line: {
-    fontSize: 13,
+    fontSize: T.size.base,
     color: C.text,
-    marginBottom: 4,
+    marginBottom: S.xs,
   },
   chipRow: {
     flexDirection: 'row',
@@ -217,32 +216,32 @@ const s = StyleSheet.create({
     alignItems: 'center',
   },
   chipLabel: {
-    fontSize: 12,
+    fontSize: T.size.sm,
     color: C.petrolDeep,
-    fontWeight: '600',
+    fontWeight: T.weight.semi,
   },
   chipValue: {
-    fontSize: 16,
+    fontSize: T.size.lg - 1,
     color: C.petrolDeep,
-    fontWeight: '800',
+    fontWeight: T.weight.heavy,
     marginTop: 2,
   },
   footnote: {
-    fontSize: 11,
+    fontSize: T.size.sm,
     color: C.text3,
     fontStyle: 'italic',
     marginTop: S.md,
     textAlign: 'center',
   },
   noMatchTitle: {
-    fontSize: 14,
+    fontSize: T.size.sm + 1,
     color: C.text,
-    fontWeight: '600',
+    fontWeight: T.weight.semi,
   },
   noMatchBody: {
-    fontSize: 13,
+    fontSize: T.size.base,
     color: C.text2,
-    marginTop: 4,
+    marginTop: S.xs,
     lineHeight: 18,
   },
 });
