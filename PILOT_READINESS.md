@@ -12,11 +12,53 @@ live only in conversation context.
 - All categories except large-appliances.
 - Buyer and seller never meet — Owmee FE handles pickup, hub, delivery.
 
-Last reviewed: 2026-05-01.
+Last reviewed: 2026-05-02.
 
 ---
 
 ## Shipped (in `main`)
+
+### Owmee Concierge — flagship feature (master spec at `docs/owmee_concierge_master_spec.md`)
+- **Phase 1 (`85e6450`)**: SellModeForkScreen (Concierge-hero / self-service-fallback fork),
+  one-screen BookingScreen with default-address pre-selected, slot chips, six tag
+  chips with bidirectional textarea binding, BookingConfirmedScreen, MyConcierge
+  Profile entry. Migration `0034_concierge_visit_fields` adds `notes_tags JSON`.
+  `RequestVisitRequest` rewritten with `address_id` required, `notes_tags`
+  validated against canonical set, `category_hint` defaulted to `'unknown'`.
+- **Phase 2 (`b563aba`)**: Migration `0035_concierge_trust` adds
+  `arrival_verification_code` (4-digit, generated at booking) +
+  `arrival_confirmed_by_seller_at`. `concierge_templates.py` ships six push
+  templates (N1-N6). Trigger points wired in request-visit handler, admin assign,
+  FE start-route / 30-mins-away / arrived. Endpoints: specialist-profile,
+  seller-confirm-arrival. Mobile: SpecialistProfileCard, ArrivalVerificationScreen,
+  VisitDetailScreen, MyConcierge upgraded from placeholder.
+- **Phase 3 (`18b53da`)**: `/v1/listings/price-suggestion` (FE-only, percentile
+  aggregation over 60-day completed transactions, progressive filter widening,
+  faster_sell_price + premium_price chips). submit-listing decoupled from
+  close-visit; explicit `/close-visit` endpoint; 10-listing per-visit cap. FE app:
+  ExpertPricingPanel, SellerApprovalScreen ("show seller before submit"),
+  VisitContinueScreen ("Add another item / Done with visit"), pre-visit briefing
+  with tags + notes + verification code.
+- **Phase 4 (`0a81016`)**: Migration `0036_listing_visit_link` adds
+  `listings.created_via_fe_visit_id` (best-effort backfill). MyConciergeScreen
+  becomes a real timeline view: per-visit cards, items grouped, statuses (Live /
+  SOLD / In progress), pending-earnings totals. Profile menu top-level "My
+  Concierge" entry.
+- **Phase 5 (`de8483e`)**: Migration `0037_concierge_safety` bundles handover
+  photo + skipped + seller-confirmed columns; `fe_visit_issues` table with
+  partial-unique severity index for unresolved-urgent fast lookup; `fe_visit_nps`
+  one-per-visit; trust-fund payout columns on transactions. Endpoints: FE-side
+  Report Issue, seller-side NPS, admin issues list + resolve. Code-mismatch path
+  now creates a real urgent FEVisitIssue row. Mobile: ReportIssueScreen (FE app),
+  NpsScreen (seller).
+
+**FCM mobile native install deferred** per master spec Risk 5. Backend
+`send_notification` always creates in-app notification rows; mobile
+already polls them via the Notifications namespace. When Firebase
+credentials are dropped in (`google-services.json` + `npm install
+@react-native-firebase/messaging`), the same triggers deliver as push.
+
+
 
 ### Identity, KYC, trust
 - KYC tri-state model (`auth_state`, `buyer_eligible`, `seller_tier`); call
