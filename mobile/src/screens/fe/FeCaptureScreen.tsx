@@ -33,6 +33,7 @@ import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 
 import { FE, Listings, FEVisits } from '../../services/api';
 import { C, S, R, T, Shadow } from '../../utils/tokens';
+import { Button, IconButton } from '../../components/ui';
 import type { RootScreen } from '../../navigation/types';
 // Concierge Phase 3
 import ExpertPricingPanel from '../../components/concierge/ExpertPricingPanel';
@@ -429,18 +430,16 @@ export default function FeCaptureScreen({ route, navigation }: RootScreen<'FeCap
   return (
     <SafeAreaView style={st.root} edges={['top']}>
       <View style={st.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Text style={st.back}>‹</Text>
-        </TouchableOpacity>
+        <IconButton icon="←" onPress={() => navigation.goBack()} a11y="Back" size="sm" />
         <Text style={st.h1}>Capture listing</Text>
-        <View style={{ width: 24 }} />
+        <View style={st.headerSpacer} />
       </View>
 
       <KeyboardAvoidingView
-        style={{ flex: 1 }}
+        style={st.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <ScrollView contentContainerStyle={{ padding: S.lg, paddingBottom: 180 }}>
+        <ScrollView contentContainerStyle={st.scrollPad}>
           {/* Category */}
           <View style={st.section}>
             <Text style={st.sectionTitle}>Category</Text>
@@ -557,7 +556,7 @@ export default function FeCaptureScreen({ route, navigation }: RootScreen<'FeCap
           <View style={st.section}>
             <Text style={st.sectionTitle}>FE notes</Text>
             <TextInput
-              style={[st.input, { minHeight: 80, textAlignVertical: 'top' }]}
+              style={[st.input, st.inputMulti]}
               multiline
               placeholder="Anything ops should know about this visit…"
               placeholderTextColor={C.text3}
@@ -586,15 +585,16 @@ export default function FeCaptureScreen({ route, navigation }: RootScreen<'FeCap
       </KeyboardAvoidingView>
 
       <View style={st.footer}>
-        <TouchableOpacity
-          style={[st.primaryBtn, (!canSubmit || submitting) && { opacity: 0.5 }]}
-          onPress={submitListing}
+        <Button
+          label="Submit listing"
+          variant="primary"
+          size="lg"
+          loading={submitting}
           disabled={!canSubmit || submitting}
-        >
-          <Text style={st.primaryBtnText}>
-            {submitting ? 'Submitting…' : 'Submit listing'}
-          </Text>
-        </TouchableOpacity>
+          onPress={submitListing}
+          fullWidth
+          style={st.primaryBtn}
+        />
       </View>
     </SafeAreaView>
   );
@@ -649,39 +649,41 @@ function OutcomeBtn({ label, onPress }: { label: string; onPress: () => void }) 
 
 const st = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bone },
+  flex: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: S.lg, backgroundColor: C.bone },
-  back: { fontSize: 28, color: C.text, paddingHorizontal: S.xs },
-  h1: { fontSize: T.h3, fontWeight: '600', color: C.text },
+  headerSpacer: { width: 24 },
+  h1: { fontSize: T.h3, fontWeight: T.weight.semi, color: C.text },
+  scrollPad: { padding: S.lg, paddingBottom: 180 },
   section: { backgroundColor: C.surface, borderRadius: R.lg, padding: S.lg, marginBottom: S.md, ...Shadow.glow },
-  sectionTitle: { fontSize: T.h3, fontWeight: '600', color: C.text, marginBottom: S.xs },
+  sectionTitle: { fontSize: T.h3, fontWeight: T.weight.semi, color: C.text, marginBottom: S.xs },
   sectionHint: { fontSize: T.small, color: C.text3, marginBottom: S.md },
   photoRow: { marginBottom: S.sm },
-  photoLabel: { fontSize: T.body, color: C.text2, marginBottom: 4 },
+  photoLabel: { fontSize: T.body, color: C.text2, marginBottom: S.xs },
   photoAddBtn: { padding: S.md, backgroundColor: C.petrolLight, borderRadius: R.md, borderWidth: 1, borderColor: C.petrol, borderStyle: 'dashed', alignItems: 'center' },
-  photoAddText: { color: C.petrolText, fontWeight: '600', textAlign: 'center' },
+  photoAddText: { color: C.petrolText, fontWeight: T.weight.semi, textAlign: 'center' },
   photoTakenBtn: { padding: S.md, backgroundColor: C.petrolLight, borderRadius: R.md },
-  photoTakenText: { color: C.petrolText, fontWeight: '600', textAlign: 'center' },
-  inputLabel: { fontSize: T.small, color: C.text3, fontWeight: '600', marginBottom: 4 },
+  photoTakenText: { color: C.petrolText, fontWeight: T.weight.semi, textAlign: 'center' },
+  inputLabel: { fontSize: T.small, color: C.text3, fontWeight: T.weight.semi, marginBottom: S.xs },
   input: { backgroundColor: C.bone, borderRadius: R.md, padding: S.md, fontSize: T.body, color: C.text, borderWidth: 1, borderColor: C.border },
-  chip: { paddingHorizontal: S.md, paddingVertical: 6, borderRadius: R.pill, backgroundColor: C.bone, borderWidth: 1, borderColor: C.border, marginRight: S.sm, marginBottom: S.sm },
+  inputMulti: { minHeight: 80, textAlignVertical: 'top' },
+  chip: { paddingHorizontal: S.md, paddingVertical: S.xs + 2, borderRadius: R.pill, backgroundColor: C.bone, borderWidth: 1, borderColor: C.border, marginRight: S.sm, marginBottom: S.sm },
   chipActive: { backgroundColor: C.petrol, borderColor: C.petrol },
-  chipText: { color: C.text2, fontSize: T.small, fontWeight: '500' },
-  chipTextActive: { color: C.white, fontWeight: '600' },
+  chipText: { color: C.text2, fontSize: T.small, fontWeight: T.weight.medium },
+  chipTextActive: { color: C.white, fontWeight: T.weight.semi },
   outcomeBtn: { padding: S.md, backgroundColor: C.bone2, borderRadius: R.md, marginTop: S.sm },
-  outcomeBtnText: { color: C.text2, fontWeight: '500' },
+  outcomeBtnText: { color: C.text2, fontWeight: T.weight.medium },
   footer: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: S.lg, backgroundColor: C.bone, borderTopWidth: 1, borderTopColor: C.border },
-  primaryBtn: { backgroundColor: C.petrol, paddingVertical: S.md, borderRadius: R.md, alignItems: 'center', ...Shadow.glow },
-  primaryBtnText: { color: C.white, fontSize: T.body, fontWeight: '700' },
-  checklistRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8 },
+  primaryBtn: { ...Shadow.glow },
+  checklistRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: S.sm },
   checkbox: {
-    width: 22, height: 22, borderRadius: 6,
+    width: 22, height: 22, borderRadius: R.xs,
     borderWidth: 1.5, borderColor: C.border,
     alignItems: 'center', justifyContent: 'center',
     marginRight: S.md,
     backgroundColor: C.bone,
   },
   checkboxChecked: { backgroundColor: C.petrol, borderColor: C.petrol },
-  checkMark: { color: C.white, fontWeight: '700', fontSize: 14 },
+  checkMark: { color: C.white, fontWeight: T.weight.bold, fontSize: T.size.sm + 1 },
   checklistLabel: { flex: 1, color: C.text2, fontSize: T.small },
 });
