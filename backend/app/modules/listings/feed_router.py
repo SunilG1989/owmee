@@ -62,17 +62,17 @@ def _seller_short_name(name):
 
 
 async def _get_user_coords(db, user_id):
-    """Returns (lat, lng, state). Karnataka default for guests."""
-    if user_id is None:
-        return None, None, "Karnataka"
-    row = await db.execute(
-        text("SELECT lat, lng, COALESCE(state, address_state) FROM users WHERE id = :uid"),
-        {"uid": user_id},
-    )
-    rec = row.first()
-    if not rec:
-        return None, None, "Karnataka"
-    return rec[0], rec[1], (rec[2] or "Karnataka")
+    """Returns (lat, lng, state). Bengaluru/Karnataka default for guests.
+
+    Thin shim over the shared resolver in identity_auth.user_location.
+    Without that resolver, every authed user who created their address
+    only via the new 3-screen flow saw an empty home feed, because the
+    legacy users.address_state column is NULL and the feed filters
+    listings by state.
+    """
+    from app.modules.identity_auth.user_location import get_user_location
+    lat, lng, _city, state = await get_user_location(db, user_id)
+    return lat, lng, state
 
 
 def _serialize_row(r, distance_km):

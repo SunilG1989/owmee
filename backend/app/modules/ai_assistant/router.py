@@ -145,13 +145,10 @@ async def draft_from_image(
             detail={"error": "PHOTO_REJECTED", "flags": detected.flags},
         )
 
-    # Lookup user's state for region-aware comparables
-    state_row = await db.execute(
-        text("SELECT COALESCE(state, address_state, 'Karnataka') FROM users WHERE id = :uid"),
-        {"uid": user.user_id},
-    )
-    s = state_row.scalar()
-    user_state = s if s else "Karnataka"
+    # Lookup user's state for region-aware comparables. Prefer
+    # user_addresses (Address PRD), fall back to legacy user columns.
+    from app.modules.identity_auth.user_location import get_user_location
+    _, _, _, user_state = await get_user_location(db, user.user_id)
 
     # Price estimate priority order (best signal first):
     #   1. Comparables (real recent sales in the seller's region) — gold standard
@@ -372,16 +369,13 @@ async def create_from_draft(
         else:
             verification_status = "pending"
 
-    # Pull seller's location for the listing's geo fields (best-effort)
-    loc_row = await db.execute(
-        text("SELECT lat, lng, city, state FROM users WHERE id = :uid"),
-        {"uid": user.user_id},
-    )
-    loc = loc_row.first()
-    seller_lat = loc.lat if loc else None
-    seller_lng = loc.lng if loc else None
-    seller_city = loc.city if loc else None
-    seller_state = loc.state if loc else None
+    # Pull seller's location for the listing's geo fields. Prefer the
+    # default user_addresses row (Address PRD) since legacy user columns
+    # are NULL for new-flow users — without this, AI listings get
+    # rejected as out-of-zone or saved with empty city/state and never
+    # surface in the home feed.
+    from app.modules.identity_auth.user_location import get_user_location
+    seller_lat, seller_lng, seller_city, seller_state = await get_user_location(db, user.user_id)
 
     # Sprint trust pillar: hyperlocal-pilot geo-fence. Same gate as the
     # non-AI listing path — mirrored here so the AI flow can't bypass.
@@ -771,13 +765,10 @@ async def draft_from_images(
             "unknown",
         )
 
-    # Lookup user state for region-aware comparables
-    state_row = await db.execute(
-        text("SELECT COALESCE(state, address_state, 'Karnataka') FROM users WHERE id = :uid"),
-        {"uid": user.user_id},
-    )
-    s = state_row.scalar()
-    user_state = s if s else "Karnataka"
+    # Lookup user state for region-aware comparables (Address PRD — prefer
+    # user_addresses, fall back to legacy user columns).
+    from app.modules.identity_auth.user_location import get_user_location
+    _, _, _, user_state = await get_user_location(db, user.user_id)
 
     # Price estimate (same priority order as the single-image draft path:
     # comparables > vision > text-only AI fallback)
