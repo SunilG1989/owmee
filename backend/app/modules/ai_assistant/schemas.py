@@ -68,7 +68,38 @@ class AIDetected(BaseModel):
     # Authoring
     title_suggestion: str | None = None
     description_suggestion: str | None = None
-    flags: list[str] = Field(default_factory=list)  # nsfw, multiple_items, etc.
+    flags: list[str] = Field(default_factory=list)
+    # Image-set safety / quality flags. Old code reads from `flags`;
+    # PROMPT v2 also surfaces these as a structured `image_set_quality`
+    # block so post-processing can reason about them without string
+    # matching:
+    #   nsfw, personal_info, multiple_items, no_product, blurry,
+    #   packaging_only, screenshot_only, stock_or_catalog_suspected
+    image_set_quality: dict = Field(default_factory=dict)
+
+    # Review routing — populated by Gemini per PROMPT v2 + reinforced
+    # by the post-processing guardrails in claude_client.py.
+    manual_review_required: bool = False
+    auto_publish_candidate: bool = False
+    blocking_reasons: list[str] = Field(default_factory=list)
+
+    # Free-text rationale: "model exactness unclear", "asked seller for
+    # battery screenshot", etc. Surfaced verbatim in admin web.
+    extraction_notes: str | None = None
+
+    # Short user-facing requests for better photos. UI renders these as
+    # bullets above the camera button.
+    seller_photo_feedback: list[str] = Field(default_factory=list)
+
+    # Per-field confidence (0.0-1.0) — keys mirror the field names above.
+    # Used by the post-processor and downstream UI to flag low-confidence
+    # fields without taking a hard NULL stance.
+    field_confidence: dict = Field(default_factory=dict)
+
+    # Per-field evidence level: "direct_visible" | "strong_visual_inference"
+    # | "not_evidenced". The post-processor enforces direct_visible for
+    # spec fields (storage, ram, processor, battery_health, purchase_year).
+    field_evidence: dict = Field(default_factory=dict)
 
 
 class DraftFromImageResponse(BaseModel):

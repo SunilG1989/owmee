@@ -67,12 +67,33 @@ log = logging.getLogger(__name__)
 #     domain types so we can evolve them separately.
 
 
+class _ImageSetQuality(BaseModel):
+    """Structured signals from PROMPT v2's IMAGE SET VALIDITY rules.
+    Each is True only when the model is confident enough to act on it.
+    """
+    nsfw: bool = False
+    personal_info: bool = False
+    multiple_items: bool = False
+    no_product: bool = False
+    blurry: bool = False
+    packaging_only: bool = False
+    screenshot_only: bool = False
+    stock_or_catalog_suspected: bool = False
+
+
 class _GeminiVisionOut(BaseModel):
     """Schema we ask Gemini to fill. Mirrors AIDetected — every field
     here corresponds to a Listing column we want populated end-to-end
-    so the seller doesn't have to type."""
+    so the seller doesn't have to type.
+
+    Gemini's response_schema accepts only basic types (no Field metadata,
+    no constrained strings). dict / object fields are passed through as
+    plain dicts — Gemini fills whatever keys the prompt asks for.
+    """
     # Identification
-    category_slug: str | None = None
+    category_slug: str | None = None  # smartphones | laptops | tablets |
+                                      # small-appliances | kids-toys |
+                                      # kids-education | kids-utility | None
     category_confidence: float = 0.0
     brand: str | None = None
     model: str | None = None
@@ -101,6 +122,20 @@ class _GeminiVisionOut(BaseModel):
     title_suggestion: str | None = None
     description_suggestion: str | None = None
     flags: list[str] = []
+
+    # ── PROMPT v2 additions ─────────────────────────────────────────────
+    image_set_quality: _ImageSetQuality = _ImageSetQuality()
+    manual_review_required: bool = False
+    auto_publish_candidate: bool = False
+    blocking_reasons: list[str] = []
+    extraction_notes: str | None = None
+    seller_photo_feedback: list[str] = []
+    # Plain dict — keys are field names from this schema ("brand",
+    # "storage", etc.) and values are floats 0.0-1.0.
+    field_confidence: dict = {}
+    # Same shape; values are "direct_visible" | "strong_visual_inference"
+    # | "not_evidenced".
+    field_evidence: dict = {}
 
 
 class _GeminiIMEIOut(BaseModel):
@@ -263,44 +298,201 @@ async def detect_from_images(
             )
             return _failed("parse_failed")
 
-    # Translate Gemini's output to the AIDetected domain type. Numeric
-    # fields are coerced defensively because Gemini occasionally returns
-    # numbers as strings ("128GB" comes back fine, but "8" for ram once
-    # came back as 8 instead of "8GB" — we accept both shapes).
-    flags = parsed.flags if isinstance(parsed.flags, list) else []
-    defects = parsed.defects if isinstance(parsed.defects, list) else []
+    # Translate Gemini's output to the AIDetected domain type and apply
+    # the post-processing guardrails defined alongside PROMPT v2. The
+    # prompt itself instructs Gemini to follow these rules — but Gemini
+    # doesn't always comply (especially on price + spec fields), so
+    # we enforce them server-side as a hard belt-and-braces.
+    detected = _translate_vision_response(parsed)
+    return _apply_post_processing_guardrails(detected)
+
+
+def _translate_vision_response(parsed: "_GeminiVisionOut") -> AIDetected:
+    """Map _GeminiVisionOut → AIDetected (1:1 with light defensive
+    coercion for fields where Gemini sometimes returns mismatched types).
+    """
+    flags_in = parsed.flags if isinstance(parsed.flags, list) else []
+    defects_in = parsed.defects if isinstance(parsed.defects, list) else []
+
+    # image_set_quality may come back as a Pydantic model OR a dict
+    # (when Gemini outputs JSON without nested-model coercion).
+    isq = parsed.image_set_quality
+    if isinstance(isq, dict):
+        isq_dict = isq
+    else:
+        isq_dict = isq.model_dump() if isq else {}
+
     return AIDetected(
-        # Identification
         category_slug=parsed.category_slug,
         category_confidence=float(parsed.category_confidence or 0.0),
         brand=parsed.brand,
         model=parsed.model,
-        # Specs
         storage=parsed.storage,
         ram=parsed.ram,
         processor=parsed.processor,
         screen_size=parsed.screen_size,
-        # Cosmetic
         color=parsed.color,
         purchase_year=parsed.purchase_year,
-        # Condition detail
         condition_guess=parsed.condition_guess,
         screen_condition=parsed.screen_condition,
         body_condition=parsed.body_condition,
-        defects=[str(d)[:120] for d in defects][:8],  # cap length + count
+        defects=[str(d)[:120] for d in defects_in][:8],
         battery_health=parsed.battery_health,
-        # Extras
         accessories=parsed.accessories,
         warranty_status=parsed.warranty_status,
-        # Pricing
         suggested_price_inr=int(parsed.suggested_price_inr) if parsed.suggested_price_inr else None,
         price_confidence=float(parsed.price_confidence or 0.0),
         price_reasoning=parsed.price_reasoning,
-        # Authoring
         title_suggestion=parsed.title_suggestion,
         description_suggestion=parsed.description_suggestion,
-        flags=[str(f) for f in flags],
+        flags=[str(f) for f in flags_in],
+        # PROMPT v2 additions
+        image_set_quality=isq_dict,
+        manual_review_required=bool(parsed.manual_review_required),
+        auto_publish_candidate=bool(parsed.auto_publish_candidate),
+        blocking_reasons=[str(b)[:200] for b in (parsed.blocking_reasons or [])][:8],
+        extraction_notes=parsed.extraction_notes,
+        seller_photo_feedback=[str(s)[:200] for s in (parsed.seller_photo_feedback or [])][:5],
+        field_confidence=dict(parsed.field_confidence or {}),
+        field_evidence=dict(parsed.field_evidence or {}),
     )
+
+
+# Spec fields that PROMPT v2 says require direct_visible evidence.
+# The post-processor nulls these unless field_evidence reports
+# direct_visible — protects against Gemini fabricating specs from
+# model knowledge.
+_SPEC_FIELDS_REQUIRING_DIRECT_VISIBLE = (
+    "storage",
+    "ram",
+    "processor",
+    "battery_health",
+    "purchase_year",
+    "screen_size",
+)
+
+# Image-set quality flags that mean "do not auto-price this listing."
+_PRICE_BLOCKING_QUALITY_FLAGS = (
+    "multiple_items",
+    "no_product",
+    "blurry",
+    "screenshot_only",
+    "stock_or_catalog_suspected",
+)
+
+
+def _apply_post_processing_guardrails(detected: AIDetected) -> AIDetected:
+    """Server-side enforcement of the rules in PROMPT v2.
+
+    Even when Gemini ignores the prompt's instructions, this function
+    reshapes the response so the rest of the app sees a safe payload:
+
+      1. personal_info / nsfw → null all product/listing/pricing fields,
+         mark manual_review_required, drop auto_publish_candidate.
+      2. multiple_items / no_product / blurry / screenshot_only /
+         stock_or_catalog_suspected → null pricing.
+      3. spec fields without direct_visible field_evidence → null.
+      4. price_confidence < 0.5 → suggested_price_inr null.
+      5. manual_review_required True → auto_publish_candidate False.
+    """
+    isq = detected.image_set_quality or {}
+
+    def _q(name: str) -> bool:
+        v = isq.get(name)
+        return bool(v) if v is not None else False
+
+    blocking_reasons: list[str] = list(detected.blocking_reasons or [])
+
+    # Rule 1: privacy / safety → nuke every product/listing/pricing field.
+    if _q("personal_info") or _q("nsfw"):
+        reason = "personal_info" if _q("personal_info") else "nsfw"
+        if reason not in blocking_reasons:
+            blocking_reasons.append(reason)
+        return AIDetected(
+            category_slug=None,
+            category_confidence=0.0,
+            brand=None,
+            model=None,
+            storage=None,
+            ram=None,
+            processor=None,
+            screen_size=None,
+            color=None,
+            purchase_year=None,
+            condition_guess=None,
+            screen_condition=None,
+            body_condition=None,
+            defects=[],
+            battery_health=None,
+            accessories=None,
+            warranty_status=None,
+            suggested_price_inr=None,
+            price_confidence=0.0,
+            price_reasoning=None,
+            title_suggestion=None,
+            description_suggestion=None,
+            flags=detected.flags,
+            image_set_quality=isq,
+            manual_review_required=True,
+            auto_publish_candidate=False,
+            blocking_reasons=blocking_reasons,
+            extraction_notes=detected.extraction_notes
+            or "Photo flagged as personal_info/nsfw — listing fields cleared by post-processor.",
+            seller_photo_feedback=detected.seller_photo_feedback,
+            field_confidence={},
+            field_evidence={},
+        )
+
+    # Rule 2: image-set quality flags that block pricing.
+    suggested_price_inr = detected.suggested_price_inr
+    price_confidence = detected.price_confidence
+    price_reasoning = detected.price_reasoning
+    for flag in _PRICE_BLOCKING_QUALITY_FLAGS:
+        if _q(flag):
+            if suggested_price_inr is not None:
+                price_reasoning = (
+                    f"price suppressed by post-processor: image_set_quality.{flag}"
+                )
+            suggested_price_inr = None
+            price_confidence = 0.0
+            if flag not in blocking_reasons:
+                blocking_reasons.append(flag)
+
+    # Rule 3: spec fields without direct_visible evidence.
+    fe = detected.field_evidence or {}
+    forced_specs: dict[str, None] = {}
+    for spec_field in _SPEC_FIELDS_REQUIRING_DIRECT_VISIBLE:
+        ev = fe.get(spec_field)
+        # If field_evidence is missing OR not direct_visible, force null.
+        # We only apply this when Gemini gave us evidence labels at all
+        # (the v2 prompt is what emits them); otherwise we leave the
+        # legacy behaviour intact for backwards compat with old prompts.
+        if fe and getattr(detected, spec_field, None) is not None and ev != "direct_visible":
+            forced_specs[spec_field] = None
+
+    # Rule 4: price-confidence floor.
+    if (price_confidence or 0.0) < 0.5 and suggested_price_inr is not None:
+        suggested_price_inr = None
+        if "price_confidence_below_floor" not in blocking_reasons:
+            blocking_reasons.append("price_confidence_below_floor")
+
+    # Rule 5: manual_review_required forces auto_publish_candidate False.
+    manual_review_required = bool(detected.manual_review_required)
+    auto_publish_candidate = bool(detected.auto_publish_candidate)
+    if manual_review_required:
+        auto_publish_candidate = False
+
+    # Apply spec nulls (Pydantic immutable-by-convention; rebuild with .model_copy).
+    update_kwargs: dict = {
+        "suggested_price_inr": suggested_price_inr,
+        "price_confidence": price_confidence,
+        "price_reasoning": price_reasoning,
+        "manual_review_required": manual_review_required,
+        "auto_publish_candidate": auto_publish_candidate,
+        "blocking_reasons": blocking_reasons,
+    }
+    update_kwargs.update(forced_specs)
+    return detected.model_copy(update=update_kwargs)
 
 
 # Single-image convenience wrapper — keeps v1 API for backward compatibility.
