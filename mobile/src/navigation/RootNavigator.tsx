@@ -62,6 +62,9 @@ import FeVisitHistoryScreen from '../screens/fe/FeVisitHistoryScreen';
 // Concierge Phase 3 — specialist excellence (FE app)
 import SellerApprovalScreen from '../screens/fe/SellerApprovalScreen';
 import VisitContinueScreen from '../screens/fe/VisitContinueScreen';
+// Concierge Phase 5 — trust safety net
+import ReportIssueScreen from '../screens/fe/ReportIssueScreen';
+import NpsScreen from '../screens/listings/concierge/NpsScreen';
 import RequestFeVisitScreen from '../screens/listings/RequestFeVisitScreen';
 import CommunityProofScreen from '../screens/community/CommunityProofScreen';
 // Sprint 4 / Pass 3: real screens replacing Pass 2 stubs
@@ -222,6 +225,8 @@ function FeRootStack() {
         {/* Concierge Phase 3 — specialist excellence */}
         <FeStack.Screen name="SellerApproval" component={SellerApprovalScreen} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
         <FeStack.Screen name="VisitContinue" component={VisitContinueScreen} options={{ animation: 'slide_from_right' }} />
+        {/* Concierge Phase 5 — trust safety net (FE side) */}
+        <FeStack.Screen name="ReportIssue" component={ReportIssueScreen} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
       </FeStack.Navigator>
     </NavigationContainer>
   );
@@ -359,6 +364,8 @@ export default function RootNavigator() {
         {/* Concierge Phase 2 — trust theater deep links */}
         <RootStack.Screen name="VisitDetail" component={VisitDetailScreen} options={{ animation: 'slide_from_right' }} />
         <RootStack.Screen name="ArrivalVerification" component={ArrivalVerificationScreen} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
+        {/* Concierge Phase 5 — seller NPS (deep-linked from notification) */}
+        <RootStack.Screen name="ConciergeNps" component={NpsScreen} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
         {/* Legacy seller-facing FE request screen — DEPRECATED in Concierge
             Phase 1, file kept (marked @deprecated) for reference only.
             Phase 5 deletes the file. */}

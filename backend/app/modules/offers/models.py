@@ -71,6 +71,13 @@ class Transaction(Base, TimestampMixin):
     # cancelled | cancelled_at_meetup | refunded | disputed
     workflow_id = Column(String(256))
     dispute_id = Column(UUID(as_uuid=True))
+    # Concierge Phase 5 (master spec section 8.3): when admin resolves a
+    # dispute as "transit damage, not seller's fault," buyer is refunded
+    # AND seller still receives expected payout from the trust fund.
+    # Finance ops manually settles the sum of these monthly.
+    trust_fund_payout_amount_inr = Column(Numeric(10, 2), nullable=True)
+    seller_protection_reason = Column(String(80), nullable=True)
+    seller_protection_resolved_at = Column(DateTime(timezone=True), nullable=True)
 
     # Meetup coordination
     agreed_meetup_at = Column(DateTime(timezone=True))       # Agreed meetup time

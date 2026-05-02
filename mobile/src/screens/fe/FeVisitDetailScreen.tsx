@@ -138,7 +138,13 @@ export default function FeVisitDetailScreen({ route, navigation }: RootScreen<'F
           <Text style={st.back}>‹</Text>
         </TouchableOpacity>
         <Text style={st.h1}>Visit details</Text>
-        <View style={{ width: 24 }} />
+        {/* Concierge Phase 5 — Report issue corner */}
+        <TouchableOpacity
+          onPress={() => navigation.navigate('ReportIssue', { visitId: visit.id })}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Text style={[st.back, { fontSize: 18, color: C.red }]}>⚠</Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={{ padding: S.lg, paddingBottom: 120 }}>

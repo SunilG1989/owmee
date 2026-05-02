@@ -38,7 +38,7 @@ from app.core.storage import (
 )
 from app.core.temporal_client import TASK_QUEUE, get_temporal_client
 from app.modules.field_executive import service as fe_service
-from app.modules.field_executive.models import FEVisit, FieldExecutive
+from app.modules.field_executive.models import FEVisit, FEVisitIssue, FEVisitNps, FieldExecutive
 from app.modules.field_executive.workflows import (
     FEVisitWorkflow,
     FEVisitWorkflowInput,
@@ -668,17 +668,25 @@ async def seller_confirm_arrival(
         await db.commit()
         return {"confirmed": True, "alerted": False}
 
-    # Code mismatch — phase 5 lands the real fe_visit_issues table; for
-    # now log loud so admin can intervene from server logs / Sentry.
+    # Phase 5: real fe_visit_issues row + admin alert.
+    issue = FEVisitIssue(
+        visit_id=visit.id,
+        reporter_user_id=current_user.user_id,
+        category="safety_concern",
+        severity="urgent",
+        description="Seller flagged code mismatch at the door.",
+        photo_urls=[],
+    )
+    db.add(issue)
+    await db.commit()
     logger.error(
         "concierge.code_mismatch_alert",
         visit_id=str(visit.id),
+        issue_id=str(issue.id),
         seller_id=str(visit.seller_id),
         fe_id=str(visit.fe_id) if visit.fe_id else None,
-        severity="urgent",
-        category="safety_concern",
     )
-    return {"confirmed": False, "alerted": True}
+    return {"confirmed": False, "alerted": True, "issue_id": str(issue.id)}
 
 
 # ── FE-facing router: /v1/fe/visits ───────────────────────────────────────────
@@ -1089,9 +1097,15 @@ class CloseVisitRequest(BaseModel):
       rejected_item           — specialist judged none worth listing
       seller_missing_verification — KYC/ID didn't pan out
       pickup_not_ready        — seller wasn't ready, reschedule
+
+    Phase 5 additions:
+      handover_photo_r2_key — group photo of items being taken (optional)
+      handover_skipped — true if seller agreed verbally instead
     """
     outcome: str = Field(..., pattern=r"^(listed|rejected_item|seller_missing_verification|pickup_not_ready)$")
     outcome_reason: Optional[str] = Field(None, max_length=500)
+    handover_photo_r2_key: Optional[str] = Field(None, max_length=500)
+    handover_skipped: bool = False
 
 
 @fe_router.post("/{visit_id}/close-visit", response_model=VisitResponse)
@@ -1118,6 +1132,12 @@ async def close_visit(
                 "message": f"Cannot close from {visit.status}.",
             },
         )
+
+    # Phase 5: stamp handover artefacts before the status transition.
+    if body.handover_photo_r2_key:
+        visit.handover_photo_r2_key = body.handover_photo_r2_key
+    if body.handover_skipped:
+        visit.handover_skipped = True
 
     listing_id_for_signal: Optional[UUID] = visit.listing_id
     try:
@@ -1208,11 +1228,217 @@ async def submit_outcome(
     return await _visit_to_response(db, visit)
 
 
+# ── Concierge Phase 5: trust safety net (master spec section 8) ──────────────
+
+
+_ISSUE_CATEGORIES = {
+    "item_damage", "seller_backout", "address_mismatch",
+    "seller_absent", "safety_concern", "other",
+}
+_CATEGORY_DEFAULT_SEVERITY = {
+    "item_damage": "medium",
+    "seller_backout": "medium",
+    "address_mismatch": "low",
+    "seller_absent": "high",
+    "safety_concern": "urgent",
+    "other": "low",
+}
+
+
+class IssueReportRequest(BaseModel):
+    category: str = Field(..., min_length=1, max_length=50)
+    description: Optional[str] = Field(None, max_length=2000)
+    photo_urls: list[str] = Field(default_factory=list, max_length=10)
+
+
+class IssueResponse(BaseModel):
+    id: str
+    visit_id: str
+    category: str
+    severity: str
+    description: Optional[str]
+    photo_urls: list[str]
+    admin_resolved_at: Optional[str]
+    admin_resolution_notes: Optional[str]
+    created_at: str
+
+    @classmethod
+    def from_row(cls, r: FEVisitIssue) -> "IssueResponse":
+        return cls(
+            id=str(r.id),
+            visit_id=str(r.visit_id),
+            category=r.category,
+            severity=r.severity,
+            description=r.description,
+            photo_urls=list(r.photo_urls or []),
+            admin_resolved_at=r.admin_resolved_at.isoformat() if r.admin_resolved_at else None,
+            admin_resolution_notes=r.admin_resolution_notes,
+            created_at=r.created_at.isoformat() if r.created_at else "",
+        )
+
+
+@fe_router.post("/{visit_id}/issues", response_model=IssueResponse, status_code=201)
+async def fe_report_issue(
+    visit_id: UUID,
+    body: IssueReportRequest,
+    current_fe: FEUser,
+    db: DBSession,
+):
+    """Specialist-side issue report — master spec section 8.2.
+
+    Severity is auto-assigned from the category. urgent issues should
+    page admin (Slack/Discord webhook is env-driven and off by default
+    in pilot; admin web /admin/fe-issues page surfaces the alert).
+    """
+    visit = await _load_visit_by_id(db, visit_id)
+    fe = await fe_service.get_fe_by_user_id(db, current_fe.user_id)
+    if fe is None or visit.fe_id != fe.id:
+        raise HTTPException(status_code=403, detail={"error": "NOT_YOUR_VISIT"})
+    if body.category not in _ISSUE_CATEGORIES:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "INVALID_CATEGORY",
+                "message": f"category must be one of {sorted(_ISSUE_CATEGORIES)}",
+            },
+        )
+    severity = _CATEGORY_DEFAULT_SEVERITY[body.category]
+
+    issue = FEVisitIssue(
+        visit_id=visit.id,
+        reporter_user_id=current_fe.user_id,
+        category=body.category,
+        severity=severity,
+        description=body.description,
+        photo_urls=body.photo_urls,
+    )
+    db.add(issue)
+    await db.commit()
+    await db.refresh(issue)
+    logger.info(
+        "fe_visit_issue.created",
+        visit_id=str(visit.id),
+        issue_id=str(issue.id),
+        category=body.category,
+        severity=severity,
+    )
+    return IssueResponse.from_row(issue)
+
+
+# ── NPS (master spec section 8.4) ────────────────────────────────────
+
+
+class NpsSubmitRequest(BaseModel):
+    nps_score: int = Field(..., ge=0, le=10)
+    free_text: Optional[str] = Field(None, max_length=2000)
+
+
+@seller_router.post("/{visit_id}/nps", status_code=201)
+async def submit_nps(
+    visit_id: UUID,
+    body: NpsSubmitRequest,
+    current_user: BasicUser,
+    db: DBSession,
+):
+    """Seller submits NPS for the visit's specialist. One per visit.
+
+    The specialist row is required to derive specialist_user_id. If the
+    FE record has no linked user, we 409 — that's a data-quality issue
+    ops should fix, not silently skip.
+    """
+    visit = await _load_visit_by_id(db, visit_id)
+    if visit.seller_id != current_user.user_id:
+        raise HTTPException(status_code=403, detail={"error": "NOT_YOUR_VISIT"})
+    if visit.status != "completed":
+        raise HTTPException(
+            status_code=409,
+            detail={"error": "VISIT_NOT_COMPLETED"},
+        )
+    if visit.fe_id is None:
+        raise HTTPException(status_code=409, detail={"error": "NO_SPECIALIST"})
+
+    fe = await _load_fe_by_id(db, visit.fe_id)
+    if not fe.user_id:
+        raise HTTPException(status_code=409, detail={"error": "SPECIALIST_HAS_NO_USER"})
+
+    # Reject duplicate NPS for the same visit (unique index also blocks at DB).
+    dup_res = await db.execute(
+        select(FEVisitNps).where(FEVisitNps.visit_id == visit.id)
+    )
+    if dup_res.scalar_one_or_none() is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={"error": "NPS_ALREADY_SUBMITTED"},
+        )
+
+    nps = FEVisitNps(
+        visit_id=visit.id,
+        seller_user_id=current_user.user_id,
+        specialist_user_id=fe.user_id,
+        nps_score=body.nps_score,
+        free_text=body.free_text,
+    )
+    db.add(nps)
+    await db.commit()
+    logger.info(
+        "fe_visit_nps.submitted",
+        visit_id=str(visit.id),
+        score=body.nps_score,
+    )
+    return {"submitted": True, "nps_score": body.nps_score}
+
+
 # ── Admin router: /v1/admin/fe-visits ─────────────────────────────────────────
 #
 # Pass 3: real AdminUser dep (AdminAny for reads, AdminL2 for writes).
 
 admin_router = APIRouter()
+
+
+@admin_router.get("/issues", response_model=list[IssueResponse])
+async def admin_list_issues(
+    current_admin: AdminAny,
+    db: DBSession,
+    severity: Optional[str] = None,
+    unresolved_only: bool = True,
+):
+    """Concierge Phase 5 — admin web /admin/fe-issues backing list.
+
+    Default: unresolved issues newest-first. severity filter narrows to
+    'urgent' for the at-a-glance dashboard surface; pass empty/null to
+    see all severities.
+    """
+    q = select(FEVisitIssue).order_by(desc(FEVisitIssue.created_at))
+    if unresolved_only:
+        q = q.where(FEVisitIssue.admin_resolved_at.is_(None))
+    if severity:
+        q = q.where(FEVisitIssue.severity == severity)
+    res = await db.execute(q.limit(200))
+    rows = list(res.scalars().all())
+    return [IssueResponse.from_row(r) for r in rows]
+
+
+class ResolveIssueRequest(BaseModel):
+    resolution_notes: Optional[str] = Field(None, max_length=2000)
+
+
+@admin_router.post("/issues/{issue_id}/resolve", response_model=IssueResponse)
+async def admin_resolve_issue(
+    issue_id: UUID,
+    body: ResolveIssueRequest,
+    current_admin: AdminL2,
+    db: DBSession,
+):
+    res = await db.execute(select(FEVisitIssue).where(FEVisitIssue.id == issue_id))
+    issue = res.scalar_one_or_none()
+    if issue is None:
+        raise HTTPException(status_code=404, detail={"error": "ISSUE_NOT_FOUND"})
+    from datetime import datetime, timezone
+    issue.admin_resolved_at = datetime.now(timezone.utc)
+    issue.admin_resolution_notes = body.resolution_notes
+    await db.commit()
+    await db.refresh(issue)
+    return IssueResponse.from_row(issue)
 
 
 @admin_router.get("/fes", response_model=list[FEResponse])

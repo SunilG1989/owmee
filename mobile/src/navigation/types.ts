@@ -39,6 +39,9 @@ export type RootStackParams = {
     payload: any;
   };
   VisitContinue: { visitId: string };
+  // Concierge Phase 5 — trust safety net
+  ReportIssue: { visitId: string };
+  ConciergeNps: { visit_id: string; specialist_first_name?: string };
 
   // Sprint 8 / Phase 1: Location picker re-entry (modal)
   LocationPicker: undefined;

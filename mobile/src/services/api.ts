@@ -538,9 +538,16 @@ export const FEVisits = {
   specialistProfile: (visitId: string) =>
     api.get<SpecialistProfile>(`/v1/fe-visits/${visitId}/specialist-profile`),
   sellerConfirmArrival: (visitId: string, codeMatched: boolean) =>
-    api.post<{ confirmed: boolean; alerted: boolean }>(
+    api.post<{ confirmed: boolean; alerted: boolean; issue_id?: string }>(
       `/v1/fe-visits/${visitId}/seller-confirm-arrival`,
       { code_matched: codeMatched },
+    ),
+
+  // Concierge Phase 5 — seller NPS submission (one per completed visit).
+  submitNps: (visitId: string, score: number, freeText?: string) =>
+    api.post<{ submitted: boolean; nps_score: number }>(
+      `/v1/fe-visits/${visitId}/nps`,
+      { nps_score: score, free_text: freeText ?? null },
     ),
 };
 
@@ -555,10 +562,19 @@ export const FE = {
   enforceAadhaar: (id: string) => api.post(`/v1/fe/visits/${id}/enforce-aadhaar`),
   submitListing: (id: string, payload: any) => api.post(`/v1/fe/visits/${id}/submit-listing`, payload),
   // Concierge Phase 3 — explicit close-visit (decoupled from submit-listing).
+  // Phase 5 extends with handover_photo_r2_key + handover_skipped.
   closeVisit: (id: string, payload: {
     outcome: 'listed' | 'rejected_item' | 'seller_missing_verification' | 'pickup_not_ready';
     outcome_reason?: string;
+    handover_photo_r2_key?: string;
+    handover_skipped?: boolean;
   }) => api.post(`/v1/fe/visits/${id}/close-visit`, payload),
+  // Concierge Phase 5 — Report Issue from FE app.
+  reportIssue: (visitId: string, payload: {
+    category: 'item_damage' | 'seller_backout' | 'address_mismatch' | 'seller_absent' | 'safety_concern' | 'other';
+    description?: string;
+    photo_urls?: string[];
+  }) => api.post(`/v1/fe/visits/${visitId}/issues`, payload),
   // Concierge Phase 3 — expert pricing panel.
   priceSuggestion: (params: {
     category_id: string;

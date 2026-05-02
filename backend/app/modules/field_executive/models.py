@@ -16,6 +16,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
+    SmallInteger,
     String,
     Text,
     text,
@@ -92,6 +93,14 @@ class FEVisit(Base, TimestampMixin):
     arrival_verification_code = Column(String(4), nullable=True)
     arrival_confirmed_by_seller_at = Column(DateTime(timezone=True), nullable=True)
 
+    # Concierge Phase 5 (master spec section 8.1): chain-of-custody
+    # capture at visit close. The specialist takes a group photo of all
+    # items and the seller confirms receipt. Both can be skipped — handover
+    # _skipped tracks the verbal-agreement path.
+    handover_photo_r2_key = Column(String(500), nullable=True)
+    handover_skipped = Column(Boolean, nullable=False, default=False)
+    seller_handover_confirmed_at = Column(DateTime(timezone=True), nullable=True)
+
     # Sprint 4 / Pass 3: category locked at admin assignment so FeCaptureScreen
     # can upload photos and submit the listing without a runtime picker hack.
     category_id = Column(
@@ -123,6 +132,64 @@ class FEVisit(Base, TimestampMixin):
         back_populates="visits",
         foreign_keys=[fe_id],
     )
+
+
+# ── Concierge Phase 5: trust safety net (master spec section 8) ─────────────
+
+
+class FEVisitIssue(Base, TimestampMixin):
+    """Issue raised by specialist (FE app Report Issue) or seller
+    (e.g. arrival code mismatch).
+
+    severity drives admin alerting:
+        urgent — admin web shows top-of-page banner; optional Slack ping
+        high   — daily-digest review
+        medium — weekly review
+        low    — review on next periodic sweep
+    """
+    __tablename__ = "fe_visit_issues"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    visit_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("fe_visits.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    reporter_user_id = Column(UUID(as_uuid=True), nullable=False)
+    category = Column(String(50), nullable=False)
+    # 'item_damage' | 'seller_backout' | 'address_mismatch' |
+    # 'seller_absent' | 'safety_concern' | 'other'
+    severity = Column(String(20), nullable=False)
+    # 'low' | 'medium' | 'high' | 'urgent'
+    description = Column(Text, nullable=True)
+    photo_urls = Column(JSONB, nullable=False, default=list)
+    admin_notified_at = Column(DateTime(timezone=True), nullable=True)
+    admin_resolved_at = Column(DateTime(timezone=True), nullable=True)
+    admin_resolution_notes = Column(Text, nullable=True)
+
+
+class FEVisitNps(Base):
+    """Seller's 1-question NPS for the visit, captured after payout."""
+    __tablename__ = "fe_visit_nps"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    visit_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("fe_visits.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    seller_user_id = Column(UUID(as_uuid=True), nullable=False)
+    specialist_user_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    nps_score = Column(SmallInteger, nullable=False)
+    free_text = Column(Text, nullable=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+
 
 # ── Sprint 4 / Pass 4c: per-visit FE earnings ────────────────────────────────
 
