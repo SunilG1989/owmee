@@ -27,7 +27,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { C, T, S, R, Shadow, formatPrice } from '../../utils/tokens';
 import { Listings, AIListing } from '../../services/api';
-import { BackButton } from '../../components/ui';
+import { BackButton, Button } from '../../components/ui';
 import { parseApiError } from '../../utils/errors';
 import type { RootScreen } from '../../navigation/types';
 
@@ -286,16 +286,16 @@ export default function EditListingScreen({ route, navigation }: RootScreen<'Edi
 
         {isEditable && (
           <View style={st.ctaBar}>
-            <TouchableOpacity
-              style={[st.saveBtn, saving && { opacity: 0.6 }]}
+            <Button
+              label="Save changes"
+              variant="primary"
+              size="lg"
+              loading={saving}
+              disabled={saving}
               onPress={save}
-              disabled={saving}>
-              {saving ? (
-                <ActivityIndicator color={C.surface} />
-              ) : (
-                <Text style={st.saveBtnText}>Save changes</Text>
-              )}
-            </TouchableOpacity>
+              fullWidth
+              style={st.saveBtn}
+            />
           </View>
         )}
       </KeyboardAvoidingView>
@@ -317,7 +317,7 @@ const st = StyleSheet.create({
     backgroundColor: C.surface,
   },
   headerBtn: { minWidth: 32, height: 32, justifyContent: 'center' },
-  headerBtnText: { fontSize: 22, color: C.text2 },
+  headerBtnText: { fontSize: T.size.xxl - 2, color: C.text2 },
   headerTitle: { fontSize: T.size.lg, fontWeight: T.weight.semi, color: C.text },
 
   lockedBanner: {
@@ -384,12 +384,5 @@ const st = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: C.border,
   },
-  saveBtn: {
-    backgroundColor: C.petrol,
-    paddingVertical: S.lg,
-    borderRadius: R.md,
-    alignItems: 'center',
-    ...Shadow.glow,
-  },
-  saveBtnText: { color: C.surface, fontSize: T.size.lg, fontWeight: T.weight.bold },
+  saveBtn: { ...Shadow.glow },
 });

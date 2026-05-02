@@ -32,7 +32,6 @@ src/screens/fe/ReportIssueScreen.tsx
 src/screens/kids/KidsSectionScreen.tsx
 src/screens/listings/CreateListingScreen.tsx
 src/screens/listings/EditListingScreen.tsx
-src/screens/listings/FeVisitConfirmationScreen.tsx
 src/screens/listings/ListingDetailScreen.tsx
 src/screens/listings/MyListingsScreen.tsx
 src/screens/listings/RequestFeVisitScreen.tsx

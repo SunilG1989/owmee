@@ -9,11 +9,12 @@
  */
 import React, { useEffect, useState, useCallback } from 'react';
 import {
-  SafeAreaView, View, Text, ScrollView, TouchableOpacity,
+  SafeAreaView, View, Text, ScrollView,
   StyleSheet, RefreshControl, ActivityIndicator, Alert,
 } from 'react-native';
 
 import { FEVisits } from '../../services/api';
+import { Button } from '../../components/ui';
 import { C, T, S, R, Shadow } from '../../utils/tokens';
 import type { RootScreen } from '../../navigation/types';
 
@@ -138,7 +139,7 @@ export default function FeVisitConfirmationScreen({
   return (
     <SafeAreaView style={st.root}>
       <ScrollView
-        contentContainerStyle={{ padding: S.xxxl, paddingBottom: S.xxl }}
+        contentContainerStyle={st.scroll}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.petrol} />}
       >
         <View style={st.check}>
@@ -195,28 +196,28 @@ export default function FeVisitConfirmationScreen({
           </View>
         ) : null}
 
-        <View style={{ height: S.xl }} />
+        <View style={st.gap} />
 
         <Text style={st.refLabel}>Booking reference</Text>
         <Text style={st.ref}>{visitId}</Text>
 
-        <TouchableOpacity
-          style={st.primaryBtn}
+        <Button
+          label="Back to home"
+          variant="primary"
+          size="lg"
           onPress={() => navigation.navigate('MainTabs' as never)}
-        >
-          <Text style={st.primaryBtnText}>Back to home</Text>
-        </TouchableOpacity>
+          fullWidth
+          style={st.primaryBtn}
+        />
 
         {canCancel ? (
-          <TouchableOpacity
-            style={st.cancelBtn}
+          <Text
+            style={st.cancelLink}
             onPress={cancel}
-            disabled={cancelling}
+            accessibilityRole="button"
           >
-            <Text style={st.cancelBtnText}>
-              {cancelling ? 'Cancelling…' : 'Cancel this visit'}
-            </Text>
-          </TouchableOpacity>
+            {cancelling ? 'Cancelling…' : 'Cancel this visit'}
+          </Text>
         ) : null}
       </ScrollView>
     </SafeAreaView>
@@ -234,16 +235,18 @@ const st = StyleSheet.create({
     marginBottom: S.xl,
     ...Shadow.glow,
   },
-  checkIcon: { fontSize: 36, color: C.petrolText, fontWeight: '700' },
-  h1: { fontSize: T.h1, fontWeight: '700', color: C.text, textAlign: 'center', marginBottom: 6 },
+  checkIcon: { fontSize: T.size.display + 6, color: C.petrolText, fontWeight: T.weight.bold },
+  scroll: { padding: S.xxxl, paddingBottom: S.xxl },
+  gap: { height: S.xl },
+  h1: { fontSize: T.h1, fontWeight: T.weight.bold, color: C.text, textAlign: 'center', marginBottom: S.xs + 2 },
   sub: { fontSize: T.body, color: C.text3, textAlign: 'center', marginBottom: S.lg },
   statusPill: {
     alignSelf: 'center',
-    paddingHorizontal: S.md, paddingVertical: 6,
+    paddingHorizontal: S.md, paddingVertical: S.xs + 2,
     borderRadius: R.pill,
     marginBottom: S.xl,
   },
-  statusPillText: { fontSize: T.small, fontWeight: '700' },
+  statusPillText: { fontSize: T.small, fontWeight: T.weight.bold },
   card: {
     backgroundColor: C.surface,
     borderRadius: R.lg,
@@ -251,20 +254,20 @@ const st = StyleSheet.create({
     marginBottom: S.md,
     ...Shadow.glow,
   },
-  cardLabel: { fontSize: T.small, color: C.text3, fontWeight: '600', marginBottom: 4 },
-  cardValue: { fontSize: T.body, color: C.text, fontWeight: '600' },
-  cardHint: { fontSize: T.small, color: C.text3, marginTop: 4 },
+  cardLabel: { fontSize: T.small, color: C.text3, fontWeight: T.weight.semi, marginBottom: S.xs },
+  cardValue: { fontSize: T.body, color: C.text, fontWeight: T.weight.semi },
+  cardHint: { fontSize: T.small, color: C.text3, marginTop: S.xs },
   refLabel: { fontSize: T.small, color: C.text3, marginBottom: 2 },
   ref: {
     fontSize: T.small, color: C.text2, fontFamily: 'monospace',
     marginBottom: S.xl,
   },
-  primaryBtn: {
-    backgroundColor: C.petrol, paddingVertical: S.md,
-    borderRadius: R.md, alignItems: 'center',
-    ...Shadow.glow,
+  primaryBtn: { ...Shadow.glow },
+  cancelLink: {
+    color: C.red, fontSize: T.small,
+    textDecorationLine: 'underline',
+    textAlign: 'center',
+    marginTop: S.md,
+    paddingVertical: S.md,
   },
-  primaryBtnText: { color: C.white, fontSize: T.body, fontWeight: '700' },
-  cancelBtn: { paddingVertical: S.md, alignItems: 'center', marginTop: S.sm },
-  cancelBtnText: { color: C.red, fontSize: T.small, textDecorationLine: 'underline' },
 });

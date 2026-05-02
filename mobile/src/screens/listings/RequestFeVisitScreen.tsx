@@ -22,7 +22,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Auth, FEVisits } from '../../services/api';
-import { BackButton } from '../../components/ui';
+import { BackButton, Button } from '../../components/ui';
 import { C, S, R, T, Shadow } from '../../utils/tokens';
 import type { RootScreen } from '../../navigation/types';
 
@@ -206,7 +206,7 @@ export default function RequestFeVisitScreen({ route, navigation }: RootScreen<'
 
           <Text style={st.sectionTitle}>Anything we should know?</Text>
           <TextInput
-            style={[st.input, { minHeight: 80, textAlignVertical: 'top' }]}
+            style={[st.input, st.inputMulti]}
             multiline
             placeholder="e.g. iPhone 13 Pro, has a screen crack…"
             placeholderTextColor={C.text3}
@@ -217,15 +217,16 @@ export default function RequestFeVisitScreen({ route, navigation }: RootScreen<'
       </KeyboardAvoidingView>
 
       <View style={st.footer}>
-        <TouchableOpacity
-          style={[st.primaryBtn, (!canSubmit || submitting || loadingProfile) && { opacity: 0.5 }]}
-          onPress={submit}
+        <Button
+          label="Request visit"
+          variant="primary"
+          size="lg"
+          loading={submitting}
           disabled={!canSubmit || submitting || loadingProfile}
-        >
-          <Text style={st.primaryBtnText}>
-            {submitting ? 'Requesting…' : 'Request visit'}
-          </Text>
-        </TouchableOpacity>
+          onPress={submit}
+          fullWidth
+          style={st.primaryBtn}
+        />
       </View>
     </SafeAreaView>
   );
@@ -250,23 +251,22 @@ function LabeledInput(props: { label: string; value: string; onChangeText: (s: s
 const st = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bone },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: S.lg },
-  back: { fontSize: 28, color: C.text, paddingHorizontal: S.xs },
-  h1: { fontSize: T.h3, fontWeight: '600', color: C.text },
+  h1: { fontSize: T.h3, fontWeight: T.weight.semi, color: C.text },
   infoCard: { backgroundColor: C.petrolLight, padding: S.lg, borderRadius: R.lg, marginBottom: S.lg, borderWidth: 1, borderColor: C.petrol },
-  infoHead: { fontSize: T.h3, fontWeight: '700', color: C.petrolText, marginBottom: S.xs },
+  infoHead: { fontSize: T.h3, fontWeight: T.weight.bold, color: C.petrolText, marginBottom: S.xs },
   infoBody: { fontSize: T.body, color: C.petrolText, lineHeight: 20 },
-  sectionTitle: { fontSize: T.h3, fontWeight: '600', color: C.text, marginTop: S.lg, marginBottom: S.md },
+  sectionTitle: { fontSize: T.h3, fontWeight: T.weight.semi, color: C.text, marginTop: S.lg, marginBottom: S.md },
   chip: { paddingHorizontal: S.md, paddingVertical: S.sm, borderRadius: R.pill, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, marginRight: S.sm, marginBottom: S.sm },
   chipActive: { backgroundColor: C.petrol, borderColor: C.petrol },
-  chipText: { color: C.text2, fontSize: T.body, fontWeight: '500' },
-  chipTextActive: { color: C.white, fontWeight: '600' },
-  inputLabel: { fontSize: T.small, color: C.text3, fontWeight: '600', marginBottom: 4 },
+  chipText: { color: C.text2, fontSize: T.body, fontWeight: T.weight.medium },
+  chipTextActive: { color: C.white, fontWeight: T.weight.semi },
+  inputLabel: { fontSize: T.small, color: C.text3, fontWeight: T.weight.semi, marginBottom: S.xs },
   input: { backgroundColor: C.surface, borderRadius: R.md, padding: S.md, fontSize: T.body, color: C.text, borderWidth: 1, borderColor: C.border },
+  inputMulti: { minHeight: 80, textAlignVertical: 'top' },
   slot: { padding: S.md, backgroundColor: C.surface, borderRadius: R.md, borderWidth: 1, borderColor: C.border, marginBottom: S.sm },
   slotActive: { borderColor: C.petrol, backgroundColor: C.petrolLight },
   slotText: { color: C.text2, fontSize: T.body },
-  slotTextActive: { color: C.petrolText, fontWeight: '600' },
+  slotTextActive: { color: C.petrolText, fontWeight: T.weight.semi },
   footer: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: S.lg, backgroundColor: C.bone, borderTopWidth: 1, borderTopColor: C.border },
-  primaryBtn: { backgroundColor: C.petrol, paddingVertical: S.md, borderRadius: R.md, alignItems: 'center', ...Shadow.glow },
-  primaryBtnText: { color: C.white, fontSize: T.body, fontWeight: '700' },
+  primaryBtn: { ...Shadow.glow },
 });
