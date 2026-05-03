@@ -1,25 +1,27 @@
 /**
- * CategoryRail — compact icon-circle row (2026-05-03).
+ * CategoryRail — compact image-circle row (2026-05-03).
  *
- * Marketplace standard pattern (OLX, Cashify, Cars24, Mercari): a thin
- * horizontal scroll of small circular category tiles with the label
- * directly below. Total height ~95dp so listings stay above the fold.
+ * v16 locked spec: each tile renders a real local image cutout
+ * (mobile/assets/images/cat-*.png), NOT emoji. Drop transparent PNGs
+ * at those paths; require() resolves at bundle time.
  *
- * Books has no canonical category_slug in the current backend taxonomy
- * (smartphones / laptops / tablets / small-appliances / kids-utility),
- * so the Books tile fires an empty-slug press — consumer should treat
- * `null` as a no-op until a Books slug exists.
+ * Books has no canonical category_slug in the backend taxonomy yet;
+ * tile fires an empty-slug press — consumer treats `null` as no-op
+ * until a Books slug exists.
  */
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import {
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Image,
+  ImageSourcePropType,
+} from 'react-native';
 import { C, T, S, R } from '../utils/tokens';
 
 export interface CategoryDef {
   label: string;
   slug: string | null;
-  /** Emoji glyph that sits inside the circular tile. */
-  emoji: string;
-  /** Optional background tint for the icon circle (defaults to mintSoft). */
+  /** Local cutout PNG asset for the tile. */
+  image: ImageSourcePropType;
+  /** Optional background tint for the icon circle (defaults to bg_soft). */
   tint?: string;
 }
 
@@ -29,12 +31,15 @@ interface Props {
   categories?: CategoryDef[];
 }
 
+// Category cutouts at locked spec path. Drop real .webp cutouts at
+// mobile/assets/owmee/home/cat-*.webp — placeholders resolve until
+// real assets land. NO emoji fallback per rule 14.
 const DEFAULT_CATEGORIES: CategoryDef[] = [
-  { label: 'Mobiles',         slug: 'smartphones',      emoji: '📱', tint: C.mintSoft },
-  { label: 'Laptops',         slug: 'laptops',          emoji: '💻', tint: C.blueSoft },
-  { label: 'Kids',            slug: 'kids-utility',     emoji: '🧸', tint: C.amberSoft },
-  { label: 'Books',           slug: null,               emoji: '📚', tint: C.mintSoft },
-  { label: 'Appliances',      slug: 'small-appliances', emoji: '🧺', tint: C.blueSoft },
+  { label: 'Mobiles',    slug: 'smartphones',      image: require('../../assets/owmee/home/cat-mobile.webp'),     tint: C.mintSoft },
+  { label: 'Laptops',    slug: 'laptops',          image: require('../../assets/owmee/home/cat-laptop.webp'),     tint: C.bone2 },
+  { label: 'Kids',       slug: 'kids-utility',     image: require('../../assets/owmee/home/cat-kids.webp'),       tint: C.amberSoft },
+  { label: 'Books',      slug: null,               image: require('../../assets/owmee/home/cat-books.webp'),      tint: C.blueSoft },
+  { label: 'Appliances', slug: 'small-appliances', image: require('../../assets/owmee/home/cat-appliances.webp'), tint: C.bone2 },
 ];
 
 export default function CategoryRail({
@@ -62,8 +67,8 @@ export default function CategoryRail({
             onPress={() => onCategoryPress(cat)}
             style={s.tile}
           >
-            <View style={[s.iconCircle, { backgroundColor: cat.tint || C.mintSoft }]}>
-              <Text style={s.iconGlyph} allowFontScaling={false}>{cat.emoji}</Text>
+            <View style={[s.iconCircle, { backgroundColor: cat.tint || C.bone2 }]}>
+              <Image source={cat.image} style={s.iconImage} resizeMode="cover" />
             </View>
             <Text style={s.label} numberOfLines={1}>{cat.label}</Text>
           </TouchableOpacity>
@@ -115,14 +120,18 @@ const s = StyleSheet.create({
     alignItems: 'center',
   },
   iconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: C.border2,
   },
-  iconGlyph: {
-    fontSize: T.size.xl + 2,
+  // v18: image fills the circle (cover) so it's clipped to round shape,
+  // not letterboxed inside a circle. Square photos clip cleanly.
+  iconImage: {
+    width: '100%',
+    height: '100%',
   },
   label: {
     marginTop: S.xs + 2,

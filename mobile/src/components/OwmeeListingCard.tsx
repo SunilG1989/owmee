@@ -47,9 +47,23 @@ function formatPriceFull(n: number | null | undefined): string {
   return `₹${Math.round(n).toLocaleString('en-IN')}`;
 }
 
+// Trust only fully-qualified https image URLs from a known image host —
+// localhost/file/relative URLs render as half-loaded noise instead of
+// triggering onError, so we skip them entirely.
+const TRUSTED_IMAGE_HOST_RX = /^https:\/\/[^/]+\.(r2\.cloudflarestorage\.com|r2\.dev|amazonaws\.com|cloudfront\.net|imgix\.net|cdn\.[^/]+)/i;
+
+function isTrustedImageUrl(u: string | null | undefined): boolean {
+  if (!u) return false;
+  if (!u.startsWith('https://')) return false;
+  if (/(localhost|127\.0\.0\.1|192\.168\.|10\.0\.|file:\/\/)/i.test(u)) return false;
+  return TRUSTED_IMAGE_HOST_RX.test(u);
+}
+
 function firstImage(listing: FeedListing): string | null {
-  if (listing.thumbnail_url) return listing.thumbnail_url;
-  if (listing.image_urls && listing.image_urls.length > 0) return listing.image_urls[0];
+  const candidates = [listing.thumbnail_url, ...(listing.image_urls || [])];
+  for (const url of candidates) {
+    if (isTrustedImageUrl(url || null)) return url as string;
+  }
   return null;
 }
 
@@ -471,7 +485,7 @@ const s = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: R.xs,
   },
-  pillGreen: { backgroundColor: C.greenLight },
+  pillGreen: { backgroundColor: C.greenLight },  // conditionBg #EEF8F0
   pillBlue:  { backgroundColor: C.blueSoft },
   pillAmber: { backgroundColor: C.amberSoft },
   pillText: {
@@ -479,7 +493,7 @@ const s = StyleSheet.create({
     fontWeight: T.weight.heavy,
     letterSpacing: 0.1,
   },
-  pillTextGreen: { color: C.green },
+  pillTextGreen: { color: C.green },  // conditionText #2F6F46
   pillTextBlue:  { color: C.blueDeep },
   pillTextAmber: { color: C.amberDeep },
   detailLine: {
@@ -519,7 +533,7 @@ const s = StyleSheet.create({
     marginTop: S.sm,
     height: 32,
     borderRadius: R.sm,
-    backgroundColor: C.petrol,
+    backgroundColor: C.petrol,           // brandNavy per spec rule 12 (Buy safely = navy)
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -13,9 +13,21 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, NativeScrollEvent, NativeSyntheticEvent,
+  Image, ImageSourcePropType,
 } from 'react-native';
 import { C, T, S, R, Shadow, Home } from '../utils/tokens';
 import Button from './ui/Button';
+
+// Local hero cutout assets — locked spec path (v17).
+// Drop transparent .webp cutouts at mobile/assets/owmee/home/. Until
+// real assets land, 1x1 placeholders resolve cleanly and the hero
+// renders with text + CTAs as the focal point. NO emoji fallback per
+// rule 15.
+const HERO_ASSETS: Record<'shield' | 'package' | 'truck', ImageSourcePropType> = {
+  shield:  require('../../assets/owmee/home/hero-chair.webp'),
+  package: require('../../assets/owmee/home/hero-laptop.webp'),
+  truck:   require('../../assets/owmee/home/hero-box.webp'),
+};
 
 interface Props {
   onBrowse: () => void;
@@ -26,8 +38,8 @@ type Slide = {
   key: string;
   title: string;
   subtitle: string;
-  primary: { label: string; action: 'browse' | 'sell'; variant: 'inverse' | 'accent' };
-  secondary: { label: string; action: 'browse' | 'sell'; variant: 'inverse' | 'accent' };
+  primary: { label: string; action: 'browse' | 'sell'; variant: 'primary' | 'secondary' | 'accent' };
+  secondary: { label: string; action: 'browse' | 'sell'; variant: 'primary' | 'secondary' | 'accent' };
   vignette: 'shield' | 'package' | 'truck';
 };
 
@@ -41,7 +53,7 @@ const SLIDES: Slide[] = [
     key: 'trust',
     title: 'Inspected listings.\nProtected payments.',
     subtitle: 'Every item is checked by an expert. ✓ 100% refund if it\'s not as promised.',
-    primary:   { label: 'Browse verified deals', action: 'browse', variant: 'inverse' },
+    primary:   { label: 'Browse verified deals', action: 'browse', variant: 'primary' },
     secondary: { label: 'Sell from home',        action: 'sell',   variant: 'accent' },
     vignette: 'shield',
   },
@@ -50,14 +62,14 @@ const SLIDES: Slide[] = [
     title: 'Sell from home.\nWe pick up. We deliver.',
     subtitle: 'We handle pricing, pickup, and doorstep handover. You just list.',
     primary:   { label: 'List in 2 min',         action: 'sell',   variant: 'accent' },
-    secondary: { label: 'See verified deals',    action: 'browse', variant: 'inverse' },
+    secondary: { label: 'See verified deals',    action: 'browse', variant: 'secondary' },
     vignette: 'package',
   },
   {
     key: 'doorstep',
     title: 'Doorstep handover.\nNo meetups, no risk.',
     subtitle: 'Owmee delivers to your door. ✓ Full refund if anything is wrong.',
-    primary:   { label: 'Browse verified deals', action: 'browse', variant: 'inverse' },
+    primary:   { label: 'Browse verified deals', action: 'browse', variant: 'primary' },
     secondary: { label: 'Sell from home',        action: 'sell',   variant: 'accent' },
     vignette: 'truck',
   },
@@ -151,38 +163,16 @@ export default function HeroCard({ onBrowse, onSell }: Props) {
 }
 
 function Vignette({ kind }: { kind: 'shield' | 'package' | 'truck' }) {
-  if (kind === 'shield') {
-    return (
-      <View pointerEvents="none" style={s.vignette}>
-        <View style={s.glowRingOne} />
-        <View style={s.glowRingTwo} />
-        <View style={s.shield}>
-          <Text style={s.shieldGlyph} allowFontScaling={false}>✓</Text>
-        </View>
-        <View style={s.package} />
-        <View style={s.phone}>
-          <Text style={s.phoneGlyph} allowFontScaling={false}>🔒</Text>
-        </View>
-      </View>
-    );
-  }
-  if (kind === 'package') {
-    return (
-      <View pointerEvents="none" style={s.vignette}>
-        <View style={s.glowRingOne} />
-        <View style={[s.shield, { left: 4, top: 4, width: 64, height: 64, borderRadius: 32 }]}>
-          <Text style={s.bigGlyph} allowFontScaling={false}>📦</Text>
-        </View>
-        <View style={[s.package, { right: 8, bottom: 4, width: 50, height: 44 }]} />
-      </View>
-    );
-  }
+  // Real Unsplash product photos clipped into a circular frame on the
+  // peach hero. Cover-fit so the photo fills the circle cleanly (avatar
+  // pattern) rather than letterboxed.
   return (
     <View pointerEvents="none" style={s.vignette}>
-      <View style={s.glowRingOne} />
-      <View style={[s.shield, { left: 4, top: 4, width: 64, height: 64, borderRadius: 32 }]}>
-        <Text style={s.bigGlyph} allowFontScaling={false}>🚚</Text>
-      </View>
+      <Image
+        source={HERO_ASSETS[kind]}
+        style={s.heroImg}
+        resizeMode="cover"
+      />
     </View>
   );
 }
@@ -206,27 +196,36 @@ const s = StyleSheet.create({
     zIndex: 2,
   },
   title: {
-    color: C.white,
-    fontSize: T.size.lg + 1,
+    color: C.petrol,                 // brand_navy heading per locked spec
+    fontSize: T.size.lg + 2,
     fontWeight: T.weight.heavy,
-    lineHeight: T.size.lg + 5,
+    lineHeight: T.size.lg + 6,
     letterSpacing: -0.3,
   },
   subtitle: {
     marginTop: S.xs,
-    color: Home.heroSubText,
+    color: C.text2,                  // text_secondary
     fontSize: T.size.sm,
     lineHeight: T.size.sm + 4,
     fontWeight: T.weight.medium,
   },
 
-  // ── Decorative vignette ─────────────────────────────────────────────
+  // ── Hero image — circular frame, photo cover-fit ────────────────────
   vignette: {
     position: 'absolute',
-    right: -4,
-    top: 4,
-    width: 120,
-    height: 92,
+    right: 16,
+    top: 16,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+    ...Shadow.card,
+  },
+  heroImg: {
+    width: '100%',
+    height: '100%',
   },
   glowRingOne: {
     position: 'absolute',

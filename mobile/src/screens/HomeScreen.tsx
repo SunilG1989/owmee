@@ -178,7 +178,10 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
     <View>
       {/* Top bar — logo + address (chip-next-to-logo) · bell right. */}
       <View style={s.hdr}>
-        <Text style={s.logo}>owmee</Text>
+        <Text style={s.logo}>
+          <Text style={{ color: C.text }}>ow</Text>
+          <Text style={{ color: C.coral }}>mee</Text>
+        </Text>
 
         <TouchableOpacity
           onPress={handleLocationPress}
