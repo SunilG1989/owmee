@@ -196,7 +196,9 @@ const s = StyleSheet.create({
     zIndex: 2,
   },
   title: {
-    color: C.petrol,                 // brand_navy heading per locked spec
+    // Heading uses text primary (deep plum), NOT brand button color.
+    // Separating the two gives proper hero hierarchy: dark headline + pink CTA.
+    color: C.text,
     fontSize: T.size.lg + 2,
     fontWeight: T.weight.heavy,
     lineHeight: T.size.lg + 6,

@@ -22,29 +22,29 @@
  */
 
 export const C = {
-  // ── PRIMARY · WARM CORAL POP (single-color brand, all CTAs) ──────────
-  // v18b founder lock: ONE warm coral with REAL CONTRAST against the
-  // cream bg. Pastel-medium saturation, NOT neon, NOT dark. Same color
-  // across every button, FAB, active nav. Reads as premium boutique
-  // accent — distinctly warm, has presence, never disappears into bg.
-  petrol:        '#D85F4E',  // warm coral pop — primary CTAs
-  petrolLight:   '#FBE5DF',  // soft coral wash — selected state
-  petrolMid:     '#B8493A',  // pressed
-  petrolGlow:    '#7C6557',  // warm taupe — secondary text
-  petrolDeep:    '#A0382A',  // deepest pressed
-  petrolText:    '#D85F4E',
-  petrolNight:   '#3D2A21',  // warm coffee for inverse contexts only
+  // ── PRIMARY · WARM ROSE PINK (v18d Boutique Rose) ────────────────────
+  // Tira/Glossier school: medium-saturation warm pink that pops on
+  // cream without being neon. Distinctly premium, NOT dark, NOT washed
+  // out. Heading + button now READ AS DIFFERENT COLORS so the hero has
+  // proper hierarchy (dark headline, pink CTA) instead of brand-monotone.
+  petrol:        '#D87290',  // warm rose pink — primary CTAs
+  petrolLight:   '#F8E5EC',  // soft rose wash — selected state
+  petrolMid:     '#B85775',  // pressed
+  petrolGlow:    '#7A6B72',  // warm rose-taupe — secondary text
+  petrolDeep:    '#9C4A63',  // deepest pressed
+  petrolText:    '#D87290',
+  petrolNight:   '#2D1F2A',  // warm deep plum inverse
 
-  // ── SECONDARY · warm taupe text/icons ────────────────────────────────
-  aqua:          '#7C6557',
-  aquaLight:     '#FBE5DF',
-  aquaDeep:      '#3D2A21',
+  // ── SECONDARY · warm rose-taupe text/icons ───────────────────────────
+  aqua:          '#7A6B72',
+  aquaLight:     '#F8E5EC',
+  aquaDeep:      '#2D1F2A',
 
-  // ── ACCENT · same coral family — single-color system ─────────────────
-  coral:         '#D85F4E',
-  coralLight:    '#FBE5DF',
-  coralDeep:     '#B8493A',
-  coralBright:   '#D85F4E',
+  // ── ACCENT · same rose family — single-color system ──────────────────
+  coral:         '#D87290',
+  coralLight:    '#F8E5EC',
+  coralDeep:     '#B85775',
+  coralBright:   '#D87290',
 
   // ── TRUST CHIP PALETTE — warm cream family + semantic green/amber ───
   mintSoft:      '#FBEDE0',  // verifiedBg — warm cream
@@ -56,27 +56,27 @@ export const C = {
   amberDeep:     '#D97706',  // offerText
   amberBorder:   '#F0E0D0',
 
-  // ── SURFACES · warm linen + peach hero (v18 Warm Boutique) ──────────
+  // ── SURFACES · warm linen + LIGHTER peach hero (v18c) ───────────────
   bone:          '#FFF6EC',  // bgApp — warm linen cream
-  bone2:         '#FBEDE0',  // bgSoft — soft cream-blush sections
-  cream:         '#FBE0D5',  // bgHero — peach blush (banner pops)
+  bone2:         '#FBEDE0',  // bgSoft
+  cream:         '#FDEDE5',  // bgHero — lighter peach (lifted from #FBE0D5)
   sand:          '#FBEDE0',
-  surface:       '#FFFFFF',  // cards stay white
+  surface:       '#FFFFFF',
 
   // Dark surfaces (inverse contexts — receipts, FE night ops)
   inkBg:         '#172033',
   inkBg2:        '#1F2A40',
   inkBg3:        '#2A3754',
 
-  // ── INK · warm coffee for headings/text (v18 Warm Boutique) ──────────
-  ink:           '#3D2A21',
-  ink2:          '#5C4538',
+  // ── INK · warm deep plum (v18d Boutique Rose) ────────────────────────
+  ink:           '#2D1F2A',
+  ink2:          '#3D2A35',
 
-  // ── TEXT scale · warm-neutral grays ─────────────────────────────────
-  text:          '#3D2A21',  // textPrimary — warm coffee (NOT navy/black)
-  text2:         '#7C6557',  // textSecondary — warm taupe
-  text3:         '#A89887',  // textMuted — pale taupe
-  text4:         '#D4C9BE',
+  // ── TEXT scale · warm rose-taupe family ─────────────────────────────
+  text:          '#2D1F2A',  // textPrimary — warm deep plum (NOT navy/black)
+  text2:         '#7A6B72',  // textSecondary — warm rose-taupe
+  text3:         '#A8979F',  // textMuted — pale rose-taupe
+  text4:         '#D4C9CE',
 
   onDark1:       '#FFFFFF',
   onDark2:       'rgba(255, 255, 255, 0.78)',
@@ -107,26 +107,26 @@ export const C = {
   cardBgPastel:  '#FFF1EB',
 
   // ── LEGACY ALIASES — old names → v16 locked values ──────────────────
-  honey:         '#C97B6F',  // → terracotta blush
-  honeyLight:    '#FBEDE0',
-  honeyGlow:     '#7C6557',
-  honeyDeep:     '#A85F54',
-  honeyText:     '#C97B6F',
+  honey:         '#D87290',  // → warm rose pink
+  honeyLight:    '#F8E5EC',
+  honeyGlow:     '#7A6B72',
+  honeyDeep:     '#B85775',
+  honeyText:     '#D87290',
 
-  forest:        '#C97B6F',
-  forestLight:   '#FBEDE0',
-  forestVivid:   '#A85F54',
-  forestText:    '#C97B6F',
+  forest:        '#D87290',
+  forestLight:   '#F8E5EC',
+  forestVivid:   '#B85775',
+  forestText:    '#D87290',
 
-  primary:       '#C97B6F',  // → terracotta
-  muted:         '#A89887',
+  primary:       '#D87290',  // → warm rose pink
+  muted:         '#A8979F',
   danger:        '#C2473A',
-  success:       '#2F6F46',  // conditionText
-  successBg:     '#EEF8F0',  // conditionBg
-  bg:            '#FFF6EC',  // → warm linen cream
+  success:       '#2F6F46',
+  successBg:     '#EEF8F0',
+  bg:            '#FFF6EC',
   surfaceMuted:  '#FBEDE0',
-  amber:         '#C97B6F',
-  amberLight:    '#FBEDE0',
+  amber:         '#D87290',
+  amberLight:    '#F8E5EC',
 } as const;
 
 export const T = {
@@ -181,9 +181,9 @@ export const Shadow = {
   sm:     _SUBTLE_SHADOW,
   card:   { shadowColor: '#3D2A21', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 2 },
   lifted: { shadowColor: '#3D2A21', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.10, shadowRadius: 18, elevation: 4 },
-  // Single terracotta glow for all CTAs (single-color brand)
-  glow:      { shadowColor: '#C97B6F', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 14, elevation: 4 },
-  coralGlow: { shadowColor: '#C97B6F', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 14, elevation: 4 },
+  // Single warm-rose glow for all CTAs (single-color brand)
+  glow:      { shadowColor: '#D87290', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.20, shadowRadius: 14, elevation: 4 },
+  coralGlow: { shadowColor: '#D87290', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.20, shadowRadius: 14, elevation: 4 },
 };
 
 export const I = { xs: 12, sm: 16, md: 24, lg: 32, xl: 48, display: 56 } as const;
@@ -304,12 +304,12 @@ export const Home = {
   // Ship indicator — petrol
   shipText:        C.petrol,
 
-  // ── Hero card — peach blush #FBE0D5 (banner pops vs cream bg) ───────
-  heroBg:          C.cream,                    // bgHero #FBE0D5
-  heroSubText:     'rgba(124, 101, 87, 1)',   // textSecondary warm taupe
-  heroStepBg:      'rgba(168, 95, 84, 0.08)', // terracotta tint chip
-  heroStepBorder:  'rgba(168, 95, 84, 0.22)', // terracotta hairline
-  heroArrow:       'rgba(61, 42, 33, 0.55)',  // warm coffee arrow
+  // ── Hero card — lighter peach #FDEDE5 + rose accents ───────────────
+  heroBg:          C.cream,                    // bgHero #FDEDE5
+  heroSubText:     'rgba(122, 107, 114, 1)',  // textSecondary rose-taupe
+  heroStepBg:      'rgba(216, 114, 144, 0.08)',  // rose tint
+  heroStepBorder:  'rgba(216, 114, 144, 0.22)',  // rose hairline
+  heroArrow:       'rgba(45, 31, 42, 0.55)',  // deep plum arrow
 
   // Trust chips below search — three color families, one per trust pillar.
   chipMintBg:      C.mintSoft,
