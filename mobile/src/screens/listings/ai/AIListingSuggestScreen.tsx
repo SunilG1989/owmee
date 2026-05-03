@@ -33,7 +33,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { C, T, S, R, Shadow, Home, formatPrice, condStyle } from '../../../utils/tokens';
+import { C, T, S, R, Shadow, formatPrice } from '../../../utils/tokens';
 import { AIListing } from '../../../services/api';
 import { BackButton, Button } from '../../../components/ui';
 import type { AIDraftResponse } from '../../../services/api';
@@ -230,85 +230,77 @@ export default function AIListingSuggestScreen({
       </View>
 
       <ScrollView style={st.flex} contentContainerStyle={st.scrollPad}>
-        {/* Photo */}
-        <View style={st.photoBlock}>
-          <Image source={{ uri: draft.photo_url }} style={st.photo} resizeMode="cover" />
-          <Text style={st.photoHint}>Tap photo to edit</Text>
-        </View>
-
-        {/* Specifics + edit affordance */}
-        <View style={st.specsBlock}>
-          <Text style={st.specsTitle}>{titleGuess}</Text>
-          {subtitleSpecifics ? <Text style={st.specsSub}>{subtitleSpecifics}</Text> : null}
-          <TouchableOpacity onPress={() => setEditSheet(true)} style={st.editLink}>
-            <Text style={st.editLinkText}>✎ Edit details</Text>
+        {/* Compact item card — image left, title + price + edit affordance */}
+        <View style={st.itemCard}>
+          <Image source={{ uri: draft.photo_url }} style={st.itemImage} resizeMode="cover" />
+          <View style={st.itemMeta}>
+            <Text style={st.itemTitle} numberOfLines={2}>{titleGuess}</Text>
+            {subtitleSpecifics ? (
+              <Text style={st.itemSubtitle} numberOfLines={1}>{subtitleSpecifics}</Text>
+            ) : null}
+            <Text style={st.itemPrice}>{formatPrice(effectivePrice)}</Text>
+          </View>
+          <TouchableOpacity onPress={() => setEditSheet(true)} style={st.itemEditBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={st.itemEditGlyph}>✎</Text>
           </TouchableOpacity>
         </View>
 
-        {/* BIG price */}
-        <View style={st.priceBlock}>
-          <Text style={st.priceBig}>{formatPrice(effectivePrice)}</Text>
+        {/* Set our price */}
+        <View style={st.section}>
+          <Text style={st.sectionH1}>Set our price</Text>
+          <Text style={st.sectionSub}>
+            {draft.price_source === 'comparables' && draft.comparables.length > 0
+              ? `Based on ${draft.comparables.length} similar items sold recently.`
+              : draft.price_source === 'ai'
+                ? 'Suggested using Indian market estimates.'
+                : 'Confirm or set a base price for your listing.'}
+          </Text>
 
-          {draft.price_source === 'comparables' && draft.comparables.length > 0 ? (
-            <Text style={st.priceProof}>
-              Based on {draft.comparables.length} similar sold recently
-            </Text>
-          ) : draft.price_source === 'ai' ? (
-            <Text style={st.priceProof}>Based on Indian market estimate</Text>
-          ) : (
-            <Text style={st.priceProofWeak}>Set your own price</Text>
-          )}
+          <TouchableOpacity style={st.priceBtn} onPress={() => setPriceSheet(true)}>
+            <Text style={st.priceBtnTitle}>Set my price</Text>
+            <Text style={st.priceBtnHint}>Enter the amount you want.</Text>
+            <Text style={st.priceBtnArrow}>›</Text>
+          </TouchableOpacity>
 
           {draft.comparables.length > 0 && (
-            <TouchableOpacity onPress={() => setCompsSheet(true)} style={st.linkBtn}>
-              <Text style={st.linkBtnText}>See similar sales →</Text>
+            <TouchableOpacity style={st.priceBtn} onPress={() => setCompsSheet(true)}>
+              <Text style={st.priceBtnTitle}>See our price suggestion</Text>
+              <Text style={st.priceBtnHint}>{formatPrice(draft.suggested_price ?? effectivePrice)} · based on similar sales</Text>
+              <Text style={st.priceBtnArrow}>›</Text>
             </TouchableOpacity>
           )}
-
-          <TouchableOpacity onPress={() => setPriceSheet(true)} style={st.linkBtnTertiary}>
-            <Text style={st.linkBtnTertiaryText}>✎ Set my own price</Text>
-          </TouchableOpacity>
         </View>
 
-        {/* Condition */}
-        <View style={st.conditionBlock}>
-          <Text style={st.sectionTitle}>Condition</Text>
-          {CONDITION_OPTIONS.map((opt) => {
-            const active = condition === opt.key;
-            const cs = condStyle(opt.key);
-            return (
-              <TouchableOpacity
-                key={opt.key}
-                onPress={() => {
-                  setCondition(opt.key);
-                  setCustomPrice(null); // clear custom price when condition changes
-                }}
-                style={[st.condRow, active && st.condRowActive]}>
-                <View style={[st.radio, active && st.radioActive]}>
-                  {active && <View style={st.radioDot} />}
-                </View>
-                <Text style={[st.condLabel, { color: active ? cs.color : C.text }]}>
-                  {opt.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+        {/* Condition pills */}
+        <View style={st.section}>
+          <Text style={st.sectionH1}>Condition</Text>
+          <Text style={st.sectionSub}>How is the item right now?</Text>
+          <View style={st.condRow}>
+            {CONDITION_OPTIONS.map((opt) => {
+              const active = condition === opt.key;
+              return (
+                <TouchableOpacity
+                  key={opt.key}
+                  onPress={() => {
+                    setCondition(opt.key);
+                    setCustomPrice(null);
+                  }}
+                  style={[st.condPill, active && st.condPillActive]}>
+                  {active && <Text style={st.condPillTick}>✓</Text>}
+                  <Text style={[st.condPillLabel, active && st.condPillLabelActive]}>
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </View>
 
-        {/* HOW IT WORKS */}
-        <View style={st.howBlock}>
-          <Text style={st.howTitle}>HOW IT WORKS</Text>
-          <HowItWorksRow num={1} text="Buyer pays Owmee" />
-          <HowItWorksRow num={2} text="We pick up from you" />
-          <HowItWorksRow num={3} text="We check, then ship to buyer" />
-          <HowItWorksRow num={4} text="Money in your bank in 2 days" />
-        </View>
-
-        {/* Trust checkmarks — How Owmee protects you */}
+        {/* How Owmee protects your trust */}
         <View style={st.trustBlock}>
           <Text style={st.trustHeading}>How Owmee protects your trust</Text>
-          <TrustRow text="No buyer comes to your home" />
-          <TrustRow text="We handle pricing, photos, and pickup" />
+          <TrustRow text="We pick up, verify, photograph, and create your ad" />
+          <TrustRow text="We do all the bargaining for you" />
           <TrustRow text="Only verified buyers — no scam calls" />
           <TrustRow text="100% refund guarantee backs every sale" />
         </View>
@@ -326,7 +318,7 @@ export default function AIListingSuggestScreen({
       {/* Sticky CTA */}
       <View style={st.ctaBar}>
         <Button
-          label={`List for ${formatPrice(effectivePrice)} →`}
+          label="Continue to list"
           variant="primary"
           size="lg"
           loading={submitting}
@@ -381,17 +373,6 @@ export default function AIListingSuggestScreen({
 
 // ── Internal sub-components (small, kept inline for simplicity) ─────────────
 
-function HowItWorksRow({ num, text }: { num: number; text: string }) {
-  return (
-    <View style={st.howRow}>
-      <View style={st.howNum}>
-        <Text style={st.howNumText}>{num}</Text>
-      </View>
-      <Text style={st.howRowText}>{text}</Text>
-    </View>
-  );
-}
-
 function TrustRow({ text }: { text: string }) {
   return (
     <View style={st.trustRow}>
@@ -429,134 +410,138 @@ const st = StyleSheet.create({
   flex: { flex: 1 },
   scrollPad: { paddingBottom: 96 },
 
-  // Photo
-  photoBlock: { padding: S.lg, alignItems: 'center', backgroundColor: C.surface },
-  photo: {
-    width: 160,
-    height: 160,
-    borderRadius: R.lg,
-    backgroundColor: C.bone2,
-  },
-  photoHint: { marginTop: S.sm, fontSize: T.size.sm, color: C.text3 },
-
-  // Specs
-  specsBlock: {
-    backgroundColor: C.surface,
-    paddingHorizontal: S.lg,
-    paddingBottom: S.lg,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: C.border,
-  },
-  specsTitle: { fontSize: T.size.lg, fontWeight: T.weight.bold, color: C.text },
-  specsSub: { marginTop: 2, fontSize: T.size.md, color: C.text2 },
-  editLink: { marginTop: S.sm, paddingVertical: 4 },
-  editLinkText: { color: C.petrol, fontSize: T.size.base, fontWeight: T.weight.semi },
-
-  // Price
-  priceBlock: {
-    paddingVertical: S.xxl,
-    paddingHorizontal: S.lg,
-    alignItems: 'center',
-    backgroundColor: C.surface,
-    marginTop: S.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: C.border,
-  },
-  priceBig: {
-    fontSize: T.size.display + 18,                                  // 48
-    fontWeight: T.weight.bold,
-    color: C.text,
-    letterSpacing: -1,
-  },
-  priceProof: {
-    marginTop: S.sm,
-    fontSize: T.size.md,
-    color: C.text2,
-    textAlign: 'center',
-  },
-  priceProofWeak: {
-    marginTop: S.sm,
-    fontSize: T.size.md,
-    color: C.text3,
-    textAlign: 'center',
-  },
-  linkBtn: { marginTop: S.md, paddingVertical: 4 },
-  linkBtnText: { color: C.petrol, fontSize: T.size.md, fontWeight: T.weight.semi },
-  linkBtnTertiary: { marginTop: 4, paddingVertical: 4 },
-  linkBtnTertiaryText: { color: C.text3, fontSize: T.size.sm, textDecorationLine: 'underline' },
-
-  // Condition
-  conditionBlock: {
-    backgroundColor: C.surface,
-    paddingHorizontal: S.lg,
-    paddingVertical: S.lg,
-    marginTop: S.sm,
-  },
-  sectionTitle: {
-    fontSize: T.size.md,
-    fontWeight: T.weight.semi,
-    color: C.text,
-    marginBottom: S.sm,
-  },
-  condRow: {
+  // Compact item card — image + meta + edit pencil
+  itemCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: S.md,
+    backgroundColor: C.surface,
+    marginHorizontal: S.lg,
+    marginTop: S.lg,
+    padding: S.md,
+    borderRadius: R.lg,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  itemImage: {
+    width: 64,
+    height: 64,
+    borderRadius: R.md,
+    backgroundColor: C.bone2,
+  },
+  itemMeta: { flex: 1, marginLeft: S.md },
+  itemTitle: { fontSize: T.size.md, fontWeight: T.weight.semi, color: C.text },
+  itemSubtitle: { marginTop: 2, fontSize: T.size.sm, color: C.text3 },
+  itemPrice: {
+    marginTop: 4,
+    fontSize: T.size.lg,
+    fontWeight: T.weight.bold,
+    color: C.petrol,
+  },
+  itemEditBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: C.bone2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  itemEditGlyph: { fontSize: T.size.md, color: C.petrol, fontWeight: T.weight.semi },
+
+  // Section (Set our price / Condition)
+  section: {
+    backgroundColor: C.surface,
+    marginHorizontal: S.lg,
+    marginTop: S.md,
+    padding: S.lg,
+    borderRadius: R.lg,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  sectionH1: {
+    fontSize: T.size.md,
+    fontWeight: T.weight.bold,
+    color: C.text,
+    marginBottom: 4,
+  },
+  sectionSub: {
+    fontSize: T.size.sm,
+    color: C.text3,
+    marginBottom: S.md,
+  },
+
+  // Price option button (outlined)
+  priceBtn: {
+    position: 'relative',
     paddingHorizontal: S.md,
+    paddingVertical: S.md,
     borderRadius: R.md,
     borderWidth: 1,
     borderColor: C.border,
+    backgroundColor: C.bone,
     marginBottom: S.sm,
+  },
+  priceBtnTitle: {
+    fontSize: T.size.md,
+    fontWeight: T.weight.semi,
+    color: C.text,
+  },
+  priceBtnHint: {
+    marginTop: 2,
+    fontSize: T.size.sm,
+    color: C.text3,
+  },
+  priceBtnArrow: {
+    position: 'absolute',
+    right: S.md,
+    top: '50%',
+    marginTop: -10,
+    fontSize: T.size.xl,
+    color: C.text3,
+    fontWeight: T.weight.semi,
+  },
+
+  // Condition pills
+  condRow: {
+    flexDirection: 'row',
+    gap: S.sm,
+  },
+  condPill: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: S.md - 2,
+    paddingHorizontal: S.sm,
+    borderRadius: R.pill,
+    borderWidth: 1,
+    borderColor: C.border,
     backgroundColor: C.bone,
   },
-  condRowActive: { borderColor: C.petrol, backgroundColor: C.petrolLight },
-  radio: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 2,
-    borderColor: C.text4,
-    marginRight: S.md,
-    alignItems: 'center',
-    justifyContent: 'center',
+  condPillActive: {
+    borderColor: C.petrol,
+    backgroundColor: C.petrolLight,
+    borderWidth: 1.5,
   },
-  radioActive: { borderColor: C.petrol },
-  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: C.petrol },
-  condLabel: { fontSize: T.size.md, fontWeight: T.weight.semi },
-
-  // How it works
-  howBlock: {
-    backgroundColor: C.ink,
-    paddingHorizontal: S.xl,
-    paddingVertical: S.xl,
-    marginTop: S.sm,
-  },
-  howTitle: {
+  condPillTick: {
+    color: C.petrol,
     fontSize: T.size.sm,
-    fontWeight: T.weight.bold,
-    color: Home.dealsBgStart,
-    letterSpacing: 1.5,
-    marginBottom: S.md,
+    fontWeight: T.weight.heavy,
+    marginRight: 4,
   },
-  howRow: { flexDirection: 'row', alignItems: 'center', marginBottom: S.md },
-  howNum: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: C.petrol,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: S.md,
+  condPillLabel: {
+    fontSize: T.size.sm,
+    fontWeight: T.weight.semi,
+    color: C.text2,
   },
-  howNumText: { color: C.surface, fontWeight: T.weight.bold, fontSize: T.size.base },
-  howRowText: { color: C.surface, fontSize: T.size.md, fontWeight: T.weight.medium },
+  condPillLabelActive: { color: C.petrolText },
 
-  // Trust
+  // Trust — floating card, mint background, refund-guarantee aligned
   trustBlock: {
     backgroundColor: C.petrolLight,
-    paddingHorizontal: S.lg,
-    paddingVertical: S.lg,
-    marginTop: S.sm,
+    marginHorizontal: S.lg,
+    marginTop: S.md,
+    padding: S.lg,
+    borderRadius: R.lg,
   },
   trustHeading: {
     fontSize: T.size.md,
@@ -564,14 +549,15 @@ const st = StyleSheet.create({
     color: C.petrolText,
     marginBottom: S.md,
   },
-  trustRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
+  trustRow: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 6 },
   trustCheck: {
-    fontSize: T.size.lg,
+    fontSize: T.size.md,
     color: C.petrol,
-    fontWeight: T.weight.bold,
+    fontWeight: T.weight.heavy,
     marginRight: S.md,
+    marginTop: 2,
   },
-  trustText: { fontSize: T.size.md, color: C.petrolText, fontWeight: T.weight.medium, flex: 1 },
+  trustText: { fontSize: T.size.base, color: C.petrolText, fontWeight: T.weight.medium, flex: 1, lineHeight: T.size.base + 4 },
 
   legal: {
     marginTop: S.lg,
