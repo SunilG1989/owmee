@@ -52,6 +52,10 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
   const [showRate, setShowRate] = useState(false);
   const [rating, setRating] = useState(0);
   const [ratingNote, setRatingNote] = useState('');
+  // null until the buyer answers — submit is gated until they pick yes/no.
+  // Was previously hardcoded to true at submit time which made dispute analytics
+  // impossible: every rating implied "matched listing" regardless of stars.
+  const [matchedListing, setMatchedListing] = useState<boolean | null>(null);
   const [showDispute, setShowDispute] = useState(false);
   const [disputeReason, setDisputeReason] = useState<string>('item_not_as_described');
   const [disputeDesc, setDisputeDesc] = useState('');
@@ -424,9 +428,34 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
                 </TouchableOpacity>
               ))}
             </View>
+
+            <Text style={s.matchedQuestion}>Did the item match the listing?</Text>
+            <View style={s.matchedRow}>
+              <TouchableOpacity
+                style={[s.matchedBtn, matchedListing === true && s.matchedBtnYes]}
+                onPress={() => setMatchedListing(true)}
+              >
+                <Text style={[s.matchedBtnLabel, matchedListing === true && s.matchedBtnLabelOn]}>
+                  ✓ Yes, it matched
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.matchedBtn, matchedListing === false && s.matchedBtnNo]}
+                onPress={() => setMatchedListing(false)}
+              >
+                <Text style={[s.matchedBtnLabel, matchedListing === false && s.matchedBtnLabelOn]}>
+                  ✗ No, it didn't
+                </Text>
+              </TouchableOpacity>
+            </View>
+
             <TextInput
               style={s.input}
-              placeholder="Add a note (optional)"
+              placeholder={
+                matchedListing === false
+                  ? 'Tell us what was different (helps disputes)'
+                  : 'Add a note (optional)'
+              }
               placeholderTextColor={C.text4}
               value={ratingNote}
               onChangeText={setRatingNote}
@@ -436,12 +465,17 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
               label="Submit"
               variant="primary"
               size="lg"
-              disabled={rating === 0 || acting}
+              disabled={rating === 0 || matchedListing === null || acting}
               loading={acting}
               onPress={() => {
                 setShowRate(false);
                 doAction(
-                  () => Transactions.rate(transactionId, rating, true, ratingNote || undefined),
+                  () => Transactions.rate(
+                    transactionId,
+                    rating,
+                    matchedListing === true,
+                    ratingNote || undefined,
+                  ),
                   'Thanks for rating!',
                 );
               }}
@@ -586,6 +620,42 @@ const s = StyleSheet.create({
   starsRow: { flexDirection: 'row', justifyContent: 'center', gap: S.sm, marginBottom: S.lg },
   star: { fontSize: T.size.display + 6, color: C.text4 },
   starOn: { color: C.petrol },
+  matchedQuestion: {
+    fontSize: T.size.md,
+    fontWeight: T.weight.semi,
+    color: C.text,
+    marginBottom: S.sm,
+  },
+  matchedRow: {
+    flexDirection: 'row',
+    gap: S.sm,
+    marginBottom: S.lg,
+  },
+  matchedBtn: {
+    flex: 1,
+    paddingVertical: S.md,
+    borderRadius: R.md,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.surface,
+    alignItems: 'center',
+  },
+  matchedBtnYes: {
+    borderColor: C.petrol,
+    backgroundColor: C.petrolLight,
+  },
+  matchedBtnNo: {
+    borderColor: C.red,
+    backgroundColor: C.redLight,
+  },
+  matchedBtnLabel: {
+    fontSize: T.size.base,
+    fontWeight: T.weight.semi,
+    color: C.text2,
+  },
+  matchedBtnLabelOn: {
+    color: C.text,
+  },
   input: {
     borderWidth: 1, borderColor: C.border, borderRadius: R.xs + 2,
     padding: S.md, marginBottom: S.lg,
