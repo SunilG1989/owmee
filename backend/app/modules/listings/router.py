@@ -923,17 +923,180 @@ async def get_listing(listing_id: UUID, db: DBSession):
     return _fmt_detail(listing, seller, avg_rating, deal_count)
 
 
-@router.delete("/{listing_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_listing(listing_id: UUID, current_user: BasicUser, db: DBSession):
+# Structured reason set captured at soft-delete time. Drives the
+# product-analytics dashboard ("X% of listings removed because no_buyers")
+# without leaking PII into free-text. UI offers these as chips; "other"
+# is the catch-all.
+_VALID_DELETION_REASONS = {
+    "sold_elsewhere",
+    "changed_mind",
+    "wrong_price",
+    "no_buyers",
+    "item_damaged",
+    "other",
+}
+
+
+class DeleteListingRequest(BaseModel):
+    """Optional body — old clients that send DELETE without a body still
+    work; the new mobile UI sends a reason for analytics."""
+    reason: Optional[str] = None
+    note: Optional[str] = Field(None, max_length=500)
+
+
+@router.delete("/{listing_id}", status_code=status.HTTP_200_OK)
+async def delete_listing(
+    listing_id: UUID,
+    current_user: BasicUser,
+    db: DBSession,
+    body: DeleteListingRequest | None = None,
+):
+    """Seller soft-deletes their own listing.
+
+    Cascade rules — all idempotent so a retry never errors:
+      1. Active offers (pending / countered) auto-decline with
+         reason 'listing_withdrawn' so buyers see "seller withdrew"
+         instead of a silent disappearance.
+      2. Any concierge FE visit linked to this listing that's still
+         in `requested` or `scheduled` is auto-cancelled. Visits
+         already `in_progress` block the delete (see hard-block
+         below) — the FE is at the door, the seller can't pull the
+         rug.
+      3. Wishlists (FK ondelete=CASCADE) and listing_images (cascade
+         all, delete-orphan) are handled at the DB layer for free.
+
+    Hard blocks (return 400 CANNOT_DELETE):
+      - status in {reserved, sold}: a transaction is in flight,
+        deleting would orphan a buyer's funds. Seller must wait or
+        cancel via the order flow.
+      - any FE visit linked to this listing with status='in_progress'.
+
+    Idempotency: status='removed' listings return 200 with an empty
+    cascade summary so the second tap from a flaky network doesn't
+    dialog "already gone".
+    """
     result = await db.execute(select(Listing).where(
         Listing.id == listing_id, Listing.seller_id == current_user.user_id))
     listing = result.scalar_one_or_none()
     if not listing:
         raise HTTPException(status_code=404, detail={"error": "LISTING_NOT_FOUND"})
+
+    # Idempotency: already removed → no-op success.
+    if listing.status == "removed":
+        return {
+            "listing_id": str(listing.id),
+            "status": "removed",
+            "offers_cancelled": 0,
+            "visits_cancelled": 0,
+            "message": "Listing was already removed.",
+        }
+
     if listing.status in ("reserved", "sold"):
-        raise HTTPException(status_code=400, detail={"error": "CANNOT_DELETE"})
+        raise HTTPException(status_code=400, detail={
+            "error": "CANNOT_DELETE",
+            "message": "An order is already in progress for this listing. "
+                       "Cancel the order from your sales tab first.",
+        })
+
+    # Validate reason (optional — old client sends nothing, accepted).
+    reason = (body.reason if body else None)
+    if reason and reason not in _VALID_DELETION_REASONS:
+        raise HTTPException(status_code=400, detail={
+            "error": "INVALID_REASON",
+            "valid": sorted(_VALID_DELETION_REASONS),
+        })
+
+    # Block delete if a concierge FE visit for this listing is in_progress.
+    # SET NULL fk + ondelete on listings.fe_visit_id means the link
+    # survives even if the listing is removed; we explicitly check status
+    # for the in-flight case.
+    from sqlalchemy import text as _sql
+    in_progress = await db.execute(
+        _sql(
+            "SELECT id FROM fe_visits WHERE listing_id = :lid "
+            "AND status = 'in_progress' LIMIT 1"
+        ),
+        {"lid": listing_id},
+    )
+    if in_progress.first() is not None:
+        raise HTTPException(status_code=400, detail={
+            "error": "VISIT_IN_PROGRESS",
+            "message": "Your concierge specialist is at the door for this "
+                       "item. Please complete or cancel that visit first.",
+        })
+
+    # ── Cascade 1: auto-decline open offers ───────────────────────────────
+    open_offers_q = await db.execute(
+        select(Offer).where(
+            Offer.listing_id == listing_id,
+            Offer.status.in_(["pending", "countered"]),
+        )
+    )
+    open_offers = open_offers_q.scalars().all()
+    from app.modules.offers.service import _notify
+    for off in open_offers:
+        off.status = "cancelled"
+        off.reject_reason = "listing_withdrawn"
+        try:
+            await _notify(
+                db, off.buyer_id, "listing_withdrawn",
+                "Item no longer available",
+                f"'{listing.title[:40]}' was removed by the seller. "
+                f"Browse similar listings.",
+                "listing", str(listing_id), bucket="message",
+            )
+        except Exception:
+            pass
+
+    # ── Cascade 2: auto-cancel pending/scheduled FE visits ───────────────
+    pending_visits = await db.execute(
+        _sql(
+            "SELECT id, fe_id, status FROM fe_visits "
+            "WHERE listing_id = :lid AND status IN ('requested', 'scheduled')"
+        ),
+        {"lid": listing_id},
+    )
+    visit_rows = list(pending_visits.fetchall())
+    for v in visit_rows:
+        await db.execute(
+            _sql(
+                "UPDATE fe_visits SET status = 'cancelled', "
+                "outcome_reason = :r, completed_at = NOW(), "
+                "cancellation_reason = 'no_longer_selling' "
+                "WHERE id = :id"
+            ),
+            {"r": "listing_withdrawn", "id": v.id},
+        )
+
+    # ── Soft-delete the listing itself ───────────────────────────────────
     listing.status = "removed"
+    # Use raw SQL to set the new columns so the model attribute presence
+    # isn't a hard requirement until the migration is applied.
+    from datetime import datetime as _dt, timezone as _tz
+    await db.execute(
+        _sql(
+            "UPDATE listings SET deletion_reason = :r, deleted_at = :t "
+            "WHERE id = :id"
+        ),
+        {"r": reason, "t": _dt.now(_tz.utc), "id": listing_id},
+    )
+
     await db.commit()
+    logger.info(
+        "listing.deleted",
+        listing_id=str(listing_id),
+        seller_id=str(current_user.user_id),
+        reason=reason,
+        offers_cancelled=len(open_offers),
+        visits_cancelled=len(visit_rows),
+    )
+    return {
+        "listing_id": str(listing.id),
+        "status": "removed",
+        "offers_cancelled": len(open_offers),
+        "visits_cancelled": len(visit_rows),
+        "message": "Listing removed.",
+    }
 
 
 # Concierge Phase 3 endpoints have been moved above /{listing_id} so

@@ -128,6 +128,15 @@ class Listing(Base, TimestampMixin):
     water_damage_history = Column(Boolean, nullable=True)
     seller_functional_attestation = Column(Boolean, nullable=True)
 
+    # ── Seller lifecycle (migration 0040) ─────────────────────────────────────
+    # Soft-delete metadata. status='removed' is the canonical "gone" signal;
+    # these two columns add structured analytics + a wall-clock timestamp
+    # distinct from updated_at so the publish/remove trail stays intact.
+    deletion_reason = Column(String(50), nullable=True)
+    # 'sold_elsewhere' | 'changed_mind' | 'wrong_price' | 'no_buyers' |
+    # 'item_damaged' | 'other'
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
+
     category = relationship("Category", back_populates="listings")
     images = relationship("ListingImage", back_populates="listing", cascade="all, delete-orphan")
     snapshots = relationship("ListingSnapshot", back_populates="listing")

@@ -540,15 +540,58 @@ async def my_visit(
     return await _visit_to_response(db, visit)
 
 
+# Canonical cancel-reason set — mirrors mobile's FEVisitCancelReason
+# (services/api.ts) and the listings.deletion_reason set, so analytics
+# can join across both surfaces.
+_CANCEL_REASONS = {
+    "changed_mind",
+    "sold_elsewhere",
+    "fe_late",
+    "schedule_conflict",
+    "no_longer_selling",
+    "other",
+}
+
+
+class CancelVisitBody(BaseModel):
+    """Optional structured body for seller-cancel.
+
+    Backwards-compatible: an empty/missing body still cancels (legacy
+    mobile builds). When supplied, `cancellation_reason` must be one of
+    the canonical keys above so it joins cleanly with listings analytics.
+    """
+    cancellation_reason: Optional[str] = Field(default=None, max_length=50)
+    note: Optional[str] = Field(default=None, max_length=500)
+
+    @field_validator("cancellation_reason")
+    @classmethod
+    def _validate_reason(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or v == "":
+            return None
+        if v not in _CANCEL_REASONS:
+            raise ValueError(f"invalid reason: {v}")
+        return v
+
+
 @seller_router.post("/{visit_id}/cancel", response_model=VisitResponse)
 async def cancel_my_visit(
     visit_id: UUID,
     current_user: BasicUser,
     db: DBSession,
+    body: Optional[CancelVisitBody] = None,
 ):
     visit = await _load_visit_by_id(db, visit_id)
     if visit.seller_id != current_user.user_id:
         raise HTTPException(status_code=403, detail={"error": "NOT_YOUR_VISIT"})
+
+    # Snapshot pre-cancel state so we know whether the FE was assigned
+    # / en route — drives whether we push-notify them.
+    fe_id_before = visit.fe_id
+    status_before = visit.status
+
+    structured_reason = body.cancellation_reason if body else None
+    structured_note = body.note.strip() if body and body.note else None
+
     try:
         await fe_service.cancel_visit(
             db,
@@ -561,9 +604,54 @@ async def cancel_my_visit(
             status_code=409,
             detail={"error": "ILLEGAL_TRANSITION", "message": str(e)},
         )
+
+    # Persist structured analytics fields. cancellation_reason is the
+    # canonical analytics key; outcome_reason already carries a free-text
+    # blend (set by the service layer) — append the user note if present.
+    if structured_reason is not None:
+        visit.cancellation_reason = structured_reason
+    if structured_note:
+        visit.outcome_reason = (
+            f"{visit.outcome_reason or 'seller_cancelled'}: {structured_note}"
+        )
+
     await db.commit()
     await db.refresh(visit)
+
+    # Push-notify the assigned FE if they were already routed to this
+    # visit. Statuses that imply an FE is on the move: `scheduled`,
+    # `in_progress` (door arrival was reached but seller bailed before
+    # handover). `requested` means no FE assigned yet → no push.
+    if fe_id_before and status_before in {"scheduled", "in_progress"}:
+        try:
+            fe_user_id = await _fe_user_id_for_fe(db, fe_id_before)
+            if fe_user_id:
+                from app.modules.notifications.concierge_templates import (
+                    notify_visit_cancelled_to_fe,
+                )
+                await notify_visit_cancelled_to_fe(
+                    fe_user_id=fe_user_id,
+                    visit_id=visit.id,
+                    reason=structured_reason,
+                )
+        except Exception as e:
+            # Notification is best-effort; the cancel itself already
+            # committed, so swallow and log.
+            logger.warning(
+                "concierge.notify_cancel_to_fe.failed",
+                visit_id=str(visit.id),
+                error=str(e),
+            )
+
     return await _visit_to_response(db, visit)
+
+
+async def _fe_user_id_for_fe(db, fe_id: UUID) -> Optional[UUID]:
+    """Resolve FieldExecutive.id → underlying user_id for push targeting."""
+    fe = await db.get(FieldExecutive, fe_id)
+    if not fe:
+        return None
+    return getattr(fe, "user_id", None)
 
 
 # ── Concierge Phase 2 seller-facing endpoints (master spec section 5) ────

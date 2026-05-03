@@ -117,6 +117,11 @@ class FEVisit(Base, TimestampMixin):
 
     outcome_reason = Column(Text, nullable=True)
 
+    # Structured cancel-reason key (added in migration 0040). Mirrors
+    # listings.deletion_reason. Populated by the cancel endpoint when
+    # the seller (or admin) cancels with a reason from the canonical set.
+    cancellation_reason = Column(String(50), nullable=True)
+
     listing_id = Column(
         UUID(as_uuid=True),
         ForeignKey("listings.id", ondelete="SET NULL"),

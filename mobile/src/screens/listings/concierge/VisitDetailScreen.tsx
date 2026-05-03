@@ -14,6 +14,7 @@
 import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -22,11 +23,28 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 
-import { FEVisits, type FEVisit } from '../../../services/api';
+import { FEVisits, type FEVisit, type FEVisitCancelReason } from '../../../services/api';
 import { BackButton, Button } from '../../../components/ui';
 import SpecialistProfileCard from '../../../components/concierge/SpecialistProfileCard';
+import ReasonSheet, { type ReasonOption } from '../../../components/listing/ReasonSheet';
+import { parseApiError } from '../../../utils/errors';
 import { C, R, S, T, Shadow } from '../../../utils/tokens';
 import type { RootScreen } from '../../../navigation/types';
+
+// Mirrors backend _VALID_CANCEL_REASONS. Order = chip order users see.
+const CANCEL_REASONS: ReasonOption<FEVisitCancelReason>[] = [
+  { key: 'changed_mind',       label: 'Changed my mind' },
+  { key: 'sold_elsewhere',     label: 'Sold elsewhere' },
+  { key: 'schedule_conflict',  label: 'Schedule clash' },
+  { key: 'fe_late',            label: 'Specialist running late' },
+  { key: 'no_longer_selling',  label: 'Not selling anymore' },
+  { key: 'other',              label: 'Other' },
+];
+
+// Visit statuses where the seller can self-serve cancel. `in_progress`
+// or terminal (completed / cancelled / no_show) means the FE is at the
+// door or the visit is already closed — block here, point at support.
+const CANCELLABLE_STATUSES = new Set<FEVisit['status']>(['requested', 'scheduled']);
 
 export default function VisitDetailScreen({
   navigation,
@@ -35,6 +53,8 @@ export default function VisitDetailScreen({
   const { visit_id } = route.params;
   const [visit, setVisit] = useState<FEVisit | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showCancelSheet, setShowCancelSheet] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -51,6 +71,27 @@ export default function VisitDetailScreen({
     useCallback(() => {
       load();
     }, [load]),
+  );
+
+  const submitCancel = useCallback(
+    async (reason: FEVisitCancelReason, note: string) => {
+      if (!visit) return;
+      setCancelling(true);
+      try {
+        await FEVisits.cancel(visit.id, reason, note);
+        setShowCancelSheet(false);
+        Alert.alert(
+          'Visit cancelled',
+          'Your specialist has been notified. You can book another visit anytime.',
+          [{ text: 'OK', onPress: () => navigation.goBack() }],
+        );
+      } catch (e) {
+        Alert.alert('Could not cancel', parseApiError(e));
+      } finally {
+        setCancelling(false);
+      }
+    },
+    [visit, navigation],
   );
 
   if (loading) {
@@ -80,6 +121,7 @@ export default function VisitDetailScreen({
   const addressText = formatAddress(visit.address);
   const isAssigned = !!visit.fe_id;
   const showCode = visit.status === 'in_progress' && visit.arrival_verification_code;
+  const canCancel = CANCELLABLE_STATUSES.has(visit.status);
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
@@ -152,8 +194,34 @@ export default function VisitDetailScreen({
           </View>
         ) : null}
 
+        {canCancel ? (
+          <View style={s.section}>
+            <Button
+              label="Cancel visit"
+              variant="secondary"
+              size="lg"
+              fullWidth
+              onPress={() => setShowCancelSheet(true)}
+            />
+            <Text style={s.cancelHelp}>
+              Free to cancel. Your specialist will be notified.
+            </Text>
+          </View>
+        ) : null}
+
         <View style={{ height: S.xl }} />
       </ScrollView>
+
+      <ReasonSheet<FEVisitCancelReason>
+        visible={showCancelSheet}
+        title="Cancel this visit?"
+        message="Your concierge specialist will be notified right away. You can book another visit whenever you're ready."
+        reasons={CANCEL_REASONS}
+        confirmLabel="Cancel visit"
+        loading={cancelling}
+        onConfirm={submitCancel}
+        onClose={() => !cancelling && setShowCancelSheet(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -287,5 +355,11 @@ const s = StyleSheet.create({
     color: C.text,
     fontStyle: 'italic',
     lineHeight: 20,
+  },
+  cancelHelp: {
+    fontSize: T.size.sm,
+    color: C.text3,
+    textAlign: 'center',
+    marginTop: S.sm,
   },
 });

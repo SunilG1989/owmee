@@ -287,6 +287,20 @@ export const KYC = {
 };
 
 // ── Listings ─────────────────────────────────────────────────────────────────
+/**
+ * Structured deletion reasons accepted by DELETE /v1/listings/{id}.
+ * The backend validates server-side; sending an unknown value returns
+ * 400 INVALID_REASON. Keep these in sync with _VALID_DELETION_REASONS in
+ * backend/app/modules/listings/router.py.
+ */
+export type ListingDeletionReason =
+  | 'sold_elsewhere'
+  | 'changed_mind'
+  | 'wrong_price'
+  | 'no_buyers'
+  | 'item_damaged'
+  | 'other';
+
 export const Listings = {
   browse: (p: BrowseParams = {}) => api.get('/v1/listings', { params: p }),
   search: (q: string, p: BrowseParams = {}) => api.get('/v1/listings/search', { params: { q, ...p } }),
@@ -294,7 +308,33 @@ export const Listings = {
   create: (d: any) => api.post('/v1/listings', d),
   publish: (id: string) => api.post(`/v1/listings/${id}/publish`),
   categories: () => api.get('/v1/listings/categories'),
-  delete: (id: string) => api.delete(`/v1/listings/${id}`),
+  /**
+   * Soft-delete a listing. The backend cascades:
+   *   - open offers → cancelled with reason 'listing_withdrawn'
+   *   - pending/scheduled FE visits → cancelled
+   *   - reserved/sold listings or in_progress visits → 400 CANNOT_DELETE
+   * Idempotent — calling twice on an already-removed listing returns 200.
+   */
+  delete: (id: string, reason?: ListingDeletionReason, note?: string) =>
+    api.delete(`/v1/listings/${id}`, {
+      data: reason ? { reason, note: note ?? null } : undefined,
+    }),
+  /**
+   * Edit a published listing. Backed by PATCH /v1/listings/{id}/ai which
+   * locks edits once a buyer has committed (state ∉ {draft_ai,
+   * pending_buyer}). Returns { updated_fields, locked_reason? }.
+   */
+  update: (id: string, fields: Partial<{
+    title: string;
+    description: string;
+    price: number;
+    condition: string;
+    brand: string;
+    model: string;
+    storage: string;
+    color: string;
+    accessories: string;
+  }>) => api.patch(`/v1/listings/${id}/ai`, fields),
   markSold: (id: string, soldWhere: string = 'on_owmee') => api.post(`/v1/listings/${id}/mark-sold`, { sold_where: soldWhere }),
   requestImageUpload: (listingId: string, contentType: string = 'image/jpeg', sortOrder: number = 0) =>
     api.post(`/v1/listings/${listingId}/images/request`, { content_type: contentType, sort_order: sortOrder }),
@@ -561,6 +601,21 @@ export interface SpecialistProfile {
   background_checked: boolean;
 }
 
+/**
+ * Structured cancel reasons for concierge visits. Server-side route
+ * (POST /v1/fe-visits/{id}/cancel) currently ignores the body — these
+ * are sent forward-compat so the FE router can adopt them without a
+ * mobile release. UI captures the reason regardless and feeds local
+ * analytics today.
+ */
+export type FEVisitCancelReason =
+  | 'changed_mind'
+  | 'sold_elsewhere'
+  | 'fe_late'
+  | 'schedule_conflict'
+  | 'no_longer_selling'
+  | 'other';
+
 export const FEVisits = {
   /**
    * Concierge Phase 1 booking. address_id resolves to a saved
@@ -571,7 +626,14 @@ export const FEVisits = {
     api.post<FEVisit>('/v1/fe-visits/request', body),
   mine: () => api.get<FEVisit[]>('/v1/fe-visits/me'),
   get: (id: string) => api.get<FEVisit>(`/v1/fe-visits/${id}`),
-  cancel: (id: string) => api.post(`/v1/fe-visits/${id}/cancel`),
+  /**
+   * Cancel a seller's own visit. Allowed when status is `requested` or
+   * `scheduled`. Reason is captured for analytics — at the API level the
+   * existing endpoint accepts no body; once the FE router adopts the
+   * structured payload these fields ride through unchanged.
+   */
+  cancel: (id: string, reason?: FEVisitCancelReason, note?: string) =>
+    api.post(`/v1/fe-visits/${id}/cancel`, reason ? { reason, note: note ?? null } : {}),
 
   // Concierge Phase 2: trust theater
   specialistProfile: (visitId: string) =>

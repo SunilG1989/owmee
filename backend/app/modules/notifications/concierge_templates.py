@@ -141,6 +141,48 @@ async def notify_specialist_arriving_soon(
     )
 
 
+# ── N7: visit cancelled (seller cancels — push to assigned FE) ──────────
+# Why this exists: when an FE is already on the way (status fe_assigned
+# or in_transit) and the seller cancels, the FE needs an immediate push
+# to U-turn. Without this, FEs waste fuel + time and surface as silent
+# CSAT incidents in the weekly ops review.
+async def notify_visit_cancelled_to_fe(
+    *,
+    fe_user_id: UUID,
+    visit_id: UUID,
+    reason: str | None = None,
+) -> None:
+    # Reason is exposed in the body so the FE doesn't need to dig into
+    # the visit detail to understand why their route changed.
+    reason_phrase = {
+        "changed_mind":      "Seller changed their mind.",
+        "sold_elsewhere":    "Seller sold the item elsewhere.",
+        "schedule_conflict": "Seller has a schedule conflict.",
+        "no_longer_selling": "Seller is no longer selling.",
+        "fe_late":           "Seller flagged the visit as running late.",
+        "other":             "",
+    }.get(reason or "", "")
+    body = (
+        f"Stop heading to this pickup. {reason_phrase}".strip()
+        if reason_phrase
+        else "Stop heading to this pickup."
+    )
+    await push(
+        user_id=fe_user_id,
+        event_type="concierge_visit_cancelled_fe",
+        title="Visit cancelled",
+        body=body,
+        data={
+            "deep_link": {
+                "screen": "FeVisitDetail",
+                "params": {"visit_id": str(visit_id)},
+            }
+        },
+        entity_type="fe_visit",
+        entity_id=str(visit_id),
+    )
+
+
 # ── N6: at the door (FE taps "Arrived") ─────────────────────────────────
 async def notify_specialist_at_door(
     *,
