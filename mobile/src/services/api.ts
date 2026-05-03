@@ -361,15 +361,20 @@ export interface UserAddress {
   custom_label: string | null;
   lat: number;
   lng: number;
+  // Per-address contact (P0 trust-floor 2026-05-03; BE schema upgrade required).
+  // Indian e-com universally lets the recipient name + phone differ from the
+  // account holder — gift deliveries, alternate contact for couriers.
+  full_name: string | null;
+  phone_number: string | null;
   flat_house_number: string;
   building_name: string | null;
   floor: string | null;
   landmark: string | null;
   address_line_1: string | null;
-  locality: string | null;
+  locality: string;
   city: string;
   state: string;
-  pincode: string | null;
+  pincode: string;
   is_default: boolean;
   source: 'gps_detected' | 'manual' | 'imported_from_profile';
 }
@@ -379,15 +384,17 @@ export interface CreateAddressRequest {
   custom_label?: string | null;
   lat: number;
   lng: number;
+  full_name: string;
+  phone_number: string;
   flat_house_number: string;
   building_name?: string | null;
   floor?: string | null;
   landmark?: string | null;
-  address_line_1?: string | null;
-  locality?: string | null;
+  address_line_1: string;
+  locality: string;
   city: string;
   state: string;
-  pincode?: string | null;
+  pincode: string;
   is_default?: boolean;
   source?: 'gps_detected' | 'manual';
 }

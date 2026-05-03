@@ -33,6 +33,7 @@ import {
 } from '../../../services/api';
 import { BackButton, Button } from '../../../components/ui';
 import { parseApiError } from '../../../utils/errors';
+import { useAuthStore } from '../../../store/authStore';
 import { C, R, S, T } from '../../../utils/tokens';
 import type { RootScreen } from '../../../navigation/types';
 
@@ -48,8 +49,16 @@ export default function AddressDetailsScreen({
   route,
 }: RootScreen<'AddressDetails'>) {
   const { lat, lng, source, reverse, returnTo } = route.params;
+  const accountPhone = useAuthStore((s) => s.phone);
 
-  // User-typed parts (only flat number is required)
+  // Per-address contact — defaults from account phone but editable so a
+  // gift / alternate-contact recipient can be entered.
+  const [fullName, setFullName] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState(
+    accountPhone ? accountPhone.replace(/^\+?91/, '') : '',
+  );
+
+  // User-typed parts
   const [flatHouseNumber, setFlatHouseNumber] = useState('');
   const [buildingName, setBuildingName] = useState('');
   const [floor, setFloor] = useState('');
@@ -69,10 +78,18 @@ export default function AddressDetailsScreen({
 
   const [saving, setSaving] = useState(false);
 
+  const phoneValid = /^[6-9]\d{9}$/.test(phoneNumber.trim());
+  const pincodeValid = /^\d{6}$/.test(pincode.trim());
+
   const canSave =
+    fullName.trim().length >= 2 &&
+    phoneValid &&
     flatHouseNumber.trim().length > 0 &&
+    addressLine1.trim().length > 0 &&
+    locality.trim().length > 0 &&
     city.trim().length > 0 &&
     state.trim().length > 0 &&
+    pincodeValid &&
     !saving;
 
   const handleSave = async () => {
@@ -84,15 +101,17 @@ export default function AddressDetailsScreen({
       custom_label: label === 'other' ? customLabel.trim() || null : null,
       lat,
       lng,
+      full_name: fullName.trim(),
+      phone_number: phoneNumber.trim(),
       flat_house_number: flatHouseNumber.trim(),
       building_name: buildingName.trim() || null,
       floor: floor.trim() || null,
       landmark: landmark.trim() || null,
-      address_line_1: addressLine1.trim() || null,
-      locality: locality.trim() || null,
+      address_line_1: addressLine1.trim(),
+      locality: locality.trim(),
       city: city.trim(),
       state: state.trim(),
-      pincode: pincode.trim() || null,
+      pincode: pincode.trim(),
       is_default: setAsDefault,
       source: source === 'gps_detected' ? 'gps_detected' : 'manual',
     };
@@ -139,12 +158,37 @@ export default function AddressDetailsScreen({
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          <Text style={s.sectionHeader}>Who's receiving?</Text>
+          <Field
+            label="Full name"
+            value={fullName}
+            onChangeText={setFullName}
+            placeholder="As it should appear on the package"
+            autoFocus
+            required
+          />
+          <Field
+            label="Mobile number"
+            value={phoneNumber}
+            onChangeText={(v) => setPhoneNumber(v.replace(/[^\d]/g, '').slice(0, 10))}
+            placeholder="10-digit Indian number"
+            keyboardType="number-pad"
+            required
+            errorText={
+              phoneNumber.length > 0 && !phoneValid
+                ? 'Enter a valid 10-digit mobile number'
+                : undefined
+            }
+          />
+
+          <View style={s.divider} />
+
+          <Text style={s.sectionHeader}>Address</Text>
           <Field
             label="Flat / house number"
             value={flatHouseNumber}
             onChangeText={setFlatHouseNumber}
             placeholder="Flat 304"
-            autoFocus
             required
           />
           <Field
@@ -166,19 +210,32 @@ export default function AddressDetailsScreen({
             placeholder="Near Diary Circle"
           />
 
-          <View style={s.divider} />
-
           <Field
-            label="Address line 1"
+            label="Street / road"
             value={addressLine1}
             onChangeText={setAddressLine1}
             placeholder="12th Main Road"
+            required
           />
           <Field
-            label="Locality"
+            label="Area / locality"
             value={locality}
             onChangeText={setLocality}
             placeholder="JP Nagar Phase 7"
+            required
+          />
+          <Field
+            label="Pincode"
+            value={pincode}
+            onChangeText={(v) => setPincode(v.replace(/[^\d]/g, '').slice(0, 6))}
+            placeholder="560078"
+            keyboardType="number-pad"
+            required
+            errorText={
+              pincode.length > 0 && !pincodeValid
+                ? 'Enter a valid 6-digit pincode'
+                : undefined
+            }
           />
           <Field
             label="City"
@@ -193,13 +250,6 @@ export default function AddressDetailsScreen({
             onChangeText={setState}
             placeholder="Karnataka"
             required
-          />
-          <Field
-            label="Pincode"
-            value={pincode}
-            onChangeText={(v) => setPincode(v.replace(/[^\d]/g, '').slice(0, 6))}
-            placeholder="560078"
-            keyboardType="number-pad"
           />
 
           <Text style={s.sectionLabel}>Save as</Text>
@@ -271,6 +321,7 @@ interface FieldProps {
   required?: boolean;
   autoFocus?: boolean;
   keyboardType?: 'default' | 'number-pad';
+  errorText?: string;
 }
 
 function Field({
@@ -281,6 +332,7 @@ function Field({
   required,
   autoFocus,
   keyboardType = 'default',
+  errorText,
 }: FieldProps) {
   return (
     <View style={s.field}>
@@ -293,11 +345,12 @@ function Field({
         onChangeText={onChangeText}
         placeholder={placeholder}
         placeholderTextColor={C.text4}
-        style={s.input}
+        style={[s.input, errorText ? s.inputError : null]}
         autoFocus={autoFocus}
         keyboardType={keyboardType}
-        autoCapitalize="words"
+        autoCapitalize={keyboardType === 'number-pad' ? 'none' : 'words'}
       />
+      {errorText ? <Text style={s.errorText}>{errorText}</Text> : null}
     </View>
   );
 }
@@ -337,6 +390,12 @@ const s = StyleSheet.create({
     fontWeight: T.weight.medium,
   },
   fieldReq: { color: C.petrolDeep },
+  sectionHeader: {
+    fontSize: T.size.md,
+    fontWeight: T.weight.bold,
+    color: C.text,
+    marginBottom: S.sm,
+  },
   input: {
     backgroundColor: C.surface,
     borderRadius: R.md,
@@ -346,6 +405,12 @@ const s = StyleSheet.create({
     color: C.text,
     borderWidth: 1,
     borderColor: C.border,
+  },
+  inputError: { borderColor: C.danger },
+  errorText: {
+    marginTop: 4,
+    fontSize: T.size.sm,
+    color: C.danger,
   },
   sectionLabel: {
     fontSize: T.size.base,
