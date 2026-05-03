@@ -24,7 +24,7 @@ import Button from './ui/Button';
 // renders with text + CTAs as the focal point. NO emoji fallback per
 // rule 15.
 const HERO_ASSETS: Record<'shield' | 'package' | 'truck', ImageSourcePropType> = {
-  shield:  require('../../assets/owmee/home/hero-chair.webp'),
+  shield:  require('../../assets/owmee/home/hero-cozy.webp'),  // first slide — cozy tech + lifestyle setup
   package: require('../../assets/owmee/home/hero-laptop.webp'),
   truck:   require('../../assets/owmee/home/hero-box.webp'),
 };
