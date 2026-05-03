@@ -24,7 +24,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { C, T, S, R, formatPrice } from '../utils/tokens';
 import type { RootScreen } from '../navigation/types';
-import { Transactions, Disputes, Returns, type TrackingResponse, type Transaction } from '../services/api';
+import { Transactions, Disputes, Returns, Evidence, type TrackingResponse, type Transaction } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import { BackButton, Button } from '../components/ui';
 import { parseApiError } from '../utils/errors';
@@ -108,6 +108,23 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
   const isCancelled = status === 'cancelled' || status === 'pickup_rejected';
 
   const showAckCode = isBuyer && tracking.ack_code && status === 'delivery_in_progress' && tracking.delivery_mode === 'fe';
+
+  // Upload a single local URI to R2 via the evidence presigned-URL flow.
+  // Returns the r2_key that the BE persists into Dispute.photo_keys /
+  // Transaction.return_photo_keys. Any upload failure throws so the caller
+  // can surface a single error rather than silently dropping evidence.
+  const uploadEvidencePhoto = async (uri: string): Promise<string> => {
+    const presign = await Evidence.requestUpload(transactionId, 'image/jpeg');
+    const { upload_url, r2_key } = presign.data;
+    const blob = await (await fetch(uri)).blob();
+    const putRes = await fetch(upload_url, {
+      method: 'PUT',
+      body: blob,
+      headers: { 'Content-Type': 'image/jpeg' },
+    });
+    if (!putRes.ok) throw new Error(`R2 upload failed: ${putRes.status}`);
+    return r2_key;
+  };
 
   // Pick up to (3 - existing) photos from the gallery for return/dispute
   // evidence. Camera capture isn't offered here on purpose — buyers usually
@@ -400,7 +417,17 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
                   setShowDispute(false);
                   setActing(true);
                   try {
-                    await Disputes.raise(transactionId, disputeReason, disputeDesc, disputePhotos);
+                    // Upload photos to R2 first, then submit the keys.
+                    // Doing this inline (vs as the picker selects) keeps
+                    // the picker fast and avoids dangling uploads if the
+                    // user backs out of the modal before submitting.
+                    let photoKeys: string[] = [];
+                    if (disputePhotos.length > 0) {
+                      photoKeys = await Promise.all(
+                        disputePhotos.map((u) => uploadEvidencePhoto(u)),
+                      );
+                    }
+                    await Disputes.raise(transactionId, disputeReason, disputeDesc, photoKeys);
                     Alert.alert('Dispute opened', 'Our team will review within 48 hours and contact you. The seller payout is on hold until then.');
                     await reload();
                   } catch (e: any) {
@@ -475,7 +502,13 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
                   setShowReturn(false);
                   setActing(true);
                   try {
-                    await Returns.request(transactionId, returnReason, returnDesc, returnPhotos);
+                    let photoKeys: string[] = [];
+                    if (returnPhotos.length > 0) {
+                      photoKeys = await Promise.all(
+                        returnPhotos.map((u) => uploadEvidencePhoto(u)),
+                      );
+                    }
+                    await Returns.request(transactionId, returnReason, returnDesc, photoKeys);
                     Alert.alert('Return requested', 'We\'ll review and decide within 24 hours.');
                     await reload();
                   } catch (e: any) {

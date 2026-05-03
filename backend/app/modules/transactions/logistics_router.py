@@ -289,8 +289,16 @@ async def admin_initiate_refund(
 class _RequestReturnRequest(BaseModel):
     reason: str = Field(..., min_length=2, max_length=50)
     description: str = Field(..., min_length=10, max_length=1000)
-    # P0.4 (2026-05-03) — buyer-uploaded return-evidence photos. Cap 3.
+    # P0.4 (2026-05-03) — R2 keys returned by the evidence-upload presigned
+    # URL flow below. Mobile uploads each photo directly to R2 first, then
+    # passes the resulting keys here. Cap 3 photos.
     photo_uris: list[str] | None = Field(default=None, max_length=3)
+
+
+class _EvidenceUploadRequest(BaseModel):
+    """Mirror of ImageUploadRequest from listings. Single content_type
+    so the presigned URL signs against the right MIME on PUT."""
+    content_type: str = Field("image/jpeg", pattern="^image/(jpeg|png|webp)$")
 
 
 class _AdminReturnDecisionRequest(BaseModel):
@@ -299,6 +307,47 @@ class _AdminReturnDecisionRequest(BaseModel):
 
 class _AdminAssignReturnPickupRequest(BaseModel):
     fe_user_id: UUID
+
+
+@router.post("/v1/transactions/{transaction_id}/evidence/request")
+async def buyer_request_evidence_upload(
+    transaction_id: UUID,
+    body: _EvidenceUploadRequest,
+    current_user: BasicUser, db: DBSession,
+):
+    """Presigned-URL request for buyer-uploaded dispute/return photos.
+
+    P0.4 follow-through: photos used to be stored as raw client URIs that
+    admin reviewers couldn't actually see. Now the FE uploads each photo
+    directly to R2 via this URL and passes back the resulting r2_keys
+    in the dispute/return create body.
+
+    Auth: any party on the transaction (buyer or seller). Status check is
+    deliberately loose — buyers raise disputes after delivery + sellers
+    might attach FE-side evidence in future. Re-validate at write-time.
+    """
+    from app.core.storage import (
+        generate_presigned_upload_url,
+        object_key_for_dispute_evidence,
+    )
+    from uuid import uuid4 as _uuid4
+
+    txn = await db.get(Transaction, transaction_id)
+    if not txn:
+        raise HTTPException(404, {"error": "NOT_FOUND"})
+    if current_user.user_id not in (txn.buyer_id, txn.seller_id):
+        raise HTTPException(403, {"error": "NOT_YOUR_TRANSACTION"})
+
+    # filename pattern: <uuid>.{ext} so the same helper produces a unique
+    # path per photo. Mirrors how listings split sort_order into the URL.
+    ext = "jpg" if body.content_type == "image/jpeg" else (
+        "png" if body.content_type == "image/png" else "webp"
+    )
+    r2_key = object_key_for_dispute_evidence(str(transaction_id), f"{_uuid4()}.{ext}")
+    upload_url = generate_presigned_upload_url(
+        r2_key, content_type=body.content_type, expires_in=300,
+    )
+    return {"upload_url": upload_url, "r2_key": r2_key, "expires_in_seconds": 300}
 
 
 @router.post("/v1/transactions/{transaction_id}/condition_confirmed")

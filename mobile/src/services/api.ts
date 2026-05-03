@@ -663,7 +663,8 @@ export const FE = {
 // ── Returns ──────────────────────────────────────────────────────────────────
 // KYC-gated server-side. Mobile catches 403 and routes to KycRequiredForAction.
 export const Returns = {
-  // photo_uris hint — see Disputes.raise note. Same plumbing assumption.
+  // photo_uris are R2 keys returned by Evidence.requestUpload below; mobile
+  // uploads each photo to R2 first, then passes the keys here.
   request: (transactionId: string, reason: string, description: string, photo_uris?: string[]) =>
     api.post(`/v1/transactions/${transactionId}/return`, {
       reason,
@@ -674,6 +675,21 @@ export const Returns = {
   // before the handover ack code is shown. Idempotent server-side.
   conditionConfirmed: (transactionId: string) =>
     api.post(`/v1/transactions/${transactionId}/condition_confirmed`),
+};
+
+// ── Evidence (dispute/return photo upload) ──────────────────────────────────
+// Two-step upload mirroring the Listings image flow:
+//   1) requestUpload() → BE returns a presigned R2 PUT URL + r2_key
+//   2) client PUTs the file bytes directly to R2 at upload_url
+//   3) client passes the r2_keys to Disputes.raise() / Returns.request()
+//      as photo_uris, which BE persists into Dispute.photo_keys /
+//      Transaction.return_photo_keys.
+export const Evidence = {
+  requestUpload: (transactionId: string, contentType: string = 'image/jpeg') =>
+    api.post<{ upload_url: string; r2_key: string; expires_in_seconds: number }>(
+      `/v1/transactions/${transactionId}/evidence/request`,
+      { content_type: contentType },
+    ),
 };
 
 export interface FePickup {
