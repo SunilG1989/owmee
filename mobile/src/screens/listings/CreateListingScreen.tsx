@@ -106,6 +106,9 @@ export default function CreateListingScreen({ navigation }: any) {
   const [price, setPrice] = useState('');
   const [originalPrice, setOriginalPrice] = useState('');
   const [nego, setNego] = useState(true);
+  // Reserve price (P1.5) — hidden floor below which auto-decline offers.
+  // Buyers don't see it. Empty string = no floor (any offer routed to seller).
+  const [reservePrice, setReservePrice] = useState('');
 
   // Product details (category-specific)
   const [brand, setBrand] = useState('');
@@ -320,6 +323,13 @@ export default function CreateListingScreen({ navigation }: any) {
       );
       return;
     }
+    if (nego && reservePrice && price && parseFloat(reservePrice) > parseFloat(price)) {
+      Alert.alert(
+        'Reserve too high',
+        'Reserve price can\'t be higher than your asking price.',
+      );
+      return;
+    }
     setBusy(true);
     try {
       const res = await Listings.create({
@@ -333,6 +343,7 @@ export default function CreateListingScreen({ navigation }: any) {
         lat: location?.lat,
         lng: location?.lng,
         is_negotiable: nego,
+        min_acceptable_price: nego && reservePrice ? parseFloat(reservePrice) : undefined,
         // Product details
         brand: brand || undefined,
         model: model || undefined,
@@ -728,6 +739,29 @@ export default function CreateListingScreen({ navigation }: any) {
               <Text style={st.negoLabel}>Open to negotiation</Text>
             </TouchableOpacity>
 
+            {nego && (
+              <>
+                <Text style={st.lbl}>Reserve price (optional, hidden from buyers)</Text>
+                <View style={st.priceRow}>
+                  <Text style={st.priceCurrencySmall}>₹</Text>
+                  <TextInput
+                    style={[st.inp, st.flex1]}
+                    placeholder="Auto-decline offers below this"
+                    placeholderTextColor={C.text4}
+                    keyboardType="numeric"
+                    value={reservePrice}
+                    onChangeText={setReservePrice}
+                  />
+                </View>
+                <Text style={st.reserveHint}>
+                  Offers below the reserve are politely declined automatically. You won't be pinged for spam.
+                </Text>
+                {reservePrice && price && parseFloat(reservePrice) > parseFloat(price) ? (
+                  <Text style={st.errText}>Reserve can't be higher than your asking price.</Text>
+                ) : null}
+              </>
+            )}
+
             {/* Review summary */}
             <View style={st.reviewCard}>
               <Text style={st.reviewTitle}>Review</Text>
@@ -900,6 +934,11 @@ const st = StyleSheet.create({
     marginTop: 4,
     fontSize: T.size.sm,
     color: C.red,
+  },
+  reserveHint: {
+    marginTop: 4,
+    fontSize: T.size.sm,
+    color: C.text3,
   },
 
   // What's-in-the-box checkboxes
