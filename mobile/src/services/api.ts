@@ -509,8 +509,17 @@ export const Orders = {
 
 // ── Disputes ──────────────────────────────────────────────────────────
 export const Disputes = {
-  raise: (transactionId: string, reason: string, description: string) =>
-    api.post('/v1/disputes', { transaction_id: transactionId, reason, description }),
+  // photo_uris is a FE-side hint; BE plumbing converts these to R2 keys via
+  // a multipart endpoint or a presigned-URL upload step, depending on what
+  // ships in the same release. Without photos, dispute resolution is text-only
+  // (P0.4 trust-floor fix 2026-05-03).
+  raise: (transactionId: string, reason: string, description: string, photo_uris?: string[]) =>
+    api.post('/v1/disputes', {
+      transaction_id: transactionId,
+      reason,
+      description,
+      photo_uris: photo_uris && photo_uris.length > 0 ? photo_uris : undefined,
+    }),
   get: (disputeId: string) => api.get(`/v1/disputes/${disputeId}`),
 };
 
@@ -645,8 +654,13 @@ export const FE = {
 // ── Returns ──────────────────────────────────────────────────────────────────
 // KYC-gated server-side. Mobile catches 403 and routes to KycRequiredForAction.
 export const Returns = {
-  request: (transactionId: string, reason: string, description: string) =>
-    api.post(`/v1/transactions/${transactionId}/return`, { reason, description }),
+  // photo_uris hint — see Disputes.raise note. Same plumbing assumption.
+  request: (transactionId: string, reason: string, description: string, photo_uris?: string[]) =>
+    api.post(`/v1/transactions/${transactionId}/return`, {
+      reason,
+      description,
+      photo_uris: photo_uris && photo_uris.length > 0 ? photo_uris : undefined,
+    }),
 };
 
 export interface FePickup {

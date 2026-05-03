@@ -17,8 +17,9 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert,
-  ActivityIndicator, Linking, TextInput, Modal,
+  ActivityIndicator, Linking, TextInput, Modal, Image,
 } from 'react-native';
+import { launchImageLibrary } from 'react-native-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { C, T, S, R, formatPrice } from '../utils/tokens';
@@ -59,9 +60,11 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
   const [showDispute, setShowDispute] = useState(false);
   const [disputeReason, setDisputeReason] = useState<string>('item_not_as_described');
   const [disputeDesc, setDisputeDesc] = useState('');
+  const [disputePhotos, setDisputePhotos] = useState<string[]>([]);
   const [showReturn, setShowReturn] = useState(false);
   const [returnReason, setReturnReason] = useState<string>('item_not_as_described');
   const [returnDesc, setReturnDesc] = useState('');
+  const [returnPhotos, setReturnPhotos] = useState<string[]>([]);
   // Buyer must visually inspect at the door before reading the handover code
   // (P0.5). The code release becomes a digital "I have inspected and accept"
   // checkpoint we can later reference if a dispute is raised.
@@ -105,6 +108,34 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
   const isCancelled = status === 'cancelled' || status === 'pickup_rejected';
 
   const showAckCode = isBuyer && tracking.ack_code && status === 'delivery_in_progress' && tracking.delivery_mode === 'fe';
+
+  // Pick up to (3 - existing) photos from the gallery for return/dispute
+  // evidence. Camera capture isn't offered here on purpose — buyers usually
+  // have the damage already photographed in their gallery and the gallery
+  // picker is friendlier on first-time use.
+  const pickPhotos = async (existing: string[], setter: (urls: string[]) => void) => {
+    const remaining = 3 - existing.length;
+    if (remaining <= 0) {
+      Alert.alert('Limit reached', 'You can attach up to 3 photos.');
+      return;
+    }
+    launchImageLibrary(
+      {
+        mediaType: 'photo',
+        quality: 0.85 as any,
+        maxWidth: 1600,
+        maxHeight: 1600,
+        selectionLimit: remaining,
+      },
+      (r) => {
+        if (r.didCancel || r.errorCode) return;
+        const uris = (r.assets || [])
+          .map((a) => a.uri)
+          .filter((u): u is string => Boolean(u));
+        setter([...existing, ...uris].slice(0, 3));
+      },
+    );
+  };
 
   const doAction = async (action: () => Promise<unknown>, successMsg: string) => {
     setActing(true);
@@ -339,6 +370,14 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
               multiline
               maxLength={1000}
             />
+
+            <Text style={[s.rowLabel, s.rowLabelSpaced]}>Add photos (highly recommended)</Text>
+            <PhotoStrip
+              photos={disputePhotos}
+              onPick={() => pickPhotos(disputePhotos, setDisputePhotos)}
+              onRemove={(i) => setDisputePhotos(disputePhotos.filter((_, idx) => idx !== i))}
+            />
+
             <View style={s.modalActions}>
               <Button
                 label="Cancel"
@@ -355,7 +394,7 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
                   setShowDispute(false);
                   setActing(true);
                   try {
-                    await Disputes.raise(transactionId, disputeReason, disputeDesc);
+                    await Disputes.raise(transactionId, disputeReason, disputeDesc, disputePhotos);
                     Alert.alert('Dispute opened', 'Our team will review within 48 hours and contact you. The seller payout is on hold until then.');
                     await reload();
                   } catch (e: any) {
@@ -406,6 +445,14 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
               multiline
               maxLength={1000}
             />
+
+            <Text style={[s.rowLabel, s.rowLabelSpaced]}>Add photos (highly recommended)</Text>
+            <PhotoStrip
+              photos={returnPhotos}
+              onPick={() => pickPhotos(returnPhotos, setReturnPhotos)}
+              onRemove={(i) => setReturnPhotos(returnPhotos.filter((_, idx) => idx !== i))}
+            />
+
             <View style={s.modalActions}>
               <Button
                 label="Cancel"
@@ -422,7 +469,7 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
                   setShowReturn(false);
                   setActing(true);
                   try {
-                    await Returns.request(transactionId, returnReason, returnDesc);
+                    await Returns.request(transactionId, returnReason, returnDesc, returnPhotos);
                     Alert.alert('Return requested', 'We\'ll review and decide within 24 hours.');
                     await reload();
                   } catch (e: any) {
@@ -512,6 +559,35 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
         </View>
       </Modal>
     </SafeAreaView>
+  );
+}
+
+function PhotoStrip({
+  photos,
+  onPick,
+  onRemove,
+}: { photos: string[]; onPick: () => void; onRemove: (i: number) => void }) {
+  return (
+    <View style={s.photoStrip}>
+      {photos.map((uri, i) => (
+        <View key={`${uri}-${i}`} style={s.photoThumbWrap}>
+          <Image source={{ uri }} style={s.photoThumb} />
+          <TouchableOpacity
+            style={s.photoThumbX}
+            onPress={() => onRemove(i)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={s.photoThumbXText}>×</Text>
+          </TouchableOpacity>
+        </View>
+      ))}
+      {photos.length < 3 && (
+        <TouchableOpacity style={s.photoAdd} onPress={onPick} activeOpacity={0.7}>
+          <Text style={s.photoAddPlus}>+</Text>
+          <Text style={s.photoAddLabel}>Photo</Text>
+        </TouchableOpacity>
+      )}
+    </View>
   );
 }
 
@@ -719,6 +795,59 @@ const s = StyleSheet.create({
   },
   matchedBtnLabelOn: {
     color: C.text,
+  },
+  photoStrip: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: S.sm,
+    marginBottom: S.lg,
+  },
+  photoThumbWrap: {
+    position: 'relative',
+  },
+  photoThumb: {
+    width: 64,
+    height: 64,
+    borderRadius: R.md,
+    backgroundColor: C.bone2,
+  },
+  photoThumbX: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: C.text,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoThumbXText: {
+    color: C.surface,
+    fontSize: T.size.sm + 1,
+    lineHeight: 14,
+    fontWeight: T.weight.bold,
+  },
+  photoAdd: {
+    width: 64,
+    height: 64,
+    borderRadius: R.md,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: C.border,
+    backgroundColor: C.bone,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoAddPlus: {
+    fontSize: T.size.xl,
+    color: C.text3,
+    lineHeight: T.size.xl + 2,
+  },
+  photoAddLabel: {
+    fontSize: T.size.sm - 1,
+    color: C.text3,
+    marginTop: -2,
   },
   input: {
     borderWidth: 1, borderColor: C.border, borderRadius: R.xs + 2,
