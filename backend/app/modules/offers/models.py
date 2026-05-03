@@ -143,10 +143,21 @@ class Transaction(Base, TimestampMixin):
     return_pickup_fe_id = Column(UUID(as_uuid=True))
     return_picked_up_at = Column(DateTime(timezone=True))
     return_completed_at = Column(DateTime(timezone=True))
+    # P0.4 (2026-05-03): buyer-uploaded return-evidence photos. JSON list of
+    # R2 keys / URIs (current persistence is verbatim until the presigned-URL
+    # flow lands; mirrors disputes.photo_keys).
+    return_photo_keys = Column(JSONB, nullable=True)
 
     # ── Sprint 4 / Pass 4e: frozen listing snapshot at reservation time ─────
     listing_snapshot = Column(JSONB, nullable=True)
     snapshot_frozen_at = Column(DateTime(timezone=True), nullable=True)
+
+    # ── P0.5 (2026-05-03): handover-inspection beacon ──────────────────────
+    # Set when the buyer taps "Item matches the listing — show my code" in
+    # TransactionDetailScreen before reading the 6-digit ack code. Becomes
+    # the timestamped record dispute resolution can point at when the buyer
+    # later raises a "not as promised" claim.
+    condition_confirmed_at = Column(DateTime(timezone=True), nullable=True)
 
     reservation = relationship("Reservation", back_populates="transactions")
     payment_links = relationship("PaymentLink", back_populates="transaction")

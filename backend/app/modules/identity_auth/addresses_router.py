@@ -43,17 +43,25 @@ router = APIRouter(prefix="/v1/users/me/addresses", tags=["user-addresses"])
 class AddressBase(BaseModel):
     label: str = Field(..., pattern=r"^(home|work|other)$")
     custom_label: Optional[str] = Field(None, max_length=50)
+    # P0.1 — recipient name + phone are now required at create time. Existing
+    # rows may still have NULL via legacy data; the column stays nullable in
+    # the DB to avoid a destructive migration.
+    full_name: str = Field(..., min_length=2, max_length=200)
+    phone_number: str = Field(..., pattern=r"^[6-9]\d{9}$")
     lat: float
     lng: float
     flat_house_number: str = Field(..., min_length=1, max_length=100)
     building_name: Optional[str] = Field(None, max_length=200)
     floor: Optional[str] = Field(None, max_length=20)
     landmark: Optional[str] = Field(None, max_length=200)
-    address_line_1: Optional[str] = Field(None, max_length=300)
-    locality: Optional[str] = Field(None, max_length=200)
+    # Promoted to required at create-time per P0.1; partial-update
+    # schema below keeps them optional so PATCHes that don't touch
+    # them still work for legacy rows.
+    address_line_1: str = Field(..., min_length=1, max_length=300)
+    locality: str = Field(..., min_length=1, max_length=200)
     city: str = Field(..., min_length=1, max_length=100)
     state: str = Field(..., min_length=1, max_length=100)
-    pincode: Optional[str] = Field(None, pattern=r"^\d{6}$")
+    pincode: str = Field(..., pattern=r"^\d{6}$")
     is_default: bool = False
     source: str = Field(
         default="manual",
@@ -69,6 +77,8 @@ class AddressUpdateRequest(BaseModel):
     """Partial update — every field optional."""
     label: Optional[str] = Field(None, pattern=r"^(home|work|other)$")
     custom_label: Optional[str] = Field(None, max_length=50)
+    full_name: Optional[str] = Field(None, min_length=2, max_length=200)
+    phone_number: Optional[str] = Field(None, pattern=r"^[6-9]\d{9}$")
     lat: Optional[float] = None
     lng: Optional[float] = None
     flat_house_number: Optional[str] = Field(None, min_length=1, max_length=100)
@@ -87,6 +97,8 @@ class AddressResponse(BaseModel):
     id: UUID
     label: str
     custom_label: Optional[str]
+    full_name: Optional[str]
+    phone_number: Optional[str]
     lat: float
     lng: float
     flat_house_number: str
@@ -107,6 +119,8 @@ class AddressResponse(BaseModel):
             id=row.id,
             label=row.label,
             custom_label=row.custom_label,
+            full_name=row.full_name,
+            phone_number=row.phone_number,
             lat=float(row.lat),
             lng=float(row.lng),
             flat_house_number=row.flat_house_number,
@@ -197,6 +211,8 @@ async def create_address(
         user_id=current_user.user_id,
         label=body.label,
         custom_label=body.custom_label if body.label == "other" else None,
+        full_name=body.full_name,
+        phone_number=body.phone_number,
         lat=body.lat,
         lng=body.lng,
         flat_house_number=body.flat_house_number,

@@ -289,6 +289,8 @@ async def admin_initiate_refund(
 class _RequestReturnRequest(BaseModel):
     reason: str = Field(..., min_length=2, max_length=50)
     description: str = Field(..., min_length=10, max_length=1000)
+    # P0.4 (2026-05-03) — buyer-uploaded return-evidence photos. Cap 3.
+    photo_uris: list[str] | None = Field(default=None, max_length=3)
 
 
 class _AdminReturnDecisionRequest(BaseModel):
@@ -297,6 +299,42 @@ class _AdminReturnDecisionRequest(BaseModel):
 
 class _AdminAssignReturnPickupRequest(BaseModel):
     fe_user_id: UUID
+
+
+@router.post("/v1/transactions/{transaction_id}/condition_confirmed")
+async def buyer_condition_confirmed(
+    transaction_id: UUID,
+    current_user: BasicUser, db: DBSession,
+):
+    """Buyer-side beacon set when the in-app inspection-confirm checkbox is
+    tapped before the 6-digit handover code is shown (mobile P0.5).
+
+    Idempotent: only sets condition_confirmed_at the first time. Subsequent
+    calls are no-ops (so a flaky network won't flip the timestamp around).
+
+    Allowed only when:
+    - Caller is the buyer of the transaction
+    - Status is delivery_in_progress (we're at the door)
+    """
+    txn = await db.get(Transaction, transaction_id)
+    if not txn:
+        raise HTTPException(404, {"error": "NOT_FOUND"})
+    if txn.buyer_id != current_user.user_id:
+        raise HTTPException(403, {"error": "NOT_YOUR_TRANSACTION"})
+    if txn.status != "delivery_in_progress":
+        raise HTTPException(400, {
+            "error": "WRONG_STATUS",
+            "message": "Inspection confirm is only valid during delivery.",
+        })
+    if txn.condition_confirmed_at is None:
+        from datetime import datetime, timezone
+        txn.condition_confirmed_at = datetime.now(timezone.utc)
+        await db.commit()
+    return {
+        "status": "ok",
+        "condition_confirmed_at": txn.condition_confirmed_at.isoformat()
+                                  if txn.condition_confirmed_at else None,
+    }
 
 
 @router.post("/v1/transactions/{transaction_id}/return")
@@ -314,6 +352,10 @@ async def buyer_request_return(
             db, txn, current_user.user_id,
             reason=body.reason, description=body.description,
         )
+        # P0.4 — persist evidence photos verbatim until presigned-URL flow
+        # for returns ships. Mirrors disputes.photo_keys.
+        if body.photo_uris:
+            txn.return_photo_keys = body.photo_uris
         await db.commit()
     except ValueError as e:
         code = str(e)

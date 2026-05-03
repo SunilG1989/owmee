@@ -113,6 +113,21 @@ class Listing(Base, TimestampMixin):
     #   original_packaging, working_condition, no_recalled_model, age_label_correct
     kids_safety_checklist = Column(JSONB, nullable=True)
 
+    # ── P1 (2026-05-03): listing-quality floor for re-commerce trust ─────────
+    # Structured "what's in the box" — replaces free-text accessories for
+    # phones/laptops/appliances where charger and bill are top return-causes.
+    has_box = Column(Boolean, nullable=True)
+    has_bill = Column(Boolean, nullable=True)
+    has_charger = Column(Boolean, nullable=True)
+    has_earphones = Column(Boolean, nullable=True)
+    # Hidden reserve floor for negotiable listings; offers below auto-decline
+    # so seller isn't pinged for spam ₹1 lowballs. Buyer never sees the value.
+    min_acceptable_price = Column(Numeric(10, 2), nullable=True)
+    # Cashify-floor disclosures — required to publish electronics, see
+    # CreateListingScreen.tsx submit guard.
+    water_damage_history = Column(Boolean, nullable=True)
+    seller_functional_attestation = Column(Boolean, nullable=True)
+
     category = relationship("Category", back_populates="listings")
     images = relationship("ListingImage", back_populates="listing", cascade="all, delete-orphan")
     snapshots = relationship("ListingSnapshot", back_populates="listing")

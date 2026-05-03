@@ -29,7 +29,7 @@ router = APIRouter()
 # ── Models (inline to avoid circular imports) ──────────────────────────────────
 # These reference tables created in migration 0003_epic5_6
 
-from sqlalchemy import Column, DateTime, ForeignKey, String
+from sqlalchemy import Column, DateTime, ForeignKey, JSON, String
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from app.db.session import Base
 import uuid as uuid_lib
@@ -58,6 +58,10 @@ class Dispute(Base):
     raised_by = Column(PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     reason = Column(String(50), nullable=False)
     description = Column(String(1000), nullable=False)
+    # P0.4 (2026-05-03): buyer-uploaded evidence photos. List of R2 keys
+    # already stored via the listing-image presigned-URL flow (mirroring
+    # ListingImage). Capped at 3 by the mobile picker.
+    photo_keys = Column(JSON, nullable=True)
     status = Column(String(30), nullable=False, default="opened")
     resolution = Column(String(30), nullable=True)
     resolution_note = Column(String(500), nullable=True)
@@ -102,6 +106,9 @@ class RaiseDisputeRequest(BaseModel):
     transaction_id: UUID
     reason: str
     description: str = Field(..., min_length=10, max_length=1000)
+    # P0.4 (2026-05-03) — mobile sends 1-3 photo URIs. The handler resolves
+    # them to R2 keys (or stores raw URIs if no presigned-URL flow yet).
+    photo_uris: list[str] | None = Field(default=None, max_length=3)
 
 
 class ResolveReportRequest(BaseModel):
@@ -274,11 +281,16 @@ async def raise_dispute(body: RaiseDisputeRequest, current_user: VerifiedUser, d
         })
 
     now = datetime.now(timezone.utc)
+    # P0.4 — store raw URIs verbatim until the presigned-URL flow lands.
+    # When that ships (mirroring listings/{id}/images/request), this becomes
+    # an upload + r2_key extraction step before the Dispute insert.
+    photo_keys = body.photo_uris if body.photo_uris else None
     dispute = Dispute(
         transaction_id=body.transaction_id,
         raised_by=current_user.user_id,
         reason=body.reason,
         description=body.description,
+        photo_keys=photo_keys,
         status="opened",
         review_deadline=now + timedelta(hours=48),
     )

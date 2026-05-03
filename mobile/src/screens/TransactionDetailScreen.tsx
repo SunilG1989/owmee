@@ -174,7 +174,13 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
                 </Text>
                 <TouchableOpacity
                   style={s.ackConfirmBtn}
-                  onPress={() => setConditionConfirmed(true)}
+                  onPress={() => {
+                    setConditionConfirmed(true);
+                    // Fire-and-forget the beacon. Network failure shouldn't
+                    // block the buyer from reading their code; the BE call
+                    // is idempotent and the client will retry on next focus.
+                    Returns.conditionConfirmed(transactionId).catch(() => {});
+                  }}
                   activeOpacity={0.8}
                 >
                   <View style={s.ackCheckBox}>

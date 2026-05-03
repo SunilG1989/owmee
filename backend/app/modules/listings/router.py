@@ -118,6 +118,15 @@ class CreateListingRequest(BaseModel):
     serial_number: str | None = Field(None, max_length=50)
     # Sprint 4 / Pass 3: kids safety checklist
     kids_safety_checklist: dict | None = None
+    # P1 (2026-05-03) — Cashify-floor listing fields. All optional;
+    # mobile router enforces required where category-specific.
+    has_box: bool | None = None
+    has_bill: bool | None = None
+    has_charger: bool | None = None
+    has_earphones: bool | None = None
+    min_acceptable_price: float | None = Field(None, gt=0, le=10000000)
+    water_damage_history: bool | None = None
+    seller_functional_attestation: bool | None = None
 
 
 class ImageUploadRequest(BaseModel):
@@ -489,6 +498,14 @@ async def create_listing(body: CreateListingRequest, current_user: BasicUser, db
         listing.serial_number = body.serial_number
         # Sprint 4 / Pass 3
         listing.kids_safety_checklist = body.kids_safety_checklist
+        # P1 (2026-05-03) — listing-quality floor
+        listing.has_box = body.has_box
+        listing.has_bill = body.has_bill
+        listing.has_charger = body.has_charger
+        listing.has_earphones = body.has_earphones
+        listing.min_acceptable_price = body.min_acceptable_price
+        listing.water_damage_history = body.water_damage_history
+        listing.seller_functional_attestation = body.seller_functional_attestation
         # Sprint 6a: snapshot seller KYC state at listing creation
         listing.seller_kyc_verified_at_listing_time = (
             getattr(current_user, "kyc_status", None) == "verified"

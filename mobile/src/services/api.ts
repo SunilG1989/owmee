@@ -661,6 +661,10 @@ export const Returns = {
       description,
       photo_uris: photo_uris && photo_uris.length > 0 ? photo_uris : undefined,
     }),
+  // P0.5 — beacon when buyer taps the inspection-confirm checkbox at the door,
+  // before the handover ack code is shown. Idempotent server-side.
+  conditionConfirmed: (transactionId: string) =>
+    api.post(`/v1/transactions/${transactionId}/condition_confirmed`),
 };
 
 export interface FePickup {

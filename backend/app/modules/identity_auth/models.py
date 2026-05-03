@@ -114,6 +114,12 @@ class UserAddress(Base, TimestampMixin):
     label = Column(String(20), nullable=False)         # 'home' | 'work' | 'other'
     custom_label = Column(String(50), nullable=True)   # used when label == 'other'
 
+    # Per-address contact (P0.1 trust-floor 2026-05-03; mobile address form
+    # now requires both). Defaults to account holder but editable for gift
+    # deliveries / alternate-contact recipients.
+    full_name = Column(String(200), nullable=True)
+    phone_number = Column(String(20), nullable=True)
+
     lat = Column(Numeric(10, 7), nullable=False)
     lng = Column(Numeric(10, 7), nullable=False)
 
@@ -122,6 +128,9 @@ class UserAddress(Base, TimestampMixin):
     floor = Column(String(20), nullable=True)
     landmark = Column(String(200), nullable=True)
 
+    # Promoted from nullable=True to nullable=True for column shape
+    # compatibility (existing rows have NULLs); router enforces required
+    # at write time (P0.1).
     address_line_1 = Column(String(300), nullable=True)
     locality = Column(String(200), nullable=True)
     city = Column(String(100), nullable=False)
