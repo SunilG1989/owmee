@@ -364,17 +364,22 @@ export interface UserAddress {
   // Per-address contact (P0 trust-floor 2026-05-03; BE schema upgrade required).
   // Indian e-com universally lets the recipient name + phone differ from the
   // account holder — gift deliveries, alternate contact for couriers.
+  // Nullable on the response because legacy rows pre-2026-05-03 don't have
+  // them yet; the backfill migration 0038b populates from the parent user.
   full_name: string | null;
   phone_number: string | null;
   flat_house_number: string;
   building_name: string | null;
   floor: string | null;
   landmark: string | null;
+  // Read-shape: nullable to match the BE response schema (legacy rows were
+  // saved with NULLs before the create-time required-rule landed).
+  // CreateAddressRequest below makes them required at write time.
   address_line_1: string | null;
-  locality: string;
+  locality: string | null;
   city: string;
   state: string;
-  pincode: string;
+  pincode: string | null;
   is_default: boolean;
   source: 'gps_detected' | 'manual' | 'imported_from_profile';
 }
