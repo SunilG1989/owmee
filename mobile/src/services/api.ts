@@ -509,7 +509,11 @@ export const Notifications = {
 
 // ── Orders (Buy Now) ──────────────────────────────────────────────────
 export const Orders = {
-  buyNow: (listingId: string) => api.post('/v1/orders/buy-now', { listing_id: listingId }),
+  buyNow: (listingId: string, orderNotes?: string) =>
+    api.post('/v1/orders/buy-now', {
+      listing_id: listingId,
+      order_notes: orderNotes && orderNotes.trim() ? orderNotes.trim() : undefined,
+    }),
 };
 
 // ── Disputes ──────────────────────────────────────────────────────────
@@ -690,6 +694,13 @@ export interface FePickup {
   at_hub_at: string | null;
   routed_at: string | null;
   delivered_at: string | null;
+  // Populated only on the /v1/fe/deliveries endpoint (P0 2026-05-03):
+  // recipient name + phone surface on the FE handover screen so the
+  // delivery agent knows who to ask for; order_notes is the buyer's
+  // delivery instructions captured at checkout.
+  buyer_name?: string | null;
+  buyer_phone?: string | null;
+  order_notes?: string | null;
 }
 
 // Stubs for endpoints not yet in backend (Phase 3+)

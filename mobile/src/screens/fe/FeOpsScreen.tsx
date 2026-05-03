@@ -336,6 +336,23 @@ function DeliverySheet({ item, onClose, onDone }: { item: FePickup; onClose: () 
           <Text style={s.sheetTitle}>{item.listing_title || 'Delivery'}</Text>
           <Text style={s.sheetSub}>₹{item.gross_amount}</Text>
 
+          {/* Recipient details — surface buyer name/phone + order notes so
+             the FE agent knows whose name is on the package and any
+             gate/parking instructions before they ring the bell. */}
+          {(item.buyer_name || item.buyer_phone || item.order_notes) ? (
+            <View style={s.recipientCard}>
+              {item.buyer_name ? (
+                <Text style={s.recipientName}>📦 Hand to: {item.buyer_name}</Text>
+              ) : null}
+              {item.buyer_phone ? (
+                <Text style={s.recipientPhone}>📞 +91 {item.buyer_phone}</Text>
+              ) : null}
+              {item.order_notes ? (
+                <Text style={s.recipientNotes}>📝 {item.order_notes}</Text>
+              ) : null}
+            </View>
+          ) : null}
+
           <Text style={s.rowLabel}>Handover photo</Text>
           <Button
             label={photoKey ? '✓ Photo captured' : '+ Take handover photo'}
@@ -413,6 +430,17 @@ const s = StyleSheet.create({
   },
   sheetTitle: { fontSize: T.size.lg + 1, fontWeight: T.weight.bold, color: C.text },
   sheetSub: { fontSize: T.size.sm + 1, color: C.text3, marginBottom: S.lg },
+
+  recipientCard: {
+    backgroundColor: C.petrolLight,
+    padding: S.md,
+    borderRadius: R.md,
+    marginBottom: S.lg,
+    gap: 4,
+  },
+  recipientName: { fontSize: T.size.md, fontWeight: T.weight.bold, color: C.petrolDeep },
+  recipientPhone: { fontSize: T.size.base, color: C.petrolDeep, fontWeight: T.weight.semi },
+  recipientNotes: { fontSize: T.size.sm + 1, color: C.text2, marginTop: 4, fontStyle: 'italic' },
 
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginVertical: S.md },
   rowLabel: { fontSize: T.size.base, fontWeight: T.weight.semi, color: C.text2, marginTop: S.sm, marginBottom: S.xs },

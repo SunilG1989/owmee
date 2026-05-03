@@ -159,6 +159,11 @@ class Transaction(Base, TimestampMixin):
     # later raises a "not as promised" claim.
     condition_confirmed_at = Column(DateTime(timezone=True), nullable=True)
 
+    # ── P0.2 / launch fix (2026-05-03): buyer order notes ──────────────────
+    # Free-text delivery instructions captured at checkout (gate code,
+    # parking, "leave with security"). Plumbed to the FE delivery agent.
+    order_notes = Column(String(500), nullable=True)
+
     reservation = relationship("Reservation", back_populates="transactions")
     payment_links = relationship("PaymentLink", back_populates="transaction")
 

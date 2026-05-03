@@ -48,33 +48,36 @@ export default function AddressDetailsScreen({
   navigation,
   route,
 }: RootScreen<'AddressDetails'>) {
-  const { lat, lng, source, reverse, returnTo } = route.params;
+  const { lat, lng, source, reverse, returnTo, edit } = route.params;
   const accountPhone = useAuthStore((s) => s.phone);
+  // Edit mode: pre-fill every field from the existing address row instead
+  // of from reverse-geocoding. Save → PATCH instead of POST.
+  const isEdit = !!edit;
 
   // Per-address contact — defaults from account phone but editable so a
   // gift / alternate-contact recipient can be entered.
-  const [fullName, setFullName] = useState('');
+  const [fullName, setFullName] = useState(edit?.full_name ?? '');
   const [phoneNumber, setPhoneNumber] = useState(
-    accountPhone ? accountPhone.replace(/^\+?91/, '') : '',
+    edit?.phone_number ?? (accountPhone ? accountPhone.replace(/^\+?91/, '') : ''),
   );
 
   // User-typed parts
-  const [flatHouseNumber, setFlatHouseNumber] = useState('');
-  const [buildingName, setBuildingName] = useState('');
-  const [floor, setFloor] = useState('');
-  const [landmark, setLandmark] = useState('');
+  const [flatHouseNumber, setFlatHouseNumber] = useState(edit?.flat_house_number ?? '');
+  const [buildingName, setBuildingName] = useState(edit?.building_name ?? '');
+  const [floor, setFloor] = useState(edit?.floor ?? '');
+  const [landmark, setLandmark] = useState(edit?.landmark ?? '');
 
   // Reverse-geocoded parts (pre-filled, editable)
-  const [addressLine1, setAddressLine1] = useState(reverse?.address_line_1 ?? '');
-  const [locality, setLocality] = useState(reverse?.locality ?? '');
-  const [city, setCity] = useState(reverse?.city ?? '');
-  const [state, setState] = useState(reverse?.state ?? '');
-  const [pincode, setPincode] = useState(reverse?.pincode ?? '');
+  const [addressLine1, setAddressLine1] = useState(edit?.address_line_1 ?? reverse?.address_line_1 ?? '');
+  const [locality, setLocality] = useState(edit?.locality ?? reverse?.locality ?? '');
+  const [city, setCity] = useState(edit?.city ?? reverse?.city ?? '');
+  const [state, setState] = useState(edit?.state ?? reverse?.state ?? '');
+  const [pincode, setPincode] = useState(edit?.pincode ?? reverse?.pincode ?? '');
 
   // Label
-  const [label, setLabel] = useState<Label>('home');
-  const [customLabel, setCustomLabel] = useState('');
-  const [setAsDefault, setSetAsDefault] = useState(true);
+  const [label, setLabel] = useState<Label>(edit?.label ?? 'home');
+  const [customLabel, setCustomLabel] = useState(edit?.custom_label ?? '');
+  const [setAsDefault, setSetAsDefault] = useState(edit?.is_default ?? true);
 
   const [saving, setSaving] = useState(false);
 
@@ -99,8 +102,8 @@ export default function AddressDetailsScreen({
     const body: CreateAddressRequest = {
       label,
       custom_label: label === 'other' ? customLabel.trim() || null : null,
-      lat,
-      lng,
+      lat: edit?.lat ?? lat,
+      lng: edit?.lng ?? lng,
       full_name: fullName.trim(),
       phone_number: phoneNumber.trim(),
       flat_house_number: flatHouseNumber.trim(),
@@ -117,9 +120,10 @@ export default function AddressDetailsScreen({
     };
 
     try {
-      const res = await Addresses.create(body);
-      const created = res.data;
-      onSaved(created);
+      const res = isEdit
+        ? await Addresses.update(edit!.id, body)
+        : await Addresses.create(body);
+      onSaved(res.data);
     } catch (e) {
       Alert.alert('Could not save', parseApiError(e, 'Please try again.'));
       setSaving(false);
@@ -144,7 +148,7 @@ export default function AddressDetailsScreen({
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.headerRow}>
         <BackButton onPress={() => navigation.goBack()} />
-        <Text style={s.headerTitle}>Add your address</Text>
+        <Text style={s.headerTitle}>{isEdit ? 'Edit address' : 'Add your address'}</Text>
       </View>
 
       <KeyboardAvoidingView

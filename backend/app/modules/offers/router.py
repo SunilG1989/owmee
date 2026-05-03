@@ -868,6 +868,10 @@ async def dev_kyc_approve(phone: str, db: DBSession):
 # ── Sprint 1: Buy Now — direct purchase at listed price ──────────
 class BuyNowRequest(BaseModel):
     listing_id: str
+    # P0.2 (2026-05-03): optional delivery instructions captured by mobile
+    # CheckoutScreen. Plumbed onto Transaction.order_notes for the FE
+    # delivery agent.
+    order_notes: str | None = Field(default=None, max_length=500)
 
 
 @router.post("/orders/buy-now")
@@ -925,6 +929,11 @@ async def buy_now(body: BuyNowRequest, current_user: BasicUser, db: DBSession):
             offer_id=offer.id,
             seller_id=listing.seller_id,
         )
+        # Attach buyer's order notes to the transaction so the FE delivery
+        # agent sees them. accept_offer creates the Transaction; we set the
+        # field before commit so it lands in the same insert.
+        if txn and body.order_notes:
+            txn.order_notes = body.order_notes.strip() or None
         await db.commit()
 
         return {

@@ -2,12 +2,13 @@
  * CheckoutScreen — "Buy Now" flow (Circle-inspired)
  * Item summary → delivery address → payment → platform fee breakdown → Owmee Guarantee → Pay
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput,
   Alert, ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { C, T, S, R, Shadow, formatPrice } from '../../utils/tokens';
 import { Listings, Orders, type Listing } from '../../services/api';
@@ -25,26 +26,38 @@ export default function CheckoutScreen({ navigation, route }: any) {
   const [address, setAddress] = useState<any>(null);
   const [orderNotes, setOrderNotes] = useState('');
 
+  // Listing once on mount; address re-reads on focus so address picker /
+  // edit flows propagate back here without a manual refresh.
   useEffect(() => {
     (async () => {
       try {
-        const [listRes, addrStr] = await Promise.all([
-          Listings.get(listingId),
-          AsyncStorage.getItem('@ow_location'),
-        ]);
+        const listRes = await Listings.get(listingId);
         setListing(listRes.data);
-        if (addrStr) {
-          const loc = JSON.parse(addrStr);
-          const profileStr = await AsyncStorage.getItem('@ow_address');
-          if (profileStr) setAddress(JSON.parse(profileStr));
-          else setAddress({ city: loc.city, pincode: loc.pincode || '' });
-        }
       } catch {
         Alert.alert('Error', 'Could not load listing');
         navigation.goBack();
       } finally { setLoading(false); }
     })();
-  }, [listingId]);
+  }, [listingId, navigation]);
+
+  const reloadAddress = useCallback(async () => {
+    try {
+      const profileStr = await AsyncStorage.getItem('@ow_address');
+      if (profileStr) {
+        setAddress(JSON.parse(profileStr));
+        return;
+      }
+      const locStr = await AsyncStorage.getItem('@ow_location');
+      if (locStr) {
+        const loc = JSON.parse(locStr);
+        setAddress({ city: loc.city, pincode: loc.pincode || '' });
+      }
+    } catch {
+      // best-effort
+    }
+  }, []);
+
+  useFocusEffect(useCallback(() => { reloadAddress(); }, [reloadAddress]));
 
   if (loading || !listing) {
     return (
@@ -76,7 +89,7 @@ export default function CheckoutScreen({ navigation, route }: any) {
     }
     setPaying(true);
     try {
-      const res = await Orders.buyNow(listingId);
+      const res = await Orders.buyNow(listingId, orderNotes);
       const txnId = res.data?.transaction_id;
       navigation.replace('OrderConfirmation', {
         transactionId: txnId || 'pending',
@@ -121,7 +134,7 @@ export default function CheckoutScreen({ navigation, route }: any) {
           <Text style={s.sectionTitle}>📍 Deliver to</Text>
           <TouchableOpacity
             style={s.addressCard}
-            onPress={() => Alert.alert('Coming soon', 'Address selection will be available shortly.')}
+            onPress={() => navigation.navigate('AddressPicker', { returnTo: 'Checkout' })}
           >
             {address ? (
               <>

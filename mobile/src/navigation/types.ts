@@ -91,6 +91,10 @@ export type RootStackParams = {
     source: 'gps_detected' | 'manual';
     reverse: import('../services/api').PhotonReverseResponse | null;
     returnTo?: string;
+    // P0 launch fix (2026-05-03): editing an existing row patches it instead
+    // of creating a new one. Used by AddressPicker's "Edit" affordance and
+    // by CheckoutScreen when buyer's default address is missing fields.
+    edit?: import('../services/api').UserAddress;
   };
   AddressPicker: { returnTo?: string } | undefined;
 

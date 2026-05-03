@@ -592,16 +592,40 @@ async def admin_courier_status(
 
 @router.get("/v1/fe/deliveries")
 async def fe_my_deliveries(current_user: FeUser, db: DBSession):
+    """List my active deliveries.
+
+    P0 launch-fix: enrich each row with the buyer's default-address
+    full_name + phone_number + order_notes so the FE delivery agent
+    knows whose name is on the package and any gate/parking notes
+    before they ring the bell. Pulled from user_addresses (the
+    buyer's default row) to avoid a redundant snapshot.
+    """
+    from app.modules.identity_auth.models import UserAddress
+
     rows = await db.execute(
-        select(Transaction, Listing.title)
+        select(Transaction, Listing.title, UserAddress)
         .join(Listing, Listing.id == Transaction.listing_id)
+        .outerjoin(
+            UserAddress,
+            and_(
+                UserAddress.user_id == Transaction.buyer_id,
+                UserAddress.is_default == True,  # noqa: E712
+            ),
+        )
         .where(and_(
             Transaction.delivery_fe_id == current_user.user_id,
             Transaction.status == DELIVERY_IN_PROGRESS,
         ))
         .order_by(Transaction.routed_at.asc())
     )
-    return {"deliveries": [_fmt_logistics(t, title) for t, title in rows.all()]}
+    out: list[dict] = []
+    for txn, title, addr in rows.all():
+        d = _fmt_logistics(txn, title)
+        d["buyer_name"] = addr.full_name if addr else None
+        d["buyer_phone"] = addr.phone_number if addr else None
+        d["order_notes"] = txn.order_notes
+        out.append(d)
+    return {"deliveries": out}
 
 
 @router.post("/v1/fe/deliveries/{transaction_id}/complete")

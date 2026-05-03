@@ -24,6 +24,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import { Addresses, type UserAddress } from '../../../services/api';
 import { BackButton, Button, EmptyState, ErrorState } from '../../../components/ui';
 import { C, R, S, Shadow, T } from '../../../utils/tokens';
@@ -72,11 +74,32 @@ export default function AddressPickerScreen({
     });
   };
 
-  const onUse = (addr: UserAddress) => {
-    // Phase 1 use case: caller is Concierge BookingStep3 (which doesn't
-    // exist yet). For now we pop back; the calling screen reads the
-    // chosen id from a navigation param state hook on its end. Concierge
-    // Phase 1 will wire this with proper params.
+  const onUse = async (addr: UserAddress) => {
+    // P0 (2026-05-03): when the caller is Checkout (or anywhere else that
+    // reads @ow_address as the source of truth for the active delivery
+    // address), snapshot the chosen address into AsyncStorage so the
+    // returning screen reflects the selection on next focus.
+    if (route.params?.returnTo === 'Checkout') {
+      try {
+        await AsyncStorage.setItem(
+          '@ow_address',
+          JSON.stringify({
+            id: addr.id,
+            full_name: addr.full_name,
+            phone_number: addr.phone_number,
+            house: addr.flat_house_number,
+            building: addr.building_name,
+            street: addr.address_line_1,
+            locality: addr.locality,
+            city: addr.city,
+            state: addr.state,
+            pincode: addr.pincode,
+          }),
+        );
+      } catch {
+        // non-blocking — checkout will fall back to its existing logic
+      }
+    }
     if (navigation.canGoBack()) {
       navigation.goBack();
     }
@@ -128,6 +151,17 @@ export default function AddressPickerScreen({
     );
   }
 
+  const onEdit = (addr: UserAddress) => {
+    navigation.navigate('AddressDetails', {
+      lat: addr.lat,
+      lng: addr.lng,
+      source: addr.source === 'gps_detected' ? 'gps_detected' : 'manual',
+      reverse: null,
+      returnTo: 'AddressPicker',
+      edit: addr,
+    });
+  };
+
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       {renderHeader()}
@@ -136,7 +170,7 @@ export default function AddressPickerScreen({
         keyExtractor={(a) => a.id}
         contentContainerStyle={s.listBody}
         renderItem={({ item }) => (
-          <AddressCard address={item} onUse={() => onUse(item)} />
+          <AddressCard address={item} onUse={() => onUse(item)} onEdit={() => onEdit(item)} />
         )}
         ListFooterComponent={
           <Button
@@ -154,9 +188,11 @@ export default function AddressPickerScreen({
 function AddressCard({
   address,
   onUse,
+  onEdit,
 }: {
   address: UserAddress;
   onUse: () => void;
+  onEdit: () => void;
 }) {
   const labelText =
     address.label === 'other' && address.custom_label
@@ -169,8 +205,13 @@ function AddressCard({
     [address.city, address.pincode].filter(Boolean).join(' '),
   ].filter(Boolean);
 
+  // Highlight rows that fail the P0 trust-floor (missing recipient name or
+  // phone) — these will be rejected at checkout. Tapping Edit opens the
+  // detail screen pre-filled so the user can fix in-app.
+  const incomplete = !address.full_name || !address.phone_number;
+
   return (
-    <View style={s.card}>
+    <View style={[s.card, incomplete && s.cardIncomplete]}>
       <View style={s.cardHead}>
         <Text style={s.cardLabel}>
           {LABEL_GLYPH[address.label]} {labelText}
@@ -179,18 +220,35 @@ function AddressCard({
           <Text style={s.cardDefault}>★ default</Text>
         ) : null}
       </View>
+      {address.full_name ? (
+        <Text style={s.cardLine}>{address.full_name}{address.phone_number ? ` · +91 ${address.phone_number}` : ''}</Text>
+      ) : null}
       {lines.map((line, i) => (
         <Text key={i} style={s.cardLine}>
           {line}
         </Text>
       ))}
-      <Button
-        label="Use this"
-        onPress={onUse}
-        variant="secondary"
-        size="sm"
-        style={s.useBtn}
-      />
+      {incomplete ? (
+        <Text style={s.cardWarn}>
+          Recipient name or phone missing — required at checkout. Tap Edit.
+        </Text>
+      ) : null}
+      <View style={s.cardActions}>
+        <Button
+          label="Edit"
+          onPress={onEdit}
+          variant="ghost"
+          size="sm"
+          style={s.useBtn}
+        />
+        <Button
+          label="Use this"
+          onPress={onUse}
+          variant="secondary"
+          size="sm"
+          style={s.useBtn}
+        />
+      </View>
     </View>
   );
 }
@@ -222,6 +280,21 @@ const s = StyleSheet.create({
     padding: S.lg,
     marginBottom: S.md,
     ...Shadow.glow,
+  },
+  cardIncomplete: {
+    borderWidth: 1.5,
+    borderColor: C.red,
+  },
+  cardWarn: {
+    marginTop: S.sm,
+    fontSize: T.size.sm,
+    color: C.red,
+    fontWeight: T.weight.semi,
+  },
+  cardActions: {
+    flexDirection: 'row',
+    gap: S.sm,
+    marginTop: S.sm,
   },
   cardHead: {
     flexDirection: 'row',
