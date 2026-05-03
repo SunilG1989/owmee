@@ -294,7 +294,17 @@ export default function CreateListingScreen({ navigation }: any) {
     }
   }, [brand, model]);
 
+  // Smartphone IMEI is required and must be exactly 15 digits — matching the
+  // AI flow's validation in AIListingIdentifierScreen. Without this, manual
+  // listings let stolen / spoofed IMEIs through.
+  const imeiRequired = catType === 'phone';
+  const imeiValid = !imeiRequired || /^\d{15}$/.test(imei);
+
   const submit = async () => {
+    if (imeiRequired && !imeiValid) {
+      Alert.alert('Invalid IMEI', 'IMEI must be exactly 15 digits. Dial *#06# on the phone to read it.');
+      return;
+    }
     setBusy(true);
     try {
       const res = await Listings.create({
@@ -477,9 +487,37 @@ export default function CreateListingScreen({ navigation }: any) {
                 <Text style={st.lbl}>Color</Text>
                 <Chips options={COLORS} selected={color} onSelect={setColor} />
                 <Text style={st.lbl}>IMEI *  (dial *#06#)</Text>
-                <TextInput style={st.inp} placeholder="15-digit IMEI number" placeholderTextColor={C.text4} value={imei} onChangeText={setImei} keyboardType="numeric" maxLength={17} />
+                <TextInput
+                  style={st.inp}
+                  placeholder="15-digit IMEI number"
+                  placeholderTextColor={C.text4}
+                  value={imei}
+                  onChangeText={(v) => setImei(v.replace(/[^\d]/g, '').slice(0, 15))}
+                  keyboardType="numeric"
+                  maxLength={15}
+                />
+                {imei.length > 0 && imei.length < 15 ? (
+                  <Text style={st.errText}>{15 - imei.length} more digit{15 - imei.length === 1 ? '' : 's'} needed</Text>
+                ) : null}
                 <Text style={st.lbl}>Battery Health (%)</Text>
-                <TextInput style={st.inp} placeholder="e.g. 87" placeholderTextColor={C.text4} value={batteryHealth} onChangeText={setBatteryHealth} keyboardType="numeric" maxLength={3} />
+                <TextInput
+                  style={st.inp}
+                  placeholder="e.g. 87"
+                  placeholderTextColor={C.text4}
+                  value={batteryHealth}
+                  onChangeText={(v) => {
+                    const digits = v.replace(/[^\d]/g, '').slice(0, 3);
+                    if (digits === '') return setBatteryHealth('');
+                    const n = parseInt(digits, 10);
+                    if (n > 100) return setBatteryHealth('100');
+                    setBatteryHealth(digits);
+                  }}
+                  keyboardType="numeric"
+                  maxLength={3}
+                />
+                {batteryHealth !== '' && parseInt(batteryHealth, 10) === 0 ? (
+                  <Text style={st.errText}>Battery health must be greater than 0</Text>
+                ) : null}
               </>
             )}
 
@@ -799,6 +837,11 @@ const st = StyleSheet.create({
     borderWidth: 0.5, borderColor: C.border, borderRadius: R.sm,
     paddingHorizontal: S.md, paddingVertical: S.sm + 2,
     fontSize: T.size.sm + 1, color: C.text, backgroundColor: C.surface,
+  },
+  errText: {
+    marginTop: 4,
+    fontSize: T.size.sm,
+    color: C.red,
   },
 
   // Chips (local helper — TODO migrate to components/ui/Chip)
