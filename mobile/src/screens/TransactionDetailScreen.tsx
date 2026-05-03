@@ -62,6 +62,10 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
   const [showReturn, setShowReturn] = useState(false);
   const [returnReason, setReturnReason] = useState<string>('item_not_as_described');
   const [returnDesc, setReturnDesc] = useState('');
+  // Buyer must visually inspect at the door before reading the handover code
+  // (P0.5). The code release becomes a digital "I have inspected and accept"
+  // checkpoint we can later reference if a dispute is raised.
+  const [conditionConfirmed, setConditionConfirmed] = useState(false);
 
   const reload = useCallback(async () => {
     try {
@@ -129,9 +133,32 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
 
         {showAckCode && (
           <View style={s.ackBox}>
-            <Text style={s.ackLabel}>Your handover code</Text>
-            <Text style={s.ackCode}>{tracking.ack_code}</Text>
-            <Text style={s.ackHint}>Read this to the Owmee FE when they hand over your item. Don't share it earlier.</Text>
+            {!conditionConfirmed ? (
+              <>
+                <Text style={s.ackLabel}>Inspect before you accept</Text>
+                <Text style={s.ackInspectCopy}>
+                  Open the package, check the item against the listing photos and condition.
+                  If it matches, confirm below to reveal your handover code. If not, raise a dispute now —
+                  100% refund if it's not as promised.
+                </Text>
+                <TouchableOpacity
+                  style={s.ackConfirmBtn}
+                  onPress={() => setConditionConfirmed(true)}
+                  activeOpacity={0.8}
+                >
+                  <View style={s.ackCheckBox}>
+                    <Text style={s.ackCheckTick}>✓</Text>
+                  </View>
+                  <Text style={s.ackConfirmLabel}>Item matches the listing — show my code</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <Text style={s.ackLabel}>Your handover code</Text>
+                <Text style={s.ackCode}>{tracking.ack_code}</Text>
+                <Text style={s.ackHint}>Read this to the Owmee FE to complete the handover.</Text>
+              </>
+            )}
           </View>
         )}
 
@@ -548,6 +575,43 @@ const s = StyleSheet.create({
   },
   ackCode: { fontSize: T.size.display + 6, fontWeight: T.weight.heavy, color: C.petrolText, letterSpacing: 8 },
   ackHint: { fontSize: T.size.sm, color: C.petrolDeep, marginTop: S.sm, textAlign: 'center', lineHeight: 18 },
+  ackInspectCopy: {
+    fontSize: T.size.base,
+    color: C.petrolDeep,
+    textAlign: 'center',
+    lineHeight: T.size.base + 6,
+    marginBottom: S.lg,
+  },
+  ackConfirmBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: C.surface,
+    paddingHorizontal: S.lg,
+    paddingVertical: S.md,
+    borderRadius: R.md,
+    borderWidth: 1.5,
+    borderColor: C.petrol,
+    gap: S.md,
+  },
+  ackCheckBox: {
+    width: 22,
+    height: 22,
+    borderRadius: 4,
+    backgroundColor: C.petrol,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ackCheckTick: {
+    color: C.surface,
+    fontSize: T.size.base,
+    fontWeight: T.weight.heavy,
+    lineHeight: 18,
+  },
+  ackConfirmLabel: {
+    fontSize: T.size.base,
+    fontWeight: T.weight.semi,
+    color: C.petrolDeep,
+  },
 
   courierBox: {
     marginHorizontal: S.lg, marginBottom: S.md,
