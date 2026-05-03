@@ -536,7 +536,7 @@ const s = StyleSheet.create({
     lineHeight: 18,
   },
 
-  // ── Guest bar ───────────────────────────────────────────────────────
+  // ── Guest bar — warm cream surface with rose accent (v18d) ─────────
   guestBar: {
     position: 'absolute',
     bottom: 0,
@@ -546,14 +546,16 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: S.xs + 2,
-    backgroundColor: C.ink,
+    backgroundColor: C.cream,
+    borderTopWidth: 1,
+    borderTopColor: C.border2,
     paddingVertical: S.md + 2,
     paddingHorizontal: S.lg,
   },
   guestText: {
     fontSize: T.size.base,
-    color: C.white,
-    fontWeight: T.weight.medium,
+    color: C.text,
+    fontWeight: T.weight.semi,
   },
-  guestArrow: { fontSize: T.size.sm + 1, color: C.coral },
+  guestArrow: { fontSize: T.size.sm + 1, color: C.coral, fontWeight: T.weight.bold },
 });
