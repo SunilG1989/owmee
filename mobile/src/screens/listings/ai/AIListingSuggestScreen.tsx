@@ -177,19 +177,28 @@ export default function AIListingSuggestScreen({
   if (success) {
     return (
       <SafeAreaView style={st.root}>
-        <View style={st.successWrap}>
-          <Text style={st.successCheck}>✓</Text>
-          <Text style={st.successTitle}>Your listing is live</Text>
-          <Text style={st.successSpecs}>{success.title}</Text>
-          <Text style={st.successPrice}>{formatPrice(success.price)}</Text>
+        <ScrollView contentContainerStyle={st.successScroll}>
+          <View style={st.successCheckCircle}>
+            <Text style={st.successCheck}>✓</Text>
+          </View>
+          <Text style={st.successTitle}>Your listing is live!</Text>
+          <Text style={st.successHelper}>
+            We'll notify you the moment a verified buyer commits.
+          </Text>
 
-          <View style={st.successDivider} />
-          <Text style={st.successSection}>WHAT HAPPENS NEXT</Text>
-          <Text style={st.successStep}>• A buyer commits (usually within 72 hours)</Text>
-          <Text style={st.successStep}>• We schedule pickup from your address</Text>
-          <Text style={st.successStep}>• You get paid 2 days after pickup</Text>
+          <View style={st.successCard}>
+            <Text style={st.successCardTitle} numberOfLines={2}>{success.title}</Text>
+            <Text style={st.successCardPrice}>{formatPrice(success.price)}</Text>
+          </View>
 
-          <View style={st.flex} />
+          <Text style={st.successSection}>What happens next</Text>
+          <SuccessStep num={1} text="A verified buyer commits — usually within 72 hours" />
+          <SuccessStep num={2} text="We pick up the item from your address" />
+          <SuccessStep num={3} text="We inspect and ship to the buyer" />
+          <SuccessStep num={4} text="Money lands in your bank 2 days after pickup" />
+        </ScrollView>
+
+        <View style={st.successCtaBar}>
           <Button
             label="See my listing"
             variant="primary"
@@ -295,11 +304,13 @@ export default function AIListingSuggestScreen({
           <HowItWorksRow num={4} text="Money in your bank in 2 days" />
         </View>
 
-        {/* Trust checkmarks */}
+        {/* Trust checkmarks — How Owmee protects you */}
         <View style={st.trustBlock}>
-          <TrustRow text="No buyer comes home" />
-          <TrustRow text="No bargaining" />
-          <TrustRow text="No scam calls" />
+          <Text style={st.trustHeading}>How Owmee protects your trust</Text>
+          <TrustRow text="No buyer comes to your home" />
+          <TrustRow text="We handle pricing, photos, and pickup" />
+          <TrustRow text="Only verified buyers — no scam calls" />
+          <TrustRow text="100% refund guarantee backs every sale" />
         </View>
 
         {/* Tiny legal */}
@@ -386,6 +397,17 @@ function TrustRow({ text }: { text: string }) {
     <View style={st.trustRow}>
       <Text style={st.trustCheck}>✓</Text>
       <Text style={st.trustText}>{text}</Text>
+    </View>
+  );
+}
+
+function SuccessStep({ num, text }: { num: number; text: string }) {
+  return (
+    <View style={st.successStepRow}>
+      <View style={st.successStepNum}>
+        <Text style={st.successStepNumText}>{num}</Text>
+      </View>
+      <Text style={st.successStepText}>{text}</Text>
     </View>
   );
 }
@@ -536,6 +558,12 @@ const st = StyleSheet.create({
     paddingVertical: S.lg,
     marginTop: S.sm,
   },
+  trustHeading: {
+    fontSize: T.size.md,
+    fontWeight: T.weight.bold,
+    color: C.petrolText,
+    marginBottom: S.md,
+  },
   trustRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
   trustCheck: {
     fontSize: T.size.lg,
@@ -543,7 +571,7 @@ const st = StyleSheet.create({
     fontWeight: T.weight.bold,
     marginRight: S.md,
   },
-  trustText: { fontSize: T.size.md, color: C.petrolText, fontWeight: T.weight.medium },
+  trustText: { fontSize: T.size.md, color: C.petrolText, fontWeight: T.weight.medium, flex: 1 },
 
   legal: {
     marginTop: S.lg,
@@ -570,44 +598,108 @@ const st = StyleSheet.create({
   primaryBtn: { ...Shadow.glow },
   secondaryBtn: { marginTop: S.md },
 
-  // Success state
-  successWrap: { flex: 1, padding: S.xxl, alignItems: 'center' },
+  // Success state — green checkmark circle, item card, "what happens next" steps
+  successScroll: {
+    paddingHorizontal: S.xl,
+    paddingTop: S.xxl,
+    paddingBottom: 200,
+    alignItems: 'stretch',
+  },
+  successCheckCircle: {
+    alignSelf: 'center',
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    backgroundColor: C.petrolLight,
+    borderWidth: 2,
+    borderColor: C.petrol,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: S.lg,
+    marginBottom: S.xl,
+  },
   successCheck: {
-    fontSize: T.size.display + 34,                                  // 64
+    fontSize: T.size.display + 8,
     color: C.petrol,
-    marginTop: S.xxl,
-    marginBottom: S.lg,
+    fontWeight: T.weight.heavy,
+    lineHeight: T.size.display + 12,
   },
   successTitle: {
     fontSize: T.size.xxl,
     fontWeight: T.weight.bold,
     color: C.text,
-    marginBottom: S.md,
+    textAlign: 'center',
+    marginBottom: S.sm,
   },
-  successSpecs: { fontSize: T.size.md, color: C.text2, marginBottom: 4 },
-  successPrice: {
-    fontSize: T.size.display,
-    fontWeight: T.weight.bold,
-    color: C.text,
+  successHelper: {
+    fontSize: T.size.md,
+    color: C.text2,
+    textAlign: 'center',
     marginBottom: S.xl,
   },
-  successDivider: {
-    width: '60%',
-    height: 1,
-    backgroundColor: C.border,
-    marginBottom: S.lg,
+  successCard: {
+    backgroundColor: C.surface,
+    borderRadius: R.lg,
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingHorizontal: S.lg,
+    paddingVertical: S.lg,
+    marginBottom: S.xl,
+    ...Shadow.card,
+  },
+  successCardTitle: {
+    fontSize: T.size.md,
+    fontWeight: T.weight.semi,
+    color: C.text,
+    marginBottom: 4,
+  },
+  successCardPrice: {
+    fontSize: T.size.xl,
+    fontWeight: T.weight.bold,
+    color: C.petrol,
   },
   successSection: {
-    fontSize: T.size.sm,
+    fontSize: T.size.md,
     fontWeight: T.weight.bold,
-    color: C.text2,
-    letterSpacing: 1.5,
+    color: C.text,
     marginBottom: S.md,
   },
-  successStep: {
+  successStepRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: S.md,
+  },
+  successStepNum: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: C.petrol,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: S.md,
+    marginTop: 2,
+  },
+  successStepNumText: {
+    color: C.surface,
+    fontWeight: T.weight.bold,
+    fontSize: T.size.sm,
+  },
+  successStepText: {
+    flex: 1,
     fontSize: T.size.md,
     color: C.text,
-    marginBottom: 6,
-    alignSelf: 'flex-start',
+    lineHeight: T.size.md + 6,
+  },
+  successCtaBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: S.lg,
+    paddingTop: S.md,
+    paddingBottom: S.lg,
+    backgroundColor: C.surface,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: C.border,
   },
 });

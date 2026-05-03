@@ -193,13 +193,13 @@ export default function AIListingCameraScreen({ navigation }: RootScreen<'AIList
       {/* Header — real close button that exits the flow */}
       <View style={st.header}>
         <IconButton icon="✕" onPress={exitFlow} a11y="Exit" size="sm" />
-        <Text style={st.headerTitle}>Sell an item</Text>
+        <Text style={st.headerTitle}>Add clear photos</Text>
         <View style={st.headerSpacer} />
       </View>
 
       {/* Body */}
       {hero ? (
-        <View style={st.previewBlock}>
+        <ScrollView style={st.flex} contentContainerStyle={st.previewBlock}>
           <View style={st.heroWrap}>
             <Image source={{ uri: hero.uri }} style={st.preview} resizeMode="cover" />
             <View style={st.heroBadge}>
@@ -232,9 +232,30 @@ export default function AIListingCameraScreen({ navigation }: RootScreen<'AIList
           <Text style={st.previewHint}>
             {canSubmit
               ? `${photos.length} photos — looking good. Tap "Done" when ready.`
-              : `Add ${MIN_PHOTOS - photos.length} more photo${MIN_PHOTOS - photos.length === 1 ? '' : 's'} (front, back, and sides). Min ${MIN_PHOTOS}, max ${MAX_PHOTOS}.`}
+              : `Add ${MIN_PHOTOS - photos.length} more photo${MIN_PHOTOS - photos.length === 1 ? '' : 's'} to continue.`}
           </Text>
-        </View>
+
+          {/* Tips for a great listing */}
+          <View style={st.tipsCard}>
+            <Text style={st.tipsHeading}>Tips for a great listing</Text>
+            <View style={st.tipRow}>
+              <Text style={st.tipBullet}>•</Text>
+              <Text style={st.tipText}>Use natural light — no flash</Text>
+            </View>
+            <View style={st.tipRow}>
+              <Text style={st.tipBullet}>•</Text>
+              <Text style={st.tipText}>Show front, back, and both sides</Text>
+            </View>
+            <View style={st.tipRow}>
+              <Text style={st.tipBullet}>•</Text>
+              <Text style={st.tipText}>Capture any damage or wear honestly</Text>
+            </View>
+            <View style={st.tipRow}>
+              <Text style={st.tipBullet}>•</Text>
+              <Text style={st.tipText}>Keep the item in focus, not blurry</Text>
+            </View>
+          </View>
+        </ScrollView>
       ) : (
         <View style={st.emptyBlock}>
           <Text style={st.emptyEmoji}>📸</Text>
@@ -306,7 +327,8 @@ const st = StyleSheet.create({
   headerSpacer: { width: 36 },
   headerTitle: { fontSize: T.size.lg, fontWeight: T.weight.semi, color: C.text },
 
-  previewBlock: { flex: 1, padding: S.lg },
+  flex: { flex: 1 },
+  previewBlock: { padding: S.lg, paddingBottom: S.xl },
   heroWrap: { position: 'relative' },
   preview: {
     width: '100%',
@@ -356,6 +378,39 @@ const st = StyleSheet.create({
     color: C.text3,
     fontSize: T.size.base,
     textAlign: 'center',
+  },
+  tipsCard: {
+    marginTop: S.lg,
+    backgroundColor: C.surface,
+    borderRadius: R.md,
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingHorizontal: S.lg,
+    paddingVertical: S.md,
+  },
+  tipsHeading: {
+    fontSize: T.size.base,
+    fontWeight: T.weight.bold,
+    color: C.text,
+    marginBottom: S.sm,
+  },
+  tipRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 4,
+  },
+  tipBullet: {
+    fontSize: T.size.md,
+    color: C.petrol,
+    marginRight: S.sm,
+    fontWeight: T.weight.bold,
+    lineHeight: T.size.md + 4,
+  },
+  tipText: {
+    flex: 1,
+    fontSize: T.size.base,
+    color: C.text2,
+    lineHeight: T.size.base + 4,
   },
 
   emptyBlock: { flex: 1, paddingHorizontal: S.xxl, justifyContent: 'center', alignItems: 'center' },

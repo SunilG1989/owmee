@@ -28,20 +28,24 @@ export const CONCIERGE_STRINGS = {
       pillBadge: 'Recommended',
       heading: 'Owmee Concierge',
       tagline:
-        'We come home. We photograph. We price. We list. We pack. We ship. You do nothing.',
+        'We do all photos, pricing, KYC, ad creation, and pickup. List with confidence.',
       bullets: [
-        'Free home visit',
-        'Expert pricing — sells faster',
-        'No buyer haggling',
-        'Money in your bank in 5 days',
+        'Best price',
+        'Expert pricing + safe inflation',
+        'Pro-quality photos',
+        'Buyer-trust boost',
       ],
       cta: 'Book a free visit',
     },
     selfService: {
       heading: 'List it myself',
       tagline:
-        'For sellers who have time to take photos, set prices, and handle buyer messages themselves.',
+        'We guide you through photos, pricing, verification, and pickup support — ending in doorstep handover.',
       cta: 'Continue',
+    },
+    alreadyBooked: {
+      label: 'Already booked. Want to track it?',
+      cta: 'Track visit',
     },
   },
   booking: {
