@@ -38,6 +38,7 @@ const PROCESSORS = ['Apple M1', 'Apple M2', 'Apple M3', 'Intel i3', 'Intel i5', 
 
 const DEFECT_OPTIONS = [
   { key: 'dead_pixels', label: 'Dead pixels on screen' },
+  { key: 'touch_issue', label: 'Touch unresponsive in spots' },
   { key: 'speaker_issue', label: 'Speaker not working properly' },
   { key: 'mic_issue', label: 'Microphone issue' },
   { key: 'camera_issue', label: 'Camera not working' },
@@ -137,6 +138,13 @@ export default function CreateListingScreen({ navigation }: any) {
   const [hasBill, setHasBill] = useState(false);
   const [hasCharger, setHasCharger] = useState(false);
   const [hasEarphones, setHasEarphones] = useState(false);
+
+  // P1.4 — Cashify-floor disclosures missing from defects[]:
+  // - waterDamageHistory: ever submerged / liquid contact (yes/no, declared once)
+  // - functionalAttest: explicit "everything else works" sign-off, gates submit
+  //   for electronics so the seller affirms the listing matches reality.
+  const [waterDamageHistory, setWaterDamageHistory] = useState<boolean | null>(null);
+  const [functionalAttest, setFunctionalAttest] = useState(false);
 
   // Fetch categories
   useEffect(() => {
@@ -323,6 +331,19 @@ export default function CreateListingScreen({ navigation }: any) {
       );
       return;
     }
+    if ((catType === 'phone' || catType === 'laptop')) {
+      if (waterDamageHistory === null) {
+        Alert.alert('One more thing', 'Please answer the water-damage question — buyers and the refund team rely on this.');
+        return;
+      }
+      if (!functionalAttest) {
+        Alert.alert(
+          'Confirm functional state',
+          'Please tick "I confirm anything not flagged above works as expected" so we can stand behind the listing with our refund guarantee.',
+        );
+        return;
+      }
+    }
     if (nego && reservePrice && price && parseFloat(reservePrice) > parseFloat(price)) {
       Alert.alert(
         'Reserve too high',
@@ -365,6 +386,8 @@ export default function CreateListingScreen({ navigation }: any) {
         has_bill: hasBill || undefined,
         has_charger: hasCharger || undefined,
         has_earphones: hasEarphones || undefined,
+        water_damage_history: waterDamageHistory ?? undefined,
+        seller_functional_attestation: functionalAttest || undefined,
         battery_health: batteryHealth ? parseInt(batteryHealth) : undefined,
         age_suitability: ageSuitability || undefined,
         hygiene_status: hygiene || undefined,
@@ -653,6 +676,48 @@ export default function CreateListingScreen({ navigation }: any) {
                   <Text style={st.defectLabel}>{d.label}</Text>
                 </TouchableOpacity>
               ))}
+
+              {/* Water damage history — separate yes/no, since the question is
+                 about the device's history, not its current state. Cashify
+                 floor: every device's quote is contingent on this answer. */}
+              <Text style={[st.lbl, st.lblSpaced]}>Has it ever had water damage?</Text>
+              <View style={st.includesRow}>
+                <TouchableOpacity
+                  style={[st.includesPill, waterDamageHistory === false && st.includesPillOn]}
+                  onPress={() => setWaterDamageHistory(false)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[st.includesLbl, waterDamageHistory === false && st.includesLblOn]}>
+                    No
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[st.includesPill, waterDamageHistory === true && st.includesPillOn]}
+                  onPress={() => setWaterDamageHistory(true)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[st.includesLbl, waterDamageHistory === true && st.includesLblOn]}>
+                    Yes — water exposure
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Functional attestation — explicit sign-off that the
+                 unselected components work. Becomes the legal basis for
+                 a refund decision if buyer raises a "not as promised"
+                 claim later. Required to publish electronics. */}
+              <TouchableOpacity
+                style={[st.attestRow, functionalAttest && st.attestRowOn]}
+                onPress={() => setFunctionalAttest(!functionalAttest)}
+                activeOpacity={0.7}
+              >
+                <View style={[st.checkbox, functionalAttest && st.checkboxActive]}>
+                  {functionalAttest && <Text style={st.checkboxTick}>✓</Text>}
+                </View>
+                <Text style={st.attestText}>
+                  I confirm that anything not flagged above works as expected.
+                </Text>
+              </TouchableOpacity>
             </>
           )}
 
@@ -939,6 +1004,32 @@ const st = StyleSheet.create({
     marginTop: 4,
     fontSize: T.size.sm,
     color: C.text3,
+  },
+
+  // Functional attestation row — gates publish for electronics (P1.4)
+  attestRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: S.md,
+    paddingHorizontal: S.md,
+    borderRadius: R.md,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.surface,
+    marginTop: S.lg,
+    gap: S.md,
+  },
+  attestRowOn: {
+    borderColor: C.petrol,
+    backgroundColor: C.petrolLight,
+    borderWidth: 1.5,
+  },
+  attestText: {
+    flex: 1,
+    fontSize: T.size.base,
+    color: C.text,
+    fontWeight: T.weight.semi,
+    lineHeight: T.size.base + 4,
   },
 
   // What's-in-the-box checkboxes
