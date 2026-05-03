@@ -127,6 +127,14 @@ export default function CreateListingScreen({ navigation }: any) {
   const [ageSuitability, setAgeSuitability] = useState('');
   const [hygiene, setHygiene] = useState('');
 
+  // Structured accessory presence (P1.3) — replaces free-text "accessories"
+  // with explicit yes/no for the items India buyers ask about most often.
+  // Charger especially is a top return-cause when buyer assumed it shipped.
+  const [hasBox, setHasBox] = useState(false);
+  const [hasBill, setHasBill] = useState(false);
+  const [hasCharger, setHasCharger] = useState(false);
+  const [hasEarphones, setHasEarphones] = useState(false);
+
   // Fetch categories
   useEffect(() => {
     Listings.categories().then(res => {
@@ -305,6 +313,13 @@ export default function CreateListingScreen({ navigation }: any) {
       Alert.alert('Invalid IMEI', 'IMEI must be exactly 15 digits. Dial *#06# on the phone to read it.');
       return;
     }
+    if (defects.length > 0 && condition === 'like_new') {
+      Alert.alert(
+        'Condition mismatch',
+        '"Like new" can\'t be paired with reported defects. Pick "Good" or "Fair", or remove the defects.',
+      );
+      return;
+    }
     setBusy(true);
     try {
       const res = await Listings.create({
@@ -335,6 +350,10 @@ export default function CreateListingScreen({ navigation }: any) {
         imei: imei || undefined,
         accessories: accessories || undefined,
         warranty_info: warrantyInfo || undefined,
+        has_box: hasBox || undefined,
+        has_bill: hasBill || undefined,
+        has_charger: hasCharger || undefined,
+        has_earphones: hasEarphones || undefined,
         battery_health: batteryHealth ? parseInt(batteryHealth) : undefined,
         age_suitability: ageSuitability || undefined,
         hygiene_status: hygiene || undefined,
@@ -626,11 +645,39 @@ export default function CreateListingScreen({ navigation }: any) {
             </>
           )}
 
+          {/* What's in the box — structured Yes/No checkboxes per India ecom convention.
+             Free-text "accessories" stayed available below for anything else. */}
+          {(catType === 'phone' || catType === 'laptop' || catType === 'appliance') && (
+            <>
+              <Text style={[st.lbl, st.lblSpaced]}>What's in the box?</Text>
+              <View style={st.includesRow}>
+                <Includes label="Original box" on={hasBox} onToggle={() => setHasBox(!hasBox)} />
+                <Includes label="Bill / invoice" on={hasBill} onToggle={() => setHasBill(!hasBill)} />
+                <Includes label="Charger" on={hasCharger} onToggle={() => setHasCharger(!hasCharger)} />
+                {catType === 'phone' && (
+                  <Includes
+                    label="Earphones"
+                    on={hasEarphones}
+                    onToggle={() => setHasEarphones(!hasEarphones)}
+                  />
+                )}
+              </View>
+            </>
+          )}
+
           {/* Accessories + Warranty */}
-          <Text style={[st.lbl, st.lblSpaced]}>Accessories included</Text>
-          <TextInput style={st.inp} placeholder="e.g. Charger, box, case, earphones" placeholderTextColor={C.text4} value={accessories} onChangeText={setAccessories} />
+          <Text style={[st.lbl, st.lblSpaced]}>Anything else included?</Text>
+          <TextInput style={st.inp} placeholder="e.g. case, screen guard, extra cable" placeholderTextColor={C.text4} value={accessories} onChangeText={setAccessories} />
           <Text style={st.lbl}>Warranty</Text>
           <TextInput style={st.inp} placeholder="e.g. 3 months remaining, No warranty" placeholderTextColor={C.text4} value={warrantyInfo} onChangeText={setWarrantyInfo} />
+
+          {/* Defect ↔ condition consistency check (P1.6) — block "Like new" + serious
+             defect. Shows at the bottom so the user sees it after picking everything. */}
+          {defects.length > 0 && condition === 'like_new' && (
+            <Text style={st.errText}>
+              "Like new" can't be paired with reported defects. Pick "Good" or "Fair", or remove the defects.
+            </Text>
+          )}
 
           <View style={st.bottomSpacer} />
         </ScrollView>
@@ -745,6 +792,17 @@ export default function CreateListingScreen({ navigation }: any) {
   );
 }
 
+function Includes({ label, on, onToggle }: { label: string; on: boolean; onToggle: () => void }) {
+  return (
+    <TouchableOpacity style={[st.includesPill, on && st.includesPillOn]} onPress={onToggle} activeOpacity={0.7}>
+      <View style={[st.includesBox, on && st.includesBoxOn]}>
+        {on && <Text style={st.includesTick}>✓</Text>}
+      </View>
+      <Text style={[st.includesLbl, on && st.includesLblOn]}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
+
 // ── Styles ────────────────────────────────────────────────────────
 const st = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bone },
@@ -842,6 +900,56 @@ const st = StyleSheet.create({
     marginTop: 4,
     fontSize: T.size.sm,
     color: C.red,
+  },
+
+  // What's-in-the-box checkboxes
+  includesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: S.sm,
+    marginTop: 4,
+  },
+  includesPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: S.md,
+    paddingVertical: S.sm,
+    borderRadius: R.pill,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.surface,
+    gap: S.sm,
+  },
+  includesPillOn: {
+    borderColor: C.petrol,
+    backgroundColor: C.petrolLight,
+  },
+  includesBox: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: C.text4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  includesBoxOn: {
+    borderColor: C.petrol,
+    backgroundColor: C.petrol,
+  },
+  includesTick: {
+    color: C.surface,
+    fontSize: T.size.sm - 1,
+    fontWeight: T.weight.heavy,
+    lineHeight: 14,
+  },
+  includesLbl: {
+    fontSize: T.size.base,
+    color: C.text2,
+    fontWeight: T.weight.semi,
+  },
+  includesLblOn: {
+    color: C.petrolDeep,
   },
 
   // Chips (local helper — TODO migrate to components/ui/Chip)
