@@ -4,8 +4,8 @@
  */
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Alert, ActivityIndicator,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput,
+  Alert, ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -23,6 +23,7 @@ export default function CheckoutScreen({ navigation, route }: any) {
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
   const [address, setAddress] = useState<any>(null);
+  const [orderNotes, setOrderNotes] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -58,7 +59,21 @@ export default function CheckoutScreen({ navigation, route }: any) {
   const gstOnFee = Math.round(platformFee * GST_RATE);
   const total = itemPrice + platformFee + gstOnFee;
 
+  // Address must have a recipient name + phone to be deliverable. Older
+  // addresses stored before the P0.1 schema upgrade may be missing these —
+  // route the buyer back to the address screen rather than failing at the FE.
+  const recipientName = address?.full_name || '';
+  const recipientPhone = address?.phone_number || '';
+  const addressDeliverable = !!recipientName && !!recipientPhone;
+
   const handlePay = async () => {
+    if (!addressDeliverable) {
+      Alert.alert(
+        'Missing recipient details',
+        'Please add the recipient name and phone number to your delivery address.',
+      );
+      return;
+    }
     setPaying(true);
     try {
       const res = await Orders.buyNow(listingId);
@@ -110,6 +125,16 @@ export default function CheckoutScreen({ navigation, route }: any) {
           >
             {address ? (
               <>
+                {recipientName ? (
+                  <Text style={s.addressName}>{recipientName}</Text>
+                ) : (
+                  <Text style={s.addressMissing}>Add recipient name</Text>
+                )}
+                {recipientPhone ? (
+                  <Text style={s.addressPhone}>+91 {recipientPhone}</Text>
+                ) : (
+                  <Text style={s.addressMissing}>Add a contact number</Text>
+                )}
                 <Text style={s.addressText}>
                   {[address.house, address.street, address.locality].filter(Boolean).join(', ') || address.city}
                 </Text>
@@ -120,6 +145,17 @@ export default function CheckoutScreen({ navigation, route }: any) {
             )}
             <Text style={s.addressChange}>Change ▾</Text>
           </TouchableOpacity>
+
+          <Text style={s.notesLabel}>Delivery instructions (optional)</Text>
+          <TextInput
+            value={orderNotes}
+            onChangeText={setOrderNotes}
+            placeholder="e.g. gate code 4521, leave with security, ring twice"
+            placeholderTextColor={C.text4}
+            style={s.notesInput}
+            multiline
+            maxLength={200}
+          />
         </View>
 
         <View style={s.section}>
@@ -164,8 +200,8 @@ export default function CheckoutScreen({ navigation, route }: any) {
           <View style={s.flex1}>
             <Text style={s.guaranteeTitle}>Owmee Guarantee</Text>
             <Text style={s.guaranteeSub}>
-              Your money is held safely by our payment partner until you confirm receipt.
-              Full refund if item doesn't match the listing.
+              Every item is inspected by an Owmee expert before pickup.
+              ✓ 100% refund if it's not as promised — refund processed in 5-7 working days.
             </Text>
           </View>
         </View>
@@ -242,9 +278,31 @@ const s = StyleSheet.create({
     borderWidth: 0.5, borderColor: C.border,
     flexDirection: 'column', gap: 2,
   },
+  addressName: { fontSize: T.size.md, color: C.text, fontWeight: T.weight.bold, marginBottom: 2 },
+  addressPhone: { fontSize: T.size.base, color: C.text2, marginBottom: 6 },
+  addressMissing: { fontSize: T.size.base, color: C.red, fontWeight: T.weight.semi, marginBottom: 4 },
   addressText: { fontSize: T.size.sm + 1, color: C.text, fontWeight: T.weight.medium },
   addressCity: { fontSize: T.size.sm, color: C.text3 },
   addressChange: { fontSize: T.size.base, color: C.petrol, fontWeight: T.weight.semi },
+  notesLabel: {
+    fontSize: T.size.base,
+    color: C.text2,
+    fontWeight: T.weight.semi,
+    marginTop: S.md,
+    marginBottom: S.xs,
+  },
+  notesInput: {
+    backgroundColor: C.surface,
+    borderRadius: R.md,
+    paddingHorizontal: S.md,
+    paddingVertical: S.md,
+    fontSize: T.size.base,
+    color: C.text,
+    borderWidth: 1,
+    borderColor: C.border,
+    minHeight: 64,
+    textAlignVertical: 'top',
+  },
 
   paymentCard: {
     flexDirection: 'row', alignItems: 'center', gap: S.md,
