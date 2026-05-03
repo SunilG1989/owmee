@@ -305,6 +305,19 @@ export default function AIListingSuggestScreen({
           <TrustRow text="100% refund guarantee backs every sale" />
         </View>
 
+        {/* TDS pre-disclosure (P0 launch fix) — surfacing IT Section 194-O
+           early avoids the surprise at first ₹5L payout. Single info card,
+           non-blocking. */}
+        <View style={st.tdsCard}>
+          <Text style={st.tdsHeading}>Heads-up about taxes</Text>
+          <Text style={st.tdsBody}>
+            Once your sales on Owmee cross{' '}
+            <Text style={st.tdsBold}>₹5,00,000 in a financial year</Text>,
+            1% TDS is deducted from each payout (Section 194-O). Add your PAN
+            in profile to keep the rate at 1% — without it, deductions jump to 5%.
+          </Text>
+        </View>
+
         {/* Tiny legal */}
         <Text style={st.legal}>
           By listing, you agree to{' '}
@@ -558,6 +571,32 @@ const st = StyleSheet.create({
     marginTop: 2,
   },
   trustText: { fontSize: T.size.base, color: C.petrolText, fontWeight: T.weight.medium, flex: 1, lineHeight: T.size.base + 4 },
+
+  // TDS info card — soft amber "heads-up" so it reads informational, not warning
+  tdsCard: {
+    marginHorizontal: S.lg,
+    marginTop: S.md,
+    padding: S.lg,
+    backgroundColor: C.bone2,
+    borderRadius: R.lg,
+    borderLeftWidth: 4,
+    borderLeftColor: C.petrol,
+  },
+  tdsHeading: {
+    fontSize: T.size.md,
+    fontWeight: T.weight.bold,
+    color: C.text,
+    marginBottom: 4,
+  },
+  tdsBody: {
+    fontSize: T.size.sm + 1,
+    color: C.text2,
+    lineHeight: T.size.sm + 8,
+  },
+  tdsBold: {
+    fontWeight: T.weight.bold,
+    color: C.text,
+  },
 
   legal: {
     marginTop: S.lg,
