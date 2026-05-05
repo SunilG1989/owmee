@@ -2,21 +2,90 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 from jose import JWTError, jwt
 
 from app.core.settings import settings
 
 
-def _load_key(path: str) -> str:
-    return Path(path).read_text()
+def _normalise_inline_key(value: str) -> str:
+    return value.replace("\\n", "\n").strip()
+
+
+def _write_public_key(private_path: Path, public_path: Path) -> None:
+    private_key = serialization.load_pem_private_key(
+        private_path.read_bytes(),
+        password=None,
+    )
+    public_path.write_bytes(
+        private_key.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+    )
+
+
+def _generate_dev_keypair(private_path: Path, public_path: Path) -> None:
+    private_path.parent.mkdir(parents=True, exist_ok=True)
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    private_path.write_bytes(
+        private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+    )
+    public_path.write_bytes(
+        private_key.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+    )
+
+
+def _ensure_key_files() -> None:
+    private_path = Path(settings.jwt_private_key_path)
+    public_path = Path(settings.jwt_public_key_path)
+    if private_path.exists() and public_path.exists():
+        return
+    if settings.is_production:
+        raise RuntimeError(
+            "JWT signing keys are missing. Set JWT_PRIVATE_KEY/JWT_PUBLIC_KEY "
+            "or mount files at JWT_PRIVATE_KEY_PATH/JWT_PUBLIC_KEY_PATH."
+        )
+    if private_path.exists() and not public_path.exists():
+        public_path.parent.mkdir(parents=True, exist_ok=True)
+        _write_public_key(private_path, public_path)
+        return
+    _generate_dev_keypair(private_path, public_path)
+
+
+def _load_key(path: str, inline_key: str, label: str) -> str:
+    if inline_key.strip():
+        return _normalise_inline_key(inline_key)
+    key_path = Path(path)
+    if not key_path.exists():
+        _ensure_key_files()
+    if not key_path.exists():
+        raise RuntimeError(f"JWT {label} key is missing at {path}")
+    return key_path.read_text()
 
 
 def _private_key() -> str:
-    return _load_key(settings.jwt_private_key_path)
+    return _load_key(
+        settings.jwt_private_key_path,
+        settings.jwt_private_key,
+        "private",
+    )
 
 
 def _public_key() -> str:
-    return _load_key(settings.jwt_public_key_path)
+    return _load_key(
+        settings.jwt_public_key_path,
+        settings.jwt_public_key,
+        "public",
+    )
 
 
 def create_access_token(
