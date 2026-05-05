@@ -12,6 +12,7 @@ import {
   SafeAreaView, View, Text, ScrollView,
   StyleSheet, RefreshControl, ActivityIndicator, Alert,
 } from 'react-native';
+import { CircleCheck } from 'lucide-react-native';
 
 import { FEVisits } from '../../services/api';
 import { Button } from '../../components/ui';
@@ -143,7 +144,7 @@ export default function FeVisitConfirmationScreen({
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.petrol} />}
       >
         <View style={st.check}>
-          <Text style={st.checkIcon}>✓</Text>
+          <CircleCheck size={40} strokeWidth={2.2} color={C.petrolDeep} />
         </View>
         <Text style={st.h1}>Visit booked</Text>
         <Text style={st.sub}>
@@ -235,7 +236,6 @@ const st = StyleSheet.create({
     marginBottom: S.xl,
     ...Shadow.glow,
   },
-  checkIcon: { fontSize: T.size.display + 6, color: C.petrolText, fontWeight: T.weight.bold },
   scroll: { padding: S.xxxl, paddingBottom: S.xxl },
   gap: { height: S.xl },
   h1: { fontSize: T.h1, fontWeight: T.weight.bold, color: C.text, textAlign: 'center', marginBottom: S.xs + 2 },

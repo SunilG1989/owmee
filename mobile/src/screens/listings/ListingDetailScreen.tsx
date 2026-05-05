@@ -405,15 +405,6 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
       {/* Bottom CTA */}
       {!isOwn && (
         <View style={[s.bottomBar, { paddingBottom: Math.max(insets.bottom, S.lg) }]}>
-          <Button
-            label="Chat"
-            variant="secondary"
-            onPress={() => Alert.alert(
-              'Coming soon',
-              'Chat will be available in the next update. For now, you can buy directly or make an offer.',
-            )}
-            style={s.chatBtn}
-          />
           {listing.is_negotiable && (
             <Button
               label="Offer"
@@ -642,7 +633,6 @@ const s = StyleSheet.create({
     paddingHorizontal: S.xl, paddingTop: S.md,
     flexDirection: 'row', gap: S.sm + 2,                            // 10
   },
-  chatBtn:        { flex: 1 },
   offerOutlineBtn:{ flex: 1, borderWidth: 1.5, borderColor: C.petrol },
   buyBtn:         { flex: 2, ...Shadow.glow },
 

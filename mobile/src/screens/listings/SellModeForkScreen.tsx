@@ -15,6 +15,8 @@
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
+  ImageSourcePropType,
   ScrollView,
   StyleSheet,
   Text,
@@ -22,6 +24,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Camera } from 'lucide-react-native';
 
 import { CONCIERGE_STRINGS } from '../../utils/conciergeStrings';
 import { BackButton } from '../../components/ui';
@@ -35,6 +38,8 @@ const ACTIVE_VISIT_STATUSES = new Set([
   'in_progress',
   'at_hub',
 ]);
+
+const FE_HELP_IMAGE: ImageSourcePropType = require('../../../assets/owmee/home/fe-visit-help.webp');
 
 export default function SellModeForkScreen({ navigation }: any) {
   const C_STR = CONCIERGE_STRINGS.forkScreen;
@@ -91,8 +96,7 @@ export default function SellModeForkScreen({ navigation }: any) {
               <Text style={s.heroHeading}>{C_STR.concierge.heading}</Text>
             </View>
             <View style={s.heroIllustration}>
-              <Text style={s.heroIllGlyph} allowFontScaling={false}>👨‍💼</Text>
-              <View style={s.heroIllStripe} />
+              <Image source={FE_HELP_IMAGE} style={s.heroIllImage} resizeMode="contain" />
             </View>
           </View>
 
@@ -125,7 +129,7 @@ export default function SellModeForkScreen({ navigation }: any) {
         >
           <View style={s.subCardHead}>
             <View style={s.subCardIconWrap}>
-              <Text style={s.subCardIconGlyph} allowFontScaling={false}>📷</Text>
+              <Camera size={24} strokeWidth={2.2} color={C.petrolDeep} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={s.subCardHeading}>{C_STR.selfService.heading}</Text>
@@ -188,13 +192,13 @@ const s = StyleSheet.create({
     paddingBottom: S.xl,
   },
 
-  // Concierge hero card — white surface, mint-tinted accents.
+  // Concierge hero card — white surface, trust-tinted accents.
   heroCard: {
     backgroundColor: C.white,
     borderRadius: R.lg,
     padding: S.lg,
     borderWidth: 1,
-    borderColor: C.mintBorder,
+    borderColor: C.border2,
     ...Shadow.lifted,
   },
   heroHeader: {
@@ -204,16 +208,16 @@ const s = StyleSheet.create({
   },
   heroPill: {
     alignSelf: 'flex-start',
-    backgroundColor: C.mintSoft,
+    backgroundColor: C.petrolLight,
     borderWidth: 1,
-    borderColor: C.mintBorder,
+    borderColor: C.blueBorder,
     paddingHorizontal: S.sm + 2,
     paddingVertical: 3,
     borderRadius: R.pill,
     marginBottom: S.sm,
   },
   heroPillText: {
-    color: C.petrol,
+    color: C.petrolDeep,
     fontSize: T.size.xs,
     fontWeight: T.weight.heavy,
     letterSpacing: 0.4,
@@ -225,25 +229,17 @@ const s = StyleSheet.create({
     letterSpacing: -0.4,
   },
   heroIllustration: {
-    width: 64,
-    height: 64,
+    width: 94,
+    height: 76,
     borderRadius: R.md,
-    backgroundColor: C.mintSoft,
+    backgroundColor: C.petrolLight,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    position: 'relative',
   },
-  heroIllGlyph: {
-    fontSize: T.size.display - 4,
-  },
-  heroIllStripe: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 8,
-    backgroundColor: C.petrolLight,
+  heroIllImage: {
+    width: 88,
+    height: 68,
   },
   heroTagline: {
     fontSize: T.size.base + 1,
@@ -281,7 +277,9 @@ const s = StyleSheet.create({
     fontWeight: T.weight.semi,
   },
   heroCta: {
-    backgroundColor: C.petrol,
+    backgroundColor: C.coralLight,
+    borderWidth: 1,
+    borderColor: C.coral,
     borderRadius: R.md,
     paddingVertical: S.md,
     paddingHorizontal: S.lg,
@@ -290,15 +288,15 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     gap: S.xs + 2,
     minHeight: MIN_TAP,
-    ...Shadow.glow,
+    ...Shadow.coralGlow,
   },
   heroCtaText: {
-    color: C.white,
+    color: C.coralDeep,
     fontSize: T.size.md,
     fontWeight: T.weight.heavy,
   },
   heroCtaArrow: {
-    color: C.white,
+    color: C.coralDeep,
     fontSize: T.size.md + 1,
     fontWeight: T.weight.heavy,
   },
@@ -327,9 +325,6 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  subCardIconGlyph: {
-    fontSize: T.size.xl,
-  },
   subCardHeading: {
     fontSize: T.size.md + 1,
     fontWeight: T.weight.heavy,
@@ -351,12 +346,12 @@ const s = StyleSheet.create({
   },
   subCardCta: {
     fontSize: T.size.base + 1,
-    color: C.petrol,
+    color: C.coralDeep,
     fontWeight: T.weight.heavy,
   },
   subCardCtaArrow: {
     fontSize: T.size.md,
-    color: C.petrol,
+    color: C.coralDeep,
     fontWeight: T.weight.heavy,
   },
 

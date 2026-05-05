@@ -3,12 +3,12 @@
  *
  * Layout (top → bottom):
  *   1. Header: logo · centered location chip · notifications bell
- *   2. Hero card (deep petrol) — story + trust flow + 2 CTAs
+ *   2. Hero carousel — SafeTrade · Assist · Payment protected
  *   3. Search bar (taps into Search tab)
  *   4. Trust chips (mint / blue / amber)
  *   5. Category rail — Mobiles · Laptops · Kids · Books · Home Appliances
  *   6. Sell banner
- *   7. "Verified deals near you" + Filter
+ *   7. "Trusted deals near you" + Filter
  *   8. Masonry feed (2 columns, infinite scroll)
  *
  * Auth & gating:
@@ -19,19 +19,155 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, FlatList, RefreshControl,
-  ActivityIndicator, useWindowDimensions,
+  ActivityIndicator, Alert, useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, {
+  Circle, Defs, LinearGradient, RadialGradient, Rect, Stop,
+} from 'react-native-svg';
+import {
+  Bell, ChevronDown, ChevronRight, CreditCard, MapPin, Search,
+  ShieldCheck, SlidersHorizontal, Truck,
+} from 'lucide-react-native';
+import type { LucideIcon } from 'lucide-react-native';
 import { C, T, S, R, Shadow, pickAspectRatio } from '../utils/tokens';
-import { IconButton } from '../components/ui';
 import type { TabScreen } from '../navigation/types';
-import { Feed, type FeedListing } from '../services/api';
+import { Feed, Wishlist, type FeedListing } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import { useLocation } from '../hooks/useLocation';
 import HeroCard from '../components/HeroCard';
 import CategoryRail, { type CategoryDef } from '../components/CategoryRail';
 import SellBlock from '../components/SellBlock';
 import { FeedCard } from '../components/OwmeeListingCard';
+import { parseApiError } from '../utils/errors';
+
+const PREVIEW_FEED_ITEMS: FeedListing[] = [
+  {
+    id: 'preview-iphone-13',
+    title: 'iPhone 13',
+    description: '128GB, blue, battery and display checked',
+    price: 29999,
+    original_price: 34000,
+    discount_pct: 12,
+    image_urls: [],
+    thumbnail_url: null,
+    city: 'HSR Layout',
+    state: 'Karnataka',
+    category_slug: 'smartphones',
+    shipping_eligible: false,
+    created_at: null,
+    seller_id: 'preview-seller-1',
+    seller_name: 'Ananya',
+    is_owmee_verified: true,
+    distance_km: 2.1,
+    bill_available: true,
+    box_available: true,
+    is_negotiable: true,
+  },
+  {
+    id: 'preview-macbook-air',
+    title: 'MacBook Air M1',
+    description: '8GB RAM, 256GB SSD, clean body',
+    price: 49900,
+    original_price: 55900,
+    discount_pct: 11,
+    image_urls: [],
+    thumbnail_url: null,
+    city: 'Koramangala',
+    state: 'Karnataka',
+    category_slug: 'laptops',
+    shipping_eligible: false,
+    created_at: null,
+    seller_id: 'preview-seller-2',
+    seller_name: 'Rahul',
+    is_owmee_verified: true,
+    distance_km: 3.4,
+    bill_available: true,
+    is_negotiable: true,
+  },
+  {
+    id: 'preview-mixer-grinder',
+    title: 'Mixer Grinder',
+    description: '750W, three jars, tested at pickup',
+    price: 2499,
+    original_price: 4200,
+    discount_pct: 40,
+    image_urls: [],
+    thumbnail_url: null,
+    city: 'Indiranagar',
+    state: 'Karnataka',
+    category_slug: 'small-appliances',
+    shipping_eligible: false,
+    created_at: null,
+    seller_id: 'preview-seller-3',
+    seller_name: 'Meera',
+    is_owmee_verified: true,
+    distance_km: 4.8,
+    box_available: true,
+    is_negotiable: true,
+  },
+  {
+    id: 'preview-kids-toys',
+    title: 'Kids Toy Set',
+    description: 'Clean wooden toys, age 2 to 5 years',
+    price: 899,
+    original_price: 1600,
+    discount_pct: 44,
+    image_urls: [],
+    thumbnail_url: null,
+    city: 'Jayanagar',
+    state: 'Karnataka',
+    category_slug: 'kids',
+    shipping_eligible: false,
+    created_at: null,
+    seller_id: 'preview-seller-4',
+    seller_name: 'Nisha',
+    is_owmee_verified: true,
+    distance_km: 5.2,
+    is_negotiable: true,
+  },
+  {
+    id: 'preview-book-set',
+    title: 'Book Set',
+    description: 'Business and fiction books, good condition',
+    price: 699,
+    original_price: 1400,
+    discount_pct: 50,
+    image_urls: [],
+    thumbnail_url: null,
+    city: 'Whitefield',
+    state: 'Karnataka',
+    category_slug: 'books',
+    shipping_eligible: false,
+    created_at: null,
+    seller_id: 'preview-seller-5',
+    seller_name: 'Karthik',
+    is_owmee_verified: true,
+    distance_km: 8.7,
+    is_negotiable: true,
+  },
+  {
+    id: 'preview-laptop-stand',
+    title: 'HP Laptop',
+    description: 'i5, 8GB RAM, charger included',
+    price: 22500,
+    original_price: 28000,
+    discount_pct: 20,
+    image_urls: [],
+    thumbnail_url: null,
+    city: 'Malleshwaram',
+    state: 'Karnataka',
+    category_slug: 'laptops',
+    shipping_eligible: false,
+    created_at: null,
+    seller_id: 'preview-seller-6',
+    seller_name: 'Arjun',
+    is_owmee_verified: true,
+    distance_km: 9.3,
+    bill_available: true,
+    is_negotiable: true,
+  },
+];
 
 export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
   const { isAuthenticated } = useAuthStore();
@@ -49,6 +185,8 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
   const [cursor, setCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [currentRadius, setCurrentRadius] = useState<number>(15);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [savedIds, setSavedIds] = useState<Set<string>>(() => new Set());
 
   const loadingMore = useRef(false);
   const listRef = useRef<FlatList>(null);
@@ -74,8 +212,17 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
           : e?.message
             ? `JS error: ${e.message}`
             : `Unknown: ${JSON.stringify(e).slice(0, 200)}`;
+      if (__DEV__) {
+        setFeedItems(PREVIEW_FEED_ITEMS);
+        setCursor(null);
+        setPage(0);
+        setHasMore(false);
+        setCurrentRadius(15);
+        setFeedError(null);
+        return;
+      }
       console.warn('[HomeScreen.loadFeed]', msg, e);
-      setFeedError(msg);
+      setFeedError('Listings are taking longer to load. Pull down to try again.');
       setFeedItems([]);
     } finally {
       setFeedLoading(false);
@@ -83,8 +230,9 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
   }, []);
 
   const loadMore = useCallback(async () => {
-    if (loadingMore.current || !hasMore) return;
+    if (loadingMore.current || feedLoading || !hasMore) return;
     loadingMore.current = true;
+    setIsLoadingMore(true);
     try {
       const nextPage = page + 1;
       const res = await Feed.explore(nextPage, cursor);
@@ -102,8 +250,9 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
       // Silent — user can pull to retry
     } finally {
       loadingMore.current = false;
+      setIsLoadingMore(false);
     }
-  }, [page, cursor, hasMore]);
+  }, [page, cursor, hasMore, feedLoading]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -114,6 +263,24 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
   useEffect(() => {
     loadFeed(true);
   }, [loadFeed]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setSavedIds(new Set());
+      return;
+    }
+    let alive = true;
+    Wishlist.list()
+      .then(res => {
+        if (!alive) return;
+        const ids = (res.data?.wishlist || [])
+          .map((item: any) => item?.listing_id)
+          .filter(Boolean);
+        setSavedIds(new Set(ids));
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [isAuthenticated]);
 
   // Refetch when location changes (after user picks a new one in LocationPickerScreen)
   const lastLocationKey = useRef<string>('');
@@ -127,8 +294,50 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
   }, [location, loadFeed]);
 
   const handleCardPress = (l: FeedListing) => {
+    if (l.id.startsWith('preview-')) {
+      Alert.alert('Preview item', 'Start the Owmee backend to open live item details.');
+      return;
+    }
     navigation.navigate('ListingDetail', { listingId: l.id });
   };
+
+  const handleWishlistPress = useCallback(async (l: FeedListing) => {
+    if (!isAuthenticated) {
+      navigation.navigate('AuthFlow');
+      return;
+    }
+
+    const wasSaved = savedIds.has(l.id);
+    if (l.id.startsWith('preview-')) {
+      setSavedIds(prev => {
+        const next = new Set(prev);
+        if (wasSaved) next.delete(l.id);
+        else next.add(l.id);
+        return next;
+      });
+      return;
+    }
+
+    setSavedIds(prev => {
+      const next = new Set(prev);
+      if (wasSaved) next.delete(l.id);
+      else next.add(l.id);
+      return next;
+    });
+
+    try {
+      if (wasSaved) await Wishlist.remove(l.id);
+      else await Wishlist.add(l.id);
+    } catch (e: any) {
+      setSavedIds(prev => {
+        const next = new Set(prev);
+        if (wasSaved) next.add(l.id);
+        else next.delete(l.id);
+        return next;
+      });
+      Alert.alert('Could not update saved item', parseApiError(e, 'Please try again.'));
+    }
+  }, [isAuthenticated, navigation, savedIds]);
 
   const handleSellPress = () => {
     if (!isAuthenticated) {
@@ -152,9 +361,13 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
   };
 
   const handleSearchPress = () => navigation.navigate('Search');
+  const handleFilterPress = () => navigation.navigate('Search', { openFilters: true });
 
   const handleCategoryPress = (cat: CategoryDef) => {
-    if (!cat.slug) return; // Books — slug not yet in backend taxonomy
+    if (!cat.slug) {
+      navigation.navigate('Search');
+      return;
+    }
     navigation.navigate('Search', { category_slug: cat.slug });
   };
 
@@ -165,12 +378,12 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
     });
   };
 
-  // Location label — fall back to "HSR Layout" per spec when no location set
+  // Location label — match the reference's city-level default.
   const locationLabel = useMemo(() => {
+    if (location?.city) return location.city;
     if (location?.locality) return location.locality;
     if (location?.label) return location.label;
-    if (location?.city) return location.city;
-    return 'HSR Layout';
+    return 'Bengaluru';
   }, [location]);
 
   // ── Header section (rendered as ListHeaderComponent) ────────────────────
@@ -179,41 +392,72 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
       {/* Top bar — logo + address (chip-next-to-logo) · bell right. */}
       <View style={s.hdr}>
         <Text style={s.logo}>
-          <Text style={{ color: C.text }}>ow</Text>
-          <Text style={{ color: C.coral }}>mee</Text>
+          <Text style={{ color: '#1A1F1F' }}>ow</Text>
+          <Text style={{ color: '#BB684F' }}>mee</Text>
         </Text>
 
         <TouchableOpacity
           onPress={handleLocationPress}
           activeOpacity={0.85}
           style={s.locChip}
+          accessibilityRole="button"
+          accessibilityLabel="Change location"
         >
-          <Text style={s.locPin} allowFontScaling={false}>📍</Text>
+          <MapPin size={15} strokeWidth={2.2} color={C.text2} />
           <Text style={s.locName} numberOfLines={1}>{locationLabel}</Text>
-          <Text style={s.locArrow} allowFontScaling={false}>▾</Text>
+          <ChevronDown size={14} strokeWidth={2.2} color={C.text2} />
         </TouchableOpacity>
 
         <View style={s.hdrSpacer} />
 
         <View style={s.bellWrap}>
-          <IconButton icon="🔔" onPress={handleNotifPress} a11y="Notifications" size="sm" />
+          <TouchableOpacity
+            onPress={handleNotifPress}
+            activeOpacity={0.76}
+            style={s.bellBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Notifications"
+          >
+            <Bell size={22} strokeWidth={2.1} color={C.text} />
+          </TouchableOpacity>
           <View style={s.bellDot} />
         </View>
       </View>
 
       {/* Search bar at the top — Ajio/Myntra pattern: search is the
           single most-used affordance, sits above the marketing hero. */}
-      <TouchableOpacity
-        onPress={handleSearchPress}
-        activeOpacity={0.8}
+      <View
         style={s.search}
       >
-        <Text style={s.searchIcon} allowFontScaling={false}>🔍</Text>
-        <Text style={s.searchPh} numberOfLines={1}>
-          Search iPhone, laptop, books, appliances...
-        </Text>
-        <Text style={s.searchMic} allowFontScaling={false}>🎤</Text>
-      </TouchableOpacity>
+        <TouchableOpacity
+          onPress={handleSearchPress}
+          activeOpacity={0.8}
+          style={s.searchMain}
+          accessibilityRole="button"
+          accessibilityLabel="Search items"
+        >
+          <Search size={23} strokeWidth={1.8} color={C.text} />
+          <Text style={s.searchPh} numberOfLines={1}>
+            Search mobiles, laptops, furniture...
+          </Text>
+        </TouchableOpacity>
+        <View style={s.searchDivider} />
+        <TouchableOpacity
+          onPress={handleFilterPress}
+          activeOpacity={0.78}
+          style={s.filterBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Open filters"
+        >
+          <SlidersHorizontal size={21} strokeWidth={2} color={C.text} />
+        </TouchableOpacity>
+      </View>
+
+      <View style={s.trustRow}>
+        <TrustChip icon={ShieldCheck} label="Seller checked" />
+        <TrustChip icon={CreditCard} label="Safe payment" />
+        <TrustChip icon={Truck} label="Home handover" />
+      </View>
 
       <HeroCard onBrowse={handleBrowsePress} onSell={handleSellPress} />
 
@@ -222,49 +466,39 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
         onCategoryPress={handleCategoryPress}
       />
 
+      <SellBlock onPress={handleSellPress} />
+
       {/* Listings header */}
       <View
         style={s.listingsHdr}
         onLayout={e => { listingsOffsetY.current = e.nativeEvent.layout.y; }}
       >
-        <View style={{ flex: 1 }}>
-          <Text style={s.sectionTitle}>Verified deals near you</Text>
-          <Text style={s.sectionSub}>
-            {currentRadius >= 500
-              ? 'Items from across your state'
-              : `Trusted items available within ${currentRadius} km`}
-          </Text>
+        <View style={s.listingsTitleBlock}>
+          <Text style={s.sectionTitle}>Trusted deals near you</Text>
+          <View style={s.radiusHint}>
+            <MapPin size={15} strokeWidth={2.2} color={C.petrolText} />
+            <Text style={s.radiusText}>
+              {currentRadius >= 500 ? 'Across state' : `Within ${currentRadius} km`}
+            </Text>
+          </View>
         </View>
-        {/* Filter is a placeholder — bottom-sheet sort/filter UI is a
-            follow-up. Tapping does nothing today; do NOT route to Search
-            (that surprised users in testing). */}
-        <TouchableOpacity activeOpacity={0.85} style={s.filterBtn} onPress={() => { /* TODO: filter sheet */ }}>
-          <Text style={s.filterIcon} allowFontScaling={false}>≡</Text>
-          <Text style={s.filterText}>Filter</Text>
+        <TouchableOpacity activeOpacity={0.75} style={s.seeAllLink} onPress={handleSearchPress}>
+          <Text style={s.seeAllText}>See all</Text>
+          <ChevronRight size={15} strokeWidth={2.3} color={C.petrolText} />
         </TouchableOpacity>
       </View>
     </View>
   ), [locationLabel, currentRadius, isAuthenticated]);
 
   // ── Footer ─────────────────────────────────────────────────────────────
-  // SellBlock lives below the feed: surface the "act as a seller" pitch
-  // after the user has seen actual listings — never push listings off the
-  // first viewport with marketing chrome.
   const Footer = () => (
     <View>
-      {feedItems.length > 0 && <SellBlock onPress={handleSellPress} />}
-      {loadingMore.current && (
+      {isLoadingMore && (
         <View style={s.footerLoading}>
           <ActivityIndicator size="small" color={C.petrol} />
         </View>
       )}
-      {!loadingMore.current && !hasMore && feedItems.length > 0 && (
-        <Text style={s.endHint}>↑ that's everything for now — pull to refresh</Text>
-      )}
-      {!loadingMore.current && hasMore && feedItems.length > 0 && (
-        <Text style={s.endHint}>↓ keep scrolling — fresh listings load as you go</Text>
-      )}
-      {feedItems.length === 0 && <View style={{ height: 60 }} />}
+      {!isLoadingMore && <View style={s.footerSpacer} />}
     </View>
   );
 
@@ -281,7 +515,7 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
       return (
         <View style={s.emptyWrap}>
           <Text style={s.emptyEmoji}>⚠️</Text>
-          <Text style={s.emptyTitle}>Could not load</Text>
+          <Text style={s.emptyTitle}>Could not load listings</Text>
           <Text style={s.emptySub}>{feedError}</Text>
         </View>
       );
@@ -289,8 +523,8 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
     return (
       <View style={s.emptyWrap}>
         <Text style={s.emptyEmoji}>📦</Text>
-        <Text style={s.emptyTitle}>No listings nearby yet</Text>
-        <Text style={s.emptySub}>Be the first to list something in {location?.city || 'your city'}!</Text>
+        <Text style={s.emptyTitle}>No trusted items nearby yet</Text>
+        <Text style={s.emptySub}>Try again later or change your location.</Text>
       </View>
     );
   };
@@ -308,6 +542,26 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
+      <Svg pointerEvents="none" style={s.screenBg} viewBox="0 0 100 100" preserveAspectRatio="none">
+        <Defs>
+          <LinearGradient id="homeCanvas" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor="#F3E4D4" stopOpacity="1" />
+            <Stop offset="0.42" stopColor="#FFF8EE" stopOpacity="1" />
+            <Stop offset="1" stopColor="#EAF4F1" stopOpacity="1" />
+          </LinearGradient>
+          <RadialGradient id="tealGlow" cx="88%" cy="15%" r="58%">
+            <Stop offset="0" stopColor="#2F766B" stopOpacity="0.16" />
+            <Stop offset="1" stopColor="#2F766B" stopOpacity="0" />
+          </RadialGradient>
+          <RadialGradient id="clayGlow" cx="5%" cy="42%" r="48%">
+            <Stop offset="0" stopColor="#D29472" stopOpacity="0.16" />
+            <Stop offset="1" stopColor="#D29472" stopOpacity="0" />
+          </RadialGradient>
+        </Defs>
+        <Rect x="0" y="0" width="100" height="100" fill="url(#homeCanvas)" />
+        <Circle cx="90" cy="12" r="48" fill="url(#tealGlow)" />
+        <Circle cx="2" cy="42" r="42" fill="url(#clayGlow)" />
+      </Svg>
       <FlatList
         ref={listRef}
         data={[1]}
@@ -328,6 +582,8 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
                     aspectRatio={pickAspectRatio(idx)}
                     index={idx}
                     onPress={() => handleCardPress(item)}
+                    onWishlist={() => handleWishlistPress(item)}
+                    isWishlisted={savedIds.has(item.id)}
                   />
                 ))}
               </View>
@@ -341,6 +597,8 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
                     aspectRatio={pickAspectRatio(idx)}
                     index={idx}
                     onPress={() => handleCardPress(item)}
+                    onWishlist={() => handleWishlistPress(item)}
+                    isWishlisted={savedIds.has(item.id)}
                   />
                 ))}
               </View>
@@ -357,23 +615,33 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
         onEndReached={loadMore}
         onEndReachedThreshold={0.6}
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={s.listContent}
       />
-
-      {!isAuthenticated && (
-        <TouchableOpacity
-          style={s.guestBar}
-          onPress={() => navigation.navigate('AuthFlow')}
-        >
-          <Text style={s.guestText}>Sign in to make offers and transact</Text>
-          <Text style={s.guestArrow}>→</Text>
-        </TouchableOpacity>
-      )}
     </SafeAreaView>
+  );
+}
+
+function TrustChip({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
+  return (
+    <View style={s.trustChip}>
+      <View style={s.trustIcon}>
+        <Icon size={13} strokeWidth={2.35} color="#2F766B" />
+      </View>
+      <Text style={s.trustText} numberOfLines={2}>{label}</Text>
+    </View>
   );
 }
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bone },
+  screenBg: {
+    ...StyleSheet.absoluteFillObject,
+  },
+
+  // ── Header ──────────────────────────────────────────────────────────
+  listContent: {
+    paddingBottom: S.xxxl,
+  },
 
   // ── Header ──────────────────────────────────────────────────────────
   hdr: {
@@ -382,114 +650,177 @@ const s = StyleSheet.create({
     paddingHorizontal: S.lg,
     paddingTop: S.sm,
     paddingBottom: S.sm,
-    backgroundColor: C.bone,
+    backgroundColor: 'transparent',
     gap: S.sm + 2,
   },
   hdrSpacer: { flex: 1 },
   logo: {
-    fontSize: T.size.xl + 4,
+    fontSize: T.size.display + 1,
     fontWeight: T.weight.heavy,
-    color: C.petrolNight,
-    letterSpacing: -1,
+    color: '#1A1F1F',
+    letterSpacing: -0.6,
   },
   locChip: {
-    height: 34,
+    height: 36,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: S.xs + 1,
-    paddingHorizontal: S.sm + 2,
+    gap: S.xs + 2,
+    paddingHorizontal: S.md,
     borderRadius: R.pill,
-    backgroundColor: C.white,
+    backgroundColor: 'rgba(255, 253, 248, 0.94)',
     borderWidth: 1,
-    borderColor: C.border,
-    maxWidth: 160,
+    borderColor: 'rgba(224, 203, 188, 0.90)',
+    maxWidth: 144,
     ...Shadow.subtle,
   },
-  locPin: { fontSize: T.size.base },
   locName: {
     fontSize: T.size.base,
-    fontWeight: T.weight.bold,
-    color: C.text,
+    fontWeight: T.weight.medium,
+    color: C.text2,
     flexShrink: 1,
   },
-  locArrow: { fontSize: T.size.sm, color: C.text2 },
   bellWrap: { position: 'relative' },
+  bellBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   bellDot: {
     position: 'absolute',
     top: 4,
-    right: 4,
+    right: 5,
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: C.red,
+    backgroundColor: C.coral,
+    borderWidth: 1,
+    borderColor: '#F3E4D4',
   },
 
   // ── Search ──────────────────────────────────────────────────────────
   search: {
     marginHorizontal: S.lg,
     marginTop: S.xs,
-    marginBottom: S.xs,
-    paddingHorizontal: S.md,
-    height: 50,
-    borderRadius: R.lg,
-    backgroundColor: C.white,
+    height: 52,
+    borderRadius: R.xl - 1,
+    backgroundColor: 'rgba(255, 253, 248, 0.94)',
     borderWidth: 1,
-    borderColor: C.border,
+    borderColor: 'rgba(224, 203, 188, 0.90)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    ...Shadow.subtle,
+  },
+  searchMain: {
+    flex: 1,
+    height: '100%',
+    minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     gap: S.sm + 2,
-    ...Shadow.subtle,
+    paddingLeft: S.md,
   },
-  searchIcon: { fontSize: T.size.md, color: C.text3 },
   searchPh: {
     flex: 1,
-    fontSize: T.size.md - 1,
-    color: C.text3,
+    fontSize: T.size.base,
+    color: '#68716F',
     fontWeight: T.weight.medium,
   },
-  searchMic: { fontSize: T.size.md, color: C.text3 },
+  searchDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: 'rgba(224, 203, 188, 0.90)',
+  },
+  filterBtn: {
+    width: 52,
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderTopRightRadius: R.xl - 1,
+    borderBottomRightRadius: R.xl - 1,
+  },
+  trustRow: {
+    flexDirection: 'row',
+    paddingHorizontal: S.lg,
+    marginTop: S.sm + 2,
+    gap: S.sm,
+  },
+  trustChip: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: R.md + 1,
+    backgroundColor: 'rgba(255, 253, 248, 0.94)',
+    borderWidth: 1,
+    borderColor: 'rgba(224, 203, 188, 0.82)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: S.xs,
+    paddingHorizontal: S.xs,
+    paddingVertical: S.xs,
+  },
+  trustIcon: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#EEF8F5',
+    borderWidth: 1,
+    borderColor: 'rgba(47, 118, 107, 0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trustText: {
+    flexShrink: 1,
+    color: '#205D58',
+    fontSize: T.size.xs - 1,
+    lineHeight: T.size.xs + 2,
+    fontWeight: T.weight.medium,
+    textAlign: 'center',
+  },
 
   // ── Listings header ─────────────────────────────────────────────────
   listingsHdr: {
-    marginTop: S.xl,
+    marginTop: S.lg,
     paddingHorizontal: S.lg,
     paddingBottom: S.sm,
     flexDirection: 'row',
     alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: S.md,
+  },
+  listingsTitleBlock: {
+    flex: 1,
+    minWidth: 0,
   },
   sectionTitle: {
-    fontSize: T.size.xl,
+    fontSize: T.size.lg,
     fontWeight: T.weight.heavy,
     color: C.text,
     letterSpacing: -0.3,
   },
-  sectionSub: {
-    marginTop: 2,
-    fontSize: T.size.base,
-    color: C.text3,
-    fontWeight: T.weight.medium,
-  },
-  filterBtn: {
+  radiusHint: {
+    marginTop: S.xs,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: S.xs + 2,
-    height: 38,
-    paddingHorizontal: S.md,
-    borderRadius: R.md,
-    backgroundColor: C.white,
-    borderWidth: 1,
-    borderColor: C.border,
-    marginTop: 4,
+    gap: S.xs,
   },
-  filterIcon: {
-    fontSize: T.size.md,
-    color: C.text,
-    fontWeight: T.weight.heavy,
-  },
-  filterText: {
+  radiusText: {
     fontSize: T.size.base,
-    color: C.text,
-    fontWeight: T.weight.heavy,
+    color: C.petrolText,
+    fontWeight: T.weight.medium,
+  },
+  seeAllLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    minHeight: 28,
+    paddingLeft: S.sm,
+  },
+  seeAllText: {
+    fontSize: T.size.base,
+    color: C.petrolText,
+    fontWeight: T.weight.medium,
   },
 
   // ── Masonry grid ────────────────────────────────────────────────────
@@ -508,13 +839,7 @@ const s = StyleSheet.create({
     paddingVertical: S.xl,
     alignItems: 'center',
   },
-  endHint: {
-    textAlign: 'center',
-    paddingVertical: S.lg,
-    paddingBottom: S.xxl,
-    color: C.text4,
-    fontSize: T.size.sm,
-  },
+  footerSpacer: { height: S.xxxl },
 
   // ── Empty / error ───────────────────────────────────────────────────
   emptyWrap: {
@@ -535,27 +860,4 @@ const s = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 18,
   },
-
-  // ── Guest bar — warm cream surface with rose accent (v18d) ─────────
-  guestBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: S.xs + 2,
-    backgroundColor: C.cream,
-    borderTopWidth: 1,
-    borderTopColor: C.border2,
-    paddingVertical: S.md + 2,
-    paddingHorizontal: S.lg,
-  },
-  guestText: {
-    fontSize: T.size.base,
-    color: C.text,
-    fontWeight: T.weight.semi,
-  },
-  guestArrow: { fontSize: T.size.sm + 1, color: C.coral, fontWeight: T.weight.bold },
 });

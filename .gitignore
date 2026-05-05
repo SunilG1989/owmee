@@ -37,22 +37,30 @@ mobile/ios/Podfile.lock
 mobile/ios/Podfile.backup
 mobile/ios/*.xcworkspace
 
+# Frontend build artifacts
+admin/dist/
+
 # Editor / OS
 .idea/
 .vscode/
 .DS_Store
 Thumbs.db
+.claude/
 
 # Patcher backups
 *.bak
 *.bak.*
 *.orig
+*.preunpatch.*
 
 # Logs
 *.log
 logs/
 
 # Session artifacts (don't commit)
+design-previews/
+sprint*_backup*/
+*_backup/
 sprint8_p2_backup/
 sprint8_p2_mobile_backup/
 =0.39.0

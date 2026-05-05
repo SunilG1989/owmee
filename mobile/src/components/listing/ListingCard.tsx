@@ -1,5 +1,7 @@
 import React, { memo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import {
+  View, Text, TouchableOpacity, StyleSheet, Image, type ImageSourcePropType,
+} from 'react-native';
 import { C, T, S, R, Shadow, formatPrice, percentOff, condStyle } from '../../utils/tokens';
 import { Button, IconButton } from '../ui';
 import type { Listing } from '../../services/api';
@@ -13,13 +15,41 @@ interface Props {
   cardWidth?: number; // T2-07: parent passes width, no useWindowDimensions
 }
 
+const FALLBACK_IMAGES: Record<string, ImageSourcePropType> = {
+  smartphones: require('../../../assets/owmee/home/cat-mobile-photo-v2.png'),
+  phones: require('../../../assets/owmee/home/cat-mobile-photo-v2.png'),
+  laptops: require('../../../assets/owmee/home/cat-laptop-photo-v2.png'),
+  'small-appliances': require('../../../assets/owmee/home/cat-appliances-photo-v2.png'),
+  appliances: require('../../../assets/owmee/home/cat-appliances-photo-v2.png'),
+  'kids-utility': require('../../../assets/owmee/home/cat-kids-photo-v2.png'),
+  kids: require('../../../assets/owmee/home/cat-kids-photo-v2.png'),
+  books: require('../../../assets/owmee/home/cat-books-photo-v2.png'),
+};
+
+function fallbackImageForCategory(slug?: string | null): ImageSourcePropType {
+  return slug && FALLBACK_IMAGES[slug]
+    ? FALLBACK_IMAGES[slug]
+    : FALLBACK_IMAGES.smartphones;
+}
+
+function isDisplayableImageUrl(uri?: string | null): uri is string {
+  if (!uri) return false;
+  if (/^(r2:\/\/|file:\/\/)/i.test(uri)) return false;
+  if (/(localhost|127\.0\.0\.1|192\.168\.|10\.0\.)/i.test(uri)) return false;
+  return /^https?:\/\//i.test(uri);
+}
+
 // T2-07: REMOVED useWindowDimensions — parent calculates once, passes to all cards
 export const ListingCard = memo(function ListingCard({
   listing, onPress, onWishlist, isWishlisted, showDistance = true, cardWidth,
 }: Props) {
   const cardW = cardWidth || 170; // fallback only
   const imgH = cardW;
-  const uri = listing.thumbnail_url || listing.images?.[0];
+  const rawUri = listing.thumbnail_url || listing.image_urls?.[0] || listing.images?.[0];
+  const uri = isDisplayableImageUrl(rawUri) ? rawUri : null;
+  const fallbackImage = fallbackImageForCategory(
+    listing.category_slug || (listing.is_kids_item ? 'kids-utility' : null),
+  );
   const cs = condStyle(listing.condition);
   const off = percentOff(listing.price, listing.original_price);
 
@@ -36,11 +66,7 @@ export const ListingCard = memo(function ListingCard({
             style={s.img} resizeMode={"cover"}
           />
         ) : (
-          <View style={s.placeholder}>
-            <Text style={s.placeholderEmoji}>
-              {listing.category_slug === 'phones' ? '📱' : listing.category_slug === 'laptops' ? '💻' : listing.is_kids_item ? '🧸' : '📦'}
-            </Text>
-          </View>
+          <Image source={fallbackImage} style={s.img} resizeMode="cover" />
         )}
         {onWishlist && (
           <View style={s.heartWrap}>
@@ -141,8 +167,6 @@ const s = StyleSheet.create({
   card: { backgroundColor: C.surface, borderRadius: R.lg, overflow: 'hidden', borderWidth: 1, borderColor: C.border, marginBottom: S.sm },
   imgWrap: { width: '100%', backgroundColor: C.border2, position: 'relative' },
   img: { width: '100%', height: '100%' },
-  placeholder: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: C.bone2 },
-  placeholderEmoji: { fontSize: T.size.display + 6 },
   heartWrap: { position: 'absolute', top: S.sm, right: S.sm },
   heartOn: { backgroundColor: 'rgba(255,255,255,0.95)' },
   cond: { position: 'absolute', bottom: S.sm, left: S.sm, paddingHorizontal: S.sm + 1, paddingVertical: 3, borderRadius: R.xs },

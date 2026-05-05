@@ -10,8 +10,8 @@
  *     secondary  bordered, neutral action ("Cancel" / "Withdraw")
  *     ghost      borderless, low-emphasis ("Skip" / inline links)
  *     destructive  red CTA, irreversible ("Delete listing")
- *     accent     coral "act now" CTA — used SPARINGLY (Sell from home)
- *     inverse    white surface, deep teal text — for buttons sitting on
+ *     accent     pastel apricot "act now" CTA — used SPARINGLY (Sell from home)
+ *     inverse    white surface, deep ink text — for buttons sitting on
  *                a dark hero / brand surface where primary would vanish
  *
  *   sizes
@@ -115,11 +115,16 @@ const sizeStyles: Record<ButtonSize, { container: ViewStyle; label: TextStyle }>
 
 const variantStyles: Record<ButtonVariant, { container: ViewStyle; text: TextStyle }> = {
   primary: {
-    container: { backgroundColor: C.petrol },
-    text: { color: C.white },
+    container: {
+      backgroundColor: C.petrolLight,
+      borderWidth: 1,
+      borderColor: C.blueBorder,
+      ...Shadow.subtle,
+    },
+    text: { color: C.petrolDeep },
   },
   secondary: {
-    container: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
+    container: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border2 },
     text: { color: C.text },
   },
   ghost: {
@@ -131,8 +136,13 @@ const variantStyles: Record<ButtonVariant, { container: ViewStyle; text: TextSty
     text: { color: C.white },
   },
   accent: {
-    container: { backgroundColor: C.coralBright, ...Shadow.coralGlow },
-    text: { color: C.white },
+    container: {
+      backgroundColor: C.coralLight,
+      borderWidth: 1,
+      borderColor: '#EBCFC5',
+      ...Shadow.subtle,
+    },
+    text: { color: C.coralDeep },
   },
   inverse: {
     container: { backgroundColor: C.white },

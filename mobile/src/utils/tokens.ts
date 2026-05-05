@@ -1,132 +1,128 @@
 /**
- * Owmee Design Tokens — v6 "Petrol"
+ * Owmee Design Tokens — v21 "Warm Trust Pastels"
  *
  * Drop-in replacement for mobile/src/utils/tokens.ts.
- * Preserves every export from v4 (C, T, S, R, Shadow, I, O, StatusColor,
- * MIN_TAP, formatPrice, percentOff, formatDistance, timeAgo, condStyle,
- * statusTone, prettyStatus) so existing screens compile UNCHANGED.
+ * Preserves every export from v4/v6/v18 (C, T, S, R, Shadow, I, O,
+ * StatusColor, MIN_TAP, formatPrice, percentOff, formatDistance,
+ * timeAgo, condStyle, statusTone, prettyStatus) so existing screens
+ * compile unchanged.
  *
- * What changed from v4 "Warm Trust":
- *   - Primary: warm honey #D88A36  →  petrol #1E5F5C (green-blue mix)
- *   - Secondary: sage forest #3D7A5C  →  petrol family (one cool primary)
- *   - Canvas: ghee cream #FAF6EE  →  bone #F6F1E7 (kept warm; refined)
- *   - Added: coral #E87A5D for "act now" moments (sale, ending soon)
- *   - Shadows: warm amber tint  →  cool ink tint (matches petrol family)
+ * Direction:
+ *   - Primary: muted trust blue #4F7F86 for verification and safety.
+ *   - Accent: warm pastel clay #D7A89E, usually as a soft CTA surface.
+ *   - Canvas: warm ivory #FFF8EE with quiet parchment borders.
+ *   - Text: ink navy #172033 for stronger readability than rose-plum.
  *
  * Migration philosophy:
  *   - Every legacy NAME (C.honey, C.forest, C.cream, etc.) still works.
- *     They now point at the v6 palette so screens render the new brand
- *     instantly without code edits.
- *   - For NEW code, prefer the semantic layer at the bottom (theme.brand,
- *     theme.accent, theme.bg, etc.) — palette-swap-stable.
+ *     They now point at the v21 semantic palette so older screens render
+ *     the new brand without call-site edits.
+ *   - For new code, prefer the semantic layer at the bottom
+ *     (theme.brand, theme.accent, theme.bg, etc.).
  */
 
 export const C = {
-  // ── PRIMARY · WARM ROSE PINK (v18d Boutique Rose) ────────────────────
-  // Tira/Glossier school: medium-saturation warm pink that pops on
-  // cream without being neon. Distinctly premium, NOT dark, NOT washed
-  // out. Heading + button now READ AS DIFFERENT COLORS so the hero has
-  // proper hierarchy (dark headline, pink CTA) instead of brand-monotone.
-  petrol:        '#D87290',  // warm rose pink — primary CTAs
-  petrolLight:   '#F8E5EC',  // soft rose wash — selected state
-  petrolMid:     '#B85775',  // pressed
-  petrolGlow:    '#7A6B72',  // warm rose-taupe — secondary text
-  petrolDeep:    '#9C4A63',  // deepest pressed
-  petrolText:    '#D87290',
-  petrolNight:   '#2D1F2A',  // warm deep plum inverse
+  // ── PRIMARY · WARM TRUST BLUE ────────────────────────────────────────
+  petrol:        '#4F7F86',  // trust actions and verified states
+  petrolLight:   '#F1F8F6',  // selected state / light trust surface
+  petrolMid:     '#91B6B0',  // trust icon / small emphasis
+  petrolGlow:    '#C9DDD7',  // highlights and focus halo
+  petrolDeep:    '#355F63',  // pressed / readable brand surface
+  petrolText:    '#4B7280',  // readable trust text on light surfaces
+  petrolNight:   '#172033',  // inverse/navy text
 
-  // ── SECONDARY · warm rose-taupe text/icons ───────────────────────────
-  aqua:          '#7A6B72',
-  aquaLight:     '#F8E5EC',
-  aquaDeep:      '#2D1F2A',
+  // ── SECONDARY · AQUA SUPPORT ────────────────────────────────────────
+  aqua:          '#91B6B0',
+  aquaLight:     '#F1F8F6',
+  aquaDeep:      '#4B7280',
 
-  // ── ACCENT · same rose family — single-color system ──────────────────
-  coral:         '#D87290',
-  coralLight:    '#F8E5EC',
-  coralDeep:     '#B85775',
-  coralBright:   '#D87290',
+  // ── ACCENT · WARM PASTEL CLAY ──────────────────────────────────────
+  coral:         '#D7A89E',
+  coralLight:    '#FBE9E2',
+  coralDeep:     '#6E4C45',
+  coralBright:   '#D7A89E',
 
-  // ── TRUST CHIP PALETTE — warm cream family + semantic green/amber ───
-  mintSoft:      '#FBEDE0',  // verifiedBg — warm cream
-  mintBorder:    '#F0E0D0',  // warm peach hairline
-  blueSoft:      '#FBEDE0',  // unified — single warm family
-  blueDeep:      '#A85F54',  // verified text uses brand pressed
-  blueBorder:    '#F0E0D0',
-  amberSoft:     '#FFF2E6',  // offerBg
-  amberDeep:     '#D97706',  // offerText
-  amberBorder:   '#F0E0D0',
+  // ── TRUST CHIP PALETTE ──────────────────────────────────────────────
+  mintSoft:      '#EDF8EF',
+  mintBorder:    '#D4EBDD',
+  blueSoft:      '#F1F8F6',
+  blueDeep:      '#4B7280',
+  blueBorder:    '#DDEBE8',
+  amberSoft:     '#FFF5E8',
+  amberDeep:     '#92570C',
+  amberBorder:   '#EBCAB1',
 
-  // ── SURFACES · warm linen + LIGHTER peach hero (v18c) ───────────────
-  bone:          '#FFF6EC',  // bgApp — warm linen cream
-  bone2:         '#FBEDE0',  // bgSoft
-  cream:         '#FDEDE5',  // bgHero — lighter peach (lifted from #FBE0D5)
-  sand:          '#FBEDE0',
-  surface:       '#FFFFFF',
+  // ── SURFACES · WARM IVORY + POWDER HERO ─────────────────────────────
+  bone:          '#FFF8EE',  // app canvas: warm ivory from final home preview
+  bone2:         '#F3E4D4',  // raised clay wash, used sparingly
+  cream:         '#EAF4F1',  // soft teal tail of the home background
+  sand:          '#F7EFE7',
+  surface:       '#FFFDF8',
 
   // Dark surfaces (inverse contexts — receipts, FE night ops)
   inkBg:         '#172033',
-  inkBg2:        '#1F2A40',
-  inkBg3:        '#2A3754',
+  inkBg2:        '#1F2B3F',
+  inkBg3:        '#2B3A54',
 
-  // ── INK · warm deep plum (v18d Boutique Rose) ────────────────────────
-  ink:           '#2D1F2A',
-  ink2:          '#3D2A35',
+  // ── INK · READABLE NAVY ─────────────────────────────────────────────
+  ink:           '#172033',
+  ink2:          '#243042',
 
-  // ── TEXT scale · warm rose-taupe family ─────────────────────────────
-  text:          '#2D1F2A',  // textPrimary — warm deep plum (NOT navy/black)
-  text2:         '#7A6B72',  // textSecondary — warm rose-taupe
-  text3:         '#A8979F',  // textMuted — pale rose-taupe
-  text4:         '#D4C9CE',
+  // ── TEXT SCALE ──────────────────────────────────────────────────────
+  text:          '#172033',
+  text2:         '#5E6A75',
+  text3:         '#67727E',
+  text4:         '#8A949E',
 
   onDark1:       '#FFFFFF',
   onDark2:       'rgba(255, 255, 255, 0.78)',
   onDark3:       'rgba(255, 255, 255, 0.52)',
 
-  // ── LINES — warm peach hairlines (v18 Warm Boutique) ─────────────────
-  border:        '#E4C9B6',  // borderStrong — warm peach
-  border2:       '#F0E0D0',  // borderSoft — soft peach
-  borderDark:    'rgba(255, 246, 236, 0.10)',
+  // ── LINES ───────────────────────────────────────────────────────────
+  border:        '#EBDCCD',
+  border2:       '#F3E7DC',
+  borderDark:    'rgba(255, 250, 244, 0.12)',
 
   // ── SEMANTIC ─────────────────────────────────────────────────────────
-  red:           '#C2473A',
+  red:           '#B33A2F',
   redLight:      '#FFF0EE',
-  green:         '#2F6F46',  // conditionText
-  greenLight:    '#EEF8F0',  // conditionBg
-  yellow:        '#D97706',  // offerText
-  yellowLight:   '#FFF2E6',  // offerBg
+  green:         '#2F7D4C',
+  greenLight:    '#EDF8EF',
+  yellow:        '#92570C',
+  yellowLight:   '#FFF3DC',
 
   white:         '#FFFFFF',
 
-  // ── CARD ACCENT BACKGROUNDS — all collapse to coral-soft / cream ────
-  cardBgGray:    '#FFF4EE',
-  cardBgMauve:   '#FFF1EB',
-  cardBgGreen:   '#FFE8E1',
-  cardBgPeach:   '#FBEDE7',
-  cardBgAmber:   '#FFF2E6',
-  cardBgStone:   '#FFF4EE',
-  cardBgPastel:  '#FFF1EB',
+  // ── CARD ACCENT BACKGROUNDS ─────────────────────────────────────────
+  cardBgGray:    '#F5F1EA',
+  cardBgMauve:   '#F5EEF3',
+  cardBgGreen:   '#EAF6F1',
+  cardBgPeach:   '#FFF0E8',
+  cardBgAmber:   '#FFF5E8',
+  cardBgStone:   '#EFF3F5',
+  cardBgPastel:  '#EAF2FF',
 
-  // ── LEGACY ALIASES — old names → v16 locked values ──────────────────
-  honey:         '#D87290',  // → warm rose pink
-  honeyLight:    '#F8E5EC',
-  honeyGlow:     '#7A6B72',
-  honeyDeep:     '#B85775',
-  honeyText:     '#D87290',
+  // ── LEGACY ALIASES — old names → v21 values ─────────────────────────
+  honey:         '#4F7F86',
+  honeyLight:    '#F1F8F6',
+  honeyGlow:     '#C9DDD7',
+  honeyDeep:     '#355F63',
+  honeyText:     '#4B7280',
 
-  forest:        '#D87290',
-  forestLight:   '#F8E5EC',
-  forestVivid:   '#B85775',
-  forestText:    '#D87290',
+  forest:        '#4F7F86',
+  forestLight:   '#F1F8F6',
+  forestVivid:   '#91B6B0',
+  forestText:    '#4B7280',
 
-  primary:       '#D87290',  // → warm rose pink
-  muted:         '#A8979F',
-  danger:        '#C2473A',
-  success:       '#2F6F46',
-  successBg:     '#EEF8F0',
-  bg:            '#FFF6EC',
-  surfaceMuted:  '#FBEDE0',
-  amber:         '#D87290',
-  amberLight:    '#F8E5EC',
+  primary:       '#4F7F86',
+  muted:         '#67727E',
+  danger:        '#B33A2F',
+  success:       '#2F7D4C',
+  successBg:     '#EDF8EF',
+  bg:            '#FFF8EE',
+  surfaceMuted:  '#F3E4D4',
+  amber:         '#C7A096',
+  amberLight:    '#FFF7F3',
 } as const;
 
 export const T = {
@@ -171,19 +167,16 @@ export const FONTS = {
 export const S = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24, xxxl: 32 } as const;
 export const R = { xs: 6, sm: 10, md: 14, lg: 16, xl: 20, pill: 999 } as const;
 
-// ── SHADOWS · cool-tinted (matches petrol family) ─────────────────────
-// Shadow color updated from warm amber (#7A5A35) → cool ink (#0F1A1F).
-// Keeps depth feeling consistent with the new cool primary.
-const _SUBTLE_SHADOW = { shadowColor: '#3D2A21', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 };
+// ── SHADOWS · ink-tinted, low opacity ─────────────────────────────────
+const _SUBTLE_SHADOW = { shadowColor: '#172033', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 };
 
 export const Shadow = {
   subtle: _SUBTLE_SHADOW,
   sm:     _SUBTLE_SHADOW,
-  card:   { shadowColor: '#3D2A21', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 2 },
-  lifted: { shadowColor: '#3D2A21', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.10, shadowRadius: 18, elevation: 4 },
-  // Single warm-rose glow for all CTAs (single-color brand)
-  glow:      { shadowColor: '#D87290', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.20, shadowRadius: 14, elevation: 4 },
-  coralGlow: { shadowColor: '#D87290', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.20, shadowRadius: 14, elevation: 4 },
+  card:   { shadowColor: '#172033', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 2 },
+  lifted: { shadowColor: '#172033', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.10, shadowRadius: 18, elevation: 4 },
+  glow:      { shadowColor: '#4F7F86', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.10, shadowRadius: 14, elevation: 4 },
+  coralGlow: { shadowColor: '#D7A89E', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.07, shadowRadius: 10, elevation: 1 },
 };
 
 export const I = { xs: 12, sm: 16, md: 24, lg: 32, xl: 48, display: 56 } as const;
@@ -196,14 +189,14 @@ export const O = {
 } as const;
 
 // ── STATUS COLOR MAP ──────────────────────────────────────────────────
-// Brand tone now uses petrol; everything else preserved.
+// Brand tone uses warm trust blue; hot tone uses quiet warm taupe.
 export const StatusColor = {
   positive: { bg: C.greenLight,  text: C.green,       border: C.greenLight },
   warning:  { bg: C.yellowLight, text: C.yellow,      border: C.yellowLight },
   danger:   { bg: C.redLight,    text: C.red,         border: C.redLight },
   neutral:  { bg: C.bone2,       text: C.text2,       border: C.border },
   brand:    { bg: C.petrolLight, text: C.petrolDeep,  border: C.petrolLight },
-  // NEW in v6 — the "act now" tone (sale, ending soon, paid-out, hot)
+  // "Act now" tone (sale, ending soon, paid-out, hot)
   hot:      { bg: C.coralLight,  text: C.coralDeep,   border: C.coralLight },
 } as const;
 
@@ -269,26 +262,25 @@ export function prettyStatus(status: string | null | undefined): string {
 
 // ──────────────────────────────────────────────────────────────────────
 // HOME-FEED ACCENTS — folded in from the now-deleted components/theme8.ts.
-// All values v6-aligned (the legacy theme8 still emitted v4 warm-amber
-// hex, which is why home surfaces visibly diverged from the rest of the
-// app until 2026-05-02).
+// All values v21-aligned so home, listings, checkout, and admin render
+// from the same warm trust pastel system.
 //
 // Keep these few; resist the urge to add more. Brand cohesion comes
-// from the petrol primary + coral accent + bone canvas trio — that's
+// from the warm trust blue + warm taupe + ivory canvas trio — that's
 // it. Anything else and the app starts to feel stitched together.
 // ──────────────────────────────────────────────────────────────────────
 export const Home = {
-  // Blockbuster deals — coral family, the v6 "spotlight / act now" surface
+  // Blockbuster deals — pastel apricot family, the spotlight / act-now surface
   dealsBgStart:    C.coralLight,
-  dealsBgEnd:      '#FAD9CB',
+  dealsBgEnd:      '#FFE9DE',
   dealsAccent:     C.coralDeep,
   dealsTitleText:  C.coralDeep,
   dealsSubtitle:   C.coralDeep,
-  dealsBadgeBg:    C.coral,
-  dealsBadgeText:  C.white,
+  dealsBadgeBg:    C.coralLight,
+  dealsBadgeText:  C.coralDeep,
   dealsCardShadow: 'rgba(15, 26, 31, 0.10)',
 
-  // Sell block — petrol family (trust + grow)
+  // Sell block — powder blue family (trust + grow)
   sellBgStart:     C.petrolLight,
   sellBgEnd:       C.aquaLight,
   sellAccent:      C.petrol,
@@ -296,20 +288,20 @@ export const Home = {
   sellCtaBg:       C.petrol,
   sellCtaText:     C.white,
 
-  // Owmee Verified badge — petrol family
+  // Owmee Verified badge — powder blue family
   verifiedBg:      C.petrolLight,
   verifiedText:    C.petrolText,
   verifiedDot:     C.petrolMid,
 
-  // Ship indicator — petrol
+  // Ship indicator — powder blue
   shipText:        C.petrol,
 
-  // ── Hero card — lighter peach #FDEDE5 + rose accents ───────────────
-  heroBg:          C.cream,                    // bgHero #FDEDE5
-  heroSubText:     'rgba(122, 107, 114, 1)',  // textSecondary rose-taupe
-  heroStepBg:      'rgba(216, 114, 144, 0.08)',  // rose tint
-  heroStepBorder:  'rgba(216, 114, 144, 0.22)',  // rose hairline
-  heroArrow:       'rgba(45, 31, 42, 0.55)',  // deep plum arrow
+  // ── Hero card — warm powder trust surface ───────────────────────────
+  heroBg:          C.cream,
+  heroSubText:     'rgba(103, 114, 126, 1)',
+  heroStepBg:      'rgba(79, 127, 134, 0.08)',
+  heroStepBorder:  'rgba(79, 127, 134, 0.18)',
+  heroArrow:       'rgba(23, 32, 51, 0.55)',
 
   // Trust chips below search — three color families, one per trust pillar.
   chipMintBg:      C.mintSoft,

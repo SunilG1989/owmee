@@ -1,20 +1,19 @@
 /**
- * CategoryRail — compact image-circle row (2026-05-03).
+ * CategoryRail — premium real-photo category row.
  *
- * v16 locked spec: each tile renders a real local image cutout
- * (mobile/assets/images/cat-*.png), NOT emoji. Drop transparent PNGs
- * at those paths; require() resolves at bundle time.
+ * Each tile renders a locally bundled real-photo crop generated for the
+ * approved Warm Clay + Deep Teal home direction. The images are framed
+ * like small commerce thumbnails instead of loose cutouts.
  *
- * Books has no canonical category_slug in the backend taxonomy yet;
- * tile fires an empty-slug press — consumer treats `null` as no-op
- * until a Books slug exists.
+ * Books has no canonical category_slug in the backend taxonomy yet, so
+ * the home screen opens general search instead of leaving the tile dead.
  */
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Image,
-  ImageSourcePropType,
+  ImageSourcePropType, useWindowDimensions,
 } from 'react-native';
-import { C, T, S, R } from '../utils/tokens';
+import { C, T, S, R, Shadow } from '../utils/tokens';
 
 export interface CategoryDef {
   label: string;
@@ -35,26 +34,26 @@ interface Props {
 // mobile/assets/owmee/home/cat-*.webp — placeholders resolve until
 // real assets land. NO emoji fallback per rule 14.
 const DEFAULT_CATEGORIES: CategoryDef[] = [
-  { label: 'Mobiles',    slug: 'smartphones',      image: require('../../assets/owmee/home/cat-mobile.webp'),     tint: C.mintSoft },
-  { label: 'Laptops',    slug: 'laptops',          image: require('../../assets/owmee/home/cat-laptop.webp'),     tint: C.bone2 },
-  { label: 'Kids',       slug: 'kids-utility',     image: require('../../assets/owmee/home/cat-kids.webp'),       tint: C.amberSoft },
-  { label: 'Books',      slug: null,               image: require('../../assets/owmee/home/cat-books.webp'),      tint: C.blueSoft },
-  { label: 'Appliances', slug: 'small-appliances', image: require('../../assets/owmee/home/cat-appliances.webp'), tint: C.bone2 },
+  { label: 'Mobile', slug: 'smartphones', image: require('../../assets/owmee/home/cat-mobile-photo-v2.png') },
+  { label: 'Laptop', slug: 'laptops', image: require('../../assets/owmee/home/cat-laptop-photo-v2.png') },
+  { label: 'Home', slug: 'small-appliances', image: require('../../assets/owmee/home/cat-appliances-photo-v2.png') },
+  { label: 'Kids', slug: 'kids-utility', image: require('../../assets/owmee/home/cat-kids-photo-v2.png') },
+  { label: 'Books', slug: null, image: require('../../assets/owmee/home/cat-books-photo-v2.png') },
 ];
 
 export default function CategoryRail({
-  onSeeAll, onCategoryPress, categories = DEFAULT_CATEGORIES,
+  onCategoryPress, categories = DEFAULT_CATEGORIES,
 }: Props) {
+  const { width } = useWindowDimensions();
+  const tileWidth = useMemo(() => {
+    const gap = S.xs + 2;
+    const available = width - (S.lg * 2) - (gap * (categories.length - 1));
+    return Math.floor(available / categories.length);
+  }, [categories.length, width]);
+  const iconWidth = Math.max(40, Math.min(46, tileWidth - 18));
+
   return (
     <View style={s.block}>
-      <View style={s.header}>
-        <Text style={s.title}>Browse by category</Text>
-        <TouchableOpacity onPress={onSeeAll} activeOpacity={0.7} style={s.seeAll}>
-          <Text style={s.seeAllText}>See all</Text>
-          <Text style={s.seeAllArrow} allowFontScaling={false}>›</Text>
-        </TouchableOpacity>
-      </View>
-
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -65,12 +64,14 @@ export default function CategoryRail({
             key={cat.label}
             activeOpacity={0.85}
             onPress={() => onCategoryPress(cat)}
-            style={s.tile}
+            style={[s.tile, { width: tileWidth }]}
+            accessibilityRole="button"
+            accessibilityLabel={`${cat.label.replace('\n', ' ')} category`}
           >
-            <View style={[s.iconCircle, { backgroundColor: cat.tint || C.bone2 }]}>
+            <View style={[s.iconFrame, { width: iconWidth }]}>
               <Image source={cat.image} style={s.iconImage} resizeMode="cover" />
             </View>
-            <Text style={s.label} numberOfLines={1}>{cat.label}</Text>
+            <Text style={[s.label, { width: tileWidth - 10 }]} numberOfLines={2}>{cat.label}</Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -80,64 +81,46 @@ export default function CategoryRail({
 
 const s = StyleSheet.create({
   block: {
-    marginTop: S.md,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: S.lg,
-    marginBottom: S.sm,
-  },
-  title: {
-    fontSize: T.size.md,
-    fontWeight: T.weight.heavy,
-    color: C.text,
-    letterSpacing: -0.2,
-  },
-  seeAll: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-  },
-  seeAllText: {
-    fontSize: T.size.base,
-    fontWeight: T.weight.bold,
-    color: C.petrol,
-  },
-  seeAllArrow: {
-    fontSize: T.size.md,
-    color: C.petrol,
-    fontWeight: T.weight.heavy,
-    marginLeft: 1,
+    marginTop: S.sm + 2,
   },
   row: {
     paddingHorizontal: S.lg,
-    gap: S.lg,
+    gap: S.xs + 2,
   },
   tile: {
-    width: 64,
+    height: 62,
     alignItems: 'center',
-  },
-  iconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    overflow: 'hidden',
+    justifyContent: 'center',
+    borderRadius: R.lg - 1,
+    backgroundColor: 'rgba(255, 253, 248, 0.94)',
     borderWidth: 1,
-    borderColor: C.border2,
+    borderColor: 'rgba(224, 203, 188, 0.9)',
+    paddingTop: S.xs + 2,
+    paddingHorizontal: S.xs,
+    paddingBottom: S.xs,
+    ...Shadow.subtle,
   },
-  // v18: image fills the circle (cover) so it's clipped to round shape,
-  // not letterboxed inside a circle. Square photos clip cleanly.
+  iconFrame: {
+    height: 34,
+    borderRadius: R.sm + 2,
+    backgroundColor: '#FFF8EE',
+    borderWidth: 1,
+    borderColor: 'rgba(224, 203, 188, 0.58)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
   iconImage: {
     width: '100%',
     height: '100%',
   },
   label: {
-    marginTop: S.xs + 2,
-    fontSize: T.size.xs + 1,
-    fontWeight: T.weight.semi,
-    color: C.text,
+    width: 60,
+    marginTop: 3,
+    fontSize: T.size.xs - 1,
+    fontWeight: T.weight.medium,
+    color: C.text2,
     textAlign: 'center',
+    lineHeight: T.size.xs + 1,
   },
 });

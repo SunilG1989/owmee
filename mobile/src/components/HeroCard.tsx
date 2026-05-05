@@ -1,333 +1,231 @@
 /**
- * HeroCard — auto-rotating banner (3 slides), 2026-05-03.
+ * HeroCard — compact 3-slide trust carousel.
  *
- * Compact petrol hero, ~140dp tall. Carousel of 3 slides:
- *   1. Trust story  — "Buy pre-owned with confidence"
- *   2. Sell pitch   — "Sell from home, we handle the rest"
- *   3. Doorstep     — "Doorstep handover, you confirm before paying"
- *
- * Slides auto-advance every ~5s; user can also swipe. Pagination dots
- * at the bottom. CTA on each slide is one of {Browse, Sell} — both
- * delegate to the consumer (no auth/KYC logic in the hero).
+ * The carousel carries the three home promises without turning the first
+ * screen into an ad wall: buy safely, sell with assist, and protected handover.
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, NativeScrollEvent, NativeSyntheticEvent,
-  Image, ImageSourcePropType,
+  View, Text, StyleSheet, ImageBackground, TouchableOpacity,
+  type ImageSourcePropType,
 } from 'react-native';
-import { C, T, S, R, Shadow, Home } from '../utils/tokens';
-import Button from './ui/Button';
+import Svg, {
+  Defs, LinearGradient, Stop, Rect, Path,
+} from 'react-native-svg';
+import { C, T, S, R, Shadow } from '../utils/tokens';
 
-// Local hero cutout assets — locked spec path (v17).
-// Drop transparent .webp cutouts at mobile/assets/owmee/home/. Until
-// real assets land, 1x1 placeholders resolve cleanly and the hero
-// renders with text + CTAs as the focal point. NO emoji fallback per
-// rule 15.
-const HERO_ASSETS: Record<'shield' | 'package' | 'truck', ImageSourcePropType> = {
-  shield:  require('../../assets/owmee/home/hero-cozy.webp'),  // first slide — cozy tech + lifestyle setup
-  package: require('../../assets/owmee/home/hero-laptop.webp'),
-  truck:   require('../../assets/owmee/home/hero-box.webp'),
-};
-
-interface Props {
-  onBrowse: () => void;
-  onSell: () => void;
-}
-
-type Slide = {
-  key: string;
+type HeroSlide = {
+  image: ImageSourcePropType;
+  kicker: string;
   title: string;
   subtitle: string;
-  primary: { label: string; action: 'browse' | 'sell'; variant: 'primary' | 'secondary' | 'accent' };
-  secondary: { label: string; action: 'browse' | 'sell'; variant: 'primary' | 'secondary' | 'accent' };
-  vignette: 'shield' | 'package' | 'truck';
+  wash: string;
+  plate: string;
+  kickerColor: string;
+  subtitleColor: string;
+  accessibilityLabel: string;
+  action: 'browse' | 'sell';
 };
 
-// Slides anchor to Owmee's three real differentiators (vs generic India
-// marketplaces): expert-inspection, full-service selling, and the
-// 100% refund guarantee that backstops every purchase. Voice is calm/
-// confident, not coupon-y. Avoid "pay after delivery" — buyers do pay
-// upfront; the protection is the refund-on-issue promise.
-const SLIDES: Slide[] = [
+const SLIDES: HeroSlide[] = [
   {
-    key: 'trust',
-    title: 'Inspected listings.\nProtected payments.',
-    subtitle: 'Every item is checked by an expert. ✓ 100% refund if it\'s not as promised.',
-    primary:   { label: 'Browse verified deals', action: 'browse', variant: 'primary' },
-    secondary: { label: 'Sell from home',        action: 'sell',   variant: 'accent' },
-    vignette: 'shield',
+    image: require('../../assets/owmee/home/safetrade-real-banner-v3.png'),
+    kicker: 'SAFE BUYING',
+    title: 'Buy used items safely.',
+    subtitle: 'Seller and item checked before handover.',
+    wash: '#2F766B',
+    plate: '#245E56',
+    kickerColor: '#FFE0C5',
+    subtitleColor: '#E9F8F2',
+    accessibilityLabel: 'Browse safe buying deals',
+    action: 'browse',
   },
   {
-    key: 'sell',
-    title: 'Sell from home.\nWe pick up. We deliver.',
-    subtitle: 'We handle pricing, pickup, and doorstep handover. You just list.',
-    primary:   { label: 'List in 2 min',         action: 'sell',   variant: 'accent' },
-    secondary: { label: 'See verified deals',    action: 'browse', variant: 'secondary' },
-    vignette: 'package',
+    image: require('../../assets/owmee/home/assist-photo-v2.png'),
+    kicker: 'SELL FROM HOME',
+    title: 'Sell with Owmee Assist.',
+    subtitle: 'We take photos, verify and arrange pickup.',
+    wash: '#B86F59',
+    plate: '#8F5749',
+    kickerColor: '#FFE8D9',
+    subtitleColor: '#FFF5EF',
+    accessibilityLabel: 'Book Owmee Assist to sell from home',
+    action: 'sell',
   },
   {
-    key: 'doorstep',
-    title: 'Doorstep handover.\nNo meetups, no risk.',
-    subtitle: 'Owmee delivers to your door. ✓ Full refund if anything is wrong.',
-    primary:   { label: 'Browse verified deals', action: 'browse', variant: 'primary' },
-    secondary: { label: 'Sell from home',        action: 'sell',   variant: 'accent' },
-    vignette: 'truck',
+    image: require('../../assets/owmee/home/safetrade-real-banner.png'),
+    kicker: 'SAFE PAYMENT',
+    title: 'Pay through Owmee.',
+    subtitle: 'Seller is paid after handover is confirmed.',
+    wash: '#496F72',
+    plate: '#2F5E61',
+    kickerColor: '#FFE4CC',
+    subtitleColor: '#EDF9F6',
+    accessibilityLabel: 'Browse safe payment listings',
+    action: 'browse',
   },
 ];
 
-const ROTATE_MS = 5000;
+interface Props {
+  onBrowse: () => void;
+  onSell?: () => void;
+}
 
 export default function HeroCard({ onBrowse, onSell }: Props) {
-  const scrollRef = useRef<ScrollView>(null);
-  const [index, setIndex] = useState(0);
-  const [slideWidth, setSlideWidth] = useState(0);
-  const userInteractingRef = useRef(false);
+  const [active, setActive] = useState(0);
+  const slide = SLIDES[active];
 
-  // Auto-advance. Pauses while the user is mid-swipe (drag begin → end).
   useEffect(() => {
-    if (slideWidth === 0) return;
-    const id = setInterval(() => {
-      if (userInteractingRef.current) return;
-      const next = (index + 1) % SLIDES.length;
-      scrollRef.current?.scrollTo({ x: next * slideWidth, animated: true });
-      setIndex(next);
-    }, ROTATE_MS);
-    return () => clearInterval(id);
-  }, [index, slideWidth]);
+    const timer = setInterval(() => {
+      setActive(prev => (prev + 1) % SLIDES.length);
+    }, 3600);
+    return () => clearInterval(timer);
+  }, []);
 
-  const onMomentumEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    if (slideWidth === 0) return;
-    const i = Math.round(e.nativeEvent.contentOffset.x / slideWidth);
-    setIndex(i);
-  };
-
-  const fire = (action: 'browse' | 'sell') => {
-    if (action === 'browse') onBrowse();
-    else onSell();
+  const handlePress = () => {
+    if (slide.action === 'sell' && onSell) {
+      onSell();
+      return;
+    }
+    onBrowse();
   };
 
   return (
-    <View
-      style={s.wrap}
-      onLayout={e => setSlideWidth(e.nativeEvent.layout.width)}
-    >
-      <ScrollView
-        ref={scrollRef}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        onScrollBeginDrag={() => { userInteractingRef.current = true; }}
-        onScrollEndDrag={() => { userInteractingRef.current = false; }}
-        onMomentumScrollEnd={onMomentumEnd}
+    <View style={s.wrap}>
+      <TouchableOpacity
+        activeOpacity={0.92}
+        onPress={handlePress}
+        accessibilityRole="button"
+        accessibilityLabel={slide.accessibilityLabel}
       >
-        {SLIDES.map(slide => (
-          <View key={slide.key} style={[s.slide, { width: slideWidth }]}>
-            <View style={s.card}>
-              <Vignette kind={slide.vignette} />
-              <View style={s.copy}>
-                <Text style={s.title}>{slide.title}</Text>
-                <Text style={s.subtitle} numberOfLines={2}>{slide.subtitle}</Text>
-              </View>
-              <View style={s.ctaRow}>
-                <Button
-                  label={slide.primary.label}
-                  variant={slide.primary.variant}
-                  size="sm"
-                  onPress={() => fire(slide.primary.action)}
-                  style={s.cta}
-                />
-                <Button
-                  label={slide.secondary.label}
-                  variant={slide.secondary.variant}
-                  size="sm"
-                  onPress={() => fire(slide.secondary.action)}
-                  style={s.cta}
-                />
-              </View>
-            </View>
+        <ImageBackground
+          source={slide.image}
+          resizeMode="cover"
+          imageStyle={s.image}
+          style={s.card}
+        >
+          <Svg pointerEvents="none" style={s.overlay} viewBox="0 0 100 100" preserveAspectRatio="none">
+            <Defs>
+              <LinearGradient id="heroWash" x1="0" y1="0" x2="1" y2="0">
+                <Stop offset="0" stopColor={slide.wash} stopOpacity="0.80" />
+                <Stop offset="0.34" stopColor={slide.wash} stopOpacity="0.60" />
+                <Stop offset="0.54" stopColor={slide.wash} stopOpacity="0.27" />
+                <Stop offset="0.74" stopColor="#FFF8EE" stopOpacity="0.04" />
+                <Stop offset="1" stopColor="#FFF8EE" stopOpacity="0" />
+              </LinearGradient>
+              <LinearGradient id="heroPlate" x1="0" y1="0" x2="1" y2="0">
+                <Stop offset="0" stopColor={slide.plate} stopOpacity="0.42" />
+                <Stop offset="0.66" stopColor={slide.wash} stopOpacity="0.18" />
+                <Stop offset="1" stopColor={slide.wash} stopOpacity="0" />
+              </LinearGradient>
+            </Defs>
+            <Rect x="0" y="0" width="100" height="100" fill="url(#heroWash)" />
+            <Path
+              d="M0 0 H58 C48 22 56 64 43 100 H0 Z"
+              fill="url(#heroPlate)"
+            />
+          </Svg>
+          <View style={s.copy}>
+            <Text style={[s.kicker, { color: slide.kickerColor }]}>{slide.kicker}</Text>
+            <Text style={s.title}>{slide.title}</Text>
+            <Text style={[s.subtitle, { color: slide.subtitleColor }]}>{slide.subtitle}</Text>
           </View>
-        ))}
-      </ScrollView>
+        </ImageBackground>
+      </TouchableOpacity>
 
-      {/* Pagination dots */}
-      <View style={s.dots}>
-        {SLIDES.map((slide, i) => (
-          <View
-            key={slide.key}
-            style={[s.dot, i === index && s.dotActive]}
-          />
+      <View style={s.dots} accessibilityRole="tablist">
+        {SLIDES.map((item, index) => (
+          <TouchableOpacity
+            // eslint-disable-next-line react/no-array-index-key
+            key={index}
+            activeOpacity={0.75}
+            onPress={() => setActive(index)}
+            style={[s.dotHit, active === index && s.dotHitActive]}
+            accessibilityRole="tab"
+            accessibilityLabel={`${item.kicker} banner`}
+            accessibilityState={{ selected: active === index }}
+          >
+            <View style={[s.dot, active === index && s.dotActive]} />
+          </TouchableOpacity>
         ))}
       </View>
     </View>
   );
 }
 
-function Vignette({ kind }: { kind: 'shield' | 'package' | 'truck' }) {
-  // Real Unsplash product photos clipped into a circular frame on the
-  // peach hero. Cover-fit so the photo fills the circle cleanly (avatar
-  // pattern) rather than letterboxed.
-  return (
-    <View pointerEvents="none" style={s.vignette}>
-      <Image
-        source={HERO_ASSETS[kind]}
-        style={s.heroImg}
-        resizeMode="cover"
-      />
-    </View>
-  );
-}
-
 const s = StyleSheet.create({
   wrap: {
-    marginTop: S.xs,
-  },
-  slide: {
+    marginTop: S.md - 2,
     paddingHorizontal: S.lg,
   },
   card: {
-    padding: S.md,
-    borderRadius: R.lg,
-    backgroundColor: Home.heroBg,
+    minHeight: 118,
+    borderRadius: R.xl + 3,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(47, 118, 107, 0.20)',
     ...Shadow.lifted,
   },
+  image: {
+    borderRadius: R.xl + 3,
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
   copy: {
-    width: '60%',
+    width: '53%',
+    paddingTop: S.md,
+    paddingLeft: S.md,
+    paddingBottom: S.md,
     zIndex: 2,
   },
-  title: {
-    // Heading uses text primary (deep plum), NOT brand button color.
-    // Separating the two gives proper hero hierarchy: dark headline + pink CTA.
-    color: C.text,
-    fontSize: T.size.lg + 2,
+  kicker: {
+    fontSize: 9,
     fontWeight: T.weight.heavy,
-    lineHeight: T.size.lg + 6,
-    letterSpacing: -0.3,
+    letterSpacing: 1,
+    marginBottom: S.xs,
+  },
+  title: {
+    color: C.white,
+    fontSize: T.size.lg + 1,
+    fontWeight: T.weight.heavy,
+    lineHeight: T.size.lg + 5,
+    letterSpacing: -0.2,
+    textShadowColor: 'rgba(12, 33, 31, 0.20)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
   subtitle: {
-    marginTop: S.xs,
-    color: C.text2,                  // text_secondary
-    fontSize: T.size.sm,
-    lineHeight: T.size.sm + 4,
+    marginTop: S.xs + 1,
+    fontSize: T.size.xs + 1,
+    lineHeight: T.size.xs + 5,
     fontWeight: T.weight.medium,
   },
-
-  // ── Hero image — circular frame, photo cover-fit ────────────────────
-  vignette: {
-    position: 'absolute',
-    right: 16,
-    top: 16,
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.5)',
-    ...Shadow.card,
-  },
-  heroImg: {
-    width: '100%',
-    height: '100%',
-  },
-  glowRingOne: {
-    position: 'absolute',
-    right: 4,
-    top: 16,
-    width: 130,
-    height: 50,
-    borderRadius: 70,
-    borderWidth: 1,
-    borderColor: Home.heroDecorRing,
-    transform: [{ rotate: '-8deg' }],
-  },
-  glowRingTwo: {
-    position: 'absolute',
-    right: 14,
-    top: 24,
-    width: 100,
-    height: 38,
-    borderRadius: 60,
-    borderWidth: 1,
-    borderColor: Home.heroDecorRingDim,
-    transform: [{ rotate: '-8deg' }],
-  },
-  shield: {
-    position: 'absolute',
-    left: 8,
-    top: 8,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: Home.heroStepBg,
-    borderWidth: 1,
-    borderColor: Home.heroStepBorder,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 3,
-  },
-  shieldGlyph: {
-    color: Home.heroDecorShield,
-    fontSize: T.size.xl + 2,
-    fontWeight: T.weight.heavy,
-  },
-  bigGlyph: {
-    fontSize: T.size.xl + 4,
-  },
-  package: {
-    position: 'absolute',
-    right: 22,
-    bottom: 0,
-    width: 44,
-    height: 38,
-    borderRadius: R.xs,
-    backgroundColor: Home.heroDecorPackage,
-    borderWidth: 1,
-    borderColor: Home.heroStepBorder,
-    transform: [{ rotate: '2deg' }],
-  },
-  phone: {
-    position: 'absolute',
-    right: 2,
-    top: 12,
-    width: 36,
-    height: 56,
-    borderRadius: R.sm,
-    backgroundColor: Home.heroDecorPhone,
-    alignItems: 'center',
-    justifyContent: 'center',
-    transform: [{ rotate: '-7deg' }],
-    zIndex: 4,
-  },
-  phoneGlyph: {
-    fontSize: T.size.base,
-  },
-
-  ctaRow: {
-    marginTop: S.md,
-    flexDirection: 'row',
-    gap: S.sm + 2,
-  },
-  cta: {
-    flex: 1,
-    minHeight: 44,
-    paddingHorizontal: S.sm,
-  },
-
-  // ── Pagination dots ─────────────────────────────────────────────────
   dots: {
-    marginTop: S.sm,
+    height: 14,
+    marginTop: S.xs,
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 6,
+    alignItems: 'center',
+    gap: 2,
+  },
+  dotHit: {
+    width: 24,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dotHitActive: {
+    width: 30,
   },
   dot: {
-    width: 6,
-    height: 6,
+    width: 5,
+    height: 5,
     borderRadius: 3,
-    backgroundColor: C.border,
+    backgroundColor: 'rgba(47, 118, 107, 0.24)',
   },
   dotActive: {
-    width: 18,
-    backgroundColor: C.petrol,
+    width: 16,
+    backgroundColor: '#2F766B',
   },
 });

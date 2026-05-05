@@ -4,6 +4,10 @@ import {
   useWindowDimensions, TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Circle, Defs, LinearGradient, RadialGradient, Rect, Stop } from 'react-native-svg';
+import {
+  ArrowLeft, MapPin, SlidersHorizontal, Sparkles, X,
+} from 'lucide-react-native';
 import { C, T, S, R } from '../utils/tokens';
 import { Button, Chip, IconButton } from '../components/ui';
 import type { TabScreen } from '../navigation/types';
@@ -24,7 +28,7 @@ const SORTS = [
   { key: 'newest',      label: 'Newest' },
 ];
 const CATEGORIES = [
-  { slug: 'smartphones',      label: 'Phones' },
+  { slug: 'smartphones',      label: 'Mobiles' },
   { slug: 'laptops',          label: 'Laptops' },
   { slug: 'tablets',          label: 'Tablets' },
   { slug: 'small-appliances', label: 'Appliances' },
@@ -59,6 +63,15 @@ export default function SearchScreen({ navigation, route }: TabScreen<'Search'>)
   useEffect(() => {
     return () => { if (debounce.current) clearTimeout(debounce.current); };
   }, []);
+
+  useEffect(() => {
+    if (!route?.params?.openFilters) return;
+    const frame = requestAnimationFrame(() => {
+      setShowFilters(true);
+      navigation.setParams({ openFilters: undefined });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [navigation, route?.params?.openFilters]);
 
   const doSearch = async (q: string, cond: string, cat: string | null, sortBy: string) => {
     setLoading(true); setSearched(true);
@@ -95,12 +108,40 @@ export default function SearchScreen({ navigation, route }: TabScreen<'Search'>)
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
+      <Svg pointerEvents="none" style={s.screenBg} viewBox="0 0 100 100" preserveAspectRatio="none">
+        <Defs>
+          <LinearGradient id="searchCanvas" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor="#FFF8EE" stopOpacity="1" />
+            <Stop offset="0.62" stopColor="#FFFDF8" stopOpacity="1" />
+            <Stop offset="1" stopColor="#EAF4F1" stopOpacity="1" />
+          </LinearGradient>
+          <RadialGradient id="searchClay" cx="6%" cy="8%" r="52%">
+            <Stop offset="0" stopColor="#D29472" stopOpacity="0.13" />
+            <Stop offset="1" stopColor="#D29472" stopOpacity="0" />
+          </RadialGradient>
+          <RadialGradient id="searchTeal" cx="94%" cy="38%" r="58%">
+            <Stop offset="0" stopColor="#2F766B" stopOpacity="0.10" />
+            <Stop offset="1" stopColor="#2F766B" stopOpacity="0" />
+          </RadialGradient>
+        </Defs>
+        <Rect x="0" y="0" width="100" height="100" fill="url(#searchCanvas)" />
+        <Circle cx="4" cy="8" r="46" fill="url(#searchClay)" />
+        <Circle cx="96" cy="38" r="48" fill="url(#searchTeal)" />
+      </Svg>
       <View style={s.top}>
         <View style={s.searchRow}>
-          <IconButton icon="←" onPress={() => navigation.goBack()} a11y="Back" size="sm" />
+          <TouchableOpacity
+            activeOpacity={0.76}
+            onPress={() => navigation.goBack()}
+            style={s.topIconBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+          >
+            <ArrowLeft size={21} strokeWidth={2.2} color={C.text} />
+          </TouchableOpacity>
           <TextInput
             style={s.input}
-            placeholder="Search phones, laptops, toys..."
+            placeholder="Search mobiles, laptops, toys..."
             placeholderTextColor={C.text4}
             value={query}
             onChangeText={onText}
@@ -109,15 +150,26 @@ export default function SearchScreen({ navigation, route }: TabScreen<'Search'>)
             onSubmitEditing={() => doSearch(query, condition, category, sort)}
           />
           {query.length > 0 && (
-            <IconButton
-              icon="✕"
+            <TouchableOpacity
+              activeOpacity={0.76}
               onPress={() => { setQuery(''); setResults([]); setSearched(false); }}
-              a11y="Clear search"
-              size="sm"
-            />
+              style={s.topIconBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Clear search"
+            >
+              <X size={19} strokeWidth={2.2} color={C.text2} />
+            </TouchableOpacity>
           )}
           <View style={s.filterAnchor}>
-            <IconButton icon="⊟" onPress={() => setShowFilters(true)} a11y="Open filters" size="sm" />
+            <TouchableOpacity
+              activeOpacity={0.76}
+              onPress={() => setShowFilters(true)}
+              style={s.topIconBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Open filters"
+            >
+              <SlidersHorizontal size={20} strokeWidth={2.1} color={C.text} />
+            </TouchableOpacity>
             {activeFilters > 0 && (
               <View style={s.filterBadge}>
                 <Text style={s.filterBadgeText}>{activeFilters}</Text>
@@ -159,10 +211,13 @@ export default function SearchScreen({ navigation, route }: TabScreen<'Search'>)
       </View>
 
       <View style={s.statusBar}>
-        <Text style={s.statusText}>
-          {location ? `📍 ${location.city}` : '📍 All cities'}
-          {searched ? ` · ${results.length} result${results.length !== 1 ? 's' : ''}` : ''}
-        </Text>
+        <View style={s.statusLocation}>
+          <MapPin size={14} strokeWidth={2.2} color={C.petrolText} />
+          <Text style={s.statusText}>
+            {location ? location.city : 'All cities'}
+            {searched ? ` · ${results.length} result${results.length !== 1 ? 's' : ''}` : ''}
+          </Text>
+        </View>
         <TouchableOpacity onPress={() => setShowFilters(true)}>
           <Text style={s.sortLabel}>
             {SORTS.find(o => o.key === sort)?.label || 'Sort'} ▾
@@ -176,12 +231,18 @@ export default function SearchScreen({ navigation, route }: TabScreen<'Search'>)
           <SkeletonCard cardWidth={cardWidth} />
         </View>
       )}
+      {!loading && !searched && results.length === 0 && (
+        <SearchStarter />
+      )}
       {!loading && searched && results.length === 0 && (
         <View style={s.empty}>
-          <Text style={s.emptyEmoji}>🔍</Text>
+          <View style={s.emptyIcon}>
+            <Sparkles size={21} strokeWidth={2.1} color={C.petrol} />
+          </View>
           <Text style={s.emptyTitle}>
-            {query ? `Nothing found for "${query}"` : 'No items match filters'}
+            {query ? `Nothing found for "${query}"` : 'No items found'}
           </Text>
+          <Text style={s.emptySub}>Try another category or clear filters.</Text>
         </View>
       )}
       {!loading && results.length > 0 && (
@@ -280,9 +341,33 @@ export default function SearchScreen({ navigation, route }: TabScreen<'Search'>)
   );
 }
 
+function SearchStarter() {
+  return (
+    <View style={s.empty}>
+      <View style={s.emptyIcon}>
+        <Sparkles size={21} strokeWidth={2.1} color={C.petrol} />
+      </View>
+      <Text style={s.emptyTitle}>Search trusted items near you</Text>
+      <Text style={s.emptySub}>Mobiles, laptops, home items and kids products.</Text>
+      <View style={s.emptyPills}>
+        <Text style={s.emptyPill}>Seller checked</Text>
+        <Text style={s.emptyPill}>Safe payment</Text>
+        <Text style={s.emptyPill}>Home handover</Text>
+      </View>
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bone },
-  top: { backgroundColor: C.surface, borderBottomWidth: 0.5, borderBottomColor: C.border },
+  screenBg: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  top: {
+    backgroundColor: 'rgba(255, 253, 248, 0.94)',
+    borderBottomWidth: 0.5,
+    borderBottomColor: 'rgba(224, 203, 188, 0.82)',
+  },
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -291,6 +376,13 @@ const s = StyleSheet.create({
     paddingVertical: S.sm,
   },
   input: { flex: 1, fontSize: T.size.md, color: C.text, paddingVertical: 0 },
+  topIconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   // Filter anchor positions the badge over the IconButton.
   filterAnchor: { position: 'relative' },
@@ -313,8 +405,16 @@ const s = StyleSheet.create({
   statusBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: S.xl,
     paddingVertical: S.sm,
+  },
+  statusLocation: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: S.xs,
+    flex: 1,
+    minWidth: 0,
   },
   statusText: { fontSize: T.size.sm, color: C.text3 },
   sortLabel: { fontSize: T.size.sm, color: C.petrolDeep, fontWeight: T.weight.semi },
@@ -323,9 +423,51 @@ const s = StyleSheet.create({
   gridPadding: { paddingBottom: S.xxxl * 3 },
   skelRow: { flexDirection: 'row', gap: S.sm, paddingHorizontal: S.xl },
 
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: S.xxxl },
-  emptyEmoji: { fontSize: T.size.display, marginBottom: S.lg },
+  empty: {
+    margin: S.xl,
+    marginTop: S.xxxl,
+    paddingVertical: S.xxl,
+    paddingHorizontal: S.lg,
+    borderRadius: R.xl,
+    borderWidth: 1,
+    borderColor: 'rgba(224, 203, 188, 0.86)',
+    backgroundColor: 'rgba(255,253,248,0.86)',
+    alignItems: 'center',
+  },
+  emptyIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: C.petrolLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: S.md,
+  },
   emptyTitle: { fontSize: T.size.lg, fontWeight: T.weight.semi, color: C.text, textAlign: 'center' },
+  emptySub: {
+    marginTop: S.xs,
+    fontSize: T.size.base,
+    lineHeight: 20,
+    color: C.text2,
+    textAlign: 'center',
+  },
+  emptyPills: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: S.xs,
+    marginTop: S.md,
+  },
+  emptyPill: {
+    overflow: 'hidden',
+    borderRadius: R.pill,
+    backgroundColor: '#EEF8F5',
+    color: C.petrolText,
+    fontSize: T.size.xs,
+    fontWeight: T.weight.semi,
+    paddingHorizontal: S.sm,
+    paddingVertical: S.xs,
+  },
 
   modalOv: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   modalC: {

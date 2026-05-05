@@ -108,7 +108,7 @@ export type AuthStackParams = {
 
 export type TabParams = {
   Home: undefined;
-  Search: { category_slug?: string; isKids?: boolean } | undefined;
+  Search: { category_slug?: string; isKids?: boolean; openFilters?: boolean } | undefined;
   Sell: undefined;
   Notifications: undefined;
   Profile: undefined;

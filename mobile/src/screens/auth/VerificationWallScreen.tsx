@@ -11,6 +11,7 @@ import React from 'react';
 import {
   SafeAreaView, View, Text, ScrollView, TouchableOpacity, StyleSheet,
 } from 'react-native';
+import { ShieldCheck } from 'lucide-react-native';
 
 import { C, T, S, R, Shadow } from '../../utils/tokens';
 import { Button, IconButton } from '../../components/ui';
@@ -71,7 +72,7 @@ export default function VerificationWallScreen({
         showsVerticalScrollIndicator={false}
       >
         <View style={st.shield}>
-          <Text style={st.shieldIcon}>🛡</Text>
+          <ShieldCheck size={42} strokeWidth={2.1} color={C.petrolDeep} />
         </View>
 
         <Text style={st.h1}>{copy.title}</Text>
@@ -145,8 +146,6 @@ const st = StyleSheet.create({
     marginBottom: S.xl,
     ...Shadow.glow,
   },
-  shieldIcon: { fontSize: T.size.display + 10 },                     // 40
-
   h1: {
     fontSize: T.h1, fontWeight: T.weight.bold, color: C.text,
     textAlign: 'center', marginBottom: S.md,

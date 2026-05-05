@@ -36,6 +36,9 @@
 # are the natural floor — Phase 3 is complete.
 
 # ── Components: rich tappable cards ──────────────────────────────
+# HeroCard is a full-bleed image banner with SVG trust wash and whole-card
+# tap behavior; Button/IconButton primitives don't match this shape.
+src/components/HeroCard.tsx
 src/components/OwmeeListingCard.tsx
 src/components/SellBlock.tsx
 src/components/listing/ListingCard.tsx

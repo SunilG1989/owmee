@@ -125,7 +125,7 @@ function TabCell({
         <Icon
           size={22}
           strokeWidth={active ? 2.25 : 2}
-          color={active ? C.petrol : C.text2}
+          color={active ? '#2F766B' : C.text2}
         />
         {badge && badge > 0 ? (
           <View style={st.badge}>
@@ -140,14 +140,14 @@ function TabCell({
 
 /**
  * Sell-tab FAB — raised circular button +14px above the bar
- * baseline, coral fill + coral-tinted halo. Anchors the primary
+ * baseline, pastel apricot fill + coral-tinted halo. Anchors the primary
  * marketplace action ("Sell my stuff") with a camera glyph that
  * primes the AI-from-photo flow that's already step 1 of every
  * listing. Pattern lifted from Mercari/Poshmark/Depop/OfferUp —
  * the four photo-first C2C marketplaces — where the camera icon
  * does the affordance work and the label confirms the verb.
  *
- * Coral (vs petrol) is deliberate: tokens.ts:38-41 reserves coral
+ * Apricot (vs petrol) is deliberate: tokens.ts:38-41 reserves coral
  * for "act now / once per screen" moments, which is exactly what
  * this FAB is. Mercari Japan does the same with brand red — the
  * primary action shouldn't blend into the rest of the chrome.
@@ -156,7 +156,7 @@ function SellFab({ active }: { active: boolean }) {
   return (
     <View style={st.fabSlot}>
       <View style={[st.fab, active && st.fabActive]}>
-        <CameraIcon size={26} strokeWidth={2.25} color={C.white} />
+        <CameraIcon size={18} strokeWidth={2.25} color="#BB684F" />
       </View>
       <Text style={[st.fabLabel, active && st.fabLabelActive]}>Sell</Text>
     </View>
@@ -511,11 +511,15 @@ function LocationPickerRoute({ navigation }: any) {
 const st = StyleSheet.create({
   tabBar: {
     flexDirection: 'row',
-    backgroundColor: C.surface,
-    borderTopWidth: 1,
-    borderTopColor: C.border,
+    backgroundColor: 'rgba(255,253,248,0.96)',
+    borderWidth: 1,
+    borderColor: 'rgba(224, 203, 188, 0.9)',
+    borderRadius: R.xl + 4,
+    marginHorizontal: S.lg,
+    marginBottom: S.sm,
     paddingTop: S.sm,
     minHeight: 64,
+    ...Shadow.subtle,
   },
   tabTouch: { flex: 1, alignItems: 'center', justifyContent: 'flex-start' },
 
@@ -529,14 +533,14 @@ const st = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'transparent',
   },
-  iconPillActive: { backgroundColor: C.petrolLight },
+  iconPillActive: { backgroundColor: 'transparent' },
   cellLabel: {
     fontSize: T.size.xs,
     fontWeight: T.weight.medium,
     color: C.text2,
     marginTop: 2,
   },
-  cellLabelActive: { color: C.petrol, fontWeight: T.weight.semi },
+  cellLabelActive: { color: '#2F766B', fontWeight: T.weight.semi },
 
   // ── Notification badge (unread count) ───────────────────────────────────
   badge: {
@@ -547,7 +551,7 @@ const st = StyleSheet.create({
     height: 16,
     borderRadius: 8,
     paddingHorizontal: 4,
-    backgroundColor: C.coral,
+    backgroundColor: C.bone,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
@@ -556,28 +560,27 @@ const st = StyleSheet.create({
   badgeText: {
     fontSize: 10,
     fontWeight: T.weight.bold,
-    color: C.white,
+    color: C.coralDeep,
     lineHeight: 12,
   },
 
-  // ── Sell tab: raised coral FAB (primary "act now" surface) ─────────────
-  // Coral fill + coral-tinted halo — pattern borrowed from Mercari
-  // (red), Poshmark (red-pink), and Depop (high-contrast). The Sell
-  // verb is the loudest thing in the bar, on purpose.
+  // ── Sell tab: raised pastel FAB (primary "act now" surface) ────────────
+  // Pastel fill + warm outline keeps Sell visible without making the bar
+  // feel heavy.
   fabSlot: { alignItems: 'center', justifyContent: 'flex-start' },
   fab: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: C.coral,
+    width: 34,
+    height: 34,
+    borderRadius: 15,
+    backgroundColor: '#FFF3E8',
+    borderWidth: 1,
+    borderColor: '#EFD0BD',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: -14,
-    ...Shadow.coralGlow,
+    ...Shadow.subtle,
   },
-  // No coralDeep token; press-state uses inline opacity via
-  // activeOpacity on the wrapping TouchableOpacity. Keep this style
-  // empty for now — added back if we introduce a darker coral later.
+  // Press-state uses inline opacity via activeOpacity on the wrapping
+  // TouchableOpacity.
   fabActive: {},
   fabLabel: {
     fontSize: T.size.xs,
@@ -585,5 +588,5 @@ const st = StyleSheet.create({
     color: C.text2,
     marginTop: 2,
   },
-  fabLabelActive: { color: C.coral, fontWeight: T.weight.semi },
+  fabLabelActive: { color: '#BB684F', fontWeight: T.weight.semi },
 });

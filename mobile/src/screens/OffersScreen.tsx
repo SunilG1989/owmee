@@ -23,7 +23,7 @@
  */
 import React, { useCallback, useState } from 'react';
 import {
-  Alert, FlatList, Image, RefreshControl, StyleSheet, Text,
+  Alert, FlatList, Image, Modal, RefreshControl, StyleSheet, Text, TextInput,
   TouchableOpacity, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -37,6 +37,14 @@ import { parseApiError } from '../utils/errors';
 import { C, I, MIN_TAP, R, S, T, formatPrice, timeAgo } from '../utils/tokens';
 
 type Tab = 'received' | 'sent' | 'inprogress';
+type PricePrompt = {
+  mode: 'counter' | 'update';
+  offerId: string;
+  title: string;
+  body: string;
+  submitLabel: string;
+  initialValue?: string;
+};
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'received', label: 'Received' },
@@ -52,6 +60,9 @@ export default function OffersScreen({ navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pricePrompt, setPricePrompt] = useState<PricePrompt | null>(null);
+  const [priceInput, setPriceInput] = useState('');
+  const [priceSubmitting, setPriceSubmitting] = useState(false);
 
   const load = useCallback(async () => {
     if (!refreshing) setLoading(true);
@@ -110,18 +121,59 @@ export default function OffersScreen({ navigation }: any) {
     }
   };
 
-  const handleCounter = (offerId: string) => {
-    if (!Alert.prompt) {
-      Alert.alert('Coming soon', 'Counter-offers from Android are landing in the next update.');
+  const openPricePrompt = (prompt: PricePrompt) => {
+    setPricePrompt(prompt);
+    setPriceInput(prompt.initialValue || '');
+  };
+
+  const closePricePrompt = () => {
+    if (priceSubmitting) return;
+    setPricePrompt(null);
+    setPriceInput('');
+  };
+
+  const submitPricePrompt = async () => {
+    if (!pricePrompt) return;
+    const cleaned = priceInput.replace(/[₹,\s]/g, '');
+    const nextPrice = Number(cleaned);
+    if (!cleaned || Number.isNaN(nextPrice) || nextPrice <= 0) {
+      Alert.alert('Enter a valid amount', 'Use numbers only, for example 12500.');
       return;
     }
-    Alert.prompt('Counter offer', 'Enter the price you\'d accept (₹)', (val: string) => {
-      const p = parseFloat(val);
-      if (!val || isNaN(p) || p <= 0) return;
-      Offers.counter(offerId, p)
-        .then(() => load())
-        .catch((e) => Alert.alert("Couldn't send counter", parseApiError(e, 'Try again.')));
-    }, undefined, undefined, 'number-pad');
+
+    setPriceSubmitting(true);
+    try {
+      if (pricePrompt.mode === 'counter') {
+        await Offers.counter(pricePrompt.offerId, nextPrice);
+      } else {
+        await Offers.updatePrice(pricePrompt.offerId, nextPrice);
+      }
+      setPricePrompt(null);
+      setPriceInput('');
+      await load();
+    } catch (e: any) {
+      const code = e?.response?.data?.detail?.error;
+      if (pricePrompt.mode === 'update' && code === 'UPDATE_LIMIT_REACHED') {
+        Alert.alert('No updates left', "You've used all 3 price updates. The seller has to respond next.");
+      } else {
+        const fallback = pricePrompt.mode === 'counter'
+          ? "Couldn't send counter"
+          : "Couldn't update price";
+        Alert.alert(fallback, parseApiError(e, 'Try again.'));
+      }
+    } finally {
+      setPriceSubmitting(false);
+    }
+  };
+
+  const handleCounter = (offerId: string) => {
+    openPricePrompt({
+      mode: 'counter',
+      offerId,
+      title: 'Counter offer',
+      body: 'Enter the price you would accept from the buyer.',
+      submitLabel: 'Send counter',
+    });
   };
 
   const handleReject = async (offerId: string) => {
@@ -145,28 +197,15 @@ export default function OffersScreen({ navigation }: any) {
   };
 
   const handleUpdatePrice = (o: Offer) => {
-    if (!Alert.prompt) {
-      Alert.alert('Coming soon', 'Price updates from Android are landing in the next update.');
-      return;
-    }
     const left = o.updates_remaining ?? Math.max(0, 3 - (o.update_count ?? 0));
-    Alert.prompt(
-      'Update your offer',
-      `Current: ${formatPrice(o.amount)}\n${left} update${left === 1 ? '' : 's'} left.`,
-      (val: string) => {
-        const p = parseFloat(val);
-        if (!val || isNaN(p) || p <= 0) return;
-        Offers.updatePrice(o.id, p).then(() => load()).catch((e: any) => {
-          const code = e?.response?.data?.detail?.error;
-          if (code === 'UPDATE_LIMIT_REACHED') {
-            Alert.alert('No updates left', "You've used all 3 price updates. The seller has to respond next.");
-          } else {
-            Alert.alert("Couldn't update price", parseApiError(e, 'Try again.'));
-          }
-        });
-      },
-      undefined, String(o.amount), 'number-pad',
-    );
+    openPricePrompt({
+      mode: 'update',
+      offerId: o.id,
+      title: 'Update offer',
+      body: `Current: ${formatPrice(o.amount)}. ${left} update${left === 1 ? '' : 's'} left.`,
+      submitLabel: 'Update price',
+      initialValue: String(o.amount),
+    });
   };
 
   // ── Row renderers ───────────────────────────────────────────────────────
@@ -337,6 +376,49 @@ export default function OffersScreen({ navigation }: any) {
           windowSize={5}
         />
       )}
+
+      <Modal
+        visible={!!pricePrompt}
+        transparent
+        animationType="fade"
+        onRequestClose={closePricePrompt}
+      >
+        <View style={s.modalBackdrop}>
+          <View style={s.priceSheet}>
+            <Text style={s.promptTitle}>{pricePrompt?.title}</Text>
+            <Text style={s.promptBody}>{pricePrompt?.body}</Text>
+            <View style={s.inputWrap}>
+              <Text style={s.rupee}>₹</Text>
+              <TextInput
+                value={priceInput}
+                onChangeText={setPriceInput}
+                keyboardType="number-pad"
+                placeholder="Enter amount"
+                placeholderTextColor={C.text4}
+                style={s.priceInput}
+                autoFocus
+              />
+            </View>
+            <View style={s.promptActions}>
+              <Button
+                label="Cancel"
+                variant="ghost"
+                size="sm"
+                onPress={closePricePrompt}
+                style={{ flex: 1 }}
+              />
+              <Button
+                label={pricePrompt?.submitLabel || 'Submit'}
+                variant="primary"
+                size="sm"
+                onPress={submitPricePrompt}
+                loading={priceSubmitting}
+                style={{ flex: 1 }}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -394,4 +476,61 @@ const s = StyleSheet.create({
   },
 
   statusFooter: { marginTop: S.md, alignItems: 'flex-start' },
+
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(16, 24, 40, 0.34)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: S.lg,
+  },
+  priceSheet: {
+    width: '100%',
+    maxWidth: 360,
+    borderRadius: R.lg,
+    backgroundColor: C.surface,
+    padding: S.lg,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  promptTitle: {
+    fontSize: T.size.lg,
+    fontWeight: T.weight.bold,
+    color: C.text,
+  },
+  promptBody: {
+    marginTop: S.xs,
+    fontSize: T.size.base,
+    color: C.text2,
+    lineHeight: 20,
+  },
+  inputWrap: {
+    marginTop: S.lg,
+    minHeight: MIN_TAP,
+    borderRadius: R.md,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.white,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: S.md,
+  },
+  rupee: {
+    fontSize: T.size.lg,
+    fontWeight: T.weight.bold,
+    color: C.text2,
+    marginRight: S.xs,
+  },
+  priceInput: {
+    flex: 1,
+    color: C.text,
+    fontSize: T.size.lg,
+    fontWeight: T.weight.semi,
+    paddingVertical: S.sm,
+  },
+  promptActions: {
+    flexDirection: 'row',
+    gap: S.sm,
+    marginTop: S.lg,
+  },
 });

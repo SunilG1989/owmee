@@ -15,7 +15,7 @@ body {
 /* ──────────────────────────────────────────────────────────────────────
  * Utility component classes (mirror mobile/src/components/ui primitives)
  *
- * All references point at v6 petrol palette. The legacy `honey-*` /
+ * All references point at the v19 trust teal + coral palette. The legacy `honey-*` /
  * `cream` / `sand` Tailwind aliases still work (mapped in
  * tailwind.config.js) so old call sites keep rendering correctly while
  * new code uses the canonical names below.

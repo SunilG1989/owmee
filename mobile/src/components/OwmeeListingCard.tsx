@@ -8,8 +8,11 @@
  * Reads from the FeedListing type returned by /v1/feed/* endpoints.
  */
 import React from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
-import { C, T, S, R, Home, pickCardBg } from '../utils/tokens';
+import {
+  View, Text, StyleSheet, Image, TouchableOpacity, type ImageSourcePropType,
+} from 'react-native';
+import { Heart, MapPin, ShieldCheck } from 'lucide-react-native';
+import { C, T, S, R, Shadow, Home, pickCardBg } from '../utils/tokens';
 import type { FeedListing } from '../services/api';
 
 interface Props {
@@ -19,6 +22,8 @@ interface Props {
   aspectRatio?: number;
   index?: number;
   onPress: () => void;
+  onWishlist?: () => void;
+  isWishlisted?: boolean;
 }
 
 function timeAgo(iso?: string | null): string {
@@ -51,6 +56,16 @@ function formatPriceFull(n: number | null | undefined): string {
 // localhost/file/relative URLs render as half-loaded noise instead of
 // triggering onError, so we skip them entirely.
 const TRUSTED_IMAGE_HOST_RX = /^https:\/\/[^/]+\.(r2\.cloudflarestorage\.com|r2\.dev|amazonaws\.com|cloudfront\.net|imgix\.net|cdn\.[^/]+)/i;
+const FALLBACK_IMAGES: Record<string, ImageSourcePropType> = {
+  smartphones: require('../../assets/owmee/home/cat-mobile-photo-v2.png'),
+  phones: require('../../assets/owmee/home/cat-mobile-photo-v2.png'),
+  laptops: require('../../assets/owmee/home/cat-laptop-photo-v2.png'),
+  'small-appliances': require('../../assets/owmee/home/cat-appliances-photo-v2.png'),
+  appliances: require('../../assets/owmee/home/cat-appliances-photo-v2.png'),
+  'kids-utility': require('../../assets/owmee/home/cat-kids-photo-v2.png'),
+  kids: require('../../assets/owmee/home/cat-kids-photo-v2.png'),
+  books: require('../../assets/owmee/home/cat-books-photo-v2.png'),
+};
 
 function isTrustedImageUrl(u: string | null | undefined): boolean {
   if (!u) return false;
@@ -67,14 +82,10 @@ function firstImage(listing: FeedListing): string | null {
   return null;
 }
 
-function fallbackEmojiForCategory(slug?: string | null): string {
-  const map: Record<string, string> = {
-    smartphones: '📱',
-    laptops: '💻',
-    'small-appliances': '🔌',
-    'kids-utility': '🧸',
-  };
-  return slug ? (map[slug] || '🛍️') : '🛍️';
+function fallbackImageForCategory(slug?: string | null): ImageSourcePropType {
+  return slug && FALLBACK_IMAGES[slug]
+    ? FALLBACK_IMAGES[slug]
+    : FALLBACK_IMAGES.smartphones;
 }
 
 // ── DEAL VARIANT ─────────────────────────────────────────────────────────────
@@ -82,7 +93,7 @@ function fallbackEmojiForCategory(slug?: string | null): string {
 export function DealCard({ listing, onPress, index = 0 }: Props) {
   const img = firstImage(listing);
   const bg = pickCardBg(index);
-  const emoji = fallbackEmojiForCategory(listing.category_slug);
+  const fallbackImage = fallbackImageForCategory(listing.category_slug);
 
   // Show city if it's not the user's local city (simple heuristic: distance > 50km or null)
   const showCity = listing.distance_km == null || listing.distance_km > 50;
@@ -108,7 +119,7 @@ export function DealCard({ listing, onPress, index = 0 }: Props) {
         {img ? (
           <Image source={{ uri: img }} style={s.imgFill} resizeMode="cover" />
         ) : (
-          <Text style={s.emojiFallback}>{emoji}</Text>
+          <Image source={fallbackImage} style={s.imgFill} resizeMode="cover" />
         )}
       </View>
       <View style={s.dealMeta}>
@@ -134,10 +145,12 @@ export function DealCard({ listing, onPress, index = 0 }: Props) {
 
 // ── FEED VARIANT (masonry) ───────────────────────────────────────────────────
 
-export function FeedCard({ listing, onPress, cardWidth, index = 0 }: Props) {
+export function FeedCard({
+  listing, onPress, onWishlist, isWishlisted = false, cardWidth, index = 0,
+}: Props) {
   const img = firstImage(listing);
   const bg = pickCardBg(index);
-  const emoji = fallbackEmojiForCategory(listing.category_slug);
+  const fallbackImage = fallbackImageForCategory(listing.category_slug);
 
   const distanceText =
     listing.distance_km != null
@@ -151,13 +164,6 @@ export function FeedCard({ listing, onPress, cardWidth, index = 0 }: Props) {
 
   const showDiscount =
     listing.discount_pct != null && listing.discount_pct > 0;
-
-  const fresh = (() => {
-    const ago = timeAgo(listing.created_at);
-    if (!ago) return null;
-    if (ago === 'just now') return 'Just listed';
-    return ago;
-  })();
 
   // Detail line — pulled from the seller's description when present.
   // We don't fabricate specs we don't have; if the seller didn't write
@@ -178,125 +184,67 @@ export function FeedCard({ listing, onPress, cardWidth, index = 0 }: Props) {
         {img ? (
           <Image source={{ uri: img }} style={s.imgFill} resizeMode="cover" />
         ) : (
-          <Text style={s.emojiFallback}>{emoji}</Text>
+          <Image source={fallbackImage} style={s.imgFill} resizeMode="cover" />
         )}
 
-        {/* Discount % overlay (top-left). High-attention coral pill — the
-            single most important conversion signal on the card. */}
-        {showDiscount && (
-          <View style={s.discountPill}>
-            <Text style={s.discountPillText}>-{Math.round(listing.discount_pct!)}%</Text>
+        {listing.is_owmee_verified && (
+          <View style={s.verifiedBadge}>
+            <ShieldCheck size={12} strokeWidth={2.35} color={C.coralDeep} />
+            <Text style={s.verifiedBadgeText}>Verified</Text>
           </View>
         )}
 
-        {/* Heart save — wishlist not yet wired; tap is a no-op. */}
-        <TouchableOpacity activeOpacity={0.7} style={s.heartBtn} onPress={() => { /* TODO: wishlist */ }}>
-          <Text style={s.heartGlyph} allowFontScaling={false}>♡</Text>
+        <TouchableOpacity
+          activeOpacity={0.72}
+          style={[s.heartBtn, isWishlisted && s.heartBtnActive]}
+          onPress={onWishlist || onPress}
+          accessibilityRole="button"
+          accessibilityLabel={isWishlisted ? 'Remove from saved items' : 'Save item'}
+          accessibilityState={{ selected: isWishlisted }}
+        >
+          <Heart
+            size={19}
+            strokeWidth={2.1}
+            color={isWishlisted ? C.coralDeep : C.text}
+            fill={isWishlisted ? C.coralLight : 'transparent'}
+          />
         </TouchableOpacity>
       </View>
 
       <View style={s.feedMeta}>
         <Text style={s.feedTitle} numberOfLines={1}>{listing.title}</Text>
 
-        {/* Price block — Indian e-commerce convention:
-              ₹31,999                              ← big listed price
-              M.R.P. ₹38,000 · Save ₹6,001         ← MRP + savings line
-            Keeps two distinct levels of attention; the "Save" line
-            is the single biggest conversion lever for Indian buyers. */}
-        <View style={s.priceBlock}>
-          <Text style={s.feedPrice}>{formatPriceFull(listing.price)}</Text>
-          {showOriginal && (
-            <View style={s.mrpRow}>
-              <Text style={s.mrpLabel}>M.R.P.</Text>
-              <Text style={s.feedStrike}>{formatPriceFull(listing.original_price)}</Text>
-              <Text style={s.metaSep} allowFontScaling={false}>·</Text>
-              <Text style={s.savingsText} numberOfLines={1}>
-                Save {formatPrice(listing.original_price! - listing.price)}
-              </Text>
-            </View>
-          )}
-        </View>
-
-        {/* Pills row: condition (always-on green) + a curated set of
-            Indian-marketplace trust signals when backend supplies them.
-            Order = priority (anxiety-fighters first, convenience last).
-            Showing >4 pills clutters small cards, so we cap. */}
-        <View style={s.pillsRow}>
-          <View style={[s.pill, s.pillGreen]}>
-            <Text style={[s.pillText, s.pillTextGreen]}>Good condition</Text>
-          </View>
-          {listing.bill_available && (
-            <View style={[s.pill, s.pillGreen]}>
-              <Text style={[s.pillText, s.pillTextGreen]}>Bill</Text>
-            </View>
-          )}
-          {listing.warranty_active && (
-            <View style={[s.pill, s.pillBlue]}>
-              <Text style={[s.pillText, s.pillTextBlue]}>
-                {listing.warranty_months_left
-                  ? `Warranty ${listing.warranty_months_left}mo`
-                  : 'Warranty'}
-              </Text>
-            </View>
-          )}
-          {listing.box_available && (
-            <View style={[s.pill, s.pillAmber]}>
-              <Text style={[s.pillText, s.pillTextAmber]}>Box pack</Text>
-            </View>
-          )}
-          {listing.returns_eligible && (
-            <View style={[s.pill, s.pillBlue]}>
-              <Text style={[s.pillText, s.pillTextBlue]}>7-day return</Text>
-            </View>
-          )}
-          {listing.shipping_eligible ? (
-            <View style={[s.pill, s.pillBlue]}>
-              <Text style={[s.pillText, s.pillTextBlue]}>Ships free</Text>
-            </View>
-          ) : (
-            <View style={[s.pill, s.pillAmber]}>
-              <Text style={[s.pillText, s.pillTextAmber]}>Doorstep</Text>
-            </View>
-          )}
-          {listing.is_negotiable && (
-            <View style={[s.pill, s.pillAmber]}>
-              <Text style={[s.pillText, s.pillTextAmber]}>Negotiable</Text>
-            </View>
-          )}
-        </View>
-
         {detailLine && (
           <Text style={s.detailLine} numberOfLines={1}>{detailLine}</Text>
         )}
 
-        {/* Meta row: distance · ✓ verified · time freshness. Each part
-            is independently conditional, joined by middle-dots. */}
-        <View style={s.metaRow}>
-          {distanceText && (
-            <>
-              <Text style={s.metaPin} allowFontScaling={false}>📍</Text>
-              <Text style={s.metaText} numberOfLines={1}>{distanceText}</Text>
-            </>
+        <View style={s.priceBlock}>
+          <Text style={s.feedPrice}>{formatPriceFull(listing.price)}</Text>
+          {showOriginal && (
+            <Text style={s.feedStrike}>{formatPriceFull(listing.original_price)}</Text>
           )}
-          {distanceText && listing.is_owmee_verified && (
-            <Text style={s.metaSep} allowFontScaling={false}>·</Text>
-          )}
-          {listing.is_owmee_verified && (
-            <>
-              <Text style={s.metaShield} allowFontScaling={false}>✓</Text>
-              <Text style={s.metaVerified} numberOfLines={1}>Verified</Text>
-            </>
-          )}
-          {(distanceText || listing.is_owmee_verified) && fresh && (
-            <Text style={s.metaSep} allowFontScaling={false}>·</Text>
-          )}
-          {fresh && (
-            <Text style={s.metaText} numberOfLines={1}>{fresh}</Text>
+          {showDiscount && (
+            <View style={s.discountInline}>
+              <Text style={s.discountInlineText}>{Math.round(listing.discount_pct!)}% off</Text>
+            </View>
           )}
         </View>
 
+        <View style={s.metaRow}>
+          {distanceText && (
+            <>
+              <MapPin size={11} strokeWidth={2.25} color={C.text3} />
+              <Text style={s.metaText} numberOfLines={1}>{distanceText}</Text>
+            </>
+          )}
+          {distanceText && listing.city && (
+            <Text style={s.metaSep} allowFontScaling={false}>·</Text>
+          )}
+          {listing.city && <Text style={s.metaText} numberOfLines={1}>{listing.city}</Text>}
+        </View>
+
         <TouchableOpacity activeOpacity={0.85} onPress={onPress} style={s.offerBtn}>
-          <Text style={s.offerText}>Buy safely</Text>
+          <Text style={s.offerText}>Make offer</Text>
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
@@ -313,8 +261,6 @@ export default function OwmeeListingCard(props: Props) {
 const s = StyleSheet.create({
   // shared
   imgFill: { width: '100%', height: '100%' },
-  emojiFallback: { fontSize: T.size.display + 18 },                   // 48
-
   // deal variant
   dealCard: {
     width: 152,
@@ -386,11 +332,12 @@ const s = StyleSheet.create({
   // feed variant
   feedCard: {
     backgroundColor: C.white,
-    borderRadius: R.md,
+    borderRadius: R.lg,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: C.border,
-    marginBottom: S.xs + 2,
+    borderColor: C.border2,
+    marginBottom: S.md,
+    ...Shadow.card,
   },
   feedImgWrap: {
     width: '100%',
@@ -400,33 +347,45 @@ const s = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
   },
-  discountPill: {
+  verifiedBadge: {
     position: 'absolute',
-    top: S.xs + 1,
-    left: S.xs + 1,
-    paddingHorizontal: S.xs + 2,
-    paddingVertical: 2,
-    borderRadius: R.xs,
-    backgroundColor: C.coralBright,
+    top: S.sm,
+    left: S.sm,
+    paddingHorizontal: S.sm,
+    paddingVertical: S.xs + 1,
+    borderRadius: R.sm,
+    backgroundColor: 'rgba(255, 255, 255, 0.88)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: S.xs,
     zIndex: 2,
   },
-  discountPillText: {
-    color: C.white,
+  verifiedShield: {
+    color: C.coralDeep,
     fontSize: T.size.xs,
     fontWeight: T.weight.heavy,
-    letterSpacing: 0.2,
+  },
+  verifiedBadgeText: {
+    color: C.text,
+    fontSize: T.size.xs,
+    fontWeight: T.weight.heavy,
   },
   heartBtn: {
     position: 'absolute',
-    top: S.xs + 1,
-    right: S.xs + 1,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.92)',
+    top: S.sm,
+    right: S.sm,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255,255,255,0.86)',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 2,
+  },
+  heartBtnActive: {
+    backgroundColor: C.white,
+    borderWidth: 1,
+    borderColor: C.border,
   },
   heartGlyph: {
     fontSize: T.size.md,
@@ -434,45 +393,43 @@ const s = StyleSheet.create({
     fontWeight: T.weight.bold,
   },
   feedMeta: {
-    paddingHorizontal: S.sm + 2,
-    paddingVertical: S.sm,
+    paddingHorizontal: S.md,
+    paddingVertical: S.md,
   },
   feedTitle: {
-    fontSize: T.size.base,
-    fontWeight: T.weight.bold,
+    fontSize: T.size.md,
+    fontWeight: T.weight.heavy,
     color: C.ink,
   },
   priceBlock: {
-    marginTop: 2,
+    marginTop: S.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: S.sm,
   },
   feedPrice: {
-    fontSize: T.size.md + 1,
+    fontSize: T.size.lg,
     fontWeight: T.weight.heavy,
     color: C.ink,
     letterSpacing: -0.2,
   },
-  mrpRow: {
-    marginTop: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 4,
-  },
-  mrpLabel: {
-    fontSize: T.size.xs,
-    fontWeight: T.weight.semi,
-    color: C.text3,
-  },
   feedStrike: {
-    fontSize: T.size.xs + 1,
+    fontSize: T.size.sm,
     fontWeight: T.weight.semi,
     color: C.text3,
     textDecorationLine: 'line-through',
   },
-  savingsText: {
+  discountInline: {
+    paddingHorizontal: S.sm,
+    paddingVertical: 3,
+    borderRadius: R.pill,
+    backgroundColor: C.coralLight,
+  },
+  discountInlineText: {
     fontSize: T.size.xs,
     fontWeight: T.weight.heavy,
-    color: C.green,
+    color: C.coralDeep,
   },
   pillsRow: {
     marginTop: S.xs,
@@ -497,13 +454,13 @@ const s = StyleSheet.create({
   pillTextBlue:  { color: C.blueDeep },
   pillTextAmber: { color: C.amberDeep },
   detailLine: {
-    marginTop: S.xs,
-    fontSize: T.size.xs,
+    marginTop: S.xs + 1,
+    fontSize: T.size.sm,
     color: C.text2,
     fontWeight: T.weight.medium,
   },
   metaRow: {
-    marginTop: S.xs + 2,
+    marginTop: S.md,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
@@ -530,15 +487,14 @@ const s = StyleSheet.create({
     fontWeight: T.weight.semi,
   },
   offerBtn: {
-    marginTop: S.sm,
-    height: 32,
-    borderRadius: R.sm,
-    backgroundColor: C.petrol,           // brandNavy per spec rule 12 (Buy safely = navy)
+    marginTop: S.xs,
+    minHeight: 28,
     alignItems: 'center',
     justifyContent: 'center',
+    alignSelf: 'flex-end',
   },
   offerText: {
-    color: C.white,
+    color: C.coralDeep,
     fontSize: T.size.base,
     fontWeight: T.weight.heavy,
   },

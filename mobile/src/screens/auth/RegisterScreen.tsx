@@ -47,6 +47,14 @@ export default function RegisterScreen({ navigation }: any) {
     }
   };
 
+  const handleBack = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    navigation.getParent()?.goBack();
+  };
+
   return (
     <SafeAreaView style={s.safe}>
       <KeyboardAvoidingView
@@ -54,7 +62,7 @@ export default function RegisterScreen({ navigation }: any) {
         style={s.flex}
       >
         <View style={s.backWrap}>
-          <IconButton icon="←" onPress={() => navigation.goBack()} a11y="Back" size="sm" />
+          <IconButton icon="←" onPress={handleBack} a11y="Back" size="sm" />
         </View>
 
         <View style={s.body}>

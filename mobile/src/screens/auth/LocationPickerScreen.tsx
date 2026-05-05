@@ -332,10 +332,9 @@ export default function LocationPickerScreen({ onLocationSet }: Props) {
         pincode: final.pincode,
         source: 'gps',
       });
-    } catch (e) {
+    } catch {
       // Silently swallow — local AsyncStorage is the source of truth for
       // anonymous users; signed-in users will retry on next location pick.
-      console.log('Location backend sync skipped:', e);
     }
     onLocationSet(final);
   };
