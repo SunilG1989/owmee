@@ -9,7 +9,7 @@
  */
 import React from 'react';
 import {
-  View, Text, StyleSheet, Image, TouchableOpacity, type GestureResponderEvent, type ImageSourcePropType,
+  View, Text, StyleSheet, Image, TouchableOpacity, type ImageSourcePropType,
 } from 'react-native';
 import { Heart, MapPin, ShieldCheck } from 'lucide-react-native';
 import { C, T, S, R, Shadow, Home, pickCardBg } from '../utils/tokens';
@@ -175,27 +175,29 @@ export function FeedCard({
     if (!d) return null;
     return d.replace(/\s+/g, ' ').slice(0, 60);
   })();
-  const handleBuySafely = (event: GestureResponderEvent) => {
-    event.stopPropagation();
+  const handleBuySafely = () => {
     (onBuySafely || onPress)();
   };
-  const handleMakeOffer = (event: GestureResponderEvent) => {
-    event.stopPropagation();
+  const handleMakeOffer = () => {
     (onMakeOffer || onPress)();
   };
 
   return (
-    <TouchableOpacity
-      activeOpacity={0.9}
-      onPress={onPress}
-      style={[s.feedCard, cardWidth ? { width: cardWidth } : null]}
-    >
+    <View style={[s.feedCard, cardWidth ? { width: cardWidth } : null]}>
       <View style={[s.feedImgWrap, { backgroundColor: bg }]}>
-        {img ? (
-          <Image source={{ uri: img }} style={s.imgFill} resizeMode="cover" />
-        ) : (
-          <Image source={fallbackImage} style={s.imgFill} resizeMode="cover" />
-        )}
+        <TouchableOpacity
+          activeOpacity={0.9}
+          onPress={onPress}
+          style={s.imagePressTarget}
+          accessibilityRole="button"
+          accessibilityLabel={`Open ${listing.title}`}
+        >
+          {img ? (
+            <Image source={{ uri: img }} style={s.imgFill} resizeMode="cover" />
+          ) : (
+            <Image source={fallbackImage} style={s.imgFill} resizeMode="cover" />
+          )}
+        </TouchableOpacity>
 
         {listing.is_owmee_verified && (
           <View style={s.verifiedBadge}>
@@ -221,7 +223,13 @@ export function FeedCard({
         </TouchableOpacity>
       </View>
 
-      <View style={s.feedMeta}>
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onPress={onPress}
+        style={s.feedMeta}
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${listing.title}`}
+      >
         <Text style={s.feedTitle} numberOfLines={1}>{listing.title}</Text>
 
         {detailLine && (
@@ -252,7 +260,9 @@ export function FeedCard({
           )}
           {listing.city && <Text style={s.metaText} numberOfLines={1}>{listing.city}</Text>}
         </View>
+      </TouchableOpacity>
 
+      <View style={s.feedActionWrap}>
         <View style={s.feedActions}>
           <TouchableOpacity
             activeOpacity={0.84}
@@ -274,7 +284,7 @@ export function FeedCard({
           </TouchableOpacity>
         </View>
       </View>
-    </TouchableOpacity>
+    </View>
   );
 }
 
@@ -288,6 +298,7 @@ export default function OwmeeListingCard(props: Props) {
 const s = StyleSheet.create({
   // shared
   imgFill: { width: '100%', height: '100%' },
+  imagePressTarget: { ...StyleSheet.absoluteFillObject },
   // deal variant
   dealCard: {
     width: 152,
@@ -421,7 +432,8 @@ const s = StyleSheet.create({
   },
   feedMeta: {
     paddingHorizontal: S.md,
-    paddingVertical: S.md,
+    paddingTop: S.md,
+    paddingBottom: S.xs,
   },
   feedTitle: {
     fontSize: T.size.md,
@@ -514,10 +526,14 @@ const s = StyleSheet.create({
     fontWeight: T.weight.semi,
   },
   feedActions: {
-    marginTop: S.sm + 2,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+  },
+  feedActionWrap: {
+    paddingHorizontal: S.md,
+    paddingTop: S.xs,
+    paddingBottom: S.md,
   },
   buySafeBtn: {
     flex: 1.05,

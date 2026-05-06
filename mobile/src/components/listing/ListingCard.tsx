@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Image, type GestureResponderEvent, type ImageSourcePropType,
+  View, Text, TouchableOpacity, StyleSheet, Image, type ImageSourcePropType,
 } from 'react-native';
 import { C, T, S, R, Shadow, formatPrice, percentOff, condStyle } from '../../utils/tokens';
 import { Button, IconButton } from '../ui';
@@ -54,30 +54,34 @@ export const ListingCard = memo(function ListingCard({
   );
   const cs = condStyle(listing.condition);
   const off = percentOff(listing.price, listing.original_price);
-  const handleBuySafely = (event: GestureResponderEvent) => {
-    event.stopPropagation();
+  const handleBuySafely = () => {
     (onBuySafely || onPress)(listing);
   };
-  const handleMakeOffer = (event: GestureResponderEvent) => {
-    event.stopPropagation();
+  const handleMakeOffer = () => {
     (onMakeOffer || onPress)(listing);
   };
 
   return (
-    <TouchableOpacity
+    <View
       style={[s.card, { width: cardW }, Shadow.card]}
-      activeOpacity={0.92}
-      onPress={() => onPress(listing)}
     >
       <View style={[s.imgWrap, { height: imgH }]}>
-        {uri ? (
-          <Image
-            source={{ uri }} // T4-19: immutable cache
-            style={s.img} resizeMode={"cover"}
-          />
-        ) : (
-          <Image source={fallbackImage} style={s.img} resizeMode="cover" />
-        )}
+        <TouchableOpacity
+          activeOpacity={0.92}
+          onPress={() => onPress(listing)}
+          style={s.imagePressTarget}
+          accessibilityRole="button"
+          accessibilityLabel={`Open ${listing.title}`}
+        >
+          {uri ? (
+            <Image
+              source={{ uri }} // T4-19: immutable cache
+              style={s.img} resizeMode={"cover"}
+            />
+          ) : (
+            <Image source={fallbackImage} style={s.img} resizeMode="cover" />
+          )}
+        </TouchableOpacity>
         {onWishlist && (
           <View style={s.heartWrap}>
             <IconButton
@@ -96,27 +100,34 @@ export const ListingCard = memo(function ListingCard({
       </View>
 
       <View style={s.info}>
-        <View style={s.priceRow}>
-          <Text style={s.price}>{formatPrice(listing.price)}</Text>
-          {listing.original_price ? <Text style={s.mrp}>{formatPrice(listing.original_price)}</Text> : null}
-          {off ? <Text style={s.off}>{off}% off</Text> : null}
-        </View>
-        <Text style={s.title} numberOfLines={2}>{listing.title}</Text>
-        {listing.seller?.avg_rating ? (
-          <View style={s.ratingRow}>
-            <Text style={s.stars}>{'★'.repeat(Math.round(listing.seller.avg_rating))}</Text>
-            <Text style={s.ratingNum}>{listing.seller.avg_rating.toFixed(1)}</Text>
-            {listing.seller.deal_count ? <Text style={s.ratingCount}>({listing.seller.deal_count})</Text> : null}
+        <TouchableOpacity
+          activeOpacity={0.92}
+          onPress={() => onPress(listing)}
+          accessibilityRole="button"
+          accessibilityLabel={`Open ${listing.title}`}
+        >
+          <View style={s.priceRow}>
+            <Text style={s.price}>{formatPrice(listing.price)}</Text>
+            {listing.original_price ? <Text style={s.mrp}>{formatPrice(listing.original_price)}</Text> : null}
+            {off ? <Text style={s.off}>{off}% off</Text> : null}
           </View>
-        ) : null}
-        <View style={s.metaRow}>
-          {listing.seller_verified && (
-            <View style={s.verified}><Text style={s.verifiedIcon}>✓</Text><Text style={s.verifiedText}>Verified</Text></View>
-          )}
-          {showDistance && listing.distance_km != null && <Text style={s.dist}>{listing.distance_km < 1 ? `${Math.round(listing.distance_km * 1000)} m` : `${listing.distance_km.toFixed(1)} km`}</Text>}
-          {!showDistance && listing.city && <Text style={s.dist}>{listing.city}</Text>}
-          {listing.is_negotiable && <View style={s.negoTag}><Text style={s.negoText}>Negotiable</Text></View>}
-        </View>
+          <Text style={s.title} numberOfLines={2}>{listing.title}</Text>
+          {listing.seller?.avg_rating ? (
+            <View style={s.ratingRow}>
+              <Text style={s.stars}>{'★'.repeat(Math.round(listing.seller.avg_rating))}</Text>
+              <Text style={s.ratingNum}>{listing.seller.avg_rating.toFixed(1)}</Text>
+              {listing.seller.deal_count ? <Text style={s.ratingCount}>({listing.seller.deal_count})</Text> : null}
+            </View>
+          ) : null}
+          <View style={s.metaRow}>
+            {listing.seller_verified && (
+              <View style={s.verified}><Text style={s.verifiedIcon}>✓</Text><Text style={s.verifiedText}>Verified</Text></View>
+            )}
+            {showDistance && listing.distance_km != null && <Text style={s.dist}>{listing.distance_km < 1 ? `${Math.round(listing.distance_km * 1000)} m` : `${listing.distance_km.toFixed(1)} km`}</Text>}
+            {!showDistance && listing.city && <Text style={s.dist}>{listing.city}</Text>}
+            {listing.is_negotiable && <View style={s.negoTag}><Text style={s.negoText}>Negotiable</Text></View>}
+          </View>
+        </TouchableOpacity>
         <View style={s.actionRow}>
           <TouchableOpacity
             activeOpacity={0.84}
@@ -138,7 +149,7 @@ export const ListingCard = memo(function ListingCard({
           </TouchableOpacity>
         </View>
       </View>
-    </TouchableOpacity>
+    </View>
   );
 });
 
@@ -196,6 +207,7 @@ export function getCardLayout(screenWidth: number) {
 const s = StyleSheet.create({
   card: { backgroundColor: C.surface, borderRadius: R.lg, overflow: 'hidden', borderWidth: 1, borderColor: C.border, marginBottom: S.sm },
   imgWrap: { width: '100%', backgroundColor: C.border2, position: 'relative' },
+  imagePressTarget: { ...StyleSheet.absoluteFillObject },
   img: { width: '100%', height: '100%' },
   heartWrap: { position: 'absolute', top: S.sm, right: S.sm },
   heartOn: { backgroundColor: 'rgba(255,255,255,0.95)' },
