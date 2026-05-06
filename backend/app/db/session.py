@@ -7,12 +7,12 @@ from app.core.settings import settings
 
 # ── Engine ─────────────────────────────────────────────────────────────────────
 engine = create_async_engine(
-    settings.database_url,
+    settings.async_database_url,
     echo=settings.env == "development",
-    pool_size=10,
-    max_overflow=20,
+    pool_size=settings.db_pool_size,
+    max_overflow=settings.db_max_overflow,
     pool_pre_ping=True,
-    pool_recycle=3600,
+    pool_recycle=settings.db_pool_recycle_seconds,
 )
 
 # ── Session factory ────────────────────────────────────────────────────────────

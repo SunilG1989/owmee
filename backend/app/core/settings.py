@@ -1,4 +1,7 @@
 from functools import lru_cache
+from pathlib import Path
+
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -24,7 +27,23 @@ class Settings(BaseSettings):
 
     # ── Database ───────────────────────────────────────────────────────────
     database_url: str
-    sync_database_url: str
+    sync_database_url: str = ""
+    db_pool_size: int = 5
+    db_max_overflow: int = 5
+    db_pool_recycle_seconds: int = 1800
+
+    @property
+    def async_database_url(self) -> str:
+        if self.database_url.startswith("postgresql://"):
+            return self.database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return self.database_url
+
+    @property
+    def sync_db_url(self) -> str:
+        raw_url = self.sync_database_url or self.database_url
+        if raw_url.startswith("postgresql+asyncpg://"):
+            return raw_url.replace("postgresql+asyncpg://", "postgresql://", 1)
+        return raw_url
 
     # ── Redis ──────────────────────────────────────────────────────────────
     redis_url: str
@@ -88,6 +107,25 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.allowed_origins.split(",")]
+
+    @model_validator(mode="after")
+    def validate_production_config(self) -> "Settings":
+        if not self.is_production:
+            return self
+
+        if len(self.secret_key.strip()) < 32 or "change_me" in self.secret_key.lower():
+            raise ValueError("SECRET_KEY must be a production secret with at least 32 characters.")
+
+        has_private_key = bool(self.jwt_private_key.strip()) or Path(self.jwt_private_key_path).exists()
+        has_public_key = bool(self.jwt_public_key.strip()) or Path(self.jwt_public_key_path).exists()
+        if not has_private_key or not has_public_key:
+            raise ValueError("Production requires JWT_PRIVATE_KEY and JWT_PUBLIC_KEY, or mounted key files.")
+
+        origins = [origin for origin in self.cors_origins if origin]
+        if not origins or any("localhost" in origin or "127.0.0.1" in origin for origin in origins):
+            raise ValueError("ALLOWED_ORIGINS must contain only production client origins.")
+
+        return self
 
     # ── Rate limiting ──────────────────────────────────────────────────────
     otp_rate_limit_per_hour: int = 3

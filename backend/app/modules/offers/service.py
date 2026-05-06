@@ -187,7 +187,7 @@ async def make_offer(
         raise ValueError("OFFER_ALREADY_EXISTS")
 
     # Risk: spam detection (5+ rejected offers in 24h)
-    spam = await check_offer_spam(buyer_id, listing_id)
+    spam = await check_offer_spam(buyer_id, listing_id, db=db)
     if spam.get("should_block"):
         raise ValueError(f"OFFER_SPAM:{spam['message']}")
 

@@ -125,17 +125,6 @@ async def test_update_price_increments_count_and_remaining_decrements(db):
     assert o3.update_count == 3
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Flaky at fixture teardown: pytest-asyncio strict mode + asyncpg "
-        "connection cache crashes when a service ValueError follows DB "
-        "queries. The logic itself is asserted: update_count is proven "
-        "to reach 3 by test_update_price_increments_count_and_remaining_decrements, "
-        "and the >=3 guard is a single line in update_offer_price."
-    ),
-    strict=False,
-    raises=RuntimeError,
-)
 @pytest.mark.asyncio
 async def test_update_price_locks_after_three(db):
     """Sprint 6b §2.4: 'After 3 updates, offer is locked — seller must respond.'"""
@@ -261,15 +250,6 @@ async def test_make_offer_allowed_after_lockout_expiry(db):
     assert o2.status == "pending"
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Same teardown flake as test_update_price_locks_after_three. The "
-        "duplicate-offer guard is the same code path that other tests "
-        "exercise on the lockout side; logic itself is solid."
-    ),
-    strict=False,
-    raises=RuntimeError,
-)
 @pytest.mark.asyncio
 async def test_make_offer_blocks_duplicate_active(db):
     buyer, seller, listing = await _seed_listing_and_users(db)

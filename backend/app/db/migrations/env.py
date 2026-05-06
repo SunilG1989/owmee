@@ -4,6 +4,7 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 from alembic import context
 from app.db.session import Base
+from app.core.settings import settings
 
 import app.modules.identity_auth.models  # noqa
 import app.modules.kyc.models  # noqa
@@ -16,7 +17,7 @@ import app.modules.admin.reports_disputes  # noqa — registers UserReport and D
 
 config = context.config
 
-sync_url = os.environ["SYNC_DATABASE_URL"]
+sync_url = os.environ.get("SYNC_DATABASE_URL") or settings.sync_db_url
 if "+asyncpg" in sync_url:
     sync_url = sync_url.replace("+asyncpg", "")
 config.set_main_option("sqlalchemy.url", sync_url)
@@ -43,6 +44,7 @@ def run_migrations_online() -> None:
         prefix="sqlalchemy.", poolclass=pool.NullPool,
     )
     with connectable.connect() as connection:
+        connection.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS postgis")
         context.configure(
             connection=connection, target_metadata=target_metadata, compare_type=True,
         )

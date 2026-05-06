@@ -10,12 +10,16 @@ Take photos of something to sell. AI fills in brand, model, condition, and price
 
 - Mobile: React Native 0.73 + TypeScript
 - Backend: FastAPI + Python 3.12
-- Database: PostgreSQL 15 + PostGIS
+- Database: PostgreSQL 16 + PostGIS
 - Cache: Redis 7
 - Workflows: Temporal
 - Object store: MinIO (dev), Cloudflare R2 (prod)
 - AI: Google Gemini (Vision + Text)
-- Infra: Docker Compose
+- Infra: Docker Compose (dev), Render Blueprint (prod)
+
+Production deployment uses the root `render.yaml`; see
+[docs/RENDER_DEPLOY.md](docs/RENDER_DEPLOY.md) for required secrets and release
+checks.
 
 ## Quick start
 

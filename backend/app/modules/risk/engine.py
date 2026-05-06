@@ -134,19 +134,17 @@ async def check_duplicate_account(phone: str, pan_ref: str | None = None) -> dic
     return {"is_suspicious": False}
 
 
-async def check_offer_spam(buyer_id: UUID, listing_id: UUID) -> dict:
+async def check_offer_spam(buyer_id: UUID, listing_id: UUID, db=None) -> dict:
     """
     Check if buyer is spamming offers.
     Returns: {should_block, reason}
     """
-    from app.db.session import AsyncSessionLocal
     from app.modules.offers.models import Offer
     from sqlalchemy import select
 
-    async with AsyncSessionLocal() as db:
-        # Count rejected offers from this buyer in last 24h
+    async def _check(session) -> dict:
         since = datetime.now(timezone.utc) - timedelta(hours=24)
-        result = await db.execute(
+        result = await session.execute(
             select(func.count(Offer.id)).where(
                 Offer.buyer_id == buyer_id,
                 Offer.status == "rejected",
@@ -162,7 +160,14 @@ async def check_offer_spam(buyer_id: UUID, listing_id: UUID) -> dict:
                 "message": "Too many rejected offers. Please wait before making more offers.",
             }
 
-    return {"should_block": False}
+        return {"should_block": False}
+
+    if db is not None:
+        return await _check(db)
+
+    from app.db.session import AsyncSessionLocal
+    async with AsyncSessionLocal() as session:
+        return await _check(session)
 
 
 async def check_transaction_velocity(user_id: UUID) -> dict:
