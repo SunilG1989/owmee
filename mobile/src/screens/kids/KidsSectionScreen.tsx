@@ -8,11 +8,13 @@ import { Listings, type Listing } from '../../services/api';
 import { ListingCard, calcCardWidth } from '../../components/listing/ListingCard';
 import { BackButton } from '../../components/ui';
 import { useLocation } from '../../hooks/useLocation';
+import { useAuthStore } from '../../store/authStore';
 
 export default function KidsSectionScreen({ navigation }: any) {
   const { width: sw } = useWindowDimensions();
   const cardWidth = useMemo(() => calcCardWidth(sw), [sw]);
   const { location } = useLocation();
+  const { isAuthenticated } = useAuthStore();
   const [items, setItems] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -29,6 +31,22 @@ export default function KidsSectionScreen({ navigation }: any) {
       } catch {} finally { setLoading(false); }
     })();
   }, [location]);
+
+  const openBuySafely = (listing: Listing) => {
+    if (!isAuthenticated) {
+      navigation.navigate('AuthFlow');
+      return;
+    }
+    navigation.navigate('Checkout', { listingId: listing.id });
+  };
+
+  const openMakeOffer = (listing: Listing) => {
+    if (!isAuthenticated) {
+      navigation.navigate('AuthFlow');
+      return;
+    }
+    navigation.navigate('ListingDetail', { listingId: listing.id, openOffer: true });
+  };
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
@@ -52,6 +70,8 @@ export default function KidsSectionScreen({ navigation }: any) {
             <ListingCard
               listing={item}
               onPress={l => navigation.navigate('ListingDetail', { listingId: l.id })}
+              onBuySafely={openBuySafely}
+              onMakeOffer={openMakeOffer}
               showDistance={!!location}
               cardWidth={cardWidth}
             />

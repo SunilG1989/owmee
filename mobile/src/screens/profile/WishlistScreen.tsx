@@ -6,10 +6,12 @@ import { useFocusEffect } from '@react-navigation/native';
 import { C, T, S, R } from '../../utils/tokens';
 import { Wishlist, Listings, type Listing } from '../../services/api';
 import { ListingCard, calcCardWidth } from '../../components/listing/ListingCard';
+import { useAuthStore } from '../../store/authStore';
 
 export default function WishlistScreen({ navigation }: any) {
   const { width: sw } = useWindowDimensions();
   const cardWidth = useMemo(() => calcCardWidth(sw), [sw]);
+  const { isAuthenticated } = useAuthStore();
   const [items, setItems] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -30,6 +32,22 @@ export default function WishlistScreen({ navigation }: any) {
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, []));
+
+  const openBuySafely = (listing: Listing) => {
+    if (!isAuthenticated) {
+      navigation.navigate('AuthFlow');
+      return;
+    }
+    navigation.navigate('Checkout', { listingId: listing.id });
+  };
+
+  const openMakeOffer = (listing: Listing) => {
+    if (!isAuthenticated) {
+      navigation.navigate('AuthFlow');
+      return;
+    }
+    navigation.navigate('ListingDetail', { listingId: listing.id, openOffer: true });
+  };
 
   if (loading) {
     return (
@@ -53,7 +71,13 @@ export default function WishlistScreen({ navigation }: any) {
         columnWrapperStyle={s.gridRow}
         contentContainerStyle={s.listPadding}
         renderItem={({ item }) => (
-          <ListingCard listing={item} onPress={l => navigation.navigate('ListingDetail', { listingId: l.id })} cardWidth={cardWidth} />
+          <ListingCard
+            listing={item}
+            onPress={l => navigation.navigate('ListingDetail', { listingId: l.id })}
+            onBuySafely={openBuySafely}
+            onMakeOffer={openMakeOffer}
+            cardWidth={cardWidth}
+          />
         )}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={C.petrol} />}
         ListEmptyComponent={

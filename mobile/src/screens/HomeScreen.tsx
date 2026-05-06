@@ -301,6 +301,30 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
     navigation.navigate('ListingDetail', { listingId: l.id });
   };
 
+  const handleBuySafely = (l: FeedListing) => {
+    if (l.id.startsWith('preview-')) {
+      Alert.alert('Preview item', 'Start the Owmee backend to buy this item safely.');
+      return;
+    }
+    if (!isAuthenticated) {
+      navigation.navigate('AuthFlow');
+      return;
+    }
+    navigation.navigate('Checkout', { listingId: l.id });
+  };
+
+  const handleMakeOffer = (l: FeedListing) => {
+    if (l.id.startsWith('preview-')) {
+      Alert.alert('Preview item', 'Start the Owmee backend to make an offer.');
+      return;
+    }
+    if (!isAuthenticated) {
+      navigation.navigate('AuthFlow');
+      return;
+    }
+    navigation.navigate('ListingDetail', { listingId: l.id, openOffer: true });
+  };
+
   const handleWishlistPress = useCallback(async (l: FeedListing) => {
     if (!isAuthenticated) {
       navigation.navigate('AuthFlow');
@@ -582,6 +606,8 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
                     aspectRatio={pickAspectRatio(idx)}
                     index={idx}
                     onPress={() => handleCardPress(item)}
+                    onBuySafely={() => handleBuySafely(item)}
+                    onMakeOffer={() => handleMakeOffer(item)}
                     onWishlist={() => handleWishlistPress(item)}
                     isWishlisted={savedIds.has(item.id)}
                   />
@@ -597,6 +623,8 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
                     aspectRatio={pickAspectRatio(idx)}
                     index={idx}
                     onPress={() => handleCardPress(item)}
+                    onBuySafely={() => handleBuySafely(item)}
+                    onMakeOffer={() => handleMakeOffer(item)}
                     onWishlist={() => handleWishlistPress(item)}
                     isWishlisted={savedIds.has(item.id)}
                   />

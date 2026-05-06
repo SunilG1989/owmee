@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Image, type ImageSourcePropType,
+  View, Text, TouchableOpacity, StyleSheet, Image, type GestureResponderEvent, type ImageSourcePropType,
 } from 'react-native';
 import { C, T, S, R, Shadow, formatPrice, percentOff, condStyle } from '../../utils/tokens';
 import { Button, IconButton } from '../ui';
@@ -9,6 +9,8 @@ import type { Listing } from '../../services/api';
 interface Props {
   listing: Listing;
   onPress: (l: Listing) => void;
+  onBuySafely?: (l: Listing) => void;
+  onMakeOffer?: (l: Listing) => void;
   onWishlist?: (l: Listing) => void;
   isWishlisted?: boolean;
   showDistance?: boolean;
@@ -41,7 +43,7 @@ function isDisplayableImageUrl(uri?: string | null): uri is string {
 
 // T2-07: REMOVED useWindowDimensions — parent calculates once, passes to all cards
 export const ListingCard = memo(function ListingCard({
-  listing, onPress, onWishlist, isWishlisted, showDistance = true, cardWidth,
+  listing, onPress, onBuySafely, onMakeOffer, onWishlist, isWishlisted, showDistance = true, cardWidth,
 }: Props) {
   const cardW = cardWidth || 170; // fallback only
   const imgH = cardW;
@@ -52,6 +54,14 @@ export const ListingCard = memo(function ListingCard({
   );
   const cs = condStyle(listing.condition);
   const off = percentOff(listing.price, listing.original_price);
+  const handleBuySafely = (event: GestureResponderEvent) => {
+    event.stopPropagation();
+    (onBuySafely || onPress)(listing);
+  };
+  const handleMakeOffer = (event: GestureResponderEvent) => {
+    event.stopPropagation();
+    (onMakeOffer || onPress)(listing);
+  };
 
   return (
     <TouchableOpacity
@@ -107,6 +117,26 @@ export const ListingCard = memo(function ListingCard({
           {!showDistance && listing.city && <Text style={s.dist}>{listing.city}</Text>}
           {listing.is_negotiable && <View style={s.negoTag}><Text style={s.negoText}>Negotiable</Text></View>}
         </View>
+        <View style={s.actionRow}>
+          <TouchableOpacity
+            activeOpacity={0.84}
+            onPress={handleBuySafely}
+            style={s.buySafeBtn}
+            accessibilityRole="button"
+            accessibilityLabel={`Buy ${listing.title} safely`}
+          >
+            <Text style={s.buySafeText} numberOfLines={1}>Buy safely</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            activeOpacity={0.84}
+            onPress={handleMakeOffer}
+            style={s.offerBtn}
+            accessibilityRole="button"
+            accessibilityLabel={`Make an offer for ${listing.title}`}
+          >
+            <Text style={s.offerText} numberOfLines={1}>Make offer</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -155,7 +185,7 @@ export function calcCardWidth(screenWidth: number): number {
 // getItemLayout for FlatList scroll optimization
 export function getCardLayout(screenWidth: number) {
   const cardW = calcCardWidth(screenWidth);
-  const cardH = cardW + 110;
+  const cardH = cardW + 154;
   return (_data: any, index: number) => ({
     length: cardH,
     offset: cardH * Math.floor(index / 2),
@@ -188,6 +218,37 @@ const s = StyleSheet.create({
   dist: { fontSize: T.size.xs, color: C.text3, fontWeight: T.weight.medium },
   negoTag: { backgroundColor: C.petrolLight, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5 },
   negoText: { fontSize: T.size.xs, fontWeight: T.weight.bold, color: C.petrolDeep },
+  actionRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: S.sm + 2 },
+  buySafeBtn: {
+    flex: 1.05,
+    minHeight: 34,
+    borderRadius: R.sm,
+    backgroundColor: C.petrolDeep,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  buySafeText: {
+    color: C.white,
+    fontSize: T.size.xs + 1,
+    fontWeight: T.weight.heavy,
+  },
+  offerBtn: {
+    flex: 1,
+    minHeight: 34,
+    borderRadius: R.sm,
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: 'rgba(110, 76, 69, 0.24)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  offerText: {
+    color: C.coralDeep,
+    fontSize: T.size.xs + 1,
+    fontWeight: T.weight.heavy,
+  },
   // Skeleton lines
   skelLine1: { width: '60%', height: 14, backgroundColor: C.border, borderRadius: R.xs - 2 },
   skelLine2: { width: '85%', height: 10, backgroundColor: C.border2, borderRadius: R.xs - 2, marginTop: 6 },

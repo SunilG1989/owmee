@@ -9,11 +9,13 @@ import { BackButton, IconButton } from '../../components/ui';
 import { C, T, S, R, Shadow, formatPrice, timeAgo } from '../../utils/tokens';
 import { Listings, type Listing } from '../../services/api';
 import { ListingCard, calcCardWidth } from '../../components/listing/ListingCard';
+import { useAuthStore } from '../../store/authStore';
 
 export default function SellerProfileScreen({ navigation, route }: any) {
   const { seller } = route.params; // { id, name, city, kyc_verified, avg_rating, deal_count, trust_score, member_since }
   const { width: sw } = useWindowDimensions();
   const cardWidth = useMemo(() => calcCardWidth(sw), [sw]);
+  const { isAuthenticated } = useAuthStore();
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -29,6 +31,22 @@ export default function SellerProfileScreen({ navigation, route }: any) {
       } catch {} finally { setLoading(false); }
     })();
   }, [seller.id]);
+
+  const openBuySafely = (listing: Listing) => {
+    if (!isAuthenticated) {
+      navigation.navigate('AuthFlow');
+      return;
+    }
+    navigation.navigate('Checkout', { listingId: listing.id });
+  };
+
+  const openMakeOffer = (listing: Listing) => {
+    if (!isAuthenticated) {
+      navigation.navigate('AuthFlow');
+      return;
+    }
+    navigation.navigate('ListingDetail', { listingId: listing.id, openOffer: true });
+  };
 
   const header = () => (
     <>
@@ -121,7 +139,13 @@ export default function SellerProfileScreen({ navigation, route }: any) {
           ListHeaderComponent={header}
           ListFooterComponent={<View style={s.bottomSpacer} />}
           renderItem={({ item }) => (
-            <ListingCard listing={item} onPress={l => navigation.navigate('ListingDetail', { listingId: l.id })} cardWidth={cardWidth} />
+            <ListingCard
+              listing={item}
+              onPress={l => navigation.navigate('ListingDetail', { listingId: l.id })}
+              onBuySafely={openBuySafely}
+              onMakeOffer={openMakeOffer}
+              cardWidth={cardWidth}
+            />
           )}
           ListEmptyComponent={
             <View style={s.empty}>

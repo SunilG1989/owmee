@@ -4,7 +4,7 @@ import type { CompositeScreenProps, NavigatorScreenParams } from '@react-navigat
 
 export type RootStackParams = {
   MainTabs: NavigatorScreenParams<TabParams>;
-  ListingDetail: { listingId: string };
+  ListingDetail: { listingId: string; openOffer?: boolean };
   TransactionDetail: { transactionId: string };
   KycFlow: { returnTo?: string };
   KycRequiredForAction: { actionLabel?: string; returnTo?: string };

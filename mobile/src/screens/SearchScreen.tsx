@@ -12,6 +12,7 @@ import { C, T, S, R } from '../utils/tokens';
 import { Button, Chip, IconButton } from '../components/ui';
 import type { TabScreen } from '../navigation/types';
 import { Listings, type BrowseParams, type Listing } from '../services/api';
+import { useAuthStore } from '../store/authStore';
 import { useLocation } from '../hooks/useLocation';
 import { ListingCard, SkeletonCard, calcCardWidth } from '../components/listing/ListingCard';
 
@@ -37,6 +38,7 @@ const CATEGORIES = [
 
 export default function SearchScreen({ navigation, route }: TabScreen<'Search'>) {
   const { location } = useLocation();
+  const { isAuthenticated } = useAuthStore();
   const { width: sw } = useWindowDimensions();
   const cardWidth = useMemo(() => calcCardWidth(sw), [sw]);
   const initCat = route?.params?.category_slug || null;
@@ -105,6 +107,22 @@ export default function SearchScreen({ navigation, route }: TabScreen<'Search'>)
     (condition ? 1 : 0) + (category ? 1 : 0) +
     (minPrice ? 1 : 0) + (maxPrice ? 1 : 0) +
     (sort !== 'ranking' ? 1 : 0);
+
+  const openBuySafely = (listing: Listing) => {
+    if (!isAuthenticated) {
+      navigation.navigate('AuthFlow');
+      return;
+    }
+    navigation.navigate('Checkout', { listingId: listing.id });
+  };
+
+  const openMakeOffer = (listing: Listing) => {
+    if (!isAuthenticated) {
+      navigation.navigate('AuthFlow');
+      return;
+    }
+    navigation.navigate('ListingDetail', { listingId: listing.id, openOffer: true });
+  };
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
@@ -256,6 +274,8 @@ export default function SearchScreen({ navigation, route }: TabScreen<'Search'>)
             <ListingCard
               listing={item}
               onPress={l => navigation.navigate('ListingDetail', { listingId: l.id })}
+              onBuySafely={openBuySafely}
+              onMakeOffer={openMakeOffer}
               showDistance={!!location}
               cardWidth={cardWidth}
             />

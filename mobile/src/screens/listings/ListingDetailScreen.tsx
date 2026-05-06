@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, FlatList, TouchableOpacity, Alert,
   ActivityIndicator, Modal, TextInput, useWindowDimensions, Share, Image,
@@ -30,7 +30,7 @@ const KIDS_SAFETY_PANEL_KEYS: { key: string; label: string }[] = [
 export default function ListingDetailScreen({ navigation, route }: RootScreen<'ListingDetail'>) {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const { listingId } = route.params;
+  const { listingId, openOffer } = route.params;
   const { isAuthenticated, userId } = useAuthStore();
   const [listing, setListing] = useState<Listing | null>(null);
   const [loading, setLoading] = useState(true);
@@ -39,6 +39,7 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
   const [offerAmt, setOfferAmt] = useState('');
   const [offerNote, setOfferNote] = useState('');
   const [imgIdx, setImgIdx] = useState(0);
+  const didAutoOpenOffer = useRef(false);
   const imgH = width * 0.85;
 
   useFocusEffect(useCallback(() => {
@@ -63,6 +64,17 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
       } catch {} finally { setLoading(false); }
     })();
   }, [listingId, isAuthenticated]));
+
+  useEffect(() => {
+    if (!openOffer || didAutoOpenOffer.current || !listing) return;
+    if (listing.seller_id === userId) return;
+    didAutoOpenOffer.current = true;
+    if (!isAuthenticated) {
+      navigation.navigate('AuthFlow');
+      return;
+    }
+    if (listing.is_negotiable) setShowOffer(true);
+  }, [openOffer, listing, userId, isAuthenticated, navigation]);
 
   if (loading) {
     return (
@@ -407,7 +419,7 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
         <View style={[s.bottomBar, { paddingBottom: Math.max(insets.bottom, S.lg) }]}>
           {listing.is_negotiable && (
             <Button
-              label="Offer"
+              label="Make offer"
               variant="secondary"
               onPress={() => {
                 if (!isAuthenticated) { navigation.navigate('AuthFlow'); return; }
@@ -417,7 +429,7 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
             />
           )}
           <Button
-            label="Buy Now →"
+            label="Buy safely"
             variant="primary"
             onPress={() => {
               if (!isAuthenticated) { navigation.navigate('AuthFlow'); return; }

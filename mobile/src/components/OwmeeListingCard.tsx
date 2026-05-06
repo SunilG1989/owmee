@@ -9,7 +9,7 @@
  */
 import React from 'react';
 import {
-  View, Text, StyleSheet, Image, TouchableOpacity, type ImageSourcePropType,
+  View, Text, StyleSheet, Image, TouchableOpacity, type GestureResponderEvent, type ImageSourcePropType,
 } from 'react-native';
 import { Heart, MapPin, ShieldCheck } from 'lucide-react-native';
 import { C, T, S, R, Shadow, Home, pickCardBg } from '../utils/tokens';
@@ -22,6 +22,8 @@ interface Props {
   aspectRatio?: number;
   index?: number;
   onPress: () => void;
+  onBuySafely?: () => void;
+  onMakeOffer?: () => void;
   onWishlist?: () => void;
   isWishlisted?: boolean;
 }
@@ -146,7 +148,7 @@ export function DealCard({ listing, onPress, index = 0 }: Props) {
 // ── FEED VARIANT (masonry) ───────────────────────────────────────────────────
 
 export function FeedCard({
-  listing, onPress, onWishlist, isWishlisted = false, cardWidth, index = 0,
+  listing, onPress, onBuySafely, onMakeOffer, onWishlist, isWishlisted = false, cardWidth, index = 0,
 }: Props) {
   const img = firstImage(listing);
   const bg = pickCardBg(index);
@@ -173,6 +175,14 @@ export function FeedCard({
     if (!d) return null;
     return d.replace(/\s+/g, ' ').slice(0, 60);
   })();
+  const handleBuySafely = (event: GestureResponderEvent) => {
+    event.stopPropagation();
+    (onBuySafely || onPress)();
+  };
+  const handleMakeOffer = (event: GestureResponderEvent) => {
+    event.stopPropagation();
+    (onMakeOffer || onPress)();
+  };
 
   return (
     <TouchableOpacity
@@ -243,9 +253,26 @@ export function FeedCard({
           {listing.city && <Text style={s.metaText} numberOfLines={1}>{listing.city}</Text>}
         </View>
 
-        <TouchableOpacity activeOpacity={0.85} onPress={onPress} style={s.offerBtn}>
-          <Text style={s.offerText}>Make offer</Text>
-        </TouchableOpacity>
+        <View style={s.feedActions}>
+          <TouchableOpacity
+            activeOpacity={0.84}
+            onPress={handleBuySafely}
+            style={s.buySafeBtn}
+            accessibilityRole="button"
+            accessibilityLabel={`Buy ${listing.title} safely`}
+          >
+            <Text style={s.buySafeText} numberOfLines={1}>Buy safely</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            activeOpacity={0.84}
+            onPress={handleMakeOffer}
+            style={s.offerBtn}
+            accessibilityRole="button"
+            accessibilityLabel={`Make an offer for ${listing.title}`}
+          >
+            <Text style={s.offerText} numberOfLines={1}>Make offer</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -486,16 +513,40 @@ const s = StyleSheet.create({
     color: Home.verifiedText,
     fontWeight: T.weight.semi,
   },
-  offerBtn: {
-    marginTop: S.xs,
-    minHeight: 28,
+  feedActions: {
+    marginTop: S.sm + 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  buySafeBtn: {
+    flex: 1.05,
+    minHeight: 34,
+    borderRadius: R.sm,
+    backgroundColor: C.petrolDeep,
     alignItems: 'center',
     justifyContent: 'center',
-    alignSelf: 'flex-end',
+    paddingHorizontal: 8,
+  },
+  buySafeText: {
+    color: C.white,
+    fontSize: T.size.xs + 1,
+    fontWeight: T.weight.heavy,
+  },
+  offerBtn: {
+    flex: 1,
+    minHeight: 34,
+    borderRadius: R.sm,
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: 'rgba(110, 76, 69, 0.24)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
   },
   offerText: {
     color: C.coralDeep,
-    fontSize: T.size.base,
+    fontSize: T.size.xs + 1,
     fontWeight: T.weight.heavy,
   },
 });
