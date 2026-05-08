@@ -79,9 +79,10 @@ def generate_presigned_download_url(
 
 def public_url(object_key: str) -> str:
     """Return public URL for public bucket objects."""
-    base = (settings.r2_public_endpoint or settings.r2_public_url or settings.r2_endpoint).rstrip("/")
-    bucket = settings.r2_bucket
-    return f"{base}/{bucket}/{object_key}"
+    if settings.r2_public_url:
+        return f"{settings.r2_public_url.rstrip('/')}/{object_key}"
+    base = (settings.r2_public_endpoint or settings.r2_endpoint).rstrip("/")
+    return f"{base}/{settings.r2_bucket}/{object_key}"
 
 
 def upload_bytes(
