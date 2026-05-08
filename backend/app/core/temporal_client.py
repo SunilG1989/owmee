@@ -45,6 +45,8 @@ _lock = asyncio.Lock()
 async def get_temporal_client() -> Client:
     """Return a cached Temporal Client, connecting on first call."""
     global _client
+    if (settings.temporal_host or "").strip().lower() in {"", "disabled", "off", "none"}:
+        raise RuntimeError("Temporal is disabled for this environment.")
     if _client is not None:
         return _client
     async with _lock:

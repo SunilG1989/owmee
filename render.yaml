@@ -60,47 +60,51 @@ services:
       - key: R2_PUBLIC_ENDPOINT
         sync: false
       - key: TEMPORAL_HOST
-        sync: false
+        value: disabled
       - key: TEMPORAL_NAMESPACE
         value: default
       - key: TEMPORAL_API_KEY
-        sync: false
+        value: ""
       - key: ALLOWED_ORIGINS
-        sync: false
+        value: https://owmee-api.onrender.com
       - key: APP_BASE_URL
+        value: https://owmee-api.onrender.com
+      - key: OTP_WHITELIST
         sync: false
+      - key: OTP_WHITELIST_CODE
+        value: "123456"
       - key: SMS_PROVIDER
-        value: msg91
+        value: mock
       - key: SMS_API_KEY
-        sync: false
+        value: ""
       - key: SMS_SENDER_ID
         value: OWMAPP
       - key: SMS_DLT_ENTITY_ID
-        sync: false
+        value: ""
       - key: KYC_PARTNER
-        value: digio
+        value: mock
       - key: KYC_PARTNER_API_KEY
-        sync: false
+        value: ""
       - key: KYC_PARTNER_BASE_URL
-        sync: false
+        value: ""
       - key: KYC_WEBHOOK_SECRET
-        sync: false
+        value: ""
       - key: PA_PROVIDER
-        value: razorpay
+        value: mock
       - key: PA_KEY_ID
-        sync: false
+        value: ""
       - key: PA_KEY_SECRET
-        sync: false
+        value: ""
       - key: PA_WEBHOOK_SECRET
-        sync: false
+        value: ""
       - key: STREAM_API_KEY
-        sync: false
+        value: ""
       - key: STREAM_API_SECRET
-        sync: false
+        value: ""
       - key: FCM_SERVER_KEY
-        sync: false
+        value: ""
       - key: SENTRY_DSN
-        sync: false
+        value: ""
       - key: GEMINI_API_KEY
         sync: false
 
@@ -164,43 +168,43 @@ services:
       - key: R2_PUBLIC_ENDPOINT
         sync: false
       - key: TEMPORAL_HOST
-        sync: false
+        value: disabled
       - key: TEMPORAL_NAMESPACE
         value: default
       - key: TEMPORAL_API_KEY
-        sync: false
+        value: ""
       - key: SMS_PROVIDER
-        value: msg91
+        value: mock
       - key: SMS_API_KEY
-        sync: false
+        value: ""
       - key: SMS_SENDER_ID
         value: OWMAPP
       - key: SMS_DLT_ENTITY_ID
-        sync: false
+        value: ""
       - key: KYC_PARTNER
-        value: digio
+        value: mock
       - key: KYC_PARTNER_API_KEY
-        sync: false
+        value: ""
       - key: KYC_PARTNER_BASE_URL
-        sync: false
+        value: ""
       - key: KYC_WEBHOOK_SECRET
-        sync: false
+        value: ""
       - key: PA_PROVIDER
-        value: razorpay
+        value: mock
       - key: PA_KEY_ID
-        sync: false
+        value: ""
       - key: PA_KEY_SECRET
-        sync: false
+        value: ""
       - key: PA_WEBHOOK_SECRET
-        sync: false
+        value: ""
       - key: STREAM_API_KEY
-        sync: false
+        value: ""
       - key: STREAM_API_SECRET
-        sync: false
+        value: ""
       - key: FCM_SERVER_KEY
-        sync: false
+        value: ""
       - key: SENTRY_DSN
-        sync: false
+        value: ""
       - key: GEMINI_API_KEY
         sync: false
 

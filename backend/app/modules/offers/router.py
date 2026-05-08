@@ -766,7 +766,8 @@ async def razorpay_webhook(request: Request, db: DBSession):
 
 @router.get("/dev/pay/{link_id}")
 async def dev_pay(link_id: str, db: DBSession):
-    if settings.env != "development":
+    provider = (settings.pa_provider or "").strip().lower()
+    if settings.env != "development" and provider not in {"", "mock", "dev"} and settings.pa_key_id:
         raise HTTPException(status_code=404)
     result = await db.execute(select(PaymentLink).where(PaymentLink.razorpay_link_id == link_id))
     pl = result.scalar_one_or_none()

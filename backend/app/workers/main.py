@@ -25,6 +25,11 @@ TASK_QUEUE = "owmee-main"
 async def main():
     logger.info("worker.starting", temporal_host=settings.temporal_host)
 
+    if (settings.temporal_host or "").strip().lower() in {"", "disabled", "off", "none"}:
+        logger.warning("worker.temporal_disabled")
+        while True:
+            await asyncio.sleep(3600)
+
     # Connect — Temporal Cloud uses TLS + API key; local uses plain TCP
     if settings.temporal_api_key:
         client = await Client.connect(

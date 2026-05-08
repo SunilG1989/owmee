@@ -310,6 +310,7 @@ class _DigioKYCAdapter:
 # ── Factory ────────────────────────────────────────────────────────────────────
 
 def get_kyc_adapter() -> _DevKYCAdapter | _DigioKYCAdapter:
-    if settings.env == "development":
+    partner = (settings.kyc_partner or "").strip().lower()
+    if settings.env == "development" or partner in {"", "mock", "dev"} or not settings.kyc_partner_api_key:
         return _DevKYCAdapter()
     return _DigioKYCAdapter()

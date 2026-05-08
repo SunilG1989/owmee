@@ -90,7 +90,7 @@ class _DevPaymentAdapter:
         expire_minutes: int = 30,
     ) -> PaymentLinkResult:
         fake_id = f"plink_dev_{uuid4().hex[:12]}"
-        fake_url = f"http://localhost:8000/v1/dev/pay/{fake_id}"
+        fake_url = f"{settings.app_base_url.rstrip('/')}/v1/dev/pay/{fake_id}"
         expires_at = datetime.now(timezone.utc) + timedelta(minutes=expire_minutes)
         logger.info(
             "payment_link.dev_created",
@@ -304,6 +304,7 @@ class _RazorpayAdapter:
 # ── Factory ──────────────────────────────────────────────────────────────────────
 
 def get_payment_adapter() -> _DevPaymentAdapter | _RazorpayAdapter:
-    if settings.env == "development" or not settings.pa_key_id:
+    provider = (settings.pa_provider or "").strip().lower()
+    if settings.env == "development" or provider in {"", "mock", "dev"} or not settings.pa_key_id:
         return _DevPaymentAdapter()
     return _RazorpayAdapter()
