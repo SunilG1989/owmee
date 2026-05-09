@@ -28,9 +28,9 @@ import { C, S, T } from '../../../utils/tokens';
 import type { RootScreen } from '../../../navigation/types';
 
 const BENGALURU = { lat: 12.9716, lng: 77.5946 };
-const GPS_TIMEOUT_MS = 14_000;
-const EXCELLENT_ACCURACY_M = 50;
-const MAX_USEFUL_ACCURACY_M = 500;
+const GPS_FAST_WINDOW_MS = 4_500;
+const GPS_HARD_TIMEOUT_MS = 10_000;
+const GOOD_ACCURACY_M = 150;
 
 export default function LocationDetectScreen({
   navigation,
@@ -40,6 +40,7 @@ export default function LocationDetectScreen({
   const [denied, setDenied] = useState(false);
   const watchRef = useRef<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hardTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const cleanupProbe = () => {
     if (watchRef.current != null) {
@@ -49,6 +50,10 @@ export default function LocationDetectScreen({
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
+    }
+    if (hardTimerRef.current) {
+      clearTimeout(hardTimerRef.current);
+      hardTimerRef.current = null;
     }
   };
 
@@ -96,12 +101,16 @@ export default function LocationDetectScreen({
 
       let best: GeolocationResponse | null = null;
       let settled = false;
+      const startedAt = Date.now();
 
       const finish = (pos: GeolocationResponse | null) => {
         if (settled) return;
         settled = true;
-        const accuracy = pos?.coords?.accuracy ?? Number.POSITIVE_INFINITY;
-        if (pos && accuracy <= MAX_USEFUL_ACCURACY_M) {
+        const accuracy = pos?.coords?.accuracy;
+        console.info(
+          `[LocationPerf] gps_probe_ms=${Date.now() - startedAt} accuracy_m=${accuracy ?? 'none'}`,
+        );
+        if (pos) {
           goToMap(
             pos.coords.latitude,
             pos.coords.longitude,
@@ -118,18 +127,21 @@ export default function LocationDetectScreen({
           const accuracy = pos.coords.accuracy ?? Number.POSITIVE_INFINITY;
           const bestAccuracy = best?.coords?.accuracy ?? Number.POSITIVE_INFINITY;
           if (!best || accuracy < bestAccuracy) best = pos;
-          if (accuracy <= EXCELLENT_ACCURACY_M) finish(pos);
+          if (accuracy <= GOOD_ACCURACY_M) finish(pos);
         },
         () => finish(best),
         {
           enableHighAccuracy: true,
-          timeout: GPS_TIMEOUT_MS,
-          maximumAge: 5_000,
+          timeout: GPS_HARD_TIMEOUT_MS,
+          maximumAge: 30_000,
           distanceFilter: 0,
         },
       );
 
-      timerRef.current = setTimeout(() => finish(best), GPS_TIMEOUT_MS);
+      timerRef.current = setTimeout(() => {
+        if (best) finish(best);
+      }, GPS_FAST_WINDOW_MS);
+      hardTimerRef.current = setTimeout(() => finish(best), GPS_HARD_TIMEOUT_MS);
     } catch {
       cleanupProbe();
       setProbing(false);
