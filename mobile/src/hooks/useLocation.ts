@@ -25,21 +25,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LOCATION_KEY } from '../utils/storageKeys';
 import { useAuthStore } from '../store/authStore';
-import { Addresses, type UserAddress } from '../services/api';
-
-export interface UserLocation {
-  lat: number;
-  lng: number;
-  city: string;
-  locality?: string;
-  state?: string;
-  pincode?: string;
-  fullAddress?: string;
-  /** Set to the address row id when sourced from /v1/users/me/addresses. */
-  addressId?: string;
-  /** What the home pill should show (e.g. "Home · JP Nagar Phase 7"). */
-  label?: string;
-}
+import { Addresses } from '../services/api';
+import { addressToLocation, cacheAddressLocation, type UserLocation } from '../utils/addressLocation';
 
 // Kept for legacy imports. Prefer reading the user's default address.
 export const INDIAN_CITIES = [
@@ -54,35 +41,6 @@ export const INDIAN_CITIES = [
   { name: 'Jaipur', lat: 26.9124, lng: 75.7873 },
   { name: 'Lucknow', lat: 26.8467, lng: 80.9462 },
 ];
-
-function _addressToLocation(addr: UserAddress): UserLocation {
-  const labelText =
-    addr.label === 'other' && addr.custom_label
-      ? addr.custom_label
-      : addr.label.charAt(0).toUpperCase() + addr.label.slice(1);
-  const fullAddress = [
-    addr.flat_house_number,
-    addr.building_name,
-    addr.address_line_1,
-    addr.locality,
-    addr.city,
-    addr.pincode,
-  ]
-    .filter(Boolean)
-    .join(', ');
-
-  return {
-    lat: addr.lat,
-    lng: addr.lng,
-    city: addr.city,
-    locality: addr.locality ?? undefined,
-    state: addr.state,
-    pincode: addr.pincode ?? undefined,
-    fullAddress,
-    addressId: addr.id,
-    label: labelText,
-  };
-}
 
 export function useLocation() {
   const { isAuthenticated } = useAuthStore();
@@ -113,9 +71,9 @@ export function useLocation() {
         res.data.find((a) => a.is_default) ??
         (res.data.length > 0 ? res.data[0] : null);
       if (def) {
-        const loc = _addressToLocation(def);
+        const loc = addressToLocation(def);
         setLocation(loc);
-        AsyncStorage.setItem(LOCATION_KEY, JSON.stringify(loc)).catch(() => {});
+        cacheAddressLocation(def).catch(() => {});
       } else {
         // Authed user with no addresses — clear the stale cache so the
         // pill says "Set location" instead of showing a previous user's

@@ -36,6 +36,7 @@ import { parseApiError } from '../../../utils/errors';
 import { useAuthStore } from '../../../store/authStore';
 import { C, R, S, T } from '../../../utils/tokens';
 import type { RootScreen } from '../../../navigation/types';
+import { cacheAddressLocation } from '../../../utils/addressLocation';
 
 type Label = 'home' | 'work' | 'other';
 const LABEL_OPTIONS: { key: Label; emoji: string; text: string }[] = [
@@ -98,6 +99,7 @@ export default function AddressDetailsScreen({
   const handleSave = async () => {
     if (!canSave) return;
     setSaving(true);
+    const shouldMakeDefault = returnTo === 'MainTabs' || setAsDefault;
 
     const body: CreateAddressRequest = {
       label,
@@ -115,7 +117,7 @@ export default function AddressDetailsScreen({
       city: city.trim(),
       state: state.trim(),
       pincode: pincode.trim(),
-      is_default: setAsDefault,
+      is_default: shouldMakeDefault,
       source: source === 'gps_detected' ? 'gps_detected' : 'manual',
     };
 
@@ -123,14 +125,17 @@ export default function AddressDetailsScreen({
       const res = isEdit
         ? await Addresses.update(edit!.id, body)
         : await Addresses.create(body);
-      onSaved(res.data);
+      await onSaved(res.data);
     } catch (e) {
       Alert.alert('Could not save', parseApiError(e, 'Please try again.'));
       setSaving(false);
     }
   };
 
-  const onSaved = (created: UserAddress) => {
+  const onSaved = async (created: UserAddress) => {
+    if (created.is_default || returnTo === 'MainTabs') {
+      await cacheAddressLocation(created).catch(() => {});
+    }
     // If a returnTo was passed (e.g. caller wants control back), use the
     // navigation params hook instead. For Phase 1 we just navigate back to
     // the configured destination — RootNavigator will re-fetch the

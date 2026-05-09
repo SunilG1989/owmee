@@ -40,6 +40,7 @@ import CategoryRail, { type CategoryDef } from '../components/CategoryRail';
 import SellBlock from '../components/SellBlock';
 import { FeedCard } from '../components/OwmeeListingCard';
 import { parseApiError } from '../utils/errors';
+import { locationDisplayLabel } from '../utils/addressLocation';
 
 const PREVIEW_FEED_ITEMS: FeedListing[] = [
   {
@@ -406,13 +407,11 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
     });
   };
 
-  // Location label — match the reference's city-level default.
+  // Location label — show the saved address area, not just the city, so
+  // users can see that their updated address actually took effect.
   const locationLabel = useMemo(() => {
-    if (location?.city) return location.city;
-    if (location?.locality) return location.locality;
-    if (location?.label) return location.label;
-    return 'Bengaluru';
-  }, [location]);
+    return locationDisplayLabel(location, isAuthenticated ? 'Set location' : 'Bengaluru');
+  }, [isAuthenticated, location]);
 
   // ── Header section (rendered as ListHeaderComponent) ────────────────────
   const Header = useMemo(() => () => (

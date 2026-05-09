@@ -82,10 +82,9 @@ export default function LocationMapScreen({
     }, REGION_DEBOUNCE_MS);
   };
 
-  const canConfirm = !loadingReverse && reverse !== null && !!reverse.city && !!reverse.state;
+  const canConfirm = !loadingReverse;
 
   const onConfirm = () => {
-    if (!reverse) return;
     navigation.replace('AddressDetails', {
       lat: center.lat,
       lng: center.lng,
@@ -171,7 +170,7 @@ export default function LocationMapScreen({
         ) : null}
 
         <Button
-          label="Confirm location"
+          label={reverse ? 'Confirm location' : 'Enter address details'}
           onPress={onConfirm}
           disabled={!canConfirm}
           style={s.confirmBtn}

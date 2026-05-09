@@ -31,45 +31,13 @@ import { Addresses, type UserAddress } from '../../../services/api';
 import { BackButton, Button, EmptyState, ErrorState } from '../../../components/ui';
 import { C, R, S, Shadow, T } from '../../../utils/tokens';
 import type { RootScreen } from '../../../navigation/types';
-import { LOCATION_KEY } from '../../../utils/storageKeys';
+import { cacheAddressLocation } from '../../../utils/addressLocation';
 
 const LABEL_GLYPH: Record<UserAddress['label'], string> = {
   home: '🏠',
   work: '💼',
   other: '📍',
 };
-
-function cacheLocation(addr: UserAddress) {
-  const labelText =
-    addr.label === 'other' && addr.custom_label
-      ? addr.custom_label
-      : addr.label.charAt(0).toUpperCase() + addr.label.slice(1);
-  const fullAddress = [
-    addr.flat_house_number,
-    addr.building_name,
-    addr.address_line_1,
-    addr.locality,
-    addr.city,
-    addr.pincode,
-  ]
-    .filter(Boolean)
-    .join(', ');
-
-  return AsyncStorage.setItem(
-    LOCATION_KEY,
-    JSON.stringify({
-      lat: addr.lat,
-      lng: addr.lng,
-      city: addr.city,
-      locality: addr.locality ?? undefined,
-      state: addr.state,
-      pincode: addr.pincode ?? undefined,
-      fullAddress,
-      addressId: addr.id,
-      label: labelText,
-    }),
-  );
-}
 
 export default function AddressPickerScreen({
   navigation,
@@ -141,7 +109,7 @@ export default function AddressPickerScreen({
         const selected = addr.is_default
           ? addr
           : (await Addresses.update(addr.id, { is_default: true })).data;
-        await cacheLocation(selected);
+        await cacheAddressLocation(selected);
       } catch (e: any) {
         Alert.alert(
           'Could not change location',

@@ -22,7 +22,7 @@ import {
 } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
 import { useAuthStore } from '../store/authStore';
-import { LOCATION_KEY, ONBOARDING_SEEN_KEY } from '../utils/storageKeys';
+import { ONBOARDING_SEEN_KEY } from '../utils/storageKeys';
 import { C, T, S, R, Shadow } from '../utils/tokens';
 import SplashScreen from '../components/SplashScreen';
 
@@ -175,7 +175,7 @@ function AuthFlowNavigator() {
 /**
  * MainTabsWithAddressGate — Address PRD section 4.1
  *
- * Replaces the old "is locationSet AsyncStorage?" check with a real
+ * Replaces the old local-location gate with a real
  * "does this user have at least one saved address?" API check that
  * fires once after auth. If 0 addresses, the user is reset onto the
  * LocationDetect screen with returnTo=MainTabs; AddressDetailsScreen
@@ -327,7 +327,6 @@ function FeRootStack() {
 
 export default function RootNavigator() {
   const { hydrate, hydrated, isAuthenticated, role } = useAuthStore();
-  const [locationSet, setLocationSet] = useState<boolean | null>(null);
   const [onboardingSeen, setOnboardingSeen] = useState<boolean | null>(null);
   // Minimum-display floor so the splash doesn't flash on fast devices —
   // same 700ms guard Amazon / Meesho use to keep brand perception
@@ -342,38 +341,8 @@ export default function RootNavigator() {
   useEffect(() => {
     hydrate();
 
-    Promise.all([
-      AsyncStorage.getItem(LOCATION_KEY),
-      AsyncStorage.getItem(ONBOARDING_SEEN_KEY),
-    ]).then(async ([loc, onb]) => {
-      setLocationSet(!!loc);
+    AsyncStorage.getItem(ONBOARDING_SEEN_KEY).then((onb) => {
       setOnboardingSeen(!!onb);
-
-      if (onb && !loc) {
-        try {
-          const { PermissionsAndroid, Platform } = require('react-native');
-          if (Platform.OS === 'android') {
-            const hasPermission = await PermissionsAndroid.check(
-              PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-            );
-            if (hasPermission) {
-              const Geolocation = require('@react-native-community/geolocation').default;
-              Geolocation.getCurrentPosition(
-                async (pos: any) => {
-                  const { latitude, longitude } = pos.coords;
-                  await AsyncStorage.setItem(LOCATION_KEY, JSON.stringify({
-                    lat: latitude, lng: longitude, city: 'Detecting...', state: '',
-                    fullAddress: 'Detecting address...',
-                  }));
-                  setLocationSet(true);
-                },
-                () => {},
-                { enableHighAccuracy: false, timeout: 5000, maximumAge: 300000 },
-              );
-            }
-          }
-        } catch {}
-      }
     });
 
     // Sync tier/role from backend on startup
@@ -398,21 +367,13 @@ export default function RootNavigator() {
     }
   }, []);
 
-  if (!hydrated || locationSet === null || onboardingSeen === null || !splashMinElapsed) {
+  if (!hydrated || onboardingSeen === null || !splashMinElapsed) {
     return <SplashScreen />;
   }
 
   // ── FE branch: if logged-in user has FE role, show the FE app ──────────────
   if (isAuthenticated && role === 'fe') {
     return <FeRootStack />;
-  }
-
-  if (!locationSet) {
-    return (
-      <LocationPickerScreen
-        onLocationSet={() => setLocationSet(true)}
-      />
-    );
   }
 
   if (!onboardingSeen) {
