@@ -15,6 +15,7 @@
  */
 import React, { useCallback, useState } from 'react';
 import {
+  Alert,
   ActivityIndicator,
   FlatList,
   StyleSheet,
@@ -30,12 +31,45 @@ import { Addresses, type UserAddress } from '../../../services/api';
 import { BackButton, Button, EmptyState, ErrorState } from '../../../components/ui';
 import { C, R, S, Shadow, T } from '../../../utils/tokens';
 import type { RootScreen } from '../../../navigation/types';
+import { LOCATION_KEY } from '../../../utils/storageKeys';
 
 const LABEL_GLYPH: Record<UserAddress['label'], string> = {
   home: '🏠',
   work: '💼',
   other: '📍',
 };
+
+function cacheLocation(addr: UserAddress) {
+  const labelText =
+    addr.label === 'other' && addr.custom_label
+      ? addr.custom_label
+      : addr.label.charAt(0).toUpperCase() + addr.label.slice(1);
+  const fullAddress = [
+    addr.flat_house_number,
+    addr.building_name,
+    addr.address_line_1,
+    addr.locality,
+    addr.city,
+    addr.pincode,
+  ]
+    .filter(Boolean)
+    .join(', ');
+
+  return AsyncStorage.setItem(
+    LOCATION_KEY,
+    JSON.stringify({
+      lat: addr.lat,
+      lng: addr.lng,
+      city: addr.city,
+      locality: addr.locality ?? undefined,
+      state: addr.state,
+      pincode: addr.pincode ?? undefined,
+      fullAddress,
+      addressId: addr.id,
+      label: labelText,
+    }),
+  );
+}
 
 export default function AddressPickerScreen({
   navigation,
@@ -44,6 +78,7 @@ export default function AddressPickerScreen({
   const [addresses, setAddresses] = useState<UserAddress[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectingId, setSelectingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -70,16 +105,17 @@ export default function AddressPickerScreen({
     // Re-uses the 3-screen flow. After save the new address row will be
     // present on focus when we come back here.
     navigation.navigate('LocationDetect', {
-      returnTo: 'AddressPicker',
+      returnTo: route.params?.returnTo === 'MainTabs' ? 'MainTabs' : 'AddressPicker',
     });
   };
 
   const onUse = async (addr: UserAddress) => {
+    const returnTo = route.params?.returnTo;
     // P0 (2026-05-03): when the caller is Checkout (or anywhere else that
     // reads @ow_address as the source of truth for the active delivery
     // address), snapshot the chosen address into AsyncStorage so the
     // returning screen reflects the selection on next focus.
-    if (route.params?.returnTo === 'Checkout') {
+    if (returnTo === 'Checkout') {
       try {
         await AsyncStorage.setItem(
           '@ow_address',
@@ -98,6 +134,21 @@ export default function AddressPickerScreen({
         );
       } catch {
         // non-blocking — checkout will fall back to its existing logic
+      }
+    } else {
+      try {
+        setSelectingId(addr.id);
+        const selected = addr.is_default
+          ? addr
+          : (await Addresses.update(addr.id, { is_default: true })).data;
+        await cacheLocation(selected);
+      } catch (e: any) {
+        Alert.alert(
+          'Could not change location',
+          e?.response?.data?.detail?.message || 'Please try again.',
+        );
+        setSelectingId(null);
+        return;
       }
     }
     if (navigation.canGoBack()) {
@@ -170,7 +221,12 @@ export default function AddressPickerScreen({
         keyExtractor={(a) => a.id}
         contentContainerStyle={s.listBody}
         renderItem={({ item }) => (
-          <AddressCard address={item} onUse={() => onUse(item)} onEdit={() => onEdit(item)} />
+          <AddressCard
+            address={item}
+            onUse={() => onUse(item)}
+            onEdit={() => onEdit(item)}
+            selecting={selectingId === item.id}
+          />
         )}
         ListFooterComponent={
           <Button
@@ -189,10 +245,12 @@ function AddressCard({
   address,
   onUse,
   onEdit,
+  selecting,
 }: {
   address: UserAddress;
   onUse: () => void;
   onEdit: () => void;
+  selecting?: boolean;
 }) {
   const labelText =
     address.label === 'other' && address.custom_label
@@ -246,6 +304,7 @@ function AddressCard({
           onPress={onUse}
           variant="secondary"
           size="sm"
+          loading={selecting}
           style={s.useBtn}
         />
       </View>

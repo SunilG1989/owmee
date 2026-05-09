@@ -21,6 +21,7 @@
  *     compile. New code should use the AddressPicker / 3-screen flow.
  */
 import { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LOCATION_KEY } from '../utils/storageKeys';
 import { useAuthStore } from '../store/authStore';
@@ -103,36 +104,50 @@ export function useLocation() {
       .finally(() => setLoading(false));
   }, []);
 
+  const refresh = useCallback(async (isCancelled?: () => boolean) => {
+    if (!isAuthenticated) return;
+    try {
+      const res = await Addresses.list();
+      if (isCancelled?.()) return;
+      const def =
+        res.data.find((a) => a.is_default) ??
+        (res.data.length > 0 ? res.data[0] : null);
+      if (def) {
+        const loc = _addressToLocation(def);
+        setLocation(loc);
+        AsyncStorage.setItem(LOCATION_KEY, JSON.stringify(loc)).catch(() => {});
+      } else {
+        // Authed user with no addresses — clear the stale cache so the
+        // pill says "Set location" instead of showing a previous user's
+        // address that the current user never set.
+        setLocation(null);
+        AsyncStorage.removeItem(LOCATION_KEY).catch(() => {});
+      }
+    } catch {
+      // Silent; cold-start cache stays.
+    } finally {
+      if (!isCancelled?.()) setLoading(false);
+    }
+  }, [isAuthenticated]);
+
   // Authed path: refresh from API. Default address wins.
   useEffect(() => {
-    if (!isAuthenticated) return;
     let cancelled = false;
-    (async () => {
-      try {
-        const res = await Addresses.list();
-        if (cancelled) return;
-        const def =
-          res.data.find((a) => a.is_default) ??
-          (res.data.length > 0 ? res.data[0] : null);
-        if (def) {
-          const loc = _addressToLocation(def);
-          setLocation(loc);
-          AsyncStorage.setItem(LOCATION_KEY, JSON.stringify(loc)).catch(() => {});
-        } else {
-          // Authed user with no addresses — clear the stale cache so the
-          // pill says "Set location" instead of showing a previous user's
-          // address that the current user never set.
-          setLocation(null);
-          AsyncStorage.removeItem(LOCATION_KEY).catch(() => {});
-        }
-      } catch {
-        // Silent; cold-start cache stays.
-      }
-    })();
+    refresh(() => cancelled);
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated]);
+  }, [refresh]);
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      refresh(() => cancelled);
+      return () => {
+        cancelled = true;
+      };
+    }, [refresh]),
+  );
 
   // Legacy no-ops: any code still calling these compiles, but the new
   // flow lives in the address screens. Remove when PRD Phase 2 finishes
@@ -151,5 +166,5 @@ export function useLocation() {
     [],
   );
 
-  return { location, loading, denied, request, setManualCity };
+  return { location, loading, denied, request, setManualCity, refresh };
 }

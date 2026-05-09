@@ -282,7 +282,7 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
     return () => { alive = false; };
   }, [isAuthenticated]);
 
-  // Refetch when location changes (after user picks a new one in LocationPickerScreen)
+  // Refetch when location changes after the user updates their saved address.
   const lastLocationKey = useRef<string>('');
   useEffect(() => {
     if (!location) return;
@@ -373,7 +373,11 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
   };
 
   const handleLocationPress = () => {
-    (navigation as any).navigate('LocationPicker');
+    if (!isAuthenticated) {
+      (navigation as any).navigate('LocationPicker');
+      return;
+    }
+    (navigation as any).navigate('AddressPicker', { returnTo: 'MainTabs' });
   };
 
   const handleNotifPress = () => {
