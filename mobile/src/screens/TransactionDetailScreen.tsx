@@ -1,7 +1,7 @@
 /**
  * TransactionDetailScreen — Sprint 6c rewrite
  *
- * Replaces the old meetup-based UI. The new model is fully managed
+ * Replaces the old direct-handoff UI. The new model is fully managed
  * logistics: buyer pays → FE picks up + inspects → item at Owmee hub
  * → admin routes (FE delivery or courier) → delivered → buyer
  * confirms receipt OR auto-completes after 48h.
@@ -49,6 +49,7 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
   const [txn, setTxn] = useState<Transaction | null>(null);
   const [tracking, setTracking] = useState<TrackingResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
   const [showRate, setShowRate] = useState(false);
   const [rating, setRating] = useState(0);
@@ -71,6 +72,7 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
   const [conditionConfirmed, setConditionConfirmed] = useState(false);
 
   const reload = useCallback(async () => {
+    setLoadError(null);
     try {
       const [tRes, tk] = await Promise.all([
         Transactions.get(transactionId),
@@ -78,8 +80,10 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
       ]);
       setTxn(tRes.data);
       setTracking(tk.data);
-    } catch {
-      // Silent here so the screen still mounts; followup will surface real errors
+    } catch (e) {
+      setTxn(null);
+      setTracking(null);
+      setLoadError(parseApiError(e, 'We could not load this transaction.'));
     } finally {
       setLoading(false);
     }
@@ -93,9 +97,11 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
   if (!txn || !tracking) {
     return (
       <SafeAreaView style={s.safe}>
-        <Text style={{ textAlign: 'center', marginTop: 60, color: C.text3 }}>
-          We couldn't load this transaction.
-        </Text>
+        <View style={s.centerError}>
+          <Text style={s.centerErrorTitle}>Could not load order</Text>
+          <Text style={s.centerErrorText}>{loadError || 'Please try again.'}</Text>
+          <Button label="Retry" variant="primary" onPress={reload} />
+        </View>
       </SafeAreaView>
     );
   }
@@ -106,6 +112,8 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
   const isCompleted = status === 'completed';
   const isDisputed = status === 'disputed';
   const isCancelled = status === 'cancelled' || status === 'pickup_rejected';
+  const disputeNeedsPhoto = disputeReason === 'item_not_as_described';
+  const returnNeedsPhoto = ['item_not_as_described', 'damaged_in_transit', 'wrong_item'].includes(returnReason);
 
   const showAckCode = isBuyer && tracking.ack_code && status === 'delivery_in_progress' && tracking.delivery_mode === 'fe';
 
@@ -177,6 +185,7 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
 
         <View style={[s.banner, isCompleted && s.bannerOK, isDisputed && s.bannerWarn, isCancelled && s.bannerErr]}>
           <Text style={s.bannerText}>{labelForStatus(status, isBuyer)}</Text>
+          <Text style={s.bannerSubText}>{nextStepForStatus(status, isBuyer, tracking.delivery_mode)}</Text>
         </View>
 
         {showAckCode && (
@@ -347,7 +356,7 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
               <Text style={s.refundHint}>Approved. Owmee FE will pick the item up from you soon.</Text>
             )}
             {tracking.return_status === 'pickup_scheduled' && (
-              <Text style={s.refundHint}>FE assigned. They'll contact you shortly.</Text>
+              <Text style={s.refundHint}>FE assigned. Track pickup updates here.</Text>
             )}
             {tracking.return_status === 'picked_up' && (
               <Text style={s.refundHint}>Item collected. Refund processing.</Text>
@@ -370,7 +379,7 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
           <View style={s.modal}>
             <Text style={s.modalTitle}>Open a dispute</Text>
             <Text style={s.disputeHint}>
-              Use this only if something is genuinely wrong. We review every dispute against the FE inspection report and listing snapshot.
+              Use this only if something is genuinely wrong. We compare your photos with the listing and FE inspection report. Seller payout stays on hold during review.
             </Text>
             <Text style={s.rowLabel}>What went wrong?</Text>
             {DISPUTE_REASONS.map(opt => (
@@ -394,7 +403,9 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
               maxLength={1000}
             />
 
-            <Text style={[s.rowLabel, s.rowLabelSpaced]}>Add photos (highly recommended)</Text>
+            <Text style={[s.rowLabel, s.rowLabelSpaced]}>
+              {disputeNeedsPhoto ? 'Add photos (required)' : 'Add photos (recommended)'}
+            </Text>
             <PhotoStrip
               photos={disputePhotos}
               onPick={() => pickPhotos(disputePhotos, setDisputePhotos)}
@@ -411,7 +422,7 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
               <Button
                 label="Open dispute"
                 variant="primary"
-                disabled={disputeDesc.length < 10 || acting}
+                disabled={disputeDesc.length < 10 || (disputeNeedsPhoto && disputePhotos.length === 0) || acting}
                 loading={acting}
                 onPress={async () => {
                   setShowDispute(false);
@@ -428,7 +439,7 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
                       );
                     }
                     await Disputes.raise(transactionId, disputeReason, disputeDesc, photoKeys);
-                    Alert.alert('Dispute opened', 'Our team will review within 48 hours and contact you. The seller payout is on hold until then.');
+                    Alert.alert('Dispute opened', 'Our team will review within 48 hours. Track updates on this screen. Seller payout is on hold until then.');
                     await reload();
                   } catch (e: any) {
                     if (e?.response?.status === 403) {
@@ -454,8 +465,7 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
           <View style={s.modal}>
             <Text style={s.modalTitle}>Return this item</Text>
             <Text style={s.disputeHint}>
-              Owmee FE will pick the item up from you and refund your original payment.
-              You have 7 days from delivery to request a return.
+              Owmee will review the reason and evidence first. If approved, FE pickup and refund status will appear on this screen.
             </Text>
             <Text style={s.rowLabel}>Why are you returning?</Text>
             {RETURN_REASONS.map(opt => (
@@ -479,7 +489,9 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
               maxLength={1000}
             />
 
-            <Text style={[s.rowLabel, s.rowLabelSpaced]}>Add photos (highly recommended)</Text>
+            <Text style={[s.rowLabel, s.rowLabelSpaced]}>
+              {returnNeedsPhoto ? 'Add photos (required)' : 'Add photos (recommended)'}
+            </Text>
             <PhotoStrip
               photos={returnPhotos}
               onPick={() => pickPhotos(returnPhotos, setReturnPhotos)}
@@ -496,7 +508,7 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
               <Button
                 label="Request return"
                 variant="primary"
-                disabled={returnDesc.length < 10 || acting}
+                disabled={returnDesc.length < 10 || (returnNeedsPhoto && returnPhotos.length === 0) || acting}
                 loading={acting}
                 onPress={async () => {
                   setShowReturn(false);
@@ -656,8 +668,48 @@ function labelForStatus(status: string, isBuyer: boolean): string {
   }
 }
 
+function nextStepForStatus(status: string, isBuyer: boolean, deliveryMode?: string | null): string {
+  switch (status) {
+    case 'payment_pending':
+      return isBuyer ? 'Complete payment to reserve the item.' : 'We will update you after the buyer pays.';
+    case 'payment_captured':
+      return isBuyer ? 'Owmee will collect and inspect the item before delivery.' : 'Keep the item ready for Owmee pickup.';
+    case 'at_hub':
+      return 'Inspection is done. We are preparing delivery.';
+    case 'delivery_in_progress':
+      return deliveryMode === 'courier'
+        ? 'Use the courier tracking link below for live movement.'
+        : 'Keep your handover code private until the FE is at your door.';
+    case 'delivered':
+      return isBuyer ? 'Check the item and confirm receipt only if everything is fine.' : 'Buyer confirmation releases the payout.';
+    case 'completed':
+      return 'You can rate this order and review the final details here.';
+    case 'disputed':
+      return 'Evidence is under review. Payout stays paused until a decision is made.';
+    case 'pickup_rejected':
+      return 'Refund starts automatically because the pickup inspection failed.';
+    case 'cancelled':
+      return 'No further action is needed.';
+    default:
+      return 'Track the next update here.';
+  }
+}
+
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bone },
+  centerError: {
+    margin: S.xl,
+    marginTop: S.xxxl + S.xxl,
+    padding: S.xl,
+    borderRadius: R.md,
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
+    alignItems: 'center',
+    gap: S.md,
+  },
+  centerErrorTitle: { fontSize: T.size.lg, fontWeight: T.weight.bold, color: C.text },
+  centerErrorText: { fontSize: T.size.sm + 1, color: C.text3, textAlign: 'center', lineHeight: 20 },
   header: {
     paddingHorizontal: S.lg, paddingVertical: S.md,
     flexDirection: 'row', alignItems: 'center', gap: S.md,
@@ -674,6 +726,7 @@ const s = StyleSheet.create({
   bannerWarn: { backgroundColor: C.yellowLight, borderColor: C.yellow },
   bannerErr: { backgroundColor: C.redLight, borderColor: C.red },
   bannerText: { fontSize: T.size.sm + 1, color: C.text, lineHeight: 20 },
+  bannerSubText: { fontSize: T.size.sm, color: C.text3, lineHeight: 18, marginTop: S.xs },
 
   ackBox: {
     margin: S.lg, padding: S.xl,

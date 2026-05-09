@@ -3,7 +3,6 @@ Community ORM models — Sprint 7 / Phase 1.
 
 Community              : apartment/school/neighborhood membership unit
 CommunityVerification  : manual-proof review queue row
-SafeMeetupPoint        : per-community approved pickup spot
 """
 import uuid
 
@@ -18,7 +17,6 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
 
 from app.db.session import Base, TimestampMixin
 
@@ -36,13 +34,6 @@ class Community(Base, TimestampMixin):
     pincode = Column(String(10), nullable=True)
     is_active = Column(Boolean, nullable=False, default=True)
     member_count = Column(Integer, nullable=False, default=0)
-
-    safe_meetup_points = relationship(
-        "SafeMeetupPoint",
-        back_populates="community",
-        cascade="all, delete-orphan",
-    )
-
 
 class CommunityVerification(Base, TimestampMixin):
     __tablename__ = "community_verifications"
@@ -69,21 +60,3 @@ class CommunityVerification(Base, TimestampMixin):
     reviewed_at = Column(DateTime(timezone=True), nullable=True)
     rejection_reason = Column(Text, nullable=True)
     notes = Column(Text, nullable=True)
-
-
-class SafeMeetupPoint(Base, TimestampMixin):
-    __tablename__ = "safe_meetup_points"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    community_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("communities.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    name = Column(String(200), nullable=False)
-    notes = Column(Text, nullable=True)
-    is_active = Column(Boolean, nullable=False, default=True)
-    sort_order = Column(Integer, nullable=False, default=0)
-
-    community = relationship("Community", back_populates="safe_meetup_points")

@@ -3,8 +3,8 @@
 All mobile location lookups go through here. Three endpoints:
 
 GET /v1/geo/reverse?lat=&lng=
-    Legacy Nominatim reverse geocode. Returns flat shape used by
-    LocationPickerScreen (deprecated as of address PRD).
+    Legacy Nominatim reverse geocode. Returns a flat shape retained for
+    backward-compatible clients.
 
 GET /v1/geo/search?q=
     Forward search for address autocomplete. Nominatim-backed.

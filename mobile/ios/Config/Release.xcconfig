@@ -1,0 +1,4 @@
+#include? "../Pods/Target Support Files/Pods-owmee/Pods-owmee.release.xcconfig"
+
+GOOGLE_MAPS_API_KEY =
+#include? "GoogleMaps.local.xcconfig"

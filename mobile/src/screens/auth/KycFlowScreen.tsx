@@ -89,9 +89,6 @@ export default function KycFlowScreen({ navigation }: any) {
         address_state: addrState.trim(),
         source: addrCity ? 'aadhaar' : 'manual',
       });
-      await AsyncStorage.setItem('@ow_address', JSON.stringify({
-        city: addrCity.trim(), pincode: addrPincode.trim(), state: addrState.trim(),
-      }));
       setStep(2);
       AsyncStorage.setItem('@ow_kyc_step', '2').catch(() => {});
     } catch (e: any) {

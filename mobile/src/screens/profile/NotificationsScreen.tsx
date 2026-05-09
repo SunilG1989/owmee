@@ -5,6 +5,7 @@ import { BackButton } from '../../components/ui';
 import { useFocusEffect } from '@react-navigation/native';
 import { C, T, S, R, timeAgo } from '../../utils/tokens';
 import { Notifications } from '../../services/api';
+import { parseApiError } from '../../utils/errors';
 
 interface NotifItem {
   id: string; type: string; title: string; body: string;
@@ -22,12 +23,16 @@ export default function NotificationsScreen({ navigation }: any) {
   const [items, setItems] = useState<NotifItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    setError(null);
     try {
       const res = await Notifications.list();
       setItems(res.data?.notifications || []);
-    } catch {} finally { setLoading(false); setRefreshing(false); }
+    } catch (e) {
+      setError(parseApiError(e, 'Could not load notifications.'));
+    } finally { setLoading(false); setRefreshing(false); }
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, []));
@@ -84,8 +89,15 @@ export default function NotificationsScreen({ navigation }: any) {
         ListEmptyComponent={
           <View style={s.empty}>
             <Text style={s.emptyEmoji}>🔔</Text>
-            <Text style={s.emptyTitle}>No notifications</Text>
-            <Text style={s.emptySub}>You'll see offers, updates, and alerts here</Text>
+            <Text style={s.emptyTitle}>{error ? 'Could not load notifications' : 'No notifications'}</Text>
+            <Text style={s.emptySub}>
+              {error || "You'll see offers, order updates, and safety alerts here."}
+            </Text>
+            {error ? (
+              <TouchableOpacity style={s.retryBtn} onPress={load} activeOpacity={0.8}>
+                <Text style={s.retryText}>Retry</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         }
         removeClippedSubviews maxToRenderPerBatch={10} windowSize={7}
@@ -130,4 +142,15 @@ const s = StyleSheet.create({
   emptyEmoji: { fontSize: T.size.display + 18, marginBottom: S.lg },
   emptyTitle: { fontSize: T.size.lg + 1, fontWeight: T.weight.semi, color: C.text, marginBottom: S.xs },
   emptySub: { fontSize: T.size.base, color: C.text3, textAlign: 'center' },
+  retryBtn: {
+    marginTop: S.lg,
+    minWidth: 108,
+    height: 40,
+    borderRadius: R.pill,
+    backgroundColor: C.petrol,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: S.xl,
+  },
+  retryText: { color: C.white, fontSize: T.size.sm + 1, fontWeight: T.weight.semi },
 });

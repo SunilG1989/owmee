@@ -1,12 +1,15 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
-import { useAuthStore } from '../store/authStore';
+import { ensureAuthHydrated, useAuthStore } from '../store/authStore';
 
 import { API_URL, REQUEST_TIMEOUT, UPLOAD_TIMEOUT } from '../config';
 const BASE = API_URL;
 const api = axios.create({ baseURL: BASE, timeout: REQUEST_TIMEOUT });
 
+type RetriableRequestConfig = InternalAxiosRequestConfig & { _retry?: boolean };
+
 // ── Request interceptor: attach token ────────────────────────────────────────
-api.interceptors.request.use((cfg) => {
+api.interceptors.request.use(async (cfg) => {
+  await ensureAuthHydrated();
   const token = useAuthStore.getState().accessToken;
   if (token) cfg.headers.Authorization = `Bearer ${token}`;
   return cfg;
@@ -46,9 +49,14 @@ function extractUserId(token: string): string {
 api.interceptors.response.use(
   (res) => res,
   async (error: AxiosError) => {
-    const orig = error.config;
+    const orig = error.config as RetriableRequestConfig | undefined;
     if (!orig || error.response?.status !== 401) return Promise.reject(error);
-    if (orig.url?.includes('/auth/')) return Promise.reject(error);
+    const url = orig.url || '';
+    if (url.includes('/auth/otp/') || url.includes('/auth/token/refresh')) {
+      return Promise.reject(error);
+    }
+    if (orig._retry) return Promise.reject(error);
+    orig._retry = true;
 
     if (isRefreshing) {
       return new Promise((resolve, reject) => {
@@ -57,7 +65,8 @@ api.interceptors.response.use(
     }
 
     isRefreshing = true;
-    const { refreshToken, logout } = useAuthStore.getState();
+    await ensureAuthHydrated();
+    const { refreshToken } = useAuthStore.getState();
 
     if (!refreshToken) {
       isRefreshing = false;
@@ -77,7 +86,7 @@ api.interceptors.response.use(
         role,
       } = res.data;
       const userId = extractUserId(access_token);
-      useAuthStore.getState().setTokens(
+      await useAuthStore.getState().setTokens(
         access_token, newRefresh, userId,
         tier, kyc_status,
         auth_state, buyer_eligible, seller_tier, role,
@@ -365,7 +374,7 @@ export const Feed = {
 
 // ── Sprint 8: Geo (Nominatim proxy with backend caching) ────────────────────
 export const Geo = {
-  /** GET /v1/geo/reverse?lat=&lng= — legacy Nominatim flat shape (used by old LocationPickerScreen). */
+  /** GET /v1/geo/reverse?lat=&lng= — legacy flat shape. New address flow uses structured reverse geocoding below. */
   reverse: (lat: number, lng: number) =>
     api.get<ReverseGeocodeResponse>('/v1/geo/reverse', { params: { lat, lng } }),
 
@@ -500,7 +509,7 @@ export const Offers = {
 };
 
 // ── Transactions ─────────────────────────────────────────────────────────────
-// Sprint 6c: meetup endpoints removed (confirmMeetup, cancelAtMeetup);
+// Sprint 6c: direct seller-buyer handoff endpoints removed;
 // logistics is fully managed. Tracking endpoint added for the new flow.
 export const Transactions = {
   list: () => api.get('/v1/transactions'),
@@ -817,7 +826,6 @@ export const Community = {
     proof_r2_key?: string;
     notes?: string;
   }) => api.post('/v1/community/verify/submit', data),
-  safeMeetupPoints: () => api.get('/v1/community/safe-meetup-points'),
   list: (city?: string) =>
     api.get('/v1/community/list', { params: city ? { city } : undefined }),
 };

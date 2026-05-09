@@ -9,7 +9,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { C, T, S, R, Shadow, formatPrice } from '../../utils/tokens';
 import { Addresses, Listings, Orders, type Listing, type UserAddress } from '../../services/api';
 import { BackButton, Button } from '../../components/ui';
@@ -18,27 +17,12 @@ import { parseApiError } from '../../utils/errors';
 const PLATFORM_FEE_PERCENT = 0.02; // 2%
 const GST_RATE = 0.18;             // 18% on platform fee
 
-function addressSnapshotFromRow(addr: UserAddress) {
-  return {
-    id: addr.id,
-    full_name: addr.full_name,
-    phone_number: addr.phone_number,
-    house: addr.flat_house_number,
-    building: addr.building_name,
-    street: addr.address_line_1,
-    locality: addr.locality,
-    city: addr.city,
-    state: addr.state,
-    pincode: addr.pincode,
-  };
-}
-
 export default function CheckoutScreen({ navigation, route }: any) {
   const { listingId } = route.params;
   const [listing, setListing] = useState<Listing | null>(null);
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
-  const [address, setAddress] = useState<any>(null);
+  const [address, setAddress] = useState<UserAddress | null>(null);
   const [orderNotes, setOrderNotes] = useState('');
 
   // Listing once on mount; address re-reads on focus so address picker /
@@ -57,31 +41,13 @@ export default function CheckoutScreen({ navigation, route }: any) {
 
   const reloadAddress = useCallback(async () => {
     try {
-      const profileStr = await AsyncStorage.getItem('@ow_address');
-      if (profileStr) {
-        const parsed = JSON.parse(profileStr);
-        if (parsed?.id && parsed?.full_name && parsed?.phone_number) {
-          setAddress(parsed);
-          return;
-        }
-      }
       const res = await Addresses.list();
       const def =
         res.data.find((a) => a.is_default) ??
         (res.data.length > 0 ? res.data[0] : null);
-      if (def) {
-        const snapshot = addressSnapshotFromRow(def);
-        setAddress(snapshot);
-        await AsyncStorage.setItem('@ow_address', JSON.stringify(snapshot));
-        return;
-      }
-      const locStr = await AsyncStorage.getItem('@ow_location');
-      if (locStr) {
-        const loc = JSON.parse(locStr);
-        setAddress({ city: loc.city, pincode: loc.pincode || '' });
-      }
+      setAddress(def);
     } catch {
-      // best-effort
+      setAddress(null);
     }
   }, []);
 
@@ -177,7 +143,7 @@ export default function CheckoutScreen({ navigation, route }: any) {
                   <Text style={s.addressMissing}>Add a contact number</Text>
                 )}
                 <Text style={s.addressText}>
-                  {[address.house, address.street, address.locality].filter(Boolean).join(', ') || address.city}
+                  {[address.flat_house_number, address.building_name, address.address_line_1, address.locality].filter(Boolean).join(', ') || address.city}
                 </Text>
                 <Text style={s.addressCity}>{address.city} {address.pincode}</Text>
               </>

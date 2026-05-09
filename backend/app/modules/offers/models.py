@@ -68,7 +68,7 @@ class Transaction(Base, TimestampMixin):
     status = Column(String(40), nullable=False, default="pending")
     # pending | payment_pending | payment_captured | payment_capture_uncertain
     # awaiting_confirmation | completed | auto_completed
-    # cancelled | cancelled_at_meetup | refunded | disputed
+    # cancelled | refunded | disputed
     workflow_id = Column(String(256))
     dispute_id = Column(UUID(as_uuid=True))
     # Concierge Phase 5 (master spec section 8.3): when admin resolves a
@@ -79,11 +79,13 @@ class Transaction(Base, TimestampMixin):
     seller_protection_reason = Column(String(80), nullable=True)
     seller_protection_resolved_at = Column(DateTime(timezone=True), nullable=True)
 
-    # Meetup coordination
-    agreed_meetup_at = Column(DateTime(timezone=True))       # Agreed meetup time
-    meetup_deadline = Column(DateTime(timezone=True))        # agreed_meetup_at + 30min cancel window
-    seller_response_deadline = Column(DateTime(timezone=True))  # payment_captured + 4h
-    seller_responded_at = Column(DateTime(timezone=True))    # When seller confirmed meetup
+    # Legacy coordination columns retained for migration compatibility.
+    # New flows use managed pickup and delivery; seller_response_deadline
+    # is treated as pickup readiness SLA.
+    pickup_ready_at = Column("agreed_meetup_at", DateTime(timezone=True))
+    pickup_deadline = Column("meetup_deadline", DateTime(timezone=True))
+    seller_response_deadline = Column(DateTime(timezone=True))
+    seller_responded_at = Column(DateTime(timezone=True))
 
     # Confirmation & completion
     buyer_confirmed_at = Column(DateTime(timezone=True))
@@ -91,7 +93,7 @@ class Transaction(Base, TimestampMixin):
     confirmation_deadline = Column(DateTime(timezone=True))
     auto_completed_at = Column(DateTime(timezone=True))
     completed_at = Column(DateTime(timezone=True))
-    cancelled_at_meetup_at = Column(DateTime(timezone=True))  # Cancel at meetup event
+    cancelled_at_handoff_at = Column("cancelled_at_meetup_at", DateTime(timezone=True))
 
     # Payout
     payout_flagged_at = Column(DateTime(timezone=True))
@@ -217,7 +219,7 @@ class NotificationEvent(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     event_type = Column(String(60), nullable=False)
-    # Buckets: transaction | message | promotion
+    # Buckets: transaction | promotion. Legacy rows may still contain "message".
     notification_bucket = Column(String(20), nullable=False, default="transaction")
     title = Column(String(100), nullable=False)
     body = Column(String(300), nullable=False)
@@ -234,6 +236,6 @@ class NotificationPreference(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True)
     transactions_enabled = Column(Boolean, nullable=False, default=True)   # Payment, deal, dispute — always on
-    messages_enabled = Column(Boolean, nullable=False, default=True)        # Chat, offers — on by default
+    messages_enabled = Column(Boolean, nullable=False, default=True)        # Legacy no-op: in-app chat is unsupported
     promotions_enabled = Column(Boolean, nullable=False, default=False)     # Nudges, tips — off by default
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))

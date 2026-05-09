@@ -46,16 +46,6 @@ export function canBuy(e: EligibilitySnapshot): boolean {
   return e.buyerEligible;
 }
 
-export function canRequestFeVisit(e: EligibilitySnapshot): boolean {
-  // A seller who has OTP-verified but hasn't done KYC is exactly who FE visits
-  // are for. We allow it for any OTP-verified non-restricted user.
-  return (
-    e.isAuthenticated &&
-    e.authState === 'otp_verified' &&
-    e.sellerTier !== 'restricted'
-  );
-}
-
 export function isFE(e: EligibilitySnapshot): boolean {
   return e.isAuthenticated && e.role === 'fe';
 }

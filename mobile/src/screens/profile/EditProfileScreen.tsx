@@ -1,22 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
-  Alert, ActivityIndicator, ScrollView, Modal,
+  Alert, ActivityIndicator, ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BackButton, Button } from '../../components/ui';
 import { C, T, S, R } from '../../utils/tokens';
 import { Auth } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
-import { INDIAN_CITIES } from '../../hooks/useLocation';
 
 export default function EditProfileScreen({ navigation }: any) {
   const { phone, kycStatus } = useAuthStore();
   const [name, setName] = useState('');
-  const [city, setCity] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [showCities, setShowCities] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -24,7 +21,6 @@ export default function EditProfileScreen({ navigation }: any) {
         const res = await Auth.me();
         const u = res.data;
         setName(u.name || '');
-        setCity(u.city || '');
       } catch {} finally { setLoading(false); }
     })();
   }, []);
@@ -33,7 +29,7 @@ export default function EditProfileScreen({ navigation }: any) {
     if (!name.trim()) { Alert.alert('Name required', 'Please enter your name'); return; }
     setSaving(true);
     try {
-      await Auth.updateProfile({ name: name.trim(), city: city || undefined });
+      await Auth.updateProfile({ name: name.trim() });
       Alert.alert('Saved', 'Profile updated', [{ text: 'OK', onPress: () => navigation.goBack() }]);
     } catch (e: any) {
       Alert.alert('Error', e.response?.data?.detail || 'Could not save');
@@ -84,11 +80,9 @@ export default function EditProfileScreen({ navigation }: any) {
           <Text style={s.readonlyText}>{phone || 'Not set'}</Text>
         </View>
 
-        <Text style={s.label}>City</Text>
-        <TouchableOpacity style={s.input} onPress={() => setShowCities(true)}>
-          <Text style={[s.cityValue, !city && s.cityPlaceholder]}>
-            {city || 'Select your city'}
-          </Text>
+        <Text style={s.label}>Delivery address</Text>
+        <TouchableOpacity style={s.input} onPress={() => navigation.navigate('AddressPicker', { returnTo: 'MainTabs' })}>
+          <Text style={s.cityValue}>Manage saved addresses</Text>
         </TouchableOpacity>
 
         <Text style={s.label}>Verification</Text>
@@ -111,31 +105,6 @@ export default function EditProfileScreen({ navigation }: any) {
         </View>
       </ScrollView>
 
-      <Modal visible={showCities} animationType="slide" transparent>
-        <View style={s.modalOv}>
-          <View style={s.modalC}>
-            <Text style={s.modalTitle}>Select city</Text>
-            <ScrollView>
-              {INDIAN_CITIES.map(c => (
-                <TouchableOpacity
-                  key={c.name}
-                  style={s.cityRow}
-                  onPress={() => { setCity(c.name); setShowCities(false); }}
-                >
-                  <Text style={s.cityRowText}>{c.name}</Text>
-                  {city === c.name && <Text style={s.cityRowCheck}>✓</Text>}
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-            <Button
-              label="Cancel"
-              variant="ghost"
-              onPress={() => setShowCities(false)}
-              style={s.modalClose}
-            />
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -178,29 +147,11 @@ const s = StyleSheet.create({
   },
   readonlyText: { fontSize: T.size.md, color: C.text3 },
 
-  cityValue: { fontSize: T.size.md, color: C.text },
-  cityPlaceholder: { color: C.text4 },
+  cityValue: { fontSize: T.size.md, color: C.petrol, fontWeight: T.weight.semi },
 
   kycRow: { flexDirection: 'row', alignItems: 'center', gap: S.sm },
   kycDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.text4 },
   kycDotOn: { backgroundColor: C.petrol },
   kycLink: { fontSize: T.size.base, color: C.petrol, fontWeight: T.weight.semi },
 
-  modalOv: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  modalC: {
-    backgroundColor: C.surface,
-    borderTopLeftRadius: R.xl, borderTopRightRadius: R.xl,
-    padding: S.xl,
-    maxHeight: '70%',
-  },
-  modalTitle: { fontSize: T.size.lg, fontWeight: T.weight.semi, color: C.text, marginBottom: S.lg },
-  modalClose: { marginTop: S.lg, alignSelf: 'center' },
-
-  cityRow: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingVertical: S.md + 2,
-    borderBottomWidth: 0.5, borderBottomColor: C.border,
-  },
-  cityRowText: { fontSize: T.size.md, color: C.text },
-  cityRowCheck: { fontSize: T.size.lg - 1, color: C.petrol },
 });

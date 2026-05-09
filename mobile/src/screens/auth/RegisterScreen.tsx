@@ -5,7 +5,7 @@
  * User enters 10-digit mobile → OTP → account created → browse.
  *
  * Address is captured later:
- *   - Location auto-detected on first app open (LocationPickerScreen)
+ *   - Location/address collected by the saved-address flow after sign-in
  *   - Buy/Sell triggers KYC with address confirm from Aadhaar
  *
  * Why phone-only:

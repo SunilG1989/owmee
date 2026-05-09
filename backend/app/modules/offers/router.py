@@ -1,5 +1,5 @@
 """
-Offers router — Owmee V1 (escrow + managed logistics, no meetups, no cash)
+Offers router — Owmee V1 (escrow + managed logistics, no direct handoff, no cash)
 
 Key endpoints:
   POST /v1/offers                          — create offer
@@ -14,9 +14,9 @@ Key endpoints:
   POST /v1/listings/{id}/mark-sold         — sold on owmee or sold elsewhere
   PUT  /v1/listings/{id}/price             — update price (triggers wishlist notifications)
 
-Removed (Sprint 6c — no-meetup mandate):
-  /accept-cash, /transactions/{id}/meetup, /transactions/{id}/cancel-meetup.
-  Buyer-seller meetups don't exist; logistics is fully managed.
+Removed (Sprint 6c — managed-logistics mandate):
+  /accept-cash and direct seller-buyer handoff endpoints.
+  Buyer-seller coordination does not exist; logistics is fully managed.
 """
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -75,7 +75,6 @@ class RateRequest(BaseModel):
 
 class NotificationPreferencesRequest(BaseModel):
     transactions_enabled: bool = True   # Cannot truly disable but kept for completeness
-    messages_enabled: bool = True
     promotions_enabled: bool = False
 
 
@@ -120,9 +119,7 @@ def _fmt_txn(t: Transaction) -> dict:
         "net_payout": str(t.net_payout),
         "payment_method": t.payment_method,
         "status": t.status,
-        "agreed_meetup_at": t.agreed_meetup_at.isoformat() if t.agreed_meetup_at else None,
-        "meetup_deadline": t.meetup_deadline.isoformat() if t.meetup_deadline else None,
-        "seller_response_deadline": t.seller_response_deadline.isoformat() if t.seller_response_deadline else None,
+        "pickup_readiness_deadline": t.seller_response_deadline.isoformat() if t.seller_response_deadline else None,
         "rate_available_at": t.rate_available_at.isoformat() if t.rate_available_at else None,
         "confirmation_deadline": t.confirmation_deadline.isoformat() if t.confirmation_deadline else None,
         "buyer_confirmed_at": t.buyer_confirmed_at.isoformat() if t.buyer_confirmed_at else None,
@@ -410,7 +407,7 @@ async def mark_sold(listing_id: UUID, body: MarkSoldRequest,
             db, offer.buyer_id, "listing_sold",
             "Item no longer available",
             f"'{listing.title[:40]}' was sold. Browse similar listings.",
-            "listing", str(listing_id), bucket="message",
+            "listing", str(listing_id),
         )
 
     await db.commit()
@@ -507,15 +504,13 @@ async def get_notification_preferences(current_user: BasicUser, db: DBSession):
     if not prefs:
         return {
             "transactions_enabled": True,
-            "messages_enabled": True,
             "promotions_enabled": False,
-            "note": "Transactions cannot be disabled — they include payments and deal updates.",
+            "note": "Deal updates cannot be disabled.",
         }
     return {
         "transactions_enabled": True,  # Always on
-        "messages_enabled": prefs.messages_enabled,
         "promotions_enabled": prefs.promotions_enabled,
-        "note": "Transactions cannot be disabled — they include payments and deal updates.",
+        "note": "Deal updates cannot be disabled.",
     }
 
 
@@ -530,17 +525,14 @@ async def update_notification_preferences(body: NotificationPreferencesRequest,
         prefs = NotificationPreference(
             user_id=current_user.user_id,
             transactions_enabled=True,  # Always on regardless of request
-            messages_enabled=body.messages_enabled,
             promotions_enabled=body.promotions_enabled,
         )
         db.add(prefs)
     else:
         prefs.transactions_enabled = True  # Always on
-        prefs.messages_enabled = body.messages_enabled
         prefs.promotions_enabled = body.promotions_enabled
     await db.commit()
-    return {"message": "Preferences updated.", "messages_enabled": prefs.messages_enabled,
-            "promotions_enabled": prefs.promotions_enabled}
+    return {"message": "Preferences updated.", "promotions_enabled": prefs.promotions_enabled}
 
 
 # ── Wishlist ─────────────────────────────────────────────────────────────────────
@@ -942,7 +934,7 @@ async def buy_now(body: BuyNowRequest, current_user: BasicUser, db: DBSession):
 
     # Auto-accept
     try:
-        txn, payment_link = await accept_offer(
+        _offer, _reservation, txn, payment_link = await accept_offer(
             db=db,
             offer_id=offer.id,
             seller_id=listing.seller_id,
@@ -971,5 +963,5 @@ async def buy_now(body: BuyNowRequest, current_user: BasicUser, db: DBSession):
             "amount": str(listing.price),
             "status": "offer_created",
             "payment_link": None,
-            "message": f"Offer created at listed price. Seller will confirm shortly.",
+            "message": "Offer created at listed price. Track the next update in Owmee.",
         }

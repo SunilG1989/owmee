@@ -74,7 +74,7 @@ export default function ProfileScreen({ navigation }: any) {
   }
 
   const displayName = profile?.name || phone || 'Owmee User';
-  const displayCity = profile?.city || location?.city;
+  const displayCity = location?.locality || location?.city;
   const isVerified = kycStatus === 'verified';
 
   const menuItems: MenuItem[] = [
@@ -86,7 +86,7 @@ export default function ProfileScreen({ navigation }: any) {
     { emoji: '📋', label: 'Transaction history', route: 'TransactionList' },
     { emoji: '🔔', label: 'Notifications', route: 'Notifications' },
     {
-      emoji: '💬', label: 'Help & support', route: null,
+      emoji: '☎', label: 'Help & support', route: null,
       onPress: () => Alert.alert(
         'Help & Support',
         'Contact us:\n\nsupport@owmee.in\n\nGrievance Officer:\ngrievance@owmee.in\nResponse within 48 hours\n\nData deletion requests:\nprivacy@owmee.in',

@@ -9,7 +9,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import {
   C, T, S, R, Shadow, formatPrice, formatDistance, timeAgo, percentOff, condStyle,
 } from '../../utils/tokens';
-import { Listings, Offers, Wishlist, type Listing } from '../../services/api';
+import { Listings, Offers, Reports, Wishlist, type Listing } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { BackButton, Button, IconButton } from '../../components/ui';
 import { parseApiError } from '../../utils/errors';
@@ -34,6 +34,7 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
   const { isAuthenticated, userId } = useAuthStore();
   const [listing, setListing] = useState<Listing | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [wishlisted, setWishlisted] = useState(false);
   const [showOffer, setShowOffer] = useState(false);
   const [offerAmt, setOfferAmt] = useState('');
@@ -45,6 +46,7 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
   useFocusEffect(useCallback(() => {
     (async () => {
       try {
+        setLoadError(null);
         const r = await Listings.get(listingId); setListing(r.data);
         // Save to recently viewed
         try {
@@ -59,9 +61,14 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
             const w = await Wishlist.list();
             const items = w.data?.wishlist || [];
             setWishlisted(items.some((i: any) => i.listing_id === listingId));
-          } catch {}
+          } catch (e) {
+            console.warn('[ListingDetail.wishlistLoad]', e);
+          }
         }
-      } catch {} finally { setLoading(false); }
+      } catch (e) {
+        setLoadError(parseApiError(e, 'This listing could not be loaded.'));
+        setListing(null);
+      } finally { setLoading(false); }
     })();
   }, [listingId, isAuthenticated]));
 
@@ -86,7 +93,13 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
   if (!listing) {
     return (
       <SafeAreaView style={s.safe}>
-        <Text style={s.notFound}>Not found</Text>
+        <Text style={s.notFound}>{loadError || 'Listing not found'}</Text>
+        <Button
+          label="Back to Home"
+          variant="secondary"
+          onPress={() => (navigation as any).navigate('MainTabs')}
+          style={s.notFoundBtn}
+        />
       </SafeAreaView>
     );
   }
@@ -101,11 +114,16 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
   const cs = condStyle(listing.condition);
 
   const toggleWish = async () => {
+    if (!isAuthenticated) { navigation.navigate('AuthFlow'); return; }
+    const next = !wishlisted;
+    setWishlisted(next);
     try {
       if (wishlisted) await Wishlist.remove(listingId);
       else await Wishlist.add(listingId);
-      setWishlisted(!wishlisted);
-    } catch {}
+    } catch (e) {
+      setWishlisted(!next);
+      Alert.alert('Could not update saved item', parseApiError(e, 'Please try again.'));
+    }
   };
 
   const onShare = () => {
@@ -114,11 +132,22 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
     }).catch(() => {});
   };
 
+  const submitReport = async (reportType: string, description: string) => {
+    try {
+      await Reports.reportListing(listingId, reportType, description);
+      Alert.alert('Report submitted', 'Thanks. Our team will review this listing.');
+    } catch (e) {
+      Alert.alert('Could not submit report', parseApiError(e, 'Please try again.'));
+    }
+  };
+
   const onReport = () => {
+    if (!isAuthenticated) { navigation.navigate('AuthFlow'); return; }
     Alert.alert('Report listing', 'Why are you reporting?', [
-      { text: 'Fake/misleading' },
-      { text: 'Stolen item' },
-      { text: 'Inappropriate' },
+      { text: 'Fake or misleading', onPress: () => submitReport('fraud', 'Fake or misleading listing') },
+      { text: 'Counterfeit or stolen', onPress: () => submitReport('counterfeit', 'Counterfeit or possibly stolen item') },
+      { text: 'Inappropriate', onPress: () => submitReport('inappropriate', 'Inappropriate listing content') },
+      { text: 'Other issue', onPress: () => submitReport('other', 'Other listing issue') },
       { text: 'Cancel', style: 'cancel' },
     ]);
   };
@@ -494,6 +523,7 @@ const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bone },
   loadingSpinner: { marginTop: S.xxxl + S.xxxl },
   notFound: { textAlign: 'center', marginTop: S.xxxl + S.xxxl, color: C.text3 },
+  notFoundBtn: { marginTop: S.lg, marginHorizontal: S.xl },
 
   imgWrap: { position: 'relative' },
   imgPlaceholder: {

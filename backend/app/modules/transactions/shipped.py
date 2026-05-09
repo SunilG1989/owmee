@@ -176,7 +176,7 @@ async def initiate_shipment(
     category = cat_result.scalar_one_or_none()
     if category and not category.shipping_eligible:
         raise HTTPException(400, {"error": "CATEGORY_NOT_SHIPPABLE",
-                                   "message": "This category only supports local meetup transactions."})
+                                   "message": "This category is not eligible for courier shipment yet."})
 
     # Create shipment record
     from sqlalchemy import text
@@ -202,7 +202,7 @@ async def initiate_shipment(
     return {
         "transaction_id": str(transaction_id),
         "status": "shipment_created",
-        "message": "Shipment initiated. Logistics partner will contact you for pickup.",
+        "message": "Shipment initiated. Track pickup and delivery in Owmee.",
         "logistics_provider": body.logistics_provider,
     }
 

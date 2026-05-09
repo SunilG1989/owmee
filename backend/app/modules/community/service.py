@@ -24,7 +24,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.community.models import (
     Community,
     CommunityVerification,
-    SafeMeetupPoint,
 )
 from app.modules.identity_auth.models import User
 
@@ -299,20 +298,6 @@ async def get_community_by_id(
 ) -> Optional[Community]:
     res = await db.execute(select(Community).where(Community.id == community_id))
     return res.scalar_one_or_none()
-
-
-async def list_safe_meetup_points(
-    db: AsyncSession, community_id: UUID
-) -> list[SafeMeetupPoint]:
-    res = await db.execute(
-        select(SafeMeetupPoint)
-        .where(
-            SafeMeetupPoint.community_id == community_id,
-            SafeMeetupPoint.is_active.is_(True),
-        )
-        .order_by(SafeMeetupPoint.sort_order, SafeMeetupPoint.name)
-    )
-    return list(res.scalars().all())
 
 
 async def get_pending_verification_for_user(

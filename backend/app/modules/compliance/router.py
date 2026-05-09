@@ -94,7 +94,7 @@ async def request_data_erasure(
         SELECT COUNT(*) FROM transactions
         WHERE (buyer_id = :uid OR seller_id = :uid)
         AND status NOT IN ('completed', 'auto_completed', 'cancelled',
-                           'refunded', 'cancelled_at_meetup', 'buyer_accepted')
+                           'refunded', 'buyer_accepted')
     """), {"uid": str(user_id)})
     active_txns = txn_check.scalar()
     if active_txns > 0:

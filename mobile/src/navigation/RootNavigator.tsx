@@ -40,11 +40,6 @@ import RegisterScreen from '../screens/auth/RegisterScreen';
 import OtpVerifyScreen from '../screens/auth/OtpVerifyScreen';
 import KycFlowScreen from '../screens/auth/KycFlowScreen';
 import KycRequiredForActionScreen from '../screens/KycRequiredForActionScreen';
-import LocationPickerScreen from '../screens/auth/LocationPickerScreen';
-// Address PRD: 3-screen flow replaces LocationPickerScreen for the
-// post-auth onboarding gate. LocationPickerScreen kept temporarily as
-// fallback for unauthed-browse + the LocationPicker modal route until
-// the PRD's Phase 2 finishes its sweep.
 import LocationDetectScreen from '../screens/auth/address/LocationDetectScreen';
 import LocationMapScreen from '../screens/auth/address/LocationMapScreen';
 import AddressDetailsScreen from '../screens/auth/address/AddressDetailsScreen';
@@ -73,7 +68,6 @@ import VisitContinueScreen from '../screens/fe/VisitContinueScreen';
 // Concierge Phase 5 — trust safety net
 import ReportIssueScreen from '../screens/fe/ReportIssueScreen';
 import NpsScreen from '../screens/listings/concierge/NpsScreen';
-import RequestFeVisitScreen from '../screens/listings/RequestFeVisitScreen';
 import CommunityProofScreen from '../screens/community/CommunityProofScreen';
 // Sprint 4 / Pass 3: real screens replacing Pass 2 stubs
 import VerificationWallScreen from '../screens/auth/VerificationWallScreen';
@@ -425,20 +419,10 @@ export default function RootNavigator() {
         <RootStack.Screen name="ArrivalVerification" component={ArrivalVerificationScreen} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
         {/* Concierge Phase 5 — seller NPS (deep-linked from notification) */}
         <RootStack.Screen name="ConciergeNps" component={NpsScreen} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
-        {/* Legacy seller-facing FE request screen — DEPRECATED in Concierge
-            Phase 1, file kept (marked @deprecated) for reference only.
-            Phase 5 deletes the file. */}
-        <RootStack.Screen name="RequestFeVisit" component={RequestFeVisitScreen} options={{ animation: 'slide_from_right' }} />
         <RootStack.Screen name="FeVisitConfirmation" component={FeVisitConfirmationScreen} options={{ animation: 'slide_from_right' }} />
         <RootStack.Screen name="VerificationWall" component={VerificationWallScreen} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
         {/* Sprint 7 / Phase 1: Community proof */}
         <RootStack.Screen name="CommunityProof" component={CommunityProofScreen} options={{ animation: 'slide_from_right' }} />
-        {/* SPRINT8_LOCATION_ROUTE: re-entry to location picker from anywhere */}
-        <RootStack.Screen
-          name="LocationPicker"
-          component={LocationPickerRoute}
-          options={{ animation: 'slide_from_bottom', presentation: 'modal' }}
-        />
         {/* Sprint 6b: My Offers (Received / Sent / Deals) */}
         <RootStack.Screen name="MyOffers" component={OffersScreen} options={{ animation: 'slide_from_right' }} />
         {/* Sprint 8 / Phase 2: AI-Assisted Listing — SPRINT8_PHASE2_AI */}
@@ -455,22 +439,6 @@ export default function RootNavigator() {
         <RootStack.Screen name="AddressPicker" component={AddressPickerScreen} options={{ animation: 'slide_from_right' }} />
       </RootStack.Navigator>
     </NavigationContainer>
-  );
-}
-
-// SPRINT8_LOCATION_ROUTE: wrapper that makes LocationPickerScreen
-// usable as a navigable route (it normally takes onLocationSet as a
-// prop instead of route params).
-function LocationPickerRoute({ navigation }: any) {
-  return (
-    <LocationPickerScreen
-      onLocationSet={() => {
-        // After the user picks a location, just close the modal.
-        // The HomeScreen's useLocation hook will pick up the new
-        // value from AsyncStorage on next render.
-        navigation.goBack();
-      }}
-    />
   );
 }
 

@@ -6,10 +6,19 @@ import { useFocusEffect } from '@react-navigation/native';
 import { C, T, S, R, Shadow, formatPrice, timeAgo } from '../../utils/tokens';
 import { Transactions, type Transaction } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
+import { parseApiError } from '../../utils/errors';
 
 const STATUS_COLORS: Record<string, string> = {
-  reserved: C.petrol, meetup_scheduled: C.petrol, payment_confirmed: C.petrol,
-  completed: C.petrol, cancelled: C.red, disputed: C.red,
+  payment_pending: C.yellow,
+  payment_captured: C.petrol,
+  at_hub: C.petrol,
+  delivery_in_progress: C.petrolMid,
+  delivered: C.green,
+  completed: C.petrol,
+  auto_completed: C.petrol,
+  cancelled: C.red,
+  pickup_rejected: C.red,
+  disputed: C.red,
 };
 
 export default function TransactionListScreen({ navigation }: any) {
@@ -18,12 +27,16 @@ export default function TransactionListScreen({ navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'buying'|'selling'|'completed'>('buying');
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    setError(null);
     try {
       const res = await Transactions.list();
       setTxns(res.data?.transactions || res.data || []);
-    } catch {} finally { setLoading(false); setRefreshing(false); }
+    } catch (e) {
+      setError(parseApiError(e, 'Could not load your orders.'));
+    } finally { setLoading(false); setRefreshing(false); }
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, []));
@@ -87,8 +100,13 @@ export default function TransactionListScreen({ navigation }: any) {
         ListEmptyComponent={
           <View style={s.empty}>
             <Text style={s.emptyEmoji}>🤝</Text>
-            <Text style={s.emptyTitle}>No transactions yet</Text>
-            <Text style={s.emptySub}>Your deals will appear here</Text>
+            <Text style={s.emptyTitle}>{error ? 'Could not load orders' : 'No orders yet'}</Text>
+            <Text style={s.emptySub}>{error || 'Your buying and selling orders will appear here.'}</Text>
+            {error ? (
+              <TouchableOpacity style={s.retryBtn} onPress={load} activeOpacity={0.8}>
+                <Text style={s.retryText}>Retry</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         }
         removeClippedSubviews maxToRenderPerBatch={8} windowSize={5}
@@ -142,4 +160,15 @@ const s = StyleSheet.create({
   emptyEmoji: { fontSize: T.size.display + 18, marginBottom: S.lg },
   emptyTitle: { fontSize: T.size.lg + 1, fontWeight: T.weight.semi, color: C.text, marginBottom: S.xs },
   emptySub: { fontSize: T.size.base, color: C.text3 },
+  retryBtn: {
+    marginTop: S.lg,
+    minWidth: 108,
+    height: 40,
+    borderRadius: R.pill,
+    backgroundColor: C.petrol,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: S.xl,
+  },
+  retryText: { color: C.white, fontSize: T.size.sm + 1, fontWeight: T.weight.semi },
 });

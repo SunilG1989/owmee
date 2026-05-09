@@ -2,17 +2,16 @@
 TransactionWorkflow — Temporal durable workflow.
 
 State machine:
-  payment_pending → payment_captured → meetup_pending
-    → awaiting_confirmation → completed | cancelled_at_meetup
+  payment_pending → payment_captured → pickup_ready
+    → delivered → completed | disputed | cancelled
 
 Timers:
-  - Seller response deadline: 24h to confirm meetup
-  - Cancel window: 30 min around meetup time
-  - Auto-complete: 48h after meetup if buyer doesn't confirm
+  - Seller readiness deadline: 24h to keep pickup moving
+  - Auto-complete: 48h after delivery if buyer doesn't dispute
 
 Compensation:
   - Payment captured but txn fails → refund via PA
-  - Seller no-show → full refund, trust score impact
+  - Pickup readiness failure → full refund, trust score impact
 """
 from datetime import timedelta
 
@@ -38,7 +37,7 @@ class TransactionWorkflow:
 
     def __init__(self):
         self._payment_captured = False
-        self._meetup_confirmed = False
+        self._pickup_ready = False
         self._deal_confirmed = False
         self._cancelled = False
         self._dispute_raised = False
@@ -52,9 +51,9 @@ class TransactionWorkflow:
         logger.info("txn_workflow.payment_captured")
 
     @workflow.signal
-    def meetup_confirmed(self):
-        self._meetup_confirmed = True
-        logger.info("txn_workflow.meetup_confirmed")
+    def pickup_ready(self):
+        self._pickup_ready = True
+        logger.info("txn_workflow.pickup_ready")
 
     @workflow.signal
     def deal_confirmed(self):
@@ -78,7 +77,7 @@ class TransactionWorkflow:
     def get_state(self) -> dict:
         return {
             "payment_captured": self._payment_captured,
-            "meetup_confirmed": self._meetup_confirmed,
+            "pickup_ready": self._pickup_ready,
             "deal_confirmed": self._deal_confirmed,
             "cancelled": self._cancelled,
             "dispute_raised": self._dispute_raised,
@@ -111,15 +110,14 @@ class TransactionWorkflow:
         if self._cancelled:
             return {"status": "cancelled", "reason": self._cancel_reason}
 
-        # ── Payment captured — wait for seller meetup confirm (24h SLA) ───
+        # ── Payment captured — wait for pickup readiness (24h SLA) ────────
         try:
             await workflow.wait_condition(
-                lambda: self._meetup_confirmed or self._cancelled or self._dispute_raised,
+                lambda: self._pickup_ready or self._cancelled or self._dispute_raised,
                 timeout=timedelta(hours=24),
             )
         except TimeoutError:
-            # Seller ghosting — flag and refund
-            logger.info("txn_workflow.seller_ghosting", transaction_id=transaction_id)
+            logger.info("txn_workflow.pickup_readiness_timeout", transaction_id=transaction_id)
             await workflow.execute_activity(
                 act_flag_seller_ghosting,
                 inp,
@@ -132,7 +130,7 @@ class TransactionWorkflow:
                 start_to_close_timeout=timedelta(seconds=30),
                 retry_policy=retry,
             )
-            return {"status": "cancelled", "reason": "SELLER_GHOSTING"}
+            return {"status": "cancelled", "reason": "PICKUP_READINESS_TIMEOUT"}
 
         if self._cancelled:
             await workflow.execute_activity(
@@ -147,7 +145,7 @@ class TransactionWorkflow:
             # Freeze — dispute workflow takes over
             return {"status": "disputed"}
 
-        # ── Meetup confirmed — wait for buyer confirmation (48h auto-complete) ─
+        # ── Delivered — wait for buyer confirmation (48h auto-complete) ───
         try:
             await workflow.wait_condition(
                 lambda: self._deal_confirmed or self._cancelled or self._dispute_raised,

@@ -5,7 +5,7 @@ India UX review changes (v2):
 - Tiered offer expiry: 24h <5K, 48h 5K–20K, 72h >20K
 - Offer note field (buyer context with offer)
 - Payment link expiry: 30min <5K, 24h >=5K
-- Seller ghosting: seller_response_deadline = payment_captured + 4h
+- Pickup readiness SLA: seller_response_deadline = payment_captured + 4h
 - Blind mutual rating: hidden until both rate or 7 days
 - Rating delayed 2h after deal complete
 - Price-drop wishlist notification
@@ -29,7 +29,7 @@ from app.modules.offers.models import (
     NotificationEvent, NotificationPreference, Offer, PaymentLink,
     Rating, Reservation, Transaction, Wishlist,
 )
-from app.modules.listings.models import Listing
+from app.modules.listings.models import Category, Listing
 from app.modules.listings.service import create_snapshot
 
 # Sprint 5a: analytics hook
@@ -114,8 +114,6 @@ async def _notify(
     if bucket != "transaction":
         prefs = await _prefs(db, user_id)
         if prefs:
-            if bucket == "message" and not prefs.messages_enabled:
-                return
             if bucket == "promotion" and not prefs.promotions_enabled:
                 return
 
@@ -138,8 +136,15 @@ async def _notify(
     # Best-effort FCM push (never blocks main transaction)
     try:
         import asyncio
-        asyncio.create_task(push_notify(user_id, event_type, title, body,
-                                        entity_type=entity_type, entity_id=str(entity_id) if entity_id else None))
+        asyncio.create_task(push_notify(
+            user_id,
+            event_type,
+            title,
+            body,
+            entity_type=entity_type,
+            entity_id=str(entity_id) if entity_id else None,
+            persist_in_app=False,
+        ))
     except Exception:
         pass
 
@@ -211,7 +216,7 @@ async def make_offer(
         "offer_received",
         "New offer received",
         f"₹{offered_price:,.0f} offer on '{listing.title}'{note_hint}",
-        "offer", str(offer.id), bucket="message",
+        "offer", str(offer.id),
     )
     logger.info("offer.created", offer_id=str(offer.id), price=str(offered_price), expiry_h=expiry_hours)
     return offer
@@ -252,7 +257,7 @@ async def counter_offer(
         "offer_countered",
         "Counter-offer received",
         f"Seller countered at ₹{counter_price:,.0f} — accept or let it expire",
-        "offer", str(offer.id), bucket="message",
+        "offer", str(offer.id),
     )
     return offer
 
@@ -291,7 +296,7 @@ async def update_offer_price(
         "offer_updated",
         "Buyer updated their offer",
         f"New price: ₹{new_price:,.0f}{rem_text}",
-        "offer", str(offer.id), bucket="message",
+        "offer", str(offer.id),
     )
     return offer
 
@@ -355,7 +360,7 @@ async def accept_offer(
     fee = delivery_fee_for(cat_slug)
     buyer_pays = agreed_price + fee
 
-    payment_method = "upi"  # Sprint 6c: cash/meetup mode removed
+    payment_method = "upi"  # Sprint 6c: direct seller-buyer handoff removed
 
     txn = Transaction(
         reservation_id=reservation.id,
@@ -440,14 +445,14 @@ async def accept_offer(
         await _notify(
             db, offer.buyer_id, "offer_accepted",
             f"{listing.title[:30]} — offer accepted!",
-            f"Cash deal at ₹{agreed_price:,.0f}. Arrange meetup with the seller.",
+            f"Deal confirmed at ₹{agreed_price:,.0f}. Owmee will guide pickup next.",
             "transaction", str(txn.id),
         )
 
     await _notify(
         db, offer.seller_id, "offer_accepted_seller",
         "You accepted the offer",
-        f"Deal at ₹{agreed_price:,.0f}. Buyer will arrange meetup.",
+        f"Deal at ₹{agreed_price:,.0f}. Owmee will guide pickup and handover.",
         "transaction", str(txn.id),
     )
     # Sprint 6b: chat removed. All buyer-seller communication is now
@@ -474,7 +479,7 @@ async def reject_offer(db, offer_id, seller_id, reason=""):
     await _notify(db, offer.buyer_id, "offer_rejected",
         "Offer not accepted",
         "The seller passed on your offer. You can offer again on this listing in 7 days.",
-        "offer", str(offer.id), bucket="message")
+        "offer", str(offer.id))
     return offer
 
 
@@ -523,16 +528,16 @@ async def process_payment_paid(db, razorpay_link_id, razorpay_payment_id, webhoo
 
     txn.status = "payment_captured"
     txn.confirmation_deadline = now + timedelta(hours=CONFIRMATION_WINDOW_HOURS)
-    # Seller ghosting deadline: 4h to respond with meetup time
+    # Seller readiness deadline: surface stale post-payment handoffs to ops.
     txn.seller_response_deadline = now + timedelta(hours=SELLER_RESPONSE_HOURS)
 
     await _notify(db, txn.seller_id, "payment_confirmed",
-        "Payment received — arrange meetup",
-        f"₹{txn.gross_amount:,.0f} paid. Reply within 4 hours to arrange meetup.",
+        "Payment received",
+        f"₹{txn.gross_amount:,.0f} paid. Owmee pickup is next.",
         "transaction", str(txn.id))
     await _notify(db, txn.buyer_id, "payment_confirmed",
         "Payment confirmed",
-        f"₹{txn.gross_amount:,.0f} sent. Seller will contact you to arrange meetup.",
+        f"₹{txn.gross_amount:,.0f} sent. Track pickup and delivery in Owmee.",
         "transaction", str(txn.id))
     logger.info("payment.confirmed", transaction_id=str(txn.id))
     return txn
@@ -680,7 +685,7 @@ async def submit_rating(
         await _notify(db, ratee_id, "rate_reminder",
             "Rate your experience",
             "Deal complete — share your feedback. Ratings are revealed when both parties rate.",
-            "transaction", str(transaction_id), bucket="message")
+            "transaction", str(transaction_id))
 
     logger.info("rating.submitted", transaction_id=str(transaction_id), stars=stars, revealed=bool(peer_rating))
     return rating

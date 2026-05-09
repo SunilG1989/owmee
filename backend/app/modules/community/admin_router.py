@@ -9,7 +9,6 @@ Admin-facing endpoints (admin web app):
   POST /v1/admin/community/verifications/{id}/reject
   GET  /v1/admin/community/list                      - all communities (incl inactive)
   POST /v1/admin/community/                          - create new community
-  POST /v1/admin/community/{id}/safe-meetup-points   - add safe meetup point
 
 Note: These endpoints are guarded by AuthUser only for V1 (consistent with
 other admin routers in the codebase). Pass 3 will wrap with AdminRBAC.
@@ -29,7 +28,6 @@ from app.modules.community import service as community_service
 from app.modules.community.models import (
     Community,
     CommunityVerification,
-    SafeMeetupPoint,
 )
 from app.modules.community.service import CommunityError
 
@@ -55,12 +53,6 @@ class CreateCommunityRequest(BaseModel):
     city: str = Field(..., min_length=2, max_length=100)
     state: Optional[str] = Field(None, max_length=100)
     pincode: Optional[str] = Field(None, max_length=10)
-
-
-class CreateSafeMeetupPointRequest(BaseModel):
-    name: str = Field(..., min_length=2, max_length=200)
-    notes: Optional[str] = Field(None, max_length=500)
-    sort_order: int = Field(0, ge=0, le=999)
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -263,42 +255,3 @@ async def admin_create_community(
         admin_id=str(current_user.user_id),
     )
     return _community_to_dict(c)
-
-
-@router.post("/{community_id}/safe-meetup-points", status_code=201)
-async def admin_add_safe_meetup_point(
-    community_id: UUID,
-    body: CreateSafeMeetupPointRequest,
-    current_user: AuthUser,
-    db: DBSession,
-):
-    res = await db.execute(select(Community).where(Community.id == community_id))
-    c = res.scalar_one_or_none()
-    if c is None:
-        raise HTTPException(
-            status_code=404, detail={"error": "COMMUNITY_NOT_FOUND"}
-        )
-
-    p = SafeMeetupPoint(
-        community_id=c.id,
-        name=body.name,
-        notes=body.notes,
-        sort_order=body.sort_order,
-        is_active=True,
-    )
-    db.add(p)
-    await db.commit()
-    await db.refresh(p)
-    logger.info(
-        "community.safe_meetup_point_added",
-        community_id=str(c.id),
-        point_id=str(p.id),
-        admin_id=str(current_user.user_id),
-    )
-    return {
-        "id": str(p.id),
-        "community_id": str(p.community_id),
-        "name": p.name,
-        "notes": p.notes,
-        "sort_order": p.sort_order,
-    }

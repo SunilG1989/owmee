@@ -15,7 +15,6 @@
  */
 import React, { useCallback, useState } from 'react';
 import {
-  Alert,
   ActivityIndicator,
   FlatList,
   StyleSheet,
@@ -24,8 +23,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { Addresses, type UserAddress } from '../../../services/api';
 import { BackButton, Button, EmptyState, ErrorState } from '../../../components/ui';
@@ -46,7 +43,6 @@ export default function AddressPickerScreen({
   const [addresses, setAddresses] = useState<UserAddress[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectingId, setSelectingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -87,49 +83,31 @@ export default function AddressPickerScreen({
 
   const onUse = async (addr: UserAddress) => {
     const returnTo = route.params?.returnTo;
-    // P0 (2026-05-03): when the caller is Checkout (or anywhere else that
-    // reads @ow_address as the source of truth for the active delivery
-    // address), snapshot the chosen address into AsyncStorage so the
-    // returning screen reflects the selection on next focus.
+
+    // Checkout keeps the expected quick picker behaviour: choose a saved
+    // delivery address and return. Home/default-location changes go through
+    // map confirmation so users can verify the pin before Owmee saves it.
     if (returnTo === 'Checkout') {
       try {
-        await AsyncStorage.setItem(
-          '@ow_address',
-          JSON.stringify({
-            id: addr.id,
-            full_name: addr.full_name,
-            phone_number: addr.phone_number,
-            house: addr.flat_house_number,
-            building: addr.building_name,
-            street: addr.address_line_1,
-            locality: addr.locality,
-            city: addr.city,
-            state: addr.state,
-            pincode: addr.pincode,
-          }),
-        );
-      } catch {
-        // non-blocking — checkout will fall back to its existing logic
-      }
-    } else {
-      try {
-        setSelectingId(addr.id);
         const selected = addr.is_default
           ? addr
           : (await Addresses.update(addr.id, { is_default: true })).data;
-        await cacheAddressLocation(selected);
-      } catch (e: any) {
-        Alert.alert(
-          'Could not change location',
-          e?.response?.data?.detail?.message || 'Please try again.',
-        );
-        setSelectingId(null);
+        await cacheAddressLocation(selected).catch(() => {});
+      } catch {
+        setError('Could not set this address. Please try again.');
         return;
       }
+      if (navigation.canGoBack()) navigation.goBack();
+      return;
     }
-    if (navigation.canGoBack()) {
-      navigation.goBack();
-    }
+
+    navigation.navigate('LocationMap', {
+      initialLat: addr.lat,
+      initialLng: addr.lng,
+      source: addr.source === 'gps_detected' ? 'gps_detected' : 'manual',
+      returnTo: returnTo === 'MainTabs' ? 'MainTabs' : 'AddressPicker',
+      reviewAddress: addr,
+    });
   };
 
   const renderHeader = () => (
@@ -201,7 +179,7 @@ export default function AddressPickerScreen({
             address={item}
             onUse={() => onUse(item)}
             onEdit={() => onEdit(item)}
-            selecting={selectingId === item.id}
+            confirmOnMap={route.params?.returnTo !== 'Checkout'}
           />
         )}
         ListFooterComponent={
@@ -221,12 +199,12 @@ function AddressCard({
   address,
   onUse,
   onEdit,
-  selecting,
+  confirmOnMap,
 }: {
   address: UserAddress;
   onUse: () => void;
   onEdit: () => void;
-  selecting?: boolean;
+  confirmOnMap?: boolean;
 }) {
   const labelText =
     address.label === 'other' && address.custom_label
@@ -276,11 +254,10 @@ function AddressCard({
           style={s.useBtn}
         />
         <Button
-          label="Use this"
+          label={confirmOnMap ? 'Confirm on map' : 'Use this'}
           onPress={onUse}
           variant="secondary"
           size="sm"
-          loading={selecting}
           style={s.useBtn}
         />
       </View>

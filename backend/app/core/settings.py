@@ -136,10 +136,10 @@ class Settings(BaseSettings):
     app_base_url: str = "http://localhost:8000"
     r2_public_endpoint: str = ""
     log_level: str = "INFO"
-    # ── Google Gemini AI (Sprint 8 Phase 2 — free tier) ─────────────────── SPRINT8_PHASE2_GEMINI
+    # ── Google Gemini AI ─────────────────────────────────────────────────
     gemini_api_key: str = ""
-    gemini_vision_model: str = "gemini-2.5-flash"
-    gemini_text_model: str = "gemini-2.0-flash-lite"
+    gemini_vision_model: str = "gemini-3-pro-preview"
+    gemini_text_model: str = "gemini-3-flash-preview"
 
     # ── Photon (reverse geocoding) ───────────────────────────────────────
     # Public Photon (komoot.io) by default. If we hit fair-use limits in

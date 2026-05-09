@@ -23,7 +23,6 @@ export type RootStackParams = {
   SellerProfile: { seller: { id: string; name?: string; city?: string; kyc_verified?: boolean; avg_rating?: number; deal_count?: number; trust_score?: number; member_since?: string } };
 
   // ── Sprint 4 / Pass 2: FE flow ─────────────────────────────────────────────
-  RequestFeVisit: { categoryHint?: string } | undefined;
   FeVisitConfirmation: { visitId: string };
   VerificationWall: { intent?: 'buy' | 'sell' | 'publish' } | undefined;
   // FE-role screens
@@ -42,9 +41,6 @@ export type RootStackParams = {
   // Concierge Phase 5 — trust safety net
   ReportIssue: { visitId: string };
   ConciergeNps: { visit_id: string; specialist_first_name?: string };
-
-  // Sprint 8 / Phase 1: Location picker re-entry (modal)
-  LocationPicker: undefined;
 
   // Sprint 6b: Buyer/seller offers list with v2 mechanics
   MyOffers: undefined;
@@ -65,7 +61,7 @@ export type RootStackParams = {
 
   // ── Concierge (master spec) ─────────────────────────────────────────
   SellModeFork: undefined;
-  ConciergeBooking: undefined;
+  ConciergeBooking: { selectedAddressId?: string } | undefined;
   ConciergeBookingConfirmed: { visit: import('../services/api').FEVisit };
   MyConcierge: undefined;
   // Phase 2 — trust theater
@@ -84,6 +80,9 @@ export type RootStackParams = {
     source?: 'gps_detected' | 'manual';
     gpsAccuracy?: number;
     returnTo?: string;
+    // Existing saved address selected from the Home location picker.
+    // The map must be reviewed before making it the active/default address.
+    reviewAddress?: import('../services/api').UserAddress;
   };
   AddressDetails: {
     lat: number;

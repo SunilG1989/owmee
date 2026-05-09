@@ -11,6 +11,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   NativeModules,
   Platform,
   StyleSheet,
@@ -22,10 +23,12 @@ import Geolocation from '@react-native-community/geolocation';
 import MapView, { Circle, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Geo, type PhotonReverseResponse } from '../../../services/api';
+import { Addresses, Geo, type PhotonReverseResponse, type UserAddress } from '../../../services/api';
 import { BackButton, Button } from '../../../components/ui';
 import { C, R, S, Shadow, T } from '../../../utils/tokens';
 import type { RootScreen } from '../../../navigation/types';
+import { cacheAddressLocation } from '../../../utils/addressLocation';
+import { parseApiError } from '../../../utils/errors';
 
 const STREET_DELTA = 0.0048;
 const REVERSE_DEBOUNCE_MS = 650;
@@ -43,7 +46,7 @@ export default function LocationMapScreen({
   navigation,
   route,
 }: RootScreen<'LocationMap'>) {
-  const { initialLat, initialLng, source, gpsAccuracy } = route.params;
+  const { initialLat, initialLng, source, gpsAccuracy, reviewAddress } = route.params;
   const mapRef = useRef<MapView | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inFlightRef = useRef(0);
@@ -59,6 +62,15 @@ export default function LocationMapScreen({
   const [loadingReverse, setLoadingReverse] = useState(true);
   const [reverseError, setReverseError] = useState(false);
   const [locating, setLocating] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+
+  const reviewOrigin = reviewAddress
+    ? { lat: reviewAddress.lat, lng: reviewAddress.lng }
+    : null;
+  const pinMovedFromReview = reviewOrigin
+    ? distanceMeters(reviewOrigin.lat, reviewOrigin.lng, center.lat, center.lng) >= MIN_REVERSE_DISTANCE_M
+    : false;
+  const reviewSource = normalizeAddressSource(reviewAddress?.source ?? source);
 
   const fetchReverse = useCallback(async (lat: number, lng: number) => {
     const seq = ++inFlightRef.current;
@@ -152,7 +164,42 @@ export default function LocationMapScreen({
     );
   };
 
-  const onConfirm = () => {
+  const onConfirm = async () => {
+    if (reviewAddress) {
+      if (pinMovedFromReview) {
+        navigation.replace('AddressDetails', {
+          lat: center.lat,
+          lng: center.lng,
+          source: reviewSource,
+          reverse,
+          ...(route.params.returnTo ? { returnTo: route.params.returnTo } : {}),
+          edit: reviewAddress,
+        });
+        return;
+      }
+
+      setConfirming(true);
+      try {
+        const selected = reviewAddress.is_default
+          ? reviewAddress
+          : (await Addresses.update(reviewAddress.id, { is_default: true })).data;
+        await cacheAddressLocation(selected).catch(() => {});
+
+        if (route.params.returnTo === 'MainTabs') {
+          navigation.reset({ index: 0, routes: [{ name: 'MainTabs' as never }] });
+        } else if (navigation.canGoBack()) {
+          navigation.goBack();
+        } else {
+          navigation.reset({ index: 0, routes: [{ name: 'MainTabs' as never }] });
+        }
+      } catch (e) {
+        Alert.alert('Could not change location', parseApiError(e, 'Please try again.'));
+      } finally {
+        setConfirming(false);
+      }
+      return;
+    }
+
     navigation.replace('AddressDetails', {
       lat: center.lat,
       lng: center.lng,
@@ -162,13 +209,16 @@ export default function LocationMapScreen({
     });
   };
 
-  const canContinue = !loadingReverse || reverseError || !!reverse;
+  const canContinue = reviewAddress && !pinMovedFromReview
+    ? true
+    : !loadingReverse || reverseError || !!reverse;
+
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.headerRow}>
         <BackButton onPress={() => navigation.goBack()} />
-        <Text style={s.headerTitle}>Set precise location</Text>
+        <Text style={s.headerTitle}>{reviewAddress ? 'Confirm address location' : 'Set precise location'}</Text>
       </View>
 
       <View style={s.body}>
@@ -199,7 +249,7 @@ export default function LocationMapScreen({
             </MapView>
 
             <View style={s.mapHint} pointerEvents="none">
-              <Text style={s.mapHintText}>Move the map until the pin is on your building</Text>
+              <Text style={s.mapHintText}>{reviewAddress ? 'Check that the pin is on your building' : 'Move the map until the pin is on your building'}</Text>
             </View>
 
             <TouchableOpacity
@@ -232,14 +282,28 @@ export default function LocationMapScreen({
         <View style={s.sheet}>
           <View style={s.sheetHead}>
             <Text style={s.sheetEyebrow}>
-              {gpsPoint?.accuracy ? accuracyCopy(gpsPoint.accuracy) : 'Pin selected'}
+              {reviewAddress
+                ? (pinMovedFromReview ? 'Pin moved' : 'Saved address')
+                : gpsPoint?.accuracy ? accuracyCopy(gpsPoint.accuracy) : 'Pin selected'}
             </Text>
             <Text style={s.coordText}>
               {center.lat.toFixed(5)}, {center.lng.toFixed(5)}
             </Text>
           </View>
 
-          {loadingReverse ? (
+          {reviewAddress && !pinMovedFromReview ? (
+            <>
+              <Text style={s.sheetMain} numberOfLines={2}>
+                {savedAddressTitle(reviewAddress)}
+              </Text>
+              <Text style={s.sheetSub} numberOfLines={3}>
+                {savedAddressLine(reviewAddress)}
+              </Text>
+              <Text style={s.sheetWarn}>
+                Move the map only if this pin is not on your building.
+              </Text>
+            </>
+          ) : loadingReverse ? (
             <View style={s.sheetLoading}>
               <ActivityIndicator color={C.petrol} />
               <Text style={s.sheetSub}>Reading this location...</Text>
@@ -261,13 +325,19 @@ export default function LocationMapScreen({
                   Owmee Assist visits are currently limited to Bengaluru.
                 </Text>
               ) : null}
+              {reviewAddress && pinMovedFromReview ? (
+                <Text style={s.sheetWarn}>
+                  Pin changed. Next, confirm the address text before saving.
+                </Text>
+              ) : null}
             </>
           ) : null}
 
           <Button
-            label="Confirm and fill address"
+            label={reviewAddress ? (pinMovedFromReview ? 'Update address details' : 'Use this address') : 'Confirm and fill address'}
             onPress={onConfirm}
-            disabled={!canContinue}
+            disabled={!canContinue || confirming}
+            loading={confirming}
             style={s.confirmBtn}
           />
         </View>
@@ -324,6 +394,25 @@ function NudgeButton({ label, onPress }: { label: string; onPress: () => void })
       <Text style={s.nudgeButtonText}>{label}</Text>
     </TouchableOpacity>
   );
+}
+
+function normalizeAddressSource(
+  value?: UserAddress['source'] | 'gps_detected' | 'manual',
+): 'gps_detected' | 'manual' {
+  return value === 'gps_detected' ? 'gps_detected' : 'manual';
+}
+
+function savedAddressTitle(address: UserAddress) {
+  if (address.label === 'other' && address.custom_label) return address.custom_label;
+  return `${address.label.charAt(0).toUpperCase()}${address.label.slice(1)} address`;
+}
+
+function savedAddressLine(address: UserAddress) {
+  return [
+    [address.flat_house_number, address.building_name].filter(Boolean).join(', '),
+    [address.address_line_1, address.locality].filter(Boolean).join(', '),
+    [address.city, address.state, address.pincode].filter(Boolean).join(' '),
+  ].filter(Boolean).join('\n');
 }
 
 function toRegion(point: Point): Region {

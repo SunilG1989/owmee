@@ -8,7 +8,6 @@ User-facing endpoints (consumer mobile app):
   POST /v1/community/join-by-referral         - join via referral code
   POST /v1/community/verify/upload/request    - presigned URL for proof image
   POST /v1/community/verify/submit            - submit manual verification request
-  GET  /v1/community/safe-meetup-points       - list safe meetup points for my community
   GET  /v1/community/list                     - list active communities (for manual flow dropdown)
 """
 from __future__ import annotations
@@ -30,7 +29,6 @@ from app.modules.community import service as community_service
 from app.modules.community.models import (
     Community,
     CommunityVerification,
-    SafeMeetupPoint,
 )
 from app.modules.community.service import CommunityError
 from app.modules.identity_auth.models import User
@@ -259,28 +257,6 @@ async def submit_manual_verification(
         raise HTTPException(status_code=400, detail={"error": str(e)})
 
     return _verification_to_dict(verification)
-
-
-@router.get("/safe-meetup-points")
-async def my_safe_meetup_points(current_user: BasicUser, db: DBSession):
-    """List safe meetup points for the user's community."""
-    user = await _load_user(db, current_user.user_id)
-    if not user.community_id:
-        return {"points": [], "community_id": None}
-
-    points = await community_service.list_safe_meetup_points(db, user.community_id)
-    return {
-        "community_id": str(user.community_id),
-        "points": [
-            {
-                "id": str(p.id),
-                "name": p.name,
-                "notes": p.notes,
-                "sort_order": p.sort_order,
-            }
-            for p in points
-        ],
-    }
 
 
 @router.get("/list")

@@ -205,7 +205,7 @@ async def draft_from_image(
             "ai_response": detected.model_dump_json(),
             "price": price_result.get("price"),
             "ccount": price_result.get("comparables_count", 0),
-            "model": "claude-vision",
+            "model": claude_client.current_vision_model(),
         },
     )
     await db.commit()
@@ -686,7 +686,7 @@ async def regenerate_description(
 
     return RegenerateDescriptionResponse(
         description=description,
-        ai_model="claude-haiku",
+        ai_model=claude_client.current_text_model(),
     )
 
 
@@ -819,7 +819,7 @@ async def draft_from_images(
             "ai_response": detected.model_dump_json(),
             "price": price_result.get("price"),
             "ccount": price_result.get("comparables_count", 0),
-            "model": "gemini-vision",
+            "model": claude_client.current_vision_model(),
         },
     )
     await db.commit()
@@ -843,4 +843,3 @@ async def draft_from_images(
     )
 
 # ── End Sprint 8 Phase 2.1 multi-image block ─────────────────────────────  # SPRINT8_PHASE2_GEMINI_V2
-

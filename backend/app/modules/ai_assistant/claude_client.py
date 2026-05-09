@@ -32,13 +32,13 @@ What v2 changes:
      with a `flags=['ai_failed:<reason>']` marker so the router/UI can
      show "AI couldn't read these photos" instead of silently empty fields.
 
-Models (latest preview defaults, override via .env):
-    Vision:  gemini-3.1-pro-preview         (top spec extraction)
-    Text:    gemini-3.1-flash-lite-preview  (cheap, multimodal)
+Models (latest Gemini defaults, override via .env):
+    Vision:  gemini-3-pro-preview     (best multimodal extraction)
+    Text:    gemini-3-flash-preview   (fast, current-generation text)
 
-WARNING: the 3.1 line is PREVIEW — Google may change behaviour or
-remove these without notice. Pin to a 2.5 GA model
-(gemini-2.5-flash / gemini-2.5-flash-lite) if stability is critical.
+WARNING: Gemini 3 is currently preview. Pin to a stable 2.5 model
+(gemini-2.5-pro / gemini-2.5-flash) if production stability matters
+more than the latest model family.
 
 Privacy note: free-tier inputs may be used by Google for training.
 Acceptable for prototype; revisit before production with real seller data.
@@ -60,6 +60,9 @@ from app.modules.ai_assistant.prompts import (
 from app.modules.ai_assistant.schemas import AIDetected
 
 log = logging.getLogger(__name__)
+
+DEFAULT_GEMINI_VISION_MODEL = "gemini-3-pro-preview"
+DEFAULT_GEMINI_TEXT_MODEL = "gemini-3-flash-preview"
 
 
 # ── Pydantic schemas used as response_schema for Gemini ───────────────────
@@ -230,15 +233,41 @@ def _get_model(kind: str) -> str:
             return (
                 getattr(settings, "gemini_vision_model", "")
                 or os.environ.get("GEMINI_VISION_MODEL", "")
-                or "gemini-3.1-pro-preview"
+                or DEFAULT_GEMINI_VISION_MODEL
             )
         return (
             getattr(settings, "gemini_text_model", "")
             or os.environ.get("GEMINI_TEXT_MODEL", "")
-            or "gemini-3.1-flash-lite-preview"
+            or DEFAULT_GEMINI_TEXT_MODEL
         )
     except Exception:
-        return "gemini-3.1-pro-preview" if kind == "vision" else "gemini-3.1-flash-lite-preview"
+        return DEFAULT_GEMINI_VISION_MODEL if kind == "vision" else DEFAULT_GEMINI_TEXT_MODEL
+
+
+def current_vision_model() -> str:
+    return _get_model("vision")
+
+
+def current_text_model() -> str:
+    return _get_model("text")
+
+
+def _thinking_config(types: Any, model: str, kind: str):
+    """Use the right thinking control for Gemini 3 vs Gemini 2.5.
+
+    Gemini 3 accepts thinking_level; Gemini 2.5 accepts thinking_budget.
+    Keeping this centralized prevents the model upgrade from breaking the
+    structured extraction calls.
+    """
+    if model.startswith("gemini-3"):
+        thinking_level = getattr(types, "ThinkingLevel", None)
+        if thinking_level is not None:
+            level = thinking_level.LOW if kind == "vision" else thinking_level.MINIMAL
+            return types.ThinkingConfig(thinking_level=level)
+        return types.ThinkingConfig(thinking_budget=-1)
+    if model.startswith("gemini-2.5-pro"):
+        return types.ThinkingConfig(thinking_budget=-1)
+    return types.ThinkingConfig(thinking_budget=0)
 
 
 def _normalize_media_type(content_type: str) -> str:
@@ -291,18 +320,19 @@ async def detect_from_images(
             )
         )
 
+    model = _get_model("vision")
     config = types.GenerateContentConfig(
         system_instruction=PROMPT_VISION_DETECT,
         response_mime_type="application/json",
         response_schema=_GeminiVisionOut,
         temperature=0.2,
         max_output_tokens=1024,
-        thinking_config=types.ThinkingConfig(thinking_budget=0),
+        thinking_config=_thinking_config(types, model, "vision"),
     )
 
     try:
         resp = await client.aio.models.generate_content(
-            model=_get_model("vision"),
+            model=model,
             contents=parts,
             config=config,
         )
@@ -588,18 +618,19 @@ async def extract_imei(image_bytes: bytes, content_type: str = "image/jpeg") -> 
         mime_type=_normalize_media_type(content_type),
     )
 
+    model = _get_model("vision")
     config = types.GenerateContentConfig(
         system_instruction=PROMPT_IMEI_OCR,
         response_mime_type="application/json",
         response_schema=_GeminiIMEIOut,
         temperature=0.0,
         max_output_tokens=512,
-        thinking_config=types.ThinkingConfig(thinking_budget=0),
+        thinking_config=_thinking_config(types, model, "vision"),
     )
 
     try:
         resp = await client.aio.models.generate_content(
-            model=_get_model("vision"),
+            model=model,
             contents=[
                 "Read the IMEI from this image. The IMEI is a 15-digit number, "
                 "usually labelled 'IMEI', 'IMEI 1', or 'MEID/IMEI'. It may "
@@ -674,16 +705,17 @@ async def regenerate_description(fields: dict[str, Any]) -> str:
         f"- {k}: {v}" for k, v in fields.items() if v not in (None, "", [])
     )
 
+    model = _get_model("text")
     config = types.GenerateContentConfig(
         system_instruction=PROMPT_DESCRIPTION_REGEN,
         temperature=0.7,
         max_output_tokens=600,
-        thinking_config=types.ThinkingConfig(thinking_budget=0),
+        thinking_config=_thinking_config(types, model, "text"),
     )
 
     try:
         resp = await client.aio.models.generate_content(
-            model=_get_model("text"),
+            model=model,
             contents=user_text,
             config=config,
         )
@@ -722,18 +754,19 @@ async def estimate_price(
         f"Currency: INR"
     )
 
+    model = _get_model("text")
     config = types.GenerateContentConfig(
         system_instruction=PROMPT_PRICE_ESTIMATE,
         response_mime_type="application/json",
         response_schema=_GeminiPriceOut,
         temperature=0.3,
         max_output_tokens=512,
-        thinking_config=types.ThinkingConfig(thinking_budget=0),
+        thinking_config=_thinking_config(types, model, "text"),
     )
 
     try:
         resp = await client.aio.models.generate_content(
-            model=_get_model("text"),
+            model=model,
             contents=user_text,
             config=config,
         )

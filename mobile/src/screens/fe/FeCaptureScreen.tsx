@@ -9,10 +9,6 @@
  *     stored locally and passed to submit-listing in image_urls.
  *   - Kids safety checklist renders when the selected category slug matches
  *     kids-utility. Checklist is passed as kids_safety_checklist on submit.
- *
- * Falls back cleanly if image-picker is not installed: a manual placeholder
- * capture path (Pass 2 behaviour) is kept so QA doesn't require the native
- * build to have the picker wired up.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -128,6 +124,9 @@ interface CapturedPhoto {
   publicUrl?: string; // server-computed public URL
 }
 
+const isRealPhoto = (photo?: CapturedPhoto | null): photo is CapturedPhoto =>
+  !!photo && !photo.uri.startsWith('placeholder:') && !photo.r2Key.includes('/placeholder-');
+
 export default function FeCaptureScreen({ route, navigation }: RootScreen<'FeCapture'>) {
   const { visitId } = route.params;
 
@@ -158,7 +157,7 @@ export default function FeCaptureScreen({ route, navigation }: RootScreen<'FeCap
   const [kidsChecklist, setKidsChecklist] = useState<Record<string, boolean>>({});
 
   // Photos — captured = uploaded + confirmed
-  const [photos, setPhotos] = useState<CapturedPhoto[]>([]);
+  const [photos, setPhotos] = useState<Array<CapturedPhoto | undefined>>([]);
   const [uploadingSlot, setUploadingSlot] = useState<number | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
@@ -223,22 +222,10 @@ export default function FeCaptureScreen({ route, navigation }: RootScreen<'FeCap
   const capturePhoto = async (slotIndex: number) => {
     const imagePicker = tryLoadImagePicker();
     if (!imagePicker) {
-      // Fallback: create a placeholder so QA can proceed even without
-      // the native module. The backend will still accept the r2_key if a
-      // real upload happens; placeholder URIs are only useful for UI.
       Alert.alert(
-        'Camera module not installed',
-        'Install react-native-image-picker or expo-image-picker. Using placeholder photo for now.',
+        'Camera unavailable',
+        'The camera module is not available in this build. Please reinstall the latest app build and try again.',
       );
-      const placeholder: CapturedPhoto = {
-        uri: `placeholder://${visitId}/${slotIndex}`,
-        r2Key: `fe-visits/${visitId}/placeholder-${slotIndex}`,
-      };
-      setPhotos((prev) => {
-        const next = [...prev];
-        next[slotIndex] = placeholder;
-        return next;
-      });
       return;
     }
 
@@ -322,12 +309,13 @@ export default function FeCaptureScreen({ route, navigation }: RootScreen<'FeCap
   const removePhoto = (idx: number) => {
     setPhotos((prev) => {
       const next = [...prev];
-      next[idx] = undefined as any;
-      return next.filter(Boolean);
+      next[idx] = undefined;
+      return next;
     });
   };
 
-  const photosCount = useMemo(() => photos.filter(Boolean).length, [photos]);
+  const realPhotos = useMemo(() => photos.filter(isRealPhoto), [photos]);
+  const photosCount = realPhotos.length;
 
   const canSubmit = useMemo(() => {
     if (!title.trim() || !brand.trim() || !model.trim()) return false;
@@ -356,7 +344,7 @@ export default function FeCaptureScreen({ route, navigation }: RootScreen<'FeCap
       battery_health: batteryHealth ? parseInt(batteryHealth, 10) : undefined,
       serial_number: serialNumber.trim() || undefined,
       condition: screenCondition,
-      image_urls: photos.filter(Boolean).map((p) => p.r2Key),
+      image_urls: realPhotos.map((p) => p.r2Key),
       city: cityOfVisit || 'Bengaluru',
       description: notes.trim() || undefined,
       is_kids_item: isKidsCategory,

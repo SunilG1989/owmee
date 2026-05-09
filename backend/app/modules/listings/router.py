@@ -1043,7 +1043,7 @@ async def delete_listing(
                 "Item no longer available",
                 f"'{listing.title[:40]}' was removed by the seller. "
                 f"Browse similar listings.",
-                "listing", str(listing_id), bucket="message",
+                "listing", str(listing_id),
             )
         except Exception:
             pass

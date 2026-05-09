@@ -86,8 +86,7 @@ class RequestVisitRequest(BaseModel):
     address_id: UUID
     notes: Optional[str] = Field(None, max_length=500)
     notes_tags: list[str] = Field(default_factory=list, max_length=6)
-    # Optional — only legacy callers (the deprecated RequestFeVisitScreen)
-    # still send this. Default 'unknown' so DB NOT NULL stays satisfied.
+    # Optional fallback. Default 'unknown' so DB NOT NULL stays satisfied.
     category_hint: str = Field("unknown", max_length=100)
 
     @field_validator("notes_tags")
@@ -1750,5 +1749,4 @@ async def admin_reassign(
     await db.commit()
     await db.refresh(visit)
     return await _visit_to_response(db, visit)
-
 

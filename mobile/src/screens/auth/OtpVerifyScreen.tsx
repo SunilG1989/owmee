@@ -61,11 +61,11 @@ export default function OtpVerifyScreen({ navigation, route }: AuthScreen<'OtpVe
         auth_state, buyer_eligible, seller_tier, role,
       } = r.data;
       const userId = extractUserId(access_token);
-      setTokens(
+      await setTokens(
         access_token, refresh_token, userId,
         tier, kyc_status, auth_state, buyer_eligible, seller_tier, role,
       );
-      storePhone(phone);
+      await storePhone(phone);
       const profile = route.params?.profile;
       if (profile) {
         try {
@@ -74,14 +74,14 @@ export default function OtpVerifyScreen({ navigation, route }: AuthScreen<'OtpVe
             email: profile.email,
             ...(profile.address || {}),
           });
-          if (profile.address) {
-            const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-            await AsyncStorage.setItem('@ow_address', JSON.stringify(profile.address));
-          }
         } catch {}
       }
       navigation.getParent()?.goBack();
     } catch (e: any) {
+      if (e?.message === 'AUTH_STORAGE_FAILED') {
+        Alert.alert('Could not save session', 'Please try again. Your login was verified, but the app could not save the session on this device.');
+        return;
+      }
       Alert.alert('Invalid OTP', parseApiError(e, 'Check and try again'));
     } finally {
       setLoading(false);

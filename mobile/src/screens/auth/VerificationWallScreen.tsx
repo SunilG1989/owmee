@@ -54,7 +54,7 @@ export default function VerificationWallScreen({
   const intent: Intent = route.params?.intent;
   const copy = COPY[intent || 'default'] || COPY.default;
 
-  const bookFeVisit = () => navigation.replace('RequestFeVisit', { categoryHint: undefined });
+  const bookFeVisit = () => navigation.replace('ConciergeBooking');
   const startKyc = () => navigation.replace('KycFlow', { returnTo: intent });
   const close = () => {
     if (navigation.canGoBack()) navigation.goBack();

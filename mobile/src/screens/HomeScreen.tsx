@@ -42,134 +42,6 @@ import { FeedCard } from '../components/OwmeeListingCard';
 import { parseApiError } from '../utils/errors';
 import { locationDisplayLabel } from '../utils/addressLocation';
 
-const PREVIEW_FEED_ITEMS: FeedListing[] = [
-  {
-    id: 'preview-iphone-13',
-    title: 'iPhone 13',
-    description: '128GB, blue, battery and display checked',
-    price: 29999,
-    original_price: 34000,
-    discount_pct: 12,
-    image_urls: [],
-    thumbnail_url: null,
-    city: 'HSR Layout',
-    state: 'Karnataka',
-    category_slug: 'smartphones',
-    shipping_eligible: false,
-    created_at: null,
-    seller_id: 'preview-seller-1',
-    seller_name: 'Ananya',
-    is_owmee_verified: true,
-    distance_km: 2.1,
-    bill_available: true,
-    box_available: true,
-    is_negotiable: true,
-  },
-  {
-    id: 'preview-macbook-air',
-    title: 'MacBook Air M1',
-    description: '8GB RAM, 256GB SSD, clean body',
-    price: 49900,
-    original_price: 55900,
-    discount_pct: 11,
-    image_urls: [],
-    thumbnail_url: null,
-    city: 'Koramangala',
-    state: 'Karnataka',
-    category_slug: 'laptops',
-    shipping_eligible: false,
-    created_at: null,
-    seller_id: 'preview-seller-2',
-    seller_name: 'Rahul',
-    is_owmee_verified: true,
-    distance_km: 3.4,
-    bill_available: true,
-    is_negotiable: true,
-  },
-  {
-    id: 'preview-mixer-grinder',
-    title: 'Mixer Grinder',
-    description: '750W, three jars, tested at pickup',
-    price: 2499,
-    original_price: 4200,
-    discount_pct: 40,
-    image_urls: [],
-    thumbnail_url: null,
-    city: 'Indiranagar',
-    state: 'Karnataka',
-    category_slug: 'small-appliances',
-    shipping_eligible: false,
-    created_at: null,
-    seller_id: 'preview-seller-3',
-    seller_name: 'Meera',
-    is_owmee_verified: true,
-    distance_km: 4.8,
-    box_available: true,
-    is_negotiable: true,
-  },
-  {
-    id: 'preview-kids-toys',
-    title: 'Kids Toy Set',
-    description: 'Clean wooden toys, age 2 to 5 years',
-    price: 899,
-    original_price: 1600,
-    discount_pct: 44,
-    image_urls: [],
-    thumbnail_url: null,
-    city: 'Jayanagar',
-    state: 'Karnataka',
-    category_slug: 'kids',
-    shipping_eligible: false,
-    created_at: null,
-    seller_id: 'preview-seller-4',
-    seller_name: 'Nisha',
-    is_owmee_verified: true,
-    distance_km: 5.2,
-    is_negotiable: true,
-  },
-  {
-    id: 'preview-book-set',
-    title: 'Book Set',
-    description: 'Business and fiction books, good condition',
-    price: 699,
-    original_price: 1400,
-    discount_pct: 50,
-    image_urls: [],
-    thumbnail_url: null,
-    city: 'Whitefield',
-    state: 'Karnataka',
-    category_slug: 'books',
-    shipping_eligible: false,
-    created_at: null,
-    seller_id: 'preview-seller-5',
-    seller_name: 'Karthik',
-    is_owmee_verified: true,
-    distance_km: 8.7,
-    is_negotiable: true,
-  },
-  {
-    id: 'preview-laptop-stand',
-    title: 'HP Laptop',
-    description: 'i5, 8GB RAM, charger included',
-    price: 22500,
-    original_price: 28000,
-    discount_pct: 20,
-    image_urls: [],
-    thumbnail_url: null,
-    city: 'Malleshwaram',
-    state: 'Karnataka',
-    category_slug: 'laptops',
-    shipping_eligible: false,
-    created_at: null,
-    seller_id: 'preview-seller-6',
-    seller_name: 'Arjun',
-    is_owmee_verified: true,
-    distance_km: 9.3,
-    bill_available: true,
-    is_negotiable: true,
-  },
-];
-
 export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
   const { isAuthenticated } = useAuthStore();
   const { location } = useLocation();
@@ -213,15 +85,6 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
           : e?.message
             ? `JS error: ${e.message}`
             : `Unknown: ${JSON.stringify(e).slice(0, 200)}`;
-      if (__DEV__) {
-        setFeedItems(PREVIEW_FEED_ITEMS);
-        setCursor(null);
-        setPage(0);
-        setHasMore(false);
-        setCurrentRadius(15);
-        setFeedError(null);
-        return;
-      }
       console.warn('[HomeScreen.loadFeed]', msg, e);
       setFeedError('Listings are taking longer to load. Pull down to try again.');
       setFeedItems([]);
@@ -295,18 +158,10 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
   }, [location, loadFeed]);
 
   const handleCardPress = (l: FeedListing) => {
-    if (l.id.startsWith('preview-')) {
-      Alert.alert('Preview item', 'Start the Owmee backend to open live item details.');
-      return;
-    }
     navigation.navigate('ListingDetail', { listingId: l.id });
   };
 
   const handleBuySafely = (l: FeedListing) => {
-    if (l.id.startsWith('preview-')) {
-      Alert.alert('Preview item', 'Start the Owmee backend to buy this item safely.');
-      return;
-    }
     if (!isAuthenticated) {
       navigation.navigate('AuthFlow');
       return;
@@ -315,10 +170,6 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
   };
 
   const handleMakeOffer = (l: FeedListing) => {
-    if (l.id.startsWith('preview-')) {
-      Alert.alert('Preview item', 'Start the Owmee backend to make an offer.');
-      return;
-    }
     if (!isAuthenticated) {
       navigation.navigate('AuthFlow');
       return;
@@ -333,16 +184,6 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
     }
 
     const wasSaved = savedIds.has(l.id);
-    if (l.id.startsWith('preview-')) {
-      setSavedIds(prev => {
-        const next = new Set(prev);
-        if (wasSaved) next.delete(l.id);
-        else next.add(l.id);
-        return next;
-      });
-      return;
-    }
-
     setSavedIds(prev => {
       const next = new Set(prev);
       if (wasSaved) next.delete(l.id);
@@ -375,7 +216,7 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
 
   const handleLocationPress = () => {
     if (!isAuthenticated) {
-      (navigation as any).navigate('LocationPicker');
+      navigation.navigate('AuthFlow');
       return;
     }
     (navigation as any).navigate('AddressPicker', { returnTo: 'MainTabs' });
@@ -544,6 +385,9 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
           <Text style={s.emptyEmoji}>⚠️</Text>
           <Text style={s.emptyTitle}>Could not load listings</Text>
           <Text style={s.emptySub}>{feedError}</Text>
+          <TouchableOpacity style={s.emptyBtn} onPress={() => loadFeed(true)} activeOpacity={0.8}>
+            <Text style={s.emptyBtnText}>Retry</Text>
+          </TouchableOpacity>
         </View>
       );
     }
@@ -891,4 +735,15 @@ const s = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 18,
   },
+  emptyBtn: {
+    marginTop: S.lg,
+    minWidth: 108,
+    height: 40,
+    borderRadius: R.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: C.petrol,
+    paddingHorizontal: S.xl,
+  },
+  emptyBtnText: { color: C.white, fontSize: T.size.sm + 1, fontWeight: T.weight.semi },
 });

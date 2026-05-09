@@ -107,6 +107,10 @@ services:
         value: ""
       - key: GEMINI_API_KEY
         sync: false
+      - key: GEMINI_VISION_MODEL
+        value: gemini-3-pro-preview
+      - key: GEMINI_TEXT_MODEL
+        value: gemini-3-flash-preview
 
   - type: worker
     name: owmee-worker
@@ -211,6 +215,10 @@ services:
         value: ""
       - key: GEMINI_API_KEY
         sync: false
+      - key: GEMINI_VISION_MODEL
+        value: gemini-3-pro-preview
+      - key: GEMINI_TEXT_MODEL
+        value: gemini-3-flash-preview
 
   - type: keyvalue
     name: owmee-redis

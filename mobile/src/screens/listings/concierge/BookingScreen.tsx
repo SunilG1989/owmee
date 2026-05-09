@@ -109,6 +109,7 @@ function buildSlots(extended: boolean): Slot[] {
 
 export default function BookingScreen({
   navigation,
+  route,
 }: RootScreen<'ConciergeBooking'>) {
   // ── State ────────────────────────────────────────────────────────────
   const [addresses, setAddresses] = useState<UserAddress[] | null>(null);
@@ -124,6 +125,7 @@ export default function BookingScreen({
   const [notesTags, setNotesTags] = useState<string[]>([]);
 
   const [submitting, setSubmitting] = useState(false);
+  const preferredAddressId = route.params?.selectedAddressId;
 
   // ── Load addresses on focus (so returning from LocationDetect refreshes) ─
   const loadAddresses = React.useCallback(async () => {
@@ -132,6 +134,9 @@ export default function BookingScreen({
       setAddresses(res.data);
       // Auto-select default on first load if not already chosen.
       setAddressId((current) => {
+        if (preferredAddressId && res.data.some((a) => a.id === preferredAddressId)) {
+          return preferredAddressId;
+        }
         if (current && res.data.some((a) => a.id === current)) return current;
         const def = res.data.find((a) => a.is_default) ?? res.data[0];
         return def?.id ?? null;
@@ -141,7 +146,7 @@ export default function BookingScreen({
     } finally {
       setAddressesLoading(false);
     }
-  }, []);
+  }, [preferredAddressId]);
 
   useFocusEffect(
     React.useCallback(() => {

@@ -34,13 +34,11 @@ BUCKET_MAP = {
     "offer_rejected":        "transactions",
     "offer_countered":       "transactions",
     "payment_confirmed":     "transactions",
-    "meetup_confirmed":      "transactions",
     "deal_confirmed":        "transactions",
     "deal_confirmed_buyer":  "transactions",
     "payout_eligible":       "transactions",
     "dispute_opened":        "transactions",
     "price_drop":            "transactions",
-    "new_message":           "messages",
     "promo_badge":           "promotions",
     # ── Concierge Phase 2 — trust theater (master spec section 5) ──
     "concierge_visit_booked":      "transactions",  # N1
@@ -67,6 +65,7 @@ async def push(
     data: dict | None = None,
     entity_type: str | None = None,
     entity_id: str | None = None,
+    persist_in_app: bool = True,
 ) -> bool:
     """
     Send a push notification to a user.
@@ -89,24 +88,22 @@ async def push(
         if pref:
             if bucket == "transactions" and not pref.transactions_enabled:
                 return False
-            if bucket == "messages" and not pref.messages_enabled:
-                return False
             if bucket == "promotions" and not pref.promotions_enabled:
                 return False
 
-        # Create in-app notification
-        n = NotificationEvent(
-            user_id=user_id,
-            event_type=event_type,
-            notification_bucket=bucket,
-            title=title,
-            body=body,
-            entity_type=entity_type,
-            entity_id=str(entity_id) if entity_id else None,
-        )
-        db.add(n)
-        await db.commit()
-        logger.info("notification.created", user_id=str(user_id), event_type=event_type)
+        if persist_in_app:
+            n = NotificationEvent(
+                user_id=user_id,
+                event_type=event_type,
+                notification_bucket=bucket,
+                title=title,
+                body=body,
+                entity_type=entity_type,
+                entity_id=str(entity_id) if entity_id else None,
+            )
+            db.add(n)
+            await db.commit()
+            logger.info("notification.created", user_id=str(user_id), event_type=event_type)
 
     # Attempt FCM push in production
     if not settings.is_production or not settings.fcm_server_key:
@@ -231,13 +228,13 @@ async def notify_payment_confirmed(seller_id: UUID, buyer_id: UUID, price: str, 
     await push(
         seller_id, "payment_confirmed",
         title="Payment received",
-        body=f"₹{int(float(price)):,} payment confirmed. Arrange meetup.",
+        body=f"₹{int(float(price)):,} payment confirmed. Owmee pickup is next.",
         entity_type="transaction", entity_id=transaction_id,
     )
     await push(
         buyer_id, "payment_confirmed",
         title="Payment sent",
-        body="Payment confirmed. Seller will contact you.",
+        body="Payment confirmed. Track pickup and delivery in Owmee.",
         entity_type="transaction", entity_id=transaction_id,
     )
 

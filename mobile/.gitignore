@@ -64,3 +64,6 @@ yarn-error.log
 
 # testing
 /coverage
+
+# Local iOS Google Maps API key
+ios/Config/GoogleMaps.local.xcconfig
