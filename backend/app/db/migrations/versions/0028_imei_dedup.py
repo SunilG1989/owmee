@@ -24,6 +24,8 @@ depends_on = None
 
 
 def upgrade() -> None:
+    op.execute("ALTER TABLE listings ADD COLUMN IF NOT EXISTS imei_1 VARCHAR(20)")
+    op.execute("ALTER TABLE listings ADD COLUMN IF NOT EXISTS imei_2 VARCHAR(20)")
     op.execute("""
         CREATE UNIQUE INDEX IF NOT EXISTS uq_listings_imei_1_active
         ON listings (imei_1)
