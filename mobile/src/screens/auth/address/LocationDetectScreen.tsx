@@ -10,7 +10,7 @@
  * forward to LocationMapScreen with the default Bengaluru centre. The
  * user can drag the pin to wherever they need it.
  */
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   PermissionsAndroid,
@@ -20,6 +20,7 @@ import {
   View,
 } from 'react-native';
 import Geolocation from '@react-native-community/geolocation';
+import type { GeolocationResponse } from '@react-native-community/geolocation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton, Button } from '../../../components/ui';
@@ -27,7 +28,9 @@ import { C, S, T } from '../../../utils/tokens';
 import type { RootScreen } from '../../../navigation/types';
 
 const BENGALURU = { lat: 12.9716, lng: 77.5946 };
-const GPS_TIMEOUT_MS = 10_000;
+const GPS_TIMEOUT_MS = 14_000;
+const EXCELLENT_ACCURACY_M = 50;
+const MAX_USEFUL_ACCURACY_M = 500;
 
 export default function LocationDetectScreen({
   navigation,
@@ -35,9 +38,43 @@ export default function LocationDetectScreen({
 }: RootScreen<'LocationDetect'>) {
   const [probing, setProbing] = useState(false);
   const [denied, setDenied] = useState(false);
+  const watchRef = useRef<number | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cleanupProbe = () => {
+    if (watchRef.current != null) {
+      Geolocation.clearWatch(watchRef.current);
+      watchRef.current = null;
+    }
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  useEffect(() => cleanupProbe, []);
+
+  const goToMap = (
+    lat: number,
+    lng: number,
+    source: 'gps_detected' | 'manual',
+    gpsAccuracy?: number,
+  ) => {
+    cleanupProbe();
+    setProbing(false);
+    navigation.replace('LocationMap', {
+      initialLat: lat,
+      initialLng: lng,
+      source,
+      ...(gpsAccuracy != null ? { gpsAccuracy } : {}),
+      ...route.params,
+    });
+  };
 
   const onUseCurrent = async () => {
+    if (probing) return;
     setProbing(true);
+    setDenied(false);
     try {
       if (Platform.OS === 'android') {
         const granted = await PermissionsAndroid.request(
@@ -57,55 +94,50 @@ export default function LocationDetectScreen({
         }
       }
 
-      Geolocation.getCurrentPosition(
+      let best: GeolocationResponse | null = null;
+      let settled = false;
+
+      const finish = (pos: GeolocationResponse | null) => {
+        if (settled) return;
+        settled = true;
+        const accuracy = pos?.coords?.accuracy ?? Number.POSITIVE_INFINITY;
+        if (pos && accuracy <= MAX_USEFUL_ACCURACY_M) {
+          goToMap(
+            pos.coords.latitude,
+            pos.coords.longitude,
+            'gps_detected',
+            accuracy,
+          );
+        } else {
+          goToMap(BENGALURU.lat, BENGALURU.lng, 'manual');
+        }
+      };
+
+      watchRef.current = Geolocation.watchPosition(
         (pos) => {
-          // PRD 9.2: accuracy > 1000m means we're effectively indoors —
-          // skip the GPS fix entirely and let user drop the pin manually.
-          const accuracy = (pos.coords as any).accuracy ?? 0;
-          if (accuracy > 1000) {
-            navigation.replace('LocationMap', {
-              initialLat: BENGALURU.lat,
-              initialLng: BENGALURU.lng,
-              source: 'manual',
-              ...route.params,
-            });
-            return;
-          }
-          navigation.replace('LocationMap', {
-            initialLat: pos.coords.latitude,
-            initialLng: pos.coords.longitude,
-            source: 'gps_detected',
-            gpsAccuracy: accuracy,
-            ...route.params,
-          });
+          const accuracy = pos.coords.accuracy ?? Number.POSITIVE_INFINITY;
+          const bestAccuracy = best?.coords?.accuracy ?? Number.POSITIVE_INFINITY;
+          if (!best || accuracy < bestAccuracy) best = pos;
+          if (accuracy <= EXCELLENT_ACCURACY_M) finish(pos);
         },
-        () => {
-          // Timeout / position-unavailable: fall through to manual map.
-          navigation.replace('LocationMap', {
-            initialLat: BENGALURU.lat,
-            initialLng: BENGALURU.lng,
-            source: 'manual',
-            ...route.params,
-          });
-        },
+        () => finish(best),
         {
           enableHighAccuracy: true,
           timeout: GPS_TIMEOUT_MS,
-          maximumAge: 0,
+          maximumAge: 5_000,
+          distanceFilter: 0,
         },
       );
+
+      timerRef.current = setTimeout(() => finish(best), GPS_TIMEOUT_MS);
     } catch {
+      cleanupProbe();
       setProbing(false);
     }
   };
 
   const onSetManually = () => {
-    navigation.replace('LocationMap', {
-      initialLat: BENGALURU.lat,
-      initialLng: BENGALURU.lng,
-      source: 'manual',
-      ...route.params,
-    });
+    goToMap(BENGALURU.lat, BENGALURU.lng, 'manual');
   };
 
   return (
