@@ -81,8 +81,11 @@ def _otp_lock_key(phone: str) -> str:
 
 
 async def _check_rate_limit(phone: str) -> None:
-    # Fix #30: Skip rate limit in dev — OTP is logged to console anyway
-    if settings.env == "development" or _is_whitelisted_phone(phone):
+    # Fix #30: Skip rate limit in dev — OTP is logged to console anyway.
+    # Private Render staging currently runs SMS_PROVIDER=mock. In that mode
+    # there is no real SMS delivery, so users must be able to use the fixed
+    # pilot OTP without getting stuck behind production SMS rate limits.
+    if settings.env == "development" or _uses_fixed_otp(phone):
         return
     redis = await get_redis()
     key = _otp_rate_key(phone)
@@ -109,9 +112,9 @@ async def _store_otp(phone: str, otp: str, *, count_rate: bool = True) -> None:
 
 async def _verify_otp(phone: str, submitted_otp: str) -> None:
     redis = await get_redis()
-    whitelisted = _is_whitelisted_phone(phone)
+    fixed_otp_enabled = _uses_fixed_otp(phone)
 
-    if whitelisted:
+    if fixed_otp_enabled:
         if submitted_otp == _whitelist_otp_code():
             await redis.delete(_otp_value_key(phone), _otp_attempts_key(phone), _otp_lock_key(phone))
             return
@@ -159,6 +162,15 @@ async def _verify_otp(phone: str, submitted_otp: str) -> None:
 
 
 # ── Sprint 5b: OTP whitelist for test users (pre-real-SMS) ──────────────────
+def _sms_provider_is_mock() -> bool:
+    return (getattr(settings, "sms_provider", "") or "").strip().lower() == "mock"
+
+
+def _uses_fixed_otp(phone: str) -> bool:
+    """True when the submitted phone should verify against fixed pilot OTP."""
+    return _sms_provider_is_mock() or _is_whitelisted_phone(phone)
+
+
 def _is_whitelisted_phone(phone: str) -> bool:
     """True if phone is in OTP_WHITELIST env var.
 
@@ -296,22 +308,23 @@ async def send_otp(body: SendOTPRequest, request: Request):
     """Send OTP to phone number. Rate limited to 3/hour per phone, plus
     20/hour per IP (handles attacker cycling through numbers)."""
     phone = _normalise_phone(body.phone_number)
-    whitelisted = _is_whitelisted_phone(phone)
+    fixed_otp_enabled = _uses_fixed_otp(phone)
 
-    if not whitelisted:
+    if not fixed_otp_enabled:
         # IP-level cap so a single attacker cycling through phone numbers
-        # can't blow through our SMS budget. Whitelisted pilot numbers bypass
-        # this so owner/device testing doesn't get stuck behind a shared IP cap.
+        # can't blow through our SMS budget. Fixed-OTP pilot numbers bypass
+        # this so private staging doesn't get stuck behind a shared IP cap.
         await limit_by_ip("otp_send_ip", OTP_PER_IP)(request)
         await _check_rate_limit(phone)
 
-    # Sprint 5b: whitelist override for test numbers
-    if whitelisted:
+    # Sprint 5b/private staging: fixed OTP override for whitelisted numbers
+    # or SMS_PROVIDER=mock.
+    if fixed_otp_enabled:
         otp = _whitelist_otp_code()
-        logger.info("otp.whitelisted", phone=phone, otp=otp)
+        logger.info("otp.fixed_code", phone=phone, otp=otp, sms_provider=settings.sms_provider)
     else:
         otp = _generate_otp()
-    await _store_otp(phone, otp, count_rate=not whitelisted)
+    await _store_otp(phone, otp, count_rate=not fixed_otp_enabled)
     await _send_sms(phone, otp)
     logger.info("otp.sent", phone_suffix=phone[-4:])
 
