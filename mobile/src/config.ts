@@ -4,11 +4,12 @@
  * Priority order:
  *   1. OVERRIDE_URL (if set, wins)
  *   2. Auto-detect based on platform when in __DEV__
- *   3. Production URL fallback
+ *   3. Production URL fallback (Render while we are in private staging)
  *
  * Android emulator -> http://10.0.2.2:8000 (special host loopback)
  * iOS simulator    -> http://localhost:8000 (shares host network)
- * Real device      -> set OVERRIDE_URL to http://<MAC_LAN_IP>:8000
+ * Real device debug -> set OVERRIDE_URL to http://<MAC_LAN_IP>:8000
+ * Real device release -> https://owmee-api.onrender.com
  *
  * Find your Mac's IP: ifconfig | grep "inet " | grep -v 127.0.0.1
  */
@@ -19,9 +20,9 @@ import { Platform } from 'react-native';
 //  Empty string '' = use platform auto-detect (correct for prod + dev).
 //  For local-only override, change in your working tree and run:
 //    git update-index --skip-worktree mobile/src/config.ts
-//  Real device:   'http://192.168.x.x:8000'
-//  Railway:       'https://owmee-api.up.railway.app'
-//  Production:    'https://api.owmee.in'
+//  Real device debug: 'http://192.168.x.x:8000'
+//  Staging/Render:    'https://owmee-api.onrender.com'
+//  Future public:     'https://api.owmee.in'
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 const OVERRIDE_URL = '';
 
@@ -35,9 +36,7 @@ function getBaseUrl(): string {
     return 'http://localhost:8000';
   }
 
-  // Production fallback — should never reach this in a properly built app
-  console.warn('Owmee: No API URL configured. Set OVERRIDE_URL in config.ts');
-  return 'https://api.owmee.in';
+  return 'https://owmee-api.onrender.com';
 }
 
 export const API_URL = getBaseUrl();
