@@ -271,7 +271,12 @@ export function FeedCard({
             accessibilityRole="button"
             accessibilityLabel={`Buy ${listing.title} safely`}
           >
-            <Text style={s.buySafeText} numberOfLines={1}>Buy safely</Text>
+            <View style={s.buySafeContent}>
+              <ShieldCheck size={14} strokeWidth={2.4} color={C.white} />
+              <Text style={s.buySafeText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82}>
+                Buy safely
+              </Text>
+            </View>
           </TouchableOpacity>
           <TouchableOpacity
             activeOpacity={0.84}
@@ -280,7 +285,9 @@ export function FeedCard({
             accessibilityRole="button"
             accessibilityLabel={`Make an offer for ${listing.title}`}
           >
-            <Text style={s.offerText} numberOfLines={1}>Make offer</Text>
+            <Text style={s.offerText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82}>
+              Make offer
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -526,43 +533,49 @@ const s = StyleSheet.create({
     fontWeight: T.weight.semi,
   },
   feedActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+    gap: 7,
   },
   feedActionWrap: {
     paddingHorizontal: S.md,
-    paddingTop: S.xs,
+    paddingTop: S.sm,
     paddingBottom: S.md,
   },
   buySafeBtn: {
-    flex: 1.05,
-    minHeight: 34,
-    borderRadius: R.sm,
-    backgroundColor: C.petrolDeep,
+    minHeight: 38,
+    borderRadius: R.md,
+    backgroundColor: C.petrol,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: S.sm,
+    borderWidth: 1,
+    borderColor: 'rgba(53, 95, 99, 0.16)',
+    ...Shadow.subtle,
+  },
+  buySafeContent: {
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: S.xs + 1,
   },
   buySafeText: {
     color: C.white,
-    fontSize: T.size.xs + 1,
+    fontSize: T.size.sm + 1,
     fontWeight: T.weight.heavy,
   },
   offerBtn: {
-    flex: 1,
     minHeight: 34,
-    borderRadius: R.sm,
-    backgroundColor: C.surface,
+    borderRadius: R.md,
+    backgroundColor: '#FFF8F3',
     borderWidth: 1,
-    borderColor: 'rgba(110, 76, 69, 0.24)',
+    borderColor: 'rgba(110, 76, 69, 0.18)',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: S.sm,
   },
   offerText: {
     color: C.coralDeep,
-    fontSize: T.size.xs + 1,
+    fontSize: T.size.sm + 1,
     fontWeight: T.weight.heavy,
   },
 });

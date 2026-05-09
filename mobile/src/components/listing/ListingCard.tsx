@@ -2,6 +2,7 @@ import React, { memo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Image, type ImageSourcePropType,
 } from 'react-native';
+import { ShieldCheck } from 'lucide-react-native';
 import { C, T, S, R, Shadow, formatPrice, percentOff, condStyle } from '../../utils/tokens';
 import { Button, IconButton } from '../ui';
 import type { Listing } from '../../services/api';
@@ -136,7 +137,12 @@ export const ListingCard = memo(function ListingCard({
             accessibilityRole="button"
             accessibilityLabel={`Buy ${listing.title} safely`}
           >
-            <Text style={s.buySafeText} numberOfLines={1}>Buy safely</Text>
+            <View style={s.buySafeContent}>
+              <ShieldCheck size={14} strokeWidth={2.4} color={C.white} />
+              <Text style={s.buySafeText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82}>
+                Buy safely
+              </Text>
+            </View>
           </TouchableOpacity>
           <TouchableOpacity
             activeOpacity={0.84}
@@ -145,7 +151,9 @@ export const ListingCard = memo(function ListingCard({
             accessibilityRole="button"
             accessibilityLabel={`Make an offer for ${listing.title}`}
           >
-            <Text style={s.offerText} numberOfLines={1}>Make offer</Text>
+            <Text style={s.offerText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82}>
+              Make offer
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -230,35 +238,43 @@ const s = StyleSheet.create({
   dist: { fontSize: T.size.xs, color: C.text3, fontWeight: T.weight.medium },
   negoTag: { backgroundColor: C.petrolLight, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5 },
   negoText: { fontSize: T.size.xs, fontWeight: T.weight.bold, color: C.petrolDeep },
-  actionRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: S.sm + 2 },
+  actionRow: { gap: 7, marginTop: S.sm + 2 },
   buySafeBtn: {
-    flex: 1.05,
-    minHeight: 34,
-    borderRadius: R.sm,
-    backgroundColor: C.petrolDeep,
+    minHeight: 38,
+    borderRadius: R.md,
+    backgroundColor: C.petrol,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: S.sm,
+    borderWidth: 1,
+    borderColor: 'rgba(53, 95, 99, 0.16)',
+    ...Shadow.subtle,
+  },
+  buySafeContent: {
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: S.xs + 1,
   },
   buySafeText: {
     color: C.white,
-    fontSize: T.size.xs + 1,
+    fontSize: T.size.sm + 1,
     fontWeight: T.weight.heavy,
   },
   offerBtn: {
-    flex: 1,
     minHeight: 34,
-    borderRadius: R.sm,
-    backgroundColor: C.surface,
+    borderRadius: R.md,
+    backgroundColor: '#FFF8F3',
     borderWidth: 1,
-    borderColor: 'rgba(110, 76, 69, 0.24)',
+    borderColor: 'rgba(110, 76, 69, 0.18)',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: S.sm,
   },
   offerText: {
     color: C.coralDeep,
-    fontSize: T.size.xs + 1,
+    fontSize: T.size.sm + 1,
     fontWeight: T.weight.heavy,
   },
   // Skeleton lines
