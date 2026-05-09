@@ -50,7 +50,7 @@ export default function CategoryRail({
     const available = width - (S.lg * 2) - (gap * (categories.length - 1));
     return Math.floor(available / categories.length);
   }, [categories.length, width]);
-  const iconWidth = Math.max(40, Math.min(46, tileWidth - 18));
+  const iconWidth = Math.max(30, Math.min(36, tileWidth - 18));
 
   return (
     <View style={s.block}>
@@ -81,27 +81,27 @@ export default function CategoryRail({
 
 const s = StyleSheet.create({
   block: {
-    marginTop: S.sm + 2,
+    marginTop: S.xs,
   },
   row: {
     paddingHorizontal: S.lg,
     gap: S.xs + 2,
   },
   tile: {
-    height: 62,
+    height: 46,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: R.lg - 1,
     backgroundColor: 'rgba(255, 253, 248, 0.94)',
     borderWidth: 1,
     borderColor: 'rgba(224, 203, 188, 0.9)',
-    paddingTop: S.xs + 2,
+    paddingTop: 3,
     paddingHorizontal: S.xs,
-    paddingBottom: S.xs,
+    paddingBottom: 3,
     ...Shadow.subtle,
   },
   iconFrame: {
-    height: 34,
+    height: 24,
     borderRadius: R.sm + 2,
     backgroundColor: '#FFF8EE',
     borderWidth: 1,
@@ -116,11 +116,11 @@ const s = StyleSheet.create({
   },
   label: {
     width: 60,
-    marginTop: 3,
-    fontSize: T.size.xs - 1,
+    marginTop: 1,
+    fontSize: T.size.xs - 2,
     fontWeight: T.weight.medium,
     color: C.text2,
     textAlign: 'center',
-    lineHeight: T.size.xs + 1,
+    lineHeight: T.size.xs,
   },
 });

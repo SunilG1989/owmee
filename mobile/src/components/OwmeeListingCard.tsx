@@ -172,7 +172,7 @@ export function FeedCard({
 
   const postedAgo = timeAgo(listing.created_at);
   const metaLine = [distanceText, placeText].filter(Boolean).join(' · ') || postedAgo;
-  const trustBadgeLabel = listing.is_owmee_verified ? 'Owmee verified' : 'Safe pay';
+  const isVerified = Boolean(listing.is_owmee_verified);
   const trustChips = [
     listing.warranty_active ? 'Warranty' : null,
     listing.bill_available ? 'Bill' : null,
@@ -204,16 +204,13 @@ export function FeedCard({
           )}
         </TouchableOpacity>
 
-        <View style={[s.verifiedBadge, !listing.is_owmee_verified && s.protectedBadge]}>
+        <View style={[s.verifiedBadge, !isVerified && s.safeIconBadge]}>
           <ShieldCheck size={12} strokeWidth={2.35} color={C.petrolDeep} />
-          <Text
-            style={s.verifiedBadgeText}
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.78}
-          >
-            {trustBadgeLabel}
-          </Text>
+          {isVerified ? (
+            <Text style={s.verifiedBadgeText} numberOfLines={1}>
+              Verified
+            </Text>
+          ) : null}
         </View>
 
         {showDiscount && (
@@ -411,7 +408,6 @@ const s = StyleSheet.create({
     position: 'absolute',
     top: S.xs + 2,
     left: S.xs + 2,
-    maxWidth: '68%',
     paddingHorizontal: S.xs + 2,
     paddingVertical: 3,
     borderRadius: R.pill,
@@ -423,12 +419,15 @@ const s = StyleSheet.create({
     gap: 3,
     zIndex: 2,
   },
-  protectedBadge: {
+  safeIconBadge: {
     backgroundColor: 'rgba(246, 251, 250, 0.94)',
+    width: 30,
+    height: 30,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    justifyContent: 'center',
   },
   verifiedBadgeText: {
-    minWidth: 0,
-    flexShrink: 1,
     color: C.petrolDeep,
     fontSize: T.size.xs - 1,
     fontWeight: T.weight.heavy,

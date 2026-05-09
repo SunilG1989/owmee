@@ -251,7 +251,9 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
   // Location label — show the saved address area, not just the city, so
   // users can see that their updated address actually took effect.
   const locationLabel = useMemo(() => {
-    return locationDisplayLabel(location, isAuthenticated ? 'Set location' : 'Bengaluru');
+    if (!isAuthenticated) return 'Bengaluru';
+    if (!location) return 'Set area';
+    return location.locality || location.city || location.label || locationDisplayLabel(location, 'Set area');
   }, [isAuthenticated, location]);
 
   // ── Header section (rendered as ListHeaderComponent) ────────────────────
@@ -304,9 +306,9 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
           accessibilityRole="button"
           accessibilityLabel="Search items"
         >
-          <Search size={23} strokeWidth={1.8} color={C.text} />
+          <Search size={21} strokeWidth={1.8} color={C.text} />
           <Text style={s.searchPh} numberOfLines={1}>
-            Search mobiles, laptops, furniture...
+            Search phones, laptops, home items
           </Text>
         </TouchableOpacity>
         <View style={s.searchDivider} />
@@ -317,15 +319,11 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
           accessibilityRole="button"
           accessibilityLabel="Open filters"
         >
-          <SlidersHorizontal size={21} strokeWidth={2} color={C.text} />
+          <SlidersHorizontal size={20} strokeWidth={2} color={C.text} />
         </TouchableOpacity>
       </View>
 
-      <View style={s.trustRow}>
-        <TrustChip icon={ShieldCheck} label="Seller checked" />
-        <TrustChip icon={CreditCard} label="Safe payment" />
-        <TrustChip icon={Truck} label="Home handover" />
-      </View>
+      <TrustProof />
 
       <HeroCard onBrowse={handleBrowsePress} onSell={handleSellPress} />
 
@@ -342,9 +340,9 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
         onLayout={e => { listingsOffsetY.current = e.nativeEvent.layout.y; }}
       >
         <View style={s.listingsTitleBlock}>
-          <Text style={s.sectionTitle}>Trusted deals near you</Text>
+          <Text style={s.sectionTitle}>Nearby deals</Text>
           <View style={s.radiusHint}>
-            <MapPin size={15} strokeWidth={2.2} color={C.petrolText} />
+            <MapPin size={12} strokeWidth={2.2} color={C.petrolText} />
             <Text style={s.radiusText}>
               {currentRadius >= 500 ? 'Across state' : `Within ${currentRadius} km`}
             </Text>
@@ -352,7 +350,7 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
         </View>
         <TouchableOpacity activeOpacity={0.75} style={s.seeAllLink} onPress={handleSearchPress}>
           <Text style={s.seeAllText}>See all</Text>
-          <ChevronRight size={15} strokeWidth={2.3} color={C.petrolText} />
+          <ChevronRight size={14} strokeWidth={2.3} color={C.petrolText} />
         </TouchableOpacity>
       </View>
     </View>
@@ -496,13 +494,24 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
   );
 }
 
-function TrustChip({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
+const TRUST_PROOFS: { icon: LucideIcon; label: string }[] = [
+  { icon: ShieldCheck, label: 'Checked sellers' },
+  { icon: CreditCard, label: 'Safe payments' },
+  { icon: Truck, label: 'No meetups' },
+];
+
+function TrustProof() {
   return (
-    <View style={s.trustChip}>
-      <View style={s.trustIcon}>
-        <Icon size={13} strokeWidth={2.35} color="#2F766B" />
-      </View>
-      <Text style={s.trustText} numberOfLines={2}>{label}</Text>
+    <View style={s.trustProof}>
+      {TRUST_PROOFS.map(({ icon: Icon, label }, index) => (
+        <React.Fragment key={label}>
+          {index > 0 && <View style={s.trustSep} />}
+          <View style={s.trustProofItem}>
+            <Icon size={12} strokeWidth={2.35} color="#2F766B" />
+            <Text style={s.trustProofText} numberOfLines={1}>{label}</Text>
+          </View>
+        </React.Fragment>
+      ))}
     </View>
   );
 }
@@ -523,42 +532,42 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: S.lg,
-    paddingTop: S.sm,
-    paddingBottom: S.sm,
+    paddingTop: S.xs,
+    paddingBottom: S.xs,
     backgroundColor: 'transparent',
     gap: S.sm + 2,
   },
   hdrSpacer: { flex: 1 },
   logo: {
-    fontSize: T.size.display + 1,
+    fontSize: T.size.xxl + 2,
     fontWeight: T.weight.heavy,
     color: '#1A1F1F',
-    letterSpacing: -0.6,
+    letterSpacing: 0,
   },
   locChip: {
-    height: 36,
+    height: 32,
     flexDirection: 'row',
     alignItems: 'center',
     gap: S.xs + 2,
-    paddingHorizontal: S.md,
+    paddingHorizontal: S.sm + 2,
     borderRadius: R.pill,
     backgroundColor: 'rgba(255, 253, 248, 0.94)',
     borderWidth: 1,
     borderColor: 'rgba(224, 203, 188, 0.90)',
-    maxWidth: 144,
+    maxWidth: 158,
     ...Shadow.subtle,
   },
   locName: {
-    fontSize: T.size.base,
+    fontSize: T.size.sm + 1,
     fontWeight: T.weight.medium,
     color: C.text2,
     flexShrink: 1,
   },
   bellWrap: { position: 'relative' },
   bellBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -577,9 +586,9 @@ const s = StyleSheet.create({
   // ── Search ──────────────────────────────────────────────────────────
   search: {
     marginHorizontal: S.lg,
-    marginTop: S.xs,
-    height: 52,
-    borderRadius: R.xl - 1,
+    marginTop: 2,
+    height: 40,
+    borderRadius: R.lg,
     backgroundColor: 'rgba(255, 253, 248, 0.94)',
     borderWidth: 1,
     borderColor: 'rgba(224, 203, 188, 0.90)',
@@ -593,95 +602,94 @@ const s = StyleSheet.create({
     minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: S.sm + 2,
-    paddingLeft: S.md,
+    gap: S.sm,
+    paddingLeft: S.sm + 2,
   },
   searchPh: {
     flex: 1,
-    fontSize: T.size.base,
+    fontSize: T.size.sm + 2,
     color: '#68716F',
     fontWeight: T.weight.medium,
   },
   searchDivider: {
     width: 1,
-    height: 24,
+    height: 20,
     backgroundColor: 'rgba(224, 203, 188, 0.90)',
   },
   filterBtn: {
-    width: 52,
+    width: 40,
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
     borderTopRightRadius: R.xl - 1,
     borderBottomRightRadius: R.xl - 1,
   },
-  trustRow: {
-    flexDirection: 'row',
-    paddingHorizontal: S.lg,
-    marginTop: S.sm + 2,
-    gap: S.sm,
-  },
-  trustChip: {
-    flex: 1,
-    minHeight: 42,
-    borderRadius: R.md + 1,
-    backgroundColor: 'rgba(255, 253, 248, 0.94)',
-    borderWidth: 1,
-    borderColor: 'rgba(224, 203, 188, 0.82)',
+  trustProof: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: S.xs,
-    paddingHorizontal: S.xs,
+    minHeight: 28,
+    marginHorizontal: S.lg,
+    marginTop: S.xs + 2,
+    paddingHorizontal: S.sm + 2,
     paddingVertical: S.xs,
-  },
-  trustIcon: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: '#EEF8F5',
+    borderRadius: R.pill,
+    backgroundColor: 'rgba(241, 248, 246, 0.72)',
     borderWidth: 1,
-    borderColor: 'rgba(47, 118, 107, 0.14)',
+    borderColor: 'rgba(79, 127, 134, 0.12)',
+  },
+  trustProofItem: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 3,
   },
-  trustText: {
-    flexShrink: 1,
+  trustProofText: {
     color: '#205D58',
     fontSize: T.size.xs - 1,
-    lineHeight: T.size.xs + 2,
-    fontWeight: T.weight.medium,
-    textAlign: 'center',
+    fontWeight: T.weight.semi,
+  },
+  trustSep: {
+    width: 1,
+    height: 12,
+    backgroundColor: 'rgba(79, 127, 134, 0.18)',
   },
 
   // ── Listings header ─────────────────────────────────────────────────
   listingsHdr: {
-    marginTop: S.lg,
+    marginTop: S.sm,
     paddingHorizontal: S.lg,
-    paddingBottom: S.sm,
+    paddingBottom: S.xs,
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
     gap: S.md,
   },
   listingsTitleBlock: {
     flex: 1,
     minWidth: 0,
-  },
-  sectionTitle: {
-    fontSize: T.size.lg,
-    fontWeight: T.weight.heavy,
-    color: C.text,
-    letterSpacing: -0.3,
-  },
-  radiusHint: {
-    marginTop: S.xs,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: S.xs,
+    gap: S.sm,
+  },
+  sectionTitle: {
+    fontSize: T.size.base + 2,
+    fontWeight: T.weight.heavy,
+    color: C.text,
+    letterSpacing: 0,
+  },
+  radiusHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: S.xs + 2,
+    paddingVertical: 2,
+    borderRadius: R.pill,
+    backgroundColor: 'rgba(241, 248, 246, 0.74)',
   },
   radiusText: {
-    fontSize: T.size.base,
+    fontSize: T.size.xs,
     color: C.petrolText,
     fontWeight: T.weight.medium,
   },
@@ -689,11 +697,11 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 2,
-    minHeight: 28,
+    minHeight: 24,
     paddingLeft: S.sm,
   },
   seeAllText: {
-    fontSize: T.size.base,
+    fontSize: T.size.sm,
     color: C.petrolText,
     fontWeight: T.weight.medium,
   },

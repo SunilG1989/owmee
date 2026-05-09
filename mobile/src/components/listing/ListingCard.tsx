@@ -67,7 +67,6 @@ export const ListingCard = memo(function ListingCard({
     || listing.seller?.kyc_verified
     || (listing.reviewed_by && listing.reviewed_by !== 'none'),
   );
-  const trustBadgeLabel = hasOwmeeCheck ? 'Owmee verified' : 'Safe pay';
   const proofChips = [
     listing.warranty_status && !/no|none|expired/i.test(listing.warranty_status) ? 'Warranty' : null,
     listing.is_negotiable ? 'Offer ok' : null,
@@ -115,16 +114,13 @@ export const ListingCard = memo(function ListingCard({
             />
           </View>
         )}
-        <View style={[s.trustBadge, !hasOwmeeCheck && s.protectedBadge]}>
+        <View style={[s.trustBadge, !hasOwmeeCheck && s.safeIconBadge]}>
           <ShieldCheck size={12} strokeWidth={2.35} color={C.petrolDeep} />
-          <Text
-            style={s.trustBadgeText}
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.78}
-          >
-            {trustBadgeLabel}
-          </Text>
+          {hasOwmeeCheck ? (
+            <Text style={s.trustBadgeText} numberOfLines={1}>
+              Verified
+            </Text>
+          ) : null}
         </View>
         <View style={[s.cond, { backgroundColor: cs.bg }]}>
           <Text style={[s.condText, { color: cs.color }]}>{cs.label}</Text>
@@ -276,7 +272,6 @@ const s = StyleSheet.create({
     position: 'absolute',
     top: S.xs + 2,
     left: S.xs + 2,
-    maxWidth: '68%',
     paddingHorizontal: S.xs + 2,
     paddingVertical: 3,
     borderRadius: R.pill,
@@ -288,12 +283,15 @@ const s = StyleSheet.create({
     gap: 3,
     zIndex: 2,
   },
-  protectedBadge: {
+  safeIconBadge: {
     backgroundColor: 'rgba(246,251,250,0.94)',
+    width: 30,
+    height: 30,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    justifyContent: 'center',
   },
   trustBadgeText: {
-    minWidth: 0,
-    flexShrink: 1,
     color: C.petrolDeep,
     fontSize: T.size.xs - 1,
     fontWeight: T.weight.heavy,

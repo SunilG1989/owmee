@@ -30,9 +30,9 @@ type HeroSlide = {
 const SLIDES: HeroSlide[] = [
   {
     image: require('../../assets/owmee/home/safetrade-real-banner-v3.png'),
-    kicker: 'SAFE BUYING',
+    kicker: 'TRUSTED C2C',
     title: 'Buy used items safely.',
-    subtitle: 'Seller and item checked before handover.',
+    subtitle: 'Checked seller. Owmee handover.',
     wash: '#2F766B',
     plate: '#245E56',
     kickerColor: '#FFE0C5',
@@ -42,9 +42,9 @@ const SLIDES: HeroSlide[] = [
   },
   {
     image: require('../../assets/owmee/home/assist-photo-v2.png'),
-    kicker: 'SELL FROM HOME',
-    title: 'Sell with Owmee Assist.',
-    subtitle: 'We take photos, verify and arrange pickup.',
+    kicker: 'OWMEE ASSIST',
+    title: 'Sell without effort.',
+    subtitle: 'Home visit, photos, price and pickup.',
     wash: '#B86F59',
     plate: '#8F5749',
     kickerColor: '#FFE8D9',
@@ -54,9 +54,9 @@ const SLIDES: HeroSlide[] = [
   },
   {
     image: require('../../assets/owmee/home/safetrade-real-banner.png'),
-    kicker: 'SAFE PAYMENT',
-    title: 'Pay through Owmee.',
-    subtitle: 'Seller is paid after handover is confirmed.',
+    kicker: 'HOME HANDOVER',
+    title: 'No buyer-seller meetups.',
+    subtitle: 'Owmee manages pickup and delivery.',
     wash: '#496F72',
     plate: '#2F5E61',
     kickerColor: '#FFE4CC',
@@ -155,28 +155,28 @@ export default function HeroCard({ onBrowse, onSell }: Props) {
 
 const s = StyleSheet.create({
   wrap: {
-    marginTop: S.md - 2,
+    marginTop: S.xs + 2,
     paddingHorizontal: S.lg,
   },
   card: {
-    minHeight: 118,
-    borderRadius: R.xl + 3,
+    minHeight: 84,
+    borderRadius: R.xl,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(47, 118, 107, 0.20)',
     ...Shadow.lifted,
   },
   image: {
-    borderRadius: R.xl + 3,
+    borderRadius: R.xl,
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
   },
   copy: {
-    width: '53%',
-    paddingTop: S.md,
+    width: '56%',
+    paddingTop: S.xs + 2,
     paddingLeft: S.md,
-    paddingBottom: S.md,
+    paddingBottom: S.xs + 2,
     zIndex: 2,
   },
   kicker: {
@@ -187,23 +187,23 @@ const s = StyleSheet.create({
   },
   title: {
     color: C.white,
-    fontSize: T.size.lg + 1,
+    fontSize: T.size.base + 2,
     fontWeight: T.weight.heavy,
-    lineHeight: T.size.lg + 5,
-    letterSpacing: -0.2,
+    lineHeight: T.size.base + 6,
+    letterSpacing: 0,
     textShadowColor: 'rgba(12, 33, 31, 0.20)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
   },
   subtitle: {
-    marginTop: S.xs + 1,
-    fontSize: T.size.xs + 1,
-    lineHeight: T.size.xs + 5,
+    marginTop: S.xs,
+    fontSize: T.size.xs,
+    lineHeight: T.size.xs + 3,
     fontWeight: T.weight.medium,
   },
   dots: {
-    height: 14,
-    marginTop: S.xs,
+    height: 8,
+    marginTop: 1,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
@@ -211,7 +211,7 @@ const s = StyleSheet.create({
   },
   dotHit: {
     width: 24,
-    height: 18,
+    height: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -219,13 +219,13 @@ const s = StyleSheet.create({
     width: 30,
   },
   dot: {
-    width: 5,
-    height: 5,
+    width: 4,
+    height: 4,
     borderRadius: 3,
     backgroundColor: 'rgba(47, 118, 107, 0.24)',
   },
   dotActive: {
-    width: 16,
+    width: 14,
     backgroundColor: '#2F766B',
   },
 });
