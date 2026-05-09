@@ -340,32 +340,37 @@ export default function RootNavigator() {
 
   useEffect(() => {
     hydrate();
-
     AsyncStorage.getItem(ONBOARDING_SEEN_KEY).then((onb) => {
       setOnboardingSeen(!!onb);
     });
+  }, [hydrate]);
 
-    // Sync tier/role from backend on startup
-    const { accessToken } = useAuthStore.getState();
-    if (accessToken) {
-      import('../services/api').then(({ Auth }) => {
-        Auth.me().then(r => {
-          const { setTier, setKycStatus, setTriState } = useAuthStore.getState();
-          const d = r.data || {};
-          if (d.tier) setTier(d.tier);
-          if (d.kyc_status) setKycStatus(d.kyc_status);
-          if (d.auth_state) {
-            setTriState(
-              d.auth_state,
-              !!d.buyer_eligible,
-              d.seller_tier || 'not_eligible',
-              d.role || 'user',
-            );
-          }
-        }).catch(() => {});
-      });
-    }
-  }, []);
+  useEffect(() => {
+    if (!hydrated || !isAuthenticated) return;
+    let alive = true;
+
+    import('../services/api').then(({ Auth }) => {
+      Auth.me().then(r => {
+        if (!alive) return;
+        const { setTier, setKycStatus, setTriState } = useAuthStore.getState();
+        const d = r.data || {};
+        if (d.tier) setTier(d.tier);
+        if (d.kyc_status) setKycStatus(d.kyc_status);
+        if (d.auth_state) {
+          setTriState(
+            d.auth_state,
+            !!d.buyer_eligible,
+            d.seller_tier || 'not_eligible',
+            d.role || 'user',
+          );
+        }
+      }).catch(() => {});
+    });
+
+    return () => {
+      alive = false;
+    };
+  }, [hydrated, isAuthenticated]);
 
   if (!hydrated || onboardingSeen === null || !splashMinElapsed) {
     return <SplashScreen />;

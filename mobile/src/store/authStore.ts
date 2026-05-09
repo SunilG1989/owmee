@@ -84,6 +84,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   role: 'user',
 
   setTokens: (a, r, uid, tier, kycStatus, authState, buyerEligible, sellerTier, role) => {
+    const resolvedUid = uid || decodeJwtSub(a);
     const t = (tier as AuthState['tier']) || get().tier || 'basic';
     const k = (kycStatus as AuthState['kycStatus']) || get().kycStatus || 'not_started';
     // Sprint 4 / Pass 2 — infer sane defaults if backend didn't send them
@@ -96,7 +97,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       isAuthenticated: true,
       accessToken: a,
       refreshToken: r,
-      userId: uid,
+      userId: resolvedUid,
       tier: t,
       kycStatus: k,
       authState: newAuthState,
@@ -107,7 +108,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     AsyncStorage.multiSet([
       [KEYS.a, a],
       [KEYS.r, r],
-      [KEYS.u, uid],
+      [KEYS.u, resolvedUid],
       [KEYS.tier, t],
       [KEYS.kyc, k],
       [KEYS.authState, newAuthState],

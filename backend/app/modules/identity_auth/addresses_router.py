@@ -28,7 +28,7 @@ from uuid import UUID
 import structlog
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select, update
+from sqlalchemy import select, text, update
 
 from app.core.dependencies import AuthUser, DBSession
 from app.modules.identity_auth.models import UserAddress
@@ -169,6 +169,107 @@ async def _load_owned(db, addr_id: UUID, user_id: UUID) -> UserAddress:
     return row
 
 
+def _full_address(row: UserAddress) -> str:
+    return ", ".join(
+        part
+        for part in [
+            row.flat_house_number,
+            row.building_name,
+            row.address_line_1,
+            row.locality,
+            row.city,
+            row.pincode,
+        ]
+        if part
+    )
+
+
+async def _sync_default_address_to_user(db, user_id: UUID, row: UserAddress) -> None:
+    """Mirror the default saved address onto legacy user location fields.
+
+    user_addresses is the source of truth, but older surfaces still read
+    users.lat/lng or users.address_* directly. Keeping the mirror updated
+    prevents checkout, feed ranking, and ops tooling from drifting apart.
+    """
+    full_address = _full_address(row)
+    display_name = row.locality or row.city or "Saved address"
+
+    await db.execute(
+        text(
+            """
+            UPDATE users
+            SET lat = :lat,
+                lng = :lng,
+                location_display_name = CAST(:display_name AS VARCHAR(120)),
+                city = CAST(:city AS VARCHAR(80)),
+                state = CAST(:state AS VARCHAR(80)),
+                pincode = CAST(:pincode AS VARCHAR(10)),
+                address_house = CAST(:house AS VARCHAR(500)),
+                address_street = CAST(:street AS VARCHAR(500)),
+                address_locality = CAST(:locality AS VARCHAR(200)),
+                address_city = CAST(:city AS VARCHAR(100)),
+                address_state = CAST(:state AS VARCHAR(100)),
+                address_pincode = CAST(:pincode AS VARCHAR(10)),
+                address_full = :full_address,
+                updated_at = NOW()
+            WHERE id = :uid
+            """
+        ),
+        {
+            "uid": user_id,
+            "lat": float(row.lat),
+            "lng": float(row.lng),
+            "display_name": display_name,
+            "city": row.city,
+            "state": row.state,
+            "pincode": row.pincode,
+            "house": row.flat_house_number,
+            "street": row.address_line_1,
+            "locality": row.locality,
+            "full_address": full_address,
+        },
+    )
+
+    await db.execute(
+        text(
+            """
+            INSERT INTO user_location_history
+                (user_id, lat, lng, display_name, full_address, city, state, pincode, source)
+            VALUES
+                (:uid, :lat, :lng, :display_name, :full_address, :city, :state, :pincode, :source)
+            """
+        ),
+        {
+            "uid": user_id,
+            "lat": float(row.lat),
+            "lng": float(row.lng),
+            "display_name": display_name,
+            "full_address": full_address,
+            "city": row.city,
+            "state": row.state,
+            "pincode": row.pincode,
+            "source": row.source,
+        },
+    )
+
+
+async def _clear_user_location_mirror(db, user_id: UUID) -> None:
+    """Clear the coordinate mirror when the user deletes their last address."""
+    await db.execute(
+        text(
+            """
+            UPDATE users
+            SET lat = NULL,
+                lng = NULL,
+                location_display_name = NULL,
+                updated_at = NOW()
+            WHERE id = :uid
+            """
+        ),
+        {"uid": user_id},
+    )
+
+
 # ── Endpoints ────────────────────────────────────────────────────────────────
 
 
@@ -228,6 +329,9 @@ async def create_address(
         source=body.source,
     )
     db.add(row)
+    await db.flush()
+    if row.is_default:
+        await _sync_default_address_to_user(db, current_user.user_id, row)
     await db.commit()
     await db.refresh(row)
     logger.info(
@@ -263,6 +367,9 @@ async def update_address(
 
     for k, v in data.items():
         setattr(row, k, v)
+
+    if row.is_default:
+        await _sync_default_address_to_user(db, current_user.user_id, row)
 
     await db.commit()
     await db.refresh(row)
@@ -303,6 +410,9 @@ async def delete_address(
         next_row = next_res.scalar_one_or_none()
         if next_row is not None:
             next_row.is_default = True
+            await _sync_default_address_to_user(db, current_user.user_id, next_row)
+        else:
+            await _clear_user_location_mirror(db, current_user.user_id)
 
     await db.commit()
     logger.info(

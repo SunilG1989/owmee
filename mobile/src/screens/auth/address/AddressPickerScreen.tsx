@@ -71,9 +71,17 @@ export default function AddressPickerScreen({
 
   const onAddNew = () => {
     // Re-uses the 3-screen flow. After save the new address row will be
-    // present on focus when we come back here.
+    // present on focus when we come back here. Checkout is special: a
+    // newly-created address should become the active delivery address and
+    // return directly to checkout instead of forcing an extra "Use this" tap.
+    const returnTo = route.params?.returnTo;
     navigation.navigate('LocationDetect', {
-      returnTo: route.params?.returnTo === 'MainTabs' ? 'MainTabs' : 'AddressPicker',
+      returnTo:
+        returnTo === 'Checkout'
+          ? 'Checkout'
+          : returnTo === 'MainTabs'
+            ? 'MainTabs'
+            : 'AddressPicker',
     });
   };
 

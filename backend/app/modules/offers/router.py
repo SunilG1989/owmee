@@ -869,6 +869,7 @@ async def dev_kyc_approve(phone: str, db: DBSession):
 # ── Sprint 1: Buy Now — direct purchase at listed price ──────────
 class BuyNowRequest(BaseModel):
     listing_id: str
+    address_id: str | None = None
     # P0.2 (2026-05-03): optional delivery instructions captured by mobile
     # CheckoutScreen. Plumbed onto Transaction.order_notes for the FE
     # delivery agent.
@@ -900,16 +901,32 @@ async def buy_now(body: BuyNowRequest, current_user: BasicUser, db: DBSession):
         raise HTTPException(status_code=400, detail={"error": "CANNOT_BUY_OWN_LISTING"})
 
     # Sprint trust pillar: buyer must also be inside a launch zone for
-    # FE-managed delivery to work. Pull buyer location from users table.
+    # FE-managed delivery to work. Use the checkout-selected saved address
+    # when mobile sends one; otherwise fall back to the user's default saved
+    # address via the shared resolver. This keeps Checkout/AddressPicker and
+    # backend serviceability checks on the same source of truth.
     from app.core.zones import is_in_service_area, out_of_service_message
-    from sqlalchemy import text as _text
-    bloc = await db.execute(
-        _text("SELECT lat, lng FROM users WHERE id = :uid"),
-        {"uid": current_user.user_id},
-    )
-    buyer_loc = bloc.first()
-    buyer_lat = buyer_loc.lat if buyer_loc else None
-    buyer_lng = buyer_loc.lng if buyer_loc else None
+    buyer_lat = buyer_lng = None
+    if body.address_id:
+        try:
+            address_id = UUID(body.address_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail={"error": "INVALID_ADDRESS_ID"})
+        from app.modules.identity_auth.models import UserAddress
+        addr_res = await db.execute(
+            select(UserAddress).where(
+                UserAddress.id == address_id,
+                UserAddress.user_id == current_user.user_id,
+            )
+        )
+        addr = addr_res.scalar_one_or_none()
+        if not addr:
+            raise HTTPException(status_code=400, detail={"error": "ADDRESS_NOT_FOUND"})
+        buyer_lat = float(addr.lat)
+        buyer_lng = float(addr.lng)
+    else:
+        from app.modules.identity_auth.user_location import get_user_location
+        buyer_lat, buyer_lng, _city, _state = await get_user_location(db, current_user.user_id)
     if not is_in_service_area(buyer_lat, buyer_lng):
         raise HTTPException(status_code=400, detail=out_of_service_message())
 

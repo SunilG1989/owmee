@@ -25,6 +25,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import {
   Addresses,
@@ -44,6 +45,21 @@ const LABEL_OPTIONS: { key: Label; emoji: string; text: string }[] = [
   { key: 'work', emoji: '💼', text: 'Work' },
   { key: 'other', emoji: '📍', text: 'Other' },
 ];
+
+function checkoutAddressSnapshot(addr: UserAddress) {
+  return {
+    id: addr.id,
+    full_name: addr.full_name,
+    phone_number: addr.phone_number,
+    house: addr.flat_house_number,
+    building: addr.building_name,
+    street: addr.address_line_1,
+    locality: addr.locality,
+    city: addr.city,
+    state: addr.state,
+    pincode: addr.pincode,
+  };
+}
 
 export default function AddressDetailsScreen({
   navigation,
@@ -135,6 +151,15 @@ export default function AddressDetailsScreen({
   const onSaved = async (created: UserAddress) => {
     if (created.is_default || returnTo === 'MainTabs') {
       await cacheAddressLocation(created).catch(() => {});
+    }
+    if (returnTo === 'Checkout') {
+      await AsyncStorage.setItem('@ow_address', JSON.stringify(checkoutAddressSnapshot(created))).catch(() => {});
+      if ((navigation as any).pop) {
+        (navigation as any).pop(2);
+      } else if (navigation.canGoBack()) {
+        navigation.goBack();
+      }
+      return;
     }
     // If a returnTo was passed (e.g. caller wants control back), use the
     // navigation params hook instead. For Phase 1 we just navigate back to

@@ -142,7 +142,8 @@ async def _verify_otp(phone: str, submitted_otp: str) -> None:
         attempts_key = _otp_attempts_key(phone)
         attempts = await redis.incr(attempts_key)
         await redis.expire(attempts_key, 900)  # 15 min window
-        if attempts >= 5:
+        max_attempts = max(1, int(settings.otp_max_attempts))
+        if attempts >= max_attempts:
             await redis.setex(_otp_lock_key(phone), 900, "1")
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,

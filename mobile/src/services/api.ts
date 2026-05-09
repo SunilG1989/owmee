@@ -31,7 +31,13 @@ function processQueue(error: any, token: string | null) {
 /** Extract user_id (sub claim) from JWT payload */
 function extractUserId(token: string): string {
   try {
-    const payload = token.split('.')[1];
+    const raw = token.split('.')[1];
+    if (!raw) return '';
+    let payload = raw.replace(/-/g, '+').replace(/_/g, '/');
+    const pad = payload.length % 4;
+    if (pad === 2) payload += '==';
+    else if (pad === 3) payload += '=';
+    else if (pad === 1) return '';
     const decoded = JSON.parse(atob(payload));
     return decoded.sub || '';
   } catch { return ''; }
@@ -549,9 +555,10 @@ export const Notifications = {
 
 // ── Orders (Buy Now) ──────────────────────────────────────────────────
 export const Orders = {
-  buyNow: (listingId: string, orderNotes?: string) =>
+  buyNow: (listingId: string, orderNotes?: string, addressId?: string | null) =>
     api.post('/v1/orders/buy-now', {
       listing_id: listingId,
+      address_id: addressId || undefined,
       order_notes: orderNotes && orderNotes.trim() ? orderNotes.trim() : undefined,
     }),
 };
@@ -982,4 +989,3 @@ export const AIListing = {
       `/v1/listings/${listingId}/regenerate-description`,
     ),
 };
-

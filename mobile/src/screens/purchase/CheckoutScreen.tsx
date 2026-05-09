@@ -11,12 +11,27 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { C, T, S, R, Shadow, formatPrice } from '../../utils/tokens';
-import { Listings, Orders, type Listing } from '../../services/api';
+import { Addresses, Listings, Orders, type Listing, type UserAddress } from '../../services/api';
 import { BackButton, Button } from '../../components/ui';
 import { parseApiError } from '../../utils/errors';
 
 const PLATFORM_FEE_PERCENT = 0.02; // 2%
 const GST_RATE = 0.18;             // 18% on platform fee
+
+function addressSnapshotFromRow(addr: UserAddress) {
+  return {
+    id: addr.id,
+    full_name: addr.full_name,
+    phone_number: addr.phone_number,
+    house: addr.flat_house_number,
+    building: addr.building_name,
+    street: addr.address_line_1,
+    locality: addr.locality,
+    city: addr.city,
+    state: addr.state,
+    pincode: addr.pincode,
+  };
+}
 
 export default function CheckoutScreen({ navigation, route }: any) {
   const { listingId } = route.params;
@@ -44,7 +59,20 @@ export default function CheckoutScreen({ navigation, route }: any) {
     try {
       const profileStr = await AsyncStorage.getItem('@ow_address');
       if (profileStr) {
-        setAddress(JSON.parse(profileStr));
+        const parsed = JSON.parse(profileStr);
+        if (parsed?.id && parsed?.full_name && parsed?.phone_number) {
+          setAddress(parsed);
+          return;
+        }
+      }
+      const res = await Addresses.list();
+      const def =
+        res.data.find((a) => a.is_default) ??
+        (res.data.length > 0 ? res.data[0] : null);
+      if (def) {
+        const snapshot = addressSnapshotFromRow(def);
+        setAddress(snapshot);
+        await AsyncStorage.setItem('@ow_address', JSON.stringify(snapshot));
         return;
       }
       const locStr = await AsyncStorage.getItem('@ow_location');
@@ -89,7 +117,7 @@ export default function CheckoutScreen({ navigation, route }: any) {
     }
     setPaying(true);
     try {
-      const res = await Orders.buyNow(listingId, orderNotes);
+      const res = await Orders.buyNow(listingId, orderNotes, address?.id);
       const txnId = res.data?.transaction_id;
       navigation.replace('OrderConfirmation', {
         transactionId: txnId || 'pending',
