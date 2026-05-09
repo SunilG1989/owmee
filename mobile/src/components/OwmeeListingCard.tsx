@@ -157,9 +157,8 @@ export function FeedCard({
   const distanceText =
     listing.distance_km != null
       ? `${listing.distance_km.toFixed(1)} km`
-      : listing.shipping_eligible && listing.city
-        ? listing.city
-        : null;
+      : null;
+  const placeText = listing.city || (listing.shipping_eligible ? 'Delivery available' : null);
 
   const showOriginal =
     listing.original_price != null && listing.original_price > listing.price;
@@ -167,14 +166,15 @@ export function FeedCard({
   const showDiscount =
     listing.discount_pct != null && listing.discount_pct > 0;
 
-  // Detail line — pulled from the seller's description when present.
-  // We don't fabricate specs we don't have; if the seller didn't write
-  // one, the row hides.
-  const detailLine = (() => {
-    const d = listing.description?.trim();
-    if (!d) return null;
-    return d.replace(/\s+/g, ' ').slice(0, 60);
-  })();
+  const postedAgo = timeAgo(listing.created_at);
+  const trustChips = [
+    listing.is_owmee_verified ? 'Checked' : null,
+    listing.warranty_active ? 'Warranty' : null,
+    listing.bill_available ? 'Bill' : null,
+    listing.box_available ? 'Box' : null,
+    listing.is_negotiable ? 'Offer ok' : null,
+  ].filter(Boolean).slice(0, 2) as string[];
+
   const handleBuySafely = () => {
     (onBuySafely || onPress)();
   };
@@ -201,8 +201,14 @@ export function FeedCard({
 
         {listing.is_owmee_verified && (
           <View style={s.verifiedBadge}>
-            <ShieldCheck size={12} strokeWidth={2.35} color={C.coralDeep} />
-            <Text style={s.verifiedBadgeText}>Verified</Text>
+            <ShieldCheck size={12} strokeWidth={2.35} color={C.petrolDeep} />
+            <Text style={s.verifiedBadgeText}>Checked</Text>
+          </View>
+        )}
+
+        {showDiscount && (
+          <View style={s.imageDealBadge}>
+            <Text style={s.imageDealText}>{Math.round(listing.discount_pct!)}% off</Text>
           </View>
         )}
 
@@ -230,23 +236,29 @@ export function FeedCard({
         accessibilityRole="button"
         accessibilityLabel={`Open ${listing.title}`}
       >
-        <Text style={s.feedTitle} numberOfLines={1}>{listing.title}</Text>
-
-        {detailLine && (
-          <Text style={s.detailLine} numberOfLines={1}>{detailLine}</Text>
-        )}
-
         <View style={s.priceBlock}>
           <Text style={s.feedPrice}>{formatPriceFull(listing.price)}</Text>
           {showOriginal && (
             <Text style={s.feedStrike}>{formatPriceFull(listing.original_price)}</Text>
           )}
-          {showDiscount && (
-            <View style={s.discountInline}>
-              <Text style={s.discountInlineText}>{Math.round(listing.discount_pct!)}% off</Text>
-            </View>
-          )}
         </View>
+
+        <Text style={s.feedTitle} numberOfLines={2}>{listing.title}</Text>
+
+        <View style={s.protectionRow}>
+          <ShieldCheck size={12} strokeWidth={2.25} color={C.petrolDeep} />
+          <Text style={s.protectionText} numberOfLines={1}>Protected payment</Text>
+        </View>
+
+        {trustChips.length > 0 && (
+          <View style={s.proofRow}>
+            {trustChips.map(chip => (
+              <View key={chip} style={s.proofChip}>
+                <Text style={s.proofText} numberOfLines={1}>{chip}</Text>
+              </View>
+            ))}
+          </View>
+        )}
 
         <View style={s.metaRow}>
           {distanceText && (
@@ -255,10 +267,14 @@ export function FeedCard({
               <Text style={s.metaText} numberOfLines={1}>{distanceText}</Text>
             </>
           )}
-          {distanceText && listing.city && (
+          {distanceText && placeText && (
             <Text style={s.metaSep} allowFontScaling={false}>·</Text>
           )}
-          {listing.city && <Text style={s.metaText} numberOfLines={1}>{listing.city}</Text>}
+          {placeText && <Text style={s.metaText} numberOfLines={1}>{placeText}</Text>}
+          {(distanceText || placeText) && postedAgo && (
+            <Text style={s.metaSep} allowFontScaling={false}>·</Text>
+          )}
+          {postedAgo && <Text style={s.metaText} numberOfLines={1}>{postedAgo}</Text>}
         </View>
       </TouchableOpacity>
 
@@ -286,7 +302,7 @@ export function FeedCard({
             accessibilityLabel={`Make an offer for ${listing.title}`}
           >
             <Text style={s.offerText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82}>
-              Make offer
+              Offer
             </Text>
           </TouchableOpacity>
         </View>
@@ -376,17 +392,21 @@ const s = StyleSheet.create({
 
   // feed variant
   feedCard: {
-    backgroundColor: C.white,
-    borderRadius: R.lg,
+    backgroundColor: 'rgba(255,253,248,0.98)',
+    borderRadius: R.md,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: C.border2,
-    marginBottom: S.md,
-    ...Shadow.card,
+    borderColor: 'rgba(224, 203, 188, 0.72)',
+    marginBottom: S.sm + 2,
+    shadowColor: '#172033',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.045,
+    shadowRadius: 7,
+    elevation: 1,
   },
   feedImgWrap: {
     width: '100%',
-    aspectRatio: 4 / 3,
+    aspectRatio: 1,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -396,13 +416,15 @@ const s = StyleSheet.create({
     position: 'absolute',
     top: S.sm,
     left: S.sm,
-    paddingHorizontal: S.sm,
-    paddingVertical: S.xs + 1,
-    borderRadius: R.sm,
-    backgroundColor: 'rgba(255, 255, 255, 0.88)',
+    paddingHorizontal: S.xs + 2,
+    paddingVertical: 4,
+    borderRadius: R.pill,
+    backgroundColor: 'rgba(255, 253, 248, 0.94)',
+    borderWidth: 1,
+    borderColor: 'rgba(79, 127, 134, 0.16)',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: S.xs,
+    gap: 3,
     zIndex: 2,
   },
   verifiedShield: {
@@ -411,18 +433,35 @@ const s = StyleSheet.create({
     fontWeight: T.weight.heavy,
   },
   verifiedBadgeText: {
-    color: C.text,
+    color: C.petrolDeep,
+    fontSize: T.size.xs - 1,
+    fontWeight: T.weight.heavy,
+  },
+  imageDealBadge: {
+    position: 'absolute',
+    left: S.sm,
+    bottom: S.sm,
+    paddingHorizontal: S.sm,
+    paddingVertical: 4,
+    borderRadius: R.pill,
+    backgroundColor: 'rgba(251, 233, 226, 0.96)',
+    borderWidth: 1,
+    borderColor: 'rgba(215, 168, 158, 0.28)',
+    zIndex: 2,
+  },
+  imageDealText: {
     fontSize: T.size.xs,
     fontWeight: T.weight.heavy,
+    color: C.coralDeep,
   },
   heartBtn: {
     position: 'absolute',
     top: S.sm,
     right: S.sm,
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: 'rgba(255,255,255,0.86)',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,253,248,0.90)',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 2,
@@ -438,21 +477,22 @@ const s = StyleSheet.create({
     fontWeight: T.weight.bold,
   },
   feedMeta: {
-    paddingHorizontal: S.md,
-    paddingTop: S.md,
-    paddingBottom: S.xs,
+    paddingHorizontal: S.sm + 2,
+    paddingTop: S.sm + 2,
+    paddingBottom: S.xs + 1,
   },
   feedTitle: {
-    fontSize: T.size.md,
-    fontWeight: T.weight.heavy,
-    color: C.ink,
+    marginTop: 4,
+    fontSize: T.size.sm + 1,
+    lineHeight: 16,
+    fontWeight: T.weight.semi,
+    color: C.text2,
   },
   priceBlock: {
-    marginTop: S.sm,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'baseline',
     flexWrap: 'wrap',
-    gap: S.sm,
+    gap: 5,
   },
   feedPrice: {
     fontSize: T.size.lg,
@@ -461,7 +501,7 @@ const s = StyleSheet.create({
     letterSpacing: -0.2,
   },
   feedStrike: {
-    fontSize: T.size.sm,
+    fontSize: T.size.xs,
     fontWeight: T.weight.semi,
     color: C.text3,
     textDecorationLine: 'line-through',
@@ -499,14 +539,40 @@ const s = StyleSheet.create({
   pillTextGreen: { color: C.green },  // conditionText #2F6F46
   pillTextBlue:  { color: C.blueDeep },
   pillTextAmber: { color: C.amberDeep },
-  detailLine: {
+  protectionRow: {
+    marginTop: S.xs + 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    minWidth: 0,
+  },
+  protectionText: {
+    flex: 1,
+    fontSize: T.size.xs,
+    color: C.petrolDeep,
+    fontWeight: T.weight.heavy,
+  },
+  proofRow: {
     marginTop: S.xs + 1,
-    fontSize: T.size.sm,
-    color: C.text2,
+    flexDirection: 'row',
+    gap: 4,
+  },
+  proofChip: {
+    maxWidth: 76,
+    paddingHorizontal: S.xs + 2,
+    paddingVertical: 3,
+    borderRadius: R.xs,
+    backgroundColor: C.petrolLight,
+    borderWidth: 1,
+    borderColor: 'rgba(79, 127, 134, 0.12)',
+  },
+  proofText: {
+    fontSize: T.size.xs - 1,
+    color: C.petrolText,
     fontWeight: T.weight.medium,
   },
   metaRow: {
-    marginTop: S.md,
+    marginTop: S.xs + 2,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
@@ -514,8 +580,9 @@ const s = StyleSheet.create({
   metaPin: { fontSize: T.size.xs - 1, color: C.text3 },
   metaText: {
     fontSize: T.size.xs,
-    color: C.text2,
-    fontWeight: T.weight.semi,
+    color: C.text3,
+    fontWeight: T.weight.medium,
+    flexShrink: 1,
   },
   metaSep: {
     fontSize: T.size.xs,
@@ -533,23 +600,26 @@ const s = StyleSheet.create({
     fontWeight: T.weight.semi,
   },
   feedActions: {
-    gap: 7,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   feedActionWrap: {
-    paddingHorizontal: S.md,
-    paddingTop: S.sm,
-    paddingBottom: S.md,
+    paddingHorizontal: S.sm + 2,
+    paddingTop: S.xs + 1,
+    paddingBottom: S.sm + 2,
   },
   buySafeBtn: {
-    minHeight: 38,
-    borderRadius: R.md,
-    backgroundColor: C.petrol,
+    flex: 1.3,
+    minWidth: 0,
+    minHeight: 34,
+    borderRadius: R.pill,
+    backgroundColor: C.petrolDeep,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: S.sm,
+    paddingHorizontal: S.xs + 1,
     borderWidth: 1,
     borderColor: 'rgba(53, 95, 99, 0.16)',
-    ...Shadow.subtle,
   },
   buySafeContent: {
     minWidth: 0,
@@ -560,22 +630,24 @@ const s = StyleSheet.create({
   },
   buySafeText: {
     color: C.white,
-    fontSize: T.size.sm + 1,
+    fontSize: T.size.xs + 1,
     fontWeight: T.weight.heavy,
   },
   offerBtn: {
+    flex: 0.82,
+    minWidth: 0,
     minHeight: 34,
-    borderRadius: R.md,
+    borderRadius: R.pill,
     backgroundColor: '#FFF8F3',
     borderWidth: 1,
     borderColor: 'rgba(110, 76, 69, 0.18)',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: S.sm,
+    paddingHorizontal: S.xs,
   },
   offerText: {
     color: C.coralDeep,
-    fontSize: T.size.sm + 1,
+    fontSize: T.size.xs + 1,
     fontWeight: T.weight.heavy,
   },
 });

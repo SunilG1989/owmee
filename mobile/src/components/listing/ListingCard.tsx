@@ -2,7 +2,7 @@ import React, { memo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Image, type ImageSourcePropType,
 } from 'react-native';
-import { ShieldCheck } from 'lucide-react-native';
+import { MapPin, ShieldCheck } from 'lucide-react-native';
 import { C, T, S, R, Shadow, formatPrice, percentOff, condStyle } from '../../utils/tokens';
 import { Button, IconButton } from '../ui';
 import type { Listing } from '../../services/api';
@@ -55,6 +55,18 @@ export const ListingCard = memo(function ListingCard({
   );
   const cs = condStyle(listing.condition);
   const off = percentOff(listing.price, listing.original_price);
+  const proofChips = [
+    listing.seller_verified ? 'Checked' : null,
+    listing.warranty_status && !/no|none|expired/i.test(listing.warranty_status) ? 'Warranty' : null,
+    listing.is_negotiable ? 'Offer ok' : null,
+  ].filter(Boolean).slice(0, 2) as string[];
+  const distanceText =
+    showDistance && listing.distance_km != null
+      ? listing.distance_km < 1
+        ? `${Math.round(listing.distance_km * 1000)} m`
+        : `${listing.distance_km.toFixed(1)} km`
+      : null;
+  const placeText = listing.city || null;
   const handleBuySafely = () => {
     (onBuySafely || onPress)(listing);
   };
@@ -110,9 +122,29 @@ export const ListingCard = memo(function ListingCard({
           <View style={s.priceRow}>
             <Text style={s.price}>{formatPrice(listing.price)}</Text>
             {listing.original_price ? <Text style={s.mrp}>{formatPrice(listing.original_price)}</Text> : null}
-            {off ? <Text style={s.off}>{off}% off</Text> : null}
           </View>
           <Text style={s.title} numberOfLines={2}>{listing.title}</Text>
+
+          <View style={s.protectionRow}>
+            <ShieldCheck size={12} strokeWidth={2.25} color={C.petrolDeep} />
+            <Text style={s.protectionText} numberOfLines={1}>Protected payment</Text>
+          </View>
+
+          {(proofChips.length > 0 || off) && (
+            <View style={s.proofRow}>
+              {off ? (
+                <View style={[s.proofChip, s.dealProof]}>
+                  <Text style={[s.proofText, s.dealProofText]} numberOfLines={1}>{off}% off</Text>
+                </View>
+              ) : null}
+              {proofChips.map(chip => (
+                <View key={chip} style={s.proofChip}>
+                  <Text style={s.proofText} numberOfLines={1}>{chip}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+
           {listing.seller?.avg_rating ? (
             <View style={s.ratingRow}>
               <Text style={s.stars}>{'★'.repeat(Math.round(listing.seller.avg_rating))}</Text>
@@ -121,12 +153,14 @@ export const ListingCard = memo(function ListingCard({
             </View>
           ) : null}
           <View style={s.metaRow}>
-            {listing.seller_verified && (
-              <View style={s.verified}><Text style={s.verifiedIcon}>✓</Text><Text style={s.verifiedText}>Verified</Text></View>
+            {distanceText && (
+              <>
+                <MapPin size={11} strokeWidth={2.2} color={C.text3} />
+                <Text style={s.dist} numberOfLines={1}>{distanceText}</Text>
+              </>
             )}
-            {showDistance && listing.distance_km != null && <Text style={s.dist}>{listing.distance_km < 1 ? `${Math.round(listing.distance_km * 1000)} m` : `${listing.distance_km.toFixed(1)} km`}</Text>}
-            {!showDistance && listing.city && <Text style={s.dist}>{listing.city}</Text>}
-            {listing.is_negotiable && <View style={s.negoTag}><Text style={s.negoText}>Negotiable</Text></View>}
+            {distanceText && placeText ? <Text style={s.metaSep}>·</Text> : null}
+            {placeText && <Text style={s.dist} numberOfLines={1}>{placeText}</Text>}
           </View>
         </TouchableOpacity>
         <View style={s.actionRow}>
@@ -152,7 +186,7 @@ export const ListingCard = memo(function ListingCard({
             accessibilityLabel={`Make an offer for ${listing.title}`}
           >
             <Text style={s.offerText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82}>
-              Make offer
+              Offer
             </Text>
           </TouchableOpacity>
         </View>
@@ -213,7 +247,14 @@ export function getCardLayout(screenWidth: number) {
 }
 
 const s = StyleSheet.create({
-  card: { backgroundColor: C.surface, borderRadius: R.lg, overflow: 'hidden', borderWidth: 1, borderColor: C.border, marginBottom: S.sm },
+  card: {
+    backgroundColor: 'rgba(255,253,248,0.98)',
+    borderRadius: R.md,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(224, 203, 188, 0.72)',
+    marginBottom: S.sm + 2,
+  },
   imgWrap: { width: '100%', backgroundColor: C.border2, position: 'relative' },
   imagePressTarget: { ...StyleSheet.absoluteFillObject },
   img: { width: '100%', height: '100%' },
@@ -221,7 +262,7 @@ const s = StyleSheet.create({
   heartOn: { backgroundColor: 'rgba(255,255,255,0.95)' },
   cond: { position: 'absolute', bottom: S.sm, left: S.sm, paddingHorizontal: S.sm + 1, paddingVertical: 3, borderRadius: R.xs },
   condText: { fontSize: T.size.xs, fontWeight: T.weight.bold },
-  info: { padding: S.md },
+  info: { padding: S.sm + 2 },
   priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 5, marginBottom: 3 },
   price: { fontSize: T.size.lg, fontWeight: T.weight.heavy, color: C.ink, letterSpacing: -0.3 },
   mrp: { fontSize: T.size.xs, color: C.text4, textDecorationLine: 'line-through' },
@@ -231,24 +272,67 @@ const s = StyleSheet.create({
   stars: { fontSize: T.size.xs, color: C.petrol, letterSpacing: -1 },
   ratingNum: { fontSize: T.size.xs, fontWeight: T.weight.bold, color: C.ink },
   ratingCount: { fontSize: T.size.xs, color: C.text3 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap' },
+  protectionRow: {
+    marginTop: S.xs,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    minWidth: 0,
+  },
+  protectionText: {
+    flex: 1,
+    fontSize: T.size.xs,
+    color: C.petrolDeep,
+    fontWeight: T.weight.heavy,
+  },
+  proofRow: {
+    marginTop: S.xs + 1,
+    flexDirection: 'row',
+    gap: 4,
+    flexWrap: 'wrap',
+  },
+  proofChip: {
+    maxWidth: 76,
+    paddingHorizontal: S.xs + 2,
+    paddingVertical: 3,
+    borderRadius: R.xs,
+    backgroundColor: C.petrolLight,
+    borderWidth: 1,
+    borderColor: 'rgba(79, 127, 134, 0.12)',
+  },
+  proofText: {
+    fontSize: T.size.xs - 1,
+    color: C.petrolText,
+    fontWeight: T.weight.medium,
+  },
+  dealProof: {
+    backgroundColor: C.coralLight,
+    borderColor: 'rgba(215, 168, 158, 0.24)',
+  },
+  dealProofText: {
+    color: C.coralDeep,
+    fontWeight: T.weight.heavy,
+  },
+  metaRow: { marginTop: S.xs + 2, flexDirection: 'row', alignItems: 'center', gap: 3, flexWrap: 'wrap' },
   verified: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: C.petrolLight, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5 },
   verifiedIcon: { fontSize: T.size.xs, fontWeight: '900', color: C.petrol },
   verifiedText: { fontSize: T.size.xs, fontWeight: T.weight.bold, color: C.petrolText },
-  dist: { fontSize: T.size.xs, color: C.text3, fontWeight: T.weight.medium },
+  dist: { fontSize: T.size.xs, color: C.text3, fontWeight: T.weight.medium, flexShrink: 1 },
+  metaSep: { fontSize: T.size.xs, color: C.text3 },
   negoTag: { backgroundColor: C.petrolLight, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5 },
   negoText: { fontSize: T.size.xs, fontWeight: T.weight.bold, color: C.petrolDeep },
-  actionRow: { gap: 7, marginTop: S.sm + 2 },
+  actionRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: S.sm + 2 },
   buySafeBtn: {
-    minHeight: 38,
-    borderRadius: R.md,
-    backgroundColor: C.petrol,
+    flex: 1.3,
+    minWidth: 0,
+    minHeight: 34,
+    borderRadius: R.pill,
+    backgroundColor: C.petrolDeep,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: S.sm,
+    paddingHorizontal: S.xs + 1,
     borderWidth: 1,
     borderColor: 'rgba(53, 95, 99, 0.16)',
-    ...Shadow.subtle,
   },
   buySafeContent: {
     minWidth: 0,
@@ -259,22 +343,24 @@ const s = StyleSheet.create({
   },
   buySafeText: {
     color: C.white,
-    fontSize: T.size.sm + 1,
+    fontSize: T.size.xs + 1,
     fontWeight: T.weight.heavy,
   },
   offerBtn: {
+    flex: 0.82,
+    minWidth: 0,
     minHeight: 34,
-    borderRadius: R.md,
+    borderRadius: R.pill,
     backgroundColor: '#FFF8F3',
     borderWidth: 1,
     borderColor: 'rgba(110, 76, 69, 0.18)',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: S.sm,
+    paddingHorizontal: S.xs,
   },
   offerText: {
     color: C.coralDeep,
-    fontSize: T.size.sm + 1,
+    fontSize: T.size.xs + 1,
     fontWeight: T.weight.heavy,
   },
   // Skeleton lines
