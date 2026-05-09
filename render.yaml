@@ -7,7 +7,7 @@ services:
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
     dockerCommand: sh /app/start.sh
-    preDeployCommand: alembic upgrade head
+    preDeployCommand: sh /app/predeploy.sh
     healthCheckPath: /health
     autoDeployTrigger: off
     maxShutdownDelaySeconds: 60
