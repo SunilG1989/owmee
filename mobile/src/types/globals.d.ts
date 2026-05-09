@@ -17,9 +17,3 @@ declare namespace NodeJS {
   type Timeout = number;
   type Timer = number;
 }
-
-// `atob` exists in the RN runtime (used to decode JWT payloads in
-// services/api.ts). The lib=es2022 set doesn't include the dom-only
-// `atob`/`btoa` functions, so declare them globally.
-declare function atob(data: string): string;
-declare function btoa(data: string): string;

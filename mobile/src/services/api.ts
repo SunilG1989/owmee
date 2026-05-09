@@ -1,5 +1,6 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { ensureAuthHydrated, useAuthStore } from '../store/authStore';
+import { decodeJwtSub } from '../utils/jwt';
 
 import { API_URL, REQUEST_TIMEOUT, UPLOAD_TIMEOUT } from '../config';
 const BASE = API_URL;
@@ -29,21 +30,6 @@ function processQueue(error: any, token: string | null) {
     }
   });
   failedQueue = [];
-}
-
-/** Extract user_id (sub claim) from JWT payload */
-function extractUserId(token: string): string {
-  try {
-    const raw = token.split('.')[1];
-    if (!raw) return '';
-    let payload = raw.replace(/-/g, '+').replace(/_/g, '/');
-    const pad = payload.length % 4;
-    if (pad === 2) payload += '==';
-    else if (pad === 3) payload += '=';
-    else if (pad === 1) return '';
-    const decoded = JSON.parse(atob(payload));
-    return decoded.sub || '';
-  } catch { return ''; }
 }
 
 api.interceptors.response.use(
@@ -78,6 +64,7 @@ api.interceptors.response.use(
       const {
         access_token,
         refresh_token: newRefresh,
+        user_id,
         tier,
         kyc_status,
         auth_state,
@@ -85,7 +72,7 @@ api.interceptors.response.use(
         seller_tier,
         role,
       } = res.data;
-      const userId = extractUserId(access_token);
+      const userId = user_id || decodeJwtSub(access_token);
       await useAuthStore.getState().setTokens(
         access_token, newRefresh, userId,
         tier, kyc_status,

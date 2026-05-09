@@ -7,29 +7,7 @@ import type { AuthScreen } from '../../navigation/types';
 import { Auth } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { parseApiError } from '../../utils/errors';
-
-/** Decode the `sub` (user id) claim from a JWT.
- *
- * JWTs are base64url-encoded (RFC 7515): `-`/`_` instead of `+`/`/`,
- * no `=` padding. RN's atob() only accepts standard base64 — a naive
- * `atob(token.split('.')[1])` silently fails on every JWT and returns
- * empty, which broke session persistence (setTokens stored an empty
- * userId, hydrate's `if (a && r && u)` guard then refused to restore
- * the session, forcing the user to OTP-verify on every relaunch).
- */
-function extractUserId(token: string): string {
-  try {
-    const raw = token.split('.')[1];
-    if (!raw) return '';
-    let b64 = raw.replace(/-/g, '+').replace(/_/g, '/');
-    const pad = b64.length % 4;
-    if (pad === 2) b64 += '==';
-    else if (pad === 3) b64 += '=';
-    else if (pad === 1) return '';
-    const decoded = JSON.parse(atob(b64));
-    return decoded.sub || '';
-  } catch { return ''; }
-}
+import { decodeJwtSub } from '../../utils/jwt';
 
 export default function OtpVerifyScreen({ navigation, route }: AuthScreen<'OtpVerify'>) {
   const { phone } = route.params;
@@ -57,10 +35,10 @@ export default function OtpVerifyScreen({ navigation, route }: AuthScreen<'OtpVe
     try {
       const r = await Auth.verifyOtp(phone, code);
       const {
-        access_token, refresh_token, tier, kyc_status,
+        access_token, refresh_token, user_id, tier, kyc_status,
         auth_state, buyer_eligible, seller_tier, role,
       } = r.data;
-      const userId = extractUserId(access_token);
+      const userId = user_id || decodeJwtSub(access_token);
       await setTokens(
         access_token, refresh_token, userId,
         tier, kyc_status, auth_state, buyer_eligible, seller_tier, role,
@@ -80,6 +58,10 @@ export default function OtpVerifyScreen({ navigation, route }: AuthScreen<'OtpVe
     } catch (e: any) {
       if (e?.message === 'AUTH_STORAGE_FAILED') {
         Alert.alert('Could not save session', 'Please try again. Your login was verified, but the app could not save the session on this device.');
+        return;
+      }
+      if (e?.message === 'AUTH_USER_ID_MISSING') {
+        Alert.alert('Could not save session', 'Please try again. The login token could not be read on this device.');
         return;
       }
       Alert.alert('Invalid OTP', parseApiError(e, 'Check and try again'));

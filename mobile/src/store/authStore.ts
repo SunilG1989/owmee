@@ -2,23 +2,7 @@ import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { AuthState as TriAuthState, SellerTier, UserRole, EligibilitySnapshot } from '../eligibility';
-
-/** Decode the `sub` claim from a JWT. Handles base64url (RFC 7515)
- *  — RN's atob() only accepts standard base64, which is why a naive
- *  `atob(token.split('.')[1])` fails on every JWT. */
-function decodeJwtSub(token: string): string {
-  try {
-    const raw = token.split('.')[1];
-    if (!raw) return '';
-    let b64 = raw.replace(/-/g, '+').replace(/_/g, '/');
-    const pad = b64.length % 4;
-    if (pad === 2) b64 += '==';
-    else if (pad === 3) b64 += '=';
-    else if (pad === 1) return '';
-    const decoded = JSON.parse(atob(b64));
-    return decoded.sub || '';
-  } catch { return ''; }
-}
+import { decodeJwtSub } from '../utils/jwt';
 
 interface AuthState {
   isAuthenticated: boolean;
@@ -87,6 +71,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   setTokens: async (a, r, uid, tier, kycStatus, authState, buyerEligible, sellerTier, role) => {
     const resolvedUid = uid || decodeJwtSub(a);
+    if (!resolvedUid) {
+      throw new Error('AUTH_USER_ID_MISSING');
+    }
     const t = (tier as AuthState['tier']) || get().tier || 'basic';
     const k = (kycStatus as AuthState['kycStatus']) || get().kycStatus || 'not_started';
     // Sprint 4 / Pass 2 — infer sane defaults if backend didn't send them

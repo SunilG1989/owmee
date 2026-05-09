@@ -34,6 +34,7 @@ class VerifyOTPRequest(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
+    user_id: str
     token_type: str = "Bearer"
     tier: str
     kyc_status: str
@@ -368,6 +369,7 @@ async def verify_otp(body: VerifyOTPRequest, db: DBSession):
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,
+        user_id=str(user.id),
         tier=user.tier,
         kyc_status=user.kyc_status,
         auth_state=user.auth_state,
@@ -417,6 +419,7 @@ async def refresh_token(body: RefreshRequest, db: DBSession):
     return TokenResponse(
         access_token=new_access,
         refresh_token=body.refresh_token,
+        user_id=str(user.id),
         tier=user.tier,
         kyc_status=user.kyc_status,
         auth_state=user.auth_state,
