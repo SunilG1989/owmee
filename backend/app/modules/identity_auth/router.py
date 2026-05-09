@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 import hashlib
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 import phonenumbers
 import structlog
@@ -82,7 +82,7 @@ def _otp_lock_key(phone: str) -> str:
 
 async def _check_rate_limit(phone: str) -> None:
     # Fix #30: Skip rate limit in dev — OTP is logged to console anyway
-    if settings.env == "development":
+    if settings.env == "development" or _is_whitelisted_phone(phone):
         return
     redis = await get_redis()
     key = _otp_rate_key(phone)
@@ -94,20 +94,31 @@ async def _check_rate_limit(phone: str) -> None:
         )
 
 
-async def _store_otp(phone: str, otp: str) -> None:
+async def _store_otp(phone: str, otp: str, *, count_rate: bool = True) -> None:
     redis = await get_redis()
     # Store OTP with 10 min expiry
     await redis.setex(_otp_value_key(phone), 600, otp)
-    # Increment rate counter with 1 hour expiry
-    rate_key = _otp_rate_key(phone)
-    await redis.incr(rate_key)
-    await redis.expire(rate_key, 3600)
-    # Reset attempt counter
-    await redis.delete(_otp_attempts_key(phone))
+    if count_rate:
+        # Increment rate counter with 1 hour expiry
+        rate_key = _otp_rate_key(phone)
+        await redis.incr(rate_key)
+        await redis.expire(rate_key, 3600)
+    # Reset attempt counter/lock so a fresh OTP send clears stale lockouts.
+    await redis.delete(_otp_attempts_key(phone), _otp_lock_key(phone))
 
 
 async def _verify_otp(phone: str, submitted_otp: str) -> None:
     redis = await get_redis()
+    whitelisted = _is_whitelisted_phone(phone)
+
+    if whitelisted:
+        if submitted_otp == _whitelist_otp_code():
+            await redis.delete(_otp_value_key(phone), _otp_attempts_key(phone), _otp_lock_key(phone))
+            return
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "OTP_INVALID", "message": "Incorrect OTP. Check your message and try again."},
+        )
 
     # Check lock
     lock = await redis.get(_otp_lock_key(phone))
@@ -279,28 +290,27 @@ def _issue_access_token(user, session_id: str, role: str = "user") -> str:
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
-@router.post(
-    "/otp/send",
-    status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[
-        # IP-level cap so a single attacker cycling through phone numbers
-        # can't blow through our SMS budget. The phone-level limit a few
-        # lines down handles the same-phone case.
-        Depends(limit_by_ip("otp_send_ip", OTP_PER_IP)),
-    ],
-)
+@router.post("/otp/send", status_code=status.HTTP_204_NO_CONTENT)
 async def send_otp(body: SendOTPRequest, request: Request):
     """Send OTP to phone number. Rate limited to 3/hour per phone, plus
     20/hour per IP (handles attacker cycling through numbers)."""
     phone = _normalise_phone(body.phone_number)
-    await _check_rate_limit(phone)
+    whitelisted = _is_whitelisted_phone(phone)
+
+    if not whitelisted:
+        # IP-level cap so a single attacker cycling through phone numbers
+        # can't blow through our SMS budget. Whitelisted pilot numbers bypass
+        # this so owner/device testing doesn't get stuck behind a shared IP cap.
+        await limit_by_ip("otp_send_ip", OTP_PER_IP)(request)
+        await _check_rate_limit(phone)
+
     # Sprint 5b: whitelist override for test numbers
-    if _is_whitelisted_phone(phone):
+    if whitelisted:
         otp = _whitelist_otp_code()
         logger.info("otp.whitelisted", phone=phone, otp=otp)
     else:
         otp = _generate_otp()
-    await _store_otp(phone, otp)
+    await _store_otp(phone, otp, count_rate=not whitelisted)
     await _send_sms(phone, otp)
     logger.info("otp.sent", phone_suffix=phone[-4:])
 
