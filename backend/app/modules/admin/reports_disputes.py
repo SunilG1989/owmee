@@ -20,69 +20,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy import and_, select
 
 from app.core.dependencies import BasicUser, DBSession, VerifiedUser
+from app.modules.admin.models import Dispute, UserBlock, UserReport
 from app.modules.listings.models import Listing
 
 logger = structlog.get_logger()
 router = APIRouter()
-
-
-# ── Models (inline to avoid circular imports) ──────────────────────────────────
-# These reference tables created in migration 0003_epic5_6
-
-from sqlalchemy import Column, DateTime, ForeignKey, JSON, String
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
-from app.db.session import Base
-import uuid as uuid_lib
-
-
-class UserReport(Base):
-    __tablename__ = "user_reports"
-    id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid_lib.uuid4)
-    reporter_id = Column(PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    reported_user_id = Column(PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
-    reported_listing_id = Column(PG_UUID(as_uuid=True), ForeignKey("listings.id"), nullable=True)
-    report_type = Column(String(30), nullable=False)
-    description = Column(String(500))
-    status = Column(String(20), nullable=False, default="open")
-    resolved_by = Column(PG_UUID(as_uuid=True), nullable=True)
-    resolved_at = Column(DateTime(timezone=True), nullable=True)
-    resolution_note = Column(String(500), nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False,
-                        server_default=__import__('sqlalchemy').text("now()"))
-
-
-class Dispute(Base):
-    __tablename__ = "disputes"
-    id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid_lib.uuid4)
-    transaction_id = Column(PG_UUID(as_uuid=True), ForeignKey("transactions.id"), nullable=False, unique=True)
-    raised_by = Column(PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    reason = Column(String(50), nullable=False)
-    description = Column(String(1000), nullable=False)
-    # P0.4 (2026-05-03): buyer-uploaded evidence photos. List of R2 keys
-    # already stored via the listing-image presigned-URL flow (mirroring
-    # ListingImage). Capped at 3 by the mobile picker.
-    photo_keys = Column(JSON, nullable=True)
-    status = Column(String(30), nullable=False, default="opened")
-    resolution = Column(String(30), nullable=True)
-    resolution_note = Column(String(500), nullable=True)
-    assigned_to = Column(PG_UUID(as_uuid=True), nullable=True)
-    evidence_archived_at = Column(DateTime(timezone=True), nullable=True)
-    review_deadline = Column(DateTime(timezone=True), nullable=True)
-    resolved_at = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False,
-                        server_default=__import__('sqlalchemy').text("now()"))
-    updated_at = Column(DateTime(timezone=True), nullable=False,
-                        server_default=__import__('sqlalchemy').text("now()"))
-
-
-class UserBlock(Base):
-    """Fix #17: User blocks — blocker won't see blocked user's listings."""
-    __tablename__ = "user_blocks"
-    id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid_lib.uuid4)
-    blocker_id = Column(PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    blocked_id = Column(PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    created_at = Column(DateTime(timezone=True), nullable=False,
-                        server_default=__import__('sqlalchemy').text("now()"))
 
 
 # ── Schemas ─────────────────────────────────────────────────────────────────────

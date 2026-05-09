@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, DateTime, ForeignKey, String, Boolean, text
+from sqlalchemy import Column, DateTime, ForeignKey, JSON, String, Boolean, text
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from app.db.session import Base, TimestampMixin
 
@@ -81,3 +81,50 @@ class AdminRefreshToken(Base):
         nullable=False,
         server_default=text("now()"),
     )
+
+
+class UserReport(Base):
+    __tablename__ = "user_reports"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    reporter_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    reported_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    reported_listing_id = Column(UUID(as_uuid=True), ForeignKey("listings.id"), nullable=True)
+    report_type = Column(String(30), nullable=False)
+    description = Column(String(500))
+    status = Column(String(20), nullable=False, default="open")
+    resolved_by = Column(UUID(as_uuid=True), nullable=True)
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    resolution_note = Column(String(500), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+
+class Dispute(Base):
+    __tablename__ = "disputes"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    transaction_id = Column(UUID(as_uuid=True), ForeignKey("transactions.id"), nullable=False, unique=True)
+    raised_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    reason = Column(String(50), nullable=False)
+    description = Column(String(1000), nullable=False)
+    photo_keys = Column(JSON, nullable=True)
+    status = Column(String(30), nullable=False, default="opened")
+    resolution = Column(String(30), nullable=True)
+    resolution_note = Column(String(500), nullable=True)
+    assigned_to = Column(UUID(as_uuid=True), nullable=True)
+    evidence_archived_at = Column(DateTime(timezone=True), nullable=True)
+    review_deadline = Column(DateTime(timezone=True), nullable=True)
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+
+class UserBlock(Base):
+    """User blocks; blocked users' listings are hidden from the blocker's browse."""
+
+    __tablename__ = "user_blocks"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    blocker_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    blocked_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
