@@ -42,12 +42,19 @@ function isDisplayableImageUrl(uri?: string | null): uri is string {
   return /^https?:\/\//i.test(uri);
 }
 
+function formatDistance(km: number | null | undefined): string | null {
+  if (km == null) return null;
+  if (km < 0.1) return 'Nearby';
+  if (km < 1) return `${Math.round(km * 1000)} m`;
+  return `${km.toFixed(1)} km`;
+}
+
 // T2-07: REMOVED useWindowDimensions — parent calculates once, passes to all cards
 export const ListingCard = memo(function ListingCard({
   listing, onPress, onBuySafely, onMakeOffer, onWishlist, isWishlisted, showDistance = true, cardWidth,
 }: Props) {
   const cardW = cardWidth || 170; // fallback only
-  const imgH = cardW;
+  const imgH = Math.round(cardW * 0.76);
   const rawUri = listing.thumbnail_url || listing.image_urls?.[0] || listing.images?.[0];
   const uri = isDisplayableImageUrl(rawUri) ? rawUri : null;
   const fallbackImage = fallbackImageForCategory(
@@ -55,18 +62,19 @@ export const ListingCard = memo(function ListingCard({
   );
   const cs = condStyle(listing.condition);
   const off = percentOff(listing.price, listing.original_price);
+  const hasOwmeeCheck = Boolean(
+    listing.seller_verified
+    || listing.seller?.kyc_verified
+    || (listing.reviewed_by && listing.reviewed_by !== 'none'),
+  );
+  const trustBadgeLabel = hasOwmeeCheck ? 'Owmee verified' : 'Safe pay';
   const proofChips = [
-    listing.seller_verified ? 'Checked' : null,
     listing.warranty_status && !/no|none|expired/i.test(listing.warranty_status) ? 'Warranty' : null,
     listing.is_negotiable ? 'Offer ok' : null,
   ].filter(Boolean).slice(0, 2) as string[];
-  const distanceText =
-    showDistance && listing.distance_km != null
-      ? listing.distance_km < 1
-        ? `${Math.round(listing.distance_km * 1000)} m`
-        : `${listing.distance_km.toFixed(1)} km`
-      : null;
+  const distanceText = showDistance ? formatDistance(listing.distance_km) : null;
   const placeText = listing.city || null;
+  const metaLine = [distanceText, placeText].filter(Boolean).join(' · ');
   const handleBuySafely = () => {
     (onBuySafely || onPress)(listing);
   };
@@ -107,6 +115,17 @@ export const ListingCard = memo(function ListingCard({
             />
           </View>
         )}
+        <View style={[s.trustBadge, !hasOwmeeCheck && s.protectedBadge]}>
+          <ShieldCheck size={12} strokeWidth={2.35} color={C.petrolDeep} />
+          <Text
+            style={s.trustBadgeText}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.78}
+          >
+            {trustBadgeLabel}
+          </Text>
+        </View>
         <View style={[s.cond, { backgroundColor: cs.bg }]}>
           <Text style={[s.condText, { color: cs.color }]}>{cs.label}</Text>
         </View>
@@ -124,11 +143,6 @@ export const ListingCard = memo(function ListingCard({
             {listing.original_price ? <Text style={s.mrp}>{formatPrice(listing.original_price)}</Text> : null}
           </View>
           <Text style={s.title} numberOfLines={2}>{listing.title}</Text>
-
-          <View style={s.protectionRow}>
-            <ShieldCheck size={12} strokeWidth={2.25} color={C.petrolDeep} />
-            <Text style={s.protectionText} numberOfLines={1}>Protected payment</Text>
-          </View>
 
           {(proofChips.length > 0 || off) && (
             <View style={s.proofRow}>
@@ -152,16 +166,12 @@ export const ListingCard = memo(function ListingCard({
               {listing.seller.deal_count ? <Text style={s.ratingCount}>({listing.seller.deal_count})</Text> : null}
             </View>
           ) : null}
-          <View style={s.metaRow}>
-            {distanceText && (
-              <>
-                <MapPin size={11} strokeWidth={2.2} color={C.text3} />
-                <Text style={s.dist} numberOfLines={1}>{distanceText}</Text>
-              </>
-            )}
-            {distanceText && placeText ? <Text style={s.metaSep}>·</Text> : null}
-            {placeText && <Text style={s.dist} numberOfLines={1}>{placeText}</Text>}
-          </View>
+          {metaLine ? (
+            <View style={s.metaRow}>
+              <MapPin size={11} strokeWidth={2.2} color={C.text3} />
+              <Text style={s.dist} numberOfLines={1}>{metaLine}</Text>
+            </View>
+          ) : null}
         </TouchableOpacity>
         <View style={s.actionRow}>
           <TouchableOpacity
@@ -200,7 +210,7 @@ export const SkeletonCard = memo(function SkeletonCard({ cardWidth }: { cardWidt
   const cardW = cardWidth || 170;
   return (
     <View style={[s.card, { width: cardW }, Shadow.card]}>
-      <View style={[s.imgWrap, { height: cardW, backgroundColor: C.border2 }]} />
+      <View style={[s.imgWrap, { height: Math.round(cardW * 0.76), backgroundColor: C.border2 }]} />
       <View style={s.info}>
         <View style={s.skelLine1} />
         <View style={s.skelLine2} />
@@ -238,7 +248,7 @@ export function calcCardWidth(screenWidth: number): number {
 // getItemLayout for FlatList scroll optimization
 export function getCardLayout(screenWidth: number) {
   const cardW = calcCardWidth(screenWidth);
-  const cardH = cardW + 154;
+  const cardH = Math.round(cardW * 0.76) + 132;
   return (_data: any, index: number) => ({
     length: cardH,
     offset: cardH * Math.floor(index / 2),
@@ -258,43 +268,55 @@ const s = StyleSheet.create({
   imgWrap: { width: '100%', backgroundColor: C.border2, position: 'relative' },
   imagePressTarget: { ...StyleSheet.absoluteFillObject },
   img: { width: '100%', height: '100%' },
-  heartWrap: { position: 'absolute', top: S.sm, right: S.sm },
+  heartWrap: { position: 'absolute', top: S.xs + 2, right: S.xs + 2 },
   heartOn: { backgroundColor: 'rgba(255,255,255,0.95)' },
   cond: { position: 'absolute', bottom: S.sm, left: S.sm, paddingHorizontal: S.sm + 1, paddingVertical: 3, borderRadius: R.xs },
   condText: { fontSize: T.size.xs, fontWeight: T.weight.bold },
-  info: { padding: S.sm + 2 },
-  priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 5, marginBottom: 3 },
-  price: { fontSize: T.size.lg, fontWeight: T.weight.heavy, color: C.ink, letterSpacing: -0.3 },
-  mrp: { fontSize: T.size.xs, color: C.text4, textDecorationLine: 'line-through' },
-  off: { fontSize: T.size.xs, fontWeight: T.weight.heavy, color: C.petrolMid },
-  title: { fontSize: T.size.base - 1, fontWeight: T.weight.medium, color: C.text2, lineHeight: 17, marginBottom: 5 },
-  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginBottom: 5 },
-  stars: { fontSize: T.size.xs, color: C.petrol, letterSpacing: -1 },
-  ratingNum: { fontSize: T.size.xs, fontWeight: T.weight.bold, color: C.ink },
-  ratingCount: { fontSize: T.size.xs, color: C.text3 },
-  protectionRow: {
-    marginTop: S.xs,
+  trustBadge: {
+    position: 'absolute',
+    top: S.xs + 2,
+    left: S.xs + 2,
+    maxWidth: '68%',
+    paddingHorizontal: S.xs + 2,
+    paddingVertical: 3,
+    borderRadius: R.pill,
+    backgroundColor: 'rgba(255,253,248,0.94)',
+    borderWidth: 1,
+    borderColor: 'rgba(79, 127, 134, 0.16)',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    minWidth: 0,
+    gap: 3,
+    zIndex: 2,
   },
-  protectionText: {
-    flex: 1,
-    fontSize: T.size.xs,
+  protectedBadge: {
+    backgroundColor: 'rgba(246,251,250,0.94)',
+  },
+  trustBadgeText: {
+    minWidth: 0,
+    flexShrink: 1,
     color: C.petrolDeep,
+    fontSize: T.size.xs - 1,
     fontWeight: T.weight.heavy,
   },
+  info: { padding: S.sm + 2, paddingBottom: S.sm },
+  priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 5, marginBottom: 3 },
+  price: { fontSize: T.size.lg, fontWeight: T.weight.heavy, color: C.ink, letterSpacing: 0 },
+  mrp: { fontSize: T.size.xs, color: C.text4, textDecorationLine: 'line-through' },
+  title: { fontSize: T.size.base - 1, fontWeight: T.weight.medium, color: C.text2, lineHeight: 17, marginBottom: 5 },
+  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginBottom: 5 },
+  stars: { fontSize: T.size.xs, color: C.petrol, letterSpacing: 0 },
+  ratingNum: { fontSize: T.size.xs, fontWeight: T.weight.bold, color: C.ink },
+  ratingCount: { fontSize: T.size.xs, color: C.text3 },
   proofRow: {
-    marginTop: S.xs + 1,
+    marginTop: S.xs,
     flexDirection: 'row',
     gap: 4,
     flexWrap: 'wrap',
   },
   proofChip: {
-    maxWidth: 76,
+    maxWidth: 68,
     paddingHorizontal: S.xs + 2,
-    paddingVertical: 3,
+    paddingVertical: 2,
     borderRadius: R.xs,
     backgroundColor: C.petrolLight,
     borderWidth: 1,
@@ -313,19 +335,13 @@ const s = StyleSheet.create({
     color: C.coralDeep,
     fontWeight: T.weight.heavy,
   },
-  metaRow: { marginTop: S.xs + 2, flexDirection: 'row', alignItems: 'center', gap: 3, flexWrap: 'wrap' },
-  verified: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: C.petrolLight, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5 },
-  verifiedIcon: { fontSize: T.size.xs, fontWeight: '900', color: C.petrol },
-  verifiedText: { fontSize: T.size.xs, fontWeight: T.weight.bold, color: C.petrolText },
+  metaRow: { marginTop: S.xs + 1, flexDirection: 'row', alignItems: 'center', gap: 3, flexWrap: 'wrap' },
   dist: { fontSize: T.size.xs, color: C.text3, fontWeight: T.weight.medium, flexShrink: 1 },
-  metaSep: { fontSize: T.size.xs, color: C.text3 },
-  negoTag: { backgroundColor: C.petrolLight, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5 },
-  negoText: { fontSize: T.size.xs, fontWeight: T.weight.bold, color: C.petrolDeep },
-  actionRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: S.sm + 2 },
+  actionRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: S.sm },
   buySafeBtn: {
     flex: 1.3,
     minWidth: 0,
-    minHeight: 34,
+    minHeight: 31,
     borderRadius: R.pill,
     backgroundColor: C.petrolDeep,
     alignItems: 'center',
@@ -349,7 +365,7 @@ const s = StyleSheet.create({
   offerBtn: {
     flex: 0.82,
     minWidth: 0,
-    minHeight: 34,
+    minHeight: 31,
     borderRadius: R.pill,
     backgroundColor: '#FFF8F3',
     borderWidth: 1,
@@ -368,7 +384,7 @@ const s = StyleSheet.create({
   skelLine2: { width: '85%', height: 10, backgroundColor: C.border2, borderRadius: R.xs - 2, marginTop: 6 },
   skelLine3: { width: '40%', height: 10, backgroundColor: C.border2, borderRadius: R.xs - 2, marginTop: 6 },
   secHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', paddingHorizontal: S.xl, marginTop: S.lg, marginBottom: S.sm },
-  secTitle: { fontSize: T.size.lg, fontWeight: T.weight.bold, color: C.ink, letterSpacing: -0.3 },
+  secTitle: { fontSize: T.size.lg, fontWeight: T.weight.bold, color: C.ink, letterSpacing: 0 },
   secLink: { fontSize: T.size.base - 1, color: C.petrolDeep, fontWeight: T.weight.semi },
   ticker: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: C.petrolLight, paddingHorizontal: S.md, paddingVertical: 6, borderRadius: R.sm, marginHorizontal: S.xl, marginBottom: S.sm },
   tickerDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: C.petrol },

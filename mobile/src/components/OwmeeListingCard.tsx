@@ -12,7 +12,7 @@ import {
   View, Text, StyleSheet, Image, TouchableOpacity, type ImageSourcePropType,
 } from 'react-native';
 import { Heart, MapPin, ShieldCheck } from 'lucide-react-native';
-import { C, T, S, R, Shadow, Home, pickCardBg } from '../utils/tokens';
+import { C, T, S, R, Home, pickCardBg } from '../utils/tokens';
 import type { FeedListing } from '../services/api';
 
 interface Props {
@@ -52,6 +52,13 @@ function formatPrice(n: number | null | undefined): string {
 function formatPriceFull(n: number | null | undefined): string {
   if (n == null) return '—';
   return `₹${Math.round(n).toLocaleString('en-IN')}`;
+}
+
+function formatDistance(km: number | null | undefined): string | null {
+  if (km == null) return null;
+  if (km < 0.1) return 'Nearby';
+  if (km < 1) return `${Math.round(km * 1000)} m`;
+  return `${km.toFixed(1)} km`;
 }
 
 // Trust only fully-qualified https image URLs from a known image host —
@@ -154,10 +161,7 @@ export function FeedCard({
   const bg = pickCardBg(index);
   const fallbackImage = fallbackImageForCategory(listing.category_slug);
 
-  const distanceText =
-    listing.distance_km != null
-      ? `${listing.distance_km.toFixed(1)} km`
-      : null;
+  const distanceText = formatDistance(listing.distance_km);
   const placeText = listing.city || (listing.shipping_eligible ? 'Delivery available' : null);
 
   const showOriginal =
@@ -167,8 +171,9 @@ export function FeedCard({
     listing.discount_pct != null && listing.discount_pct > 0;
 
   const postedAgo = timeAgo(listing.created_at);
+  const metaLine = [distanceText, placeText].filter(Boolean).join(' · ') || postedAgo;
+  const trustBadgeLabel = listing.is_owmee_verified ? 'Owmee verified' : 'Safe pay';
   const trustChips = [
-    listing.is_owmee_verified ? 'Checked' : null,
     listing.warranty_active ? 'Warranty' : null,
     listing.bill_available ? 'Bill' : null,
     listing.box_available ? 'Box' : null,
@@ -199,12 +204,17 @@ export function FeedCard({
           )}
         </TouchableOpacity>
 
-        {listing.is_owmee_verified && (
-          <View style={s.verifiedBadge}>
-            <ShieldCheck size={12} strokeWidth={2.35} color={C.petrolDeep} />
-            <Text style={s.verifiedBadgeText}>Checked</Text>
-          </View>
-        )}
+        <View style={[s.verifiedBadge, !listing.is_owmee_verified && s.protectedBadge]}>
+          <ShieldCheck size={12} strokeWidth={2.35} color={C.petrolDeep} />
+          <Text
+            style={s.verifiedBadgeText}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.78}
+          >
+            {trustBadgeLabel}
+          </Text>
+        </View>
 
         {showDiscount && (
           <View style={s.imageDealBadge}>
@@ -245,11 +255,6 @@ export function FeedCard({
 
         <Text style={s.feedTitle} numberOfLines={2}>{listing.title}</Text>
 
-        <View style={s.protectionRow}>
-          <ShieldCheck size={12} strokeWidth={2.25} color={C.petrolDeep} />
-          <Text style={s.protectionText} numberOfLines={1}>Protected payment</Text>
-        </View>
-
         {trustChips.length > 0 && (
           <View style={s.proofRow}>
             {trustChips.map(chip => (
@@ -260,22 +265,12 @@ export function FeedCard({
           </View>
         )}
 
-        <View style={s.metaRow}>
-          {distanceText && (
-            <>
-              <MapPin size={11} strokeWidth={2.25} color={C.text3} />
-              <Text style={s.metaText} numberOfLines={1}>{distanceText}</Text>
-            </>
-          )}
-          {distanceText && placeText && (
-            <Text style={s.metaSep} allowFontScaling={false}>·</Text>
-          )}
-          {placeText && <Text style={s.metaText} numberOfLines={1}>{placeText}</Text>}
-          {(distanceText || placeText) && postedAgo && (
-            <Text style={s.metaSep} allowFontScaling={false}>·</Text>
-          )}
-          {postedAgo && <Text style={s.metaText} numberOfLines={1}>{postedAgo}</Text>}
-        </View>
+        {metaLine ? (
+          <View style={s.metaRow}>
+            <MapPin size={11} strokeWidth={2.25} color={C.text3} />
+            <Text style={s.metaText} numberOfLines={1}>{metaLine}</Text>
+          </View>
+        ) : null}
       </TouchableOpacity>
 
       <View style={s.feedActionWrap}>
@@ -406,7 +401,7 @@ const s = StyleSheet.create({
   },
   feedImgWrap: {
     width: '100%',
-    aspectRatio: 1,
+    aspectRatio: 4 / 3,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -414,10 +409,11 @@ const s = StyleSheet.create({
   },
   verifiedBadge: {
     position: 'absolute',
-    top: S.sm,
-    left: S.sm,
+    top: S.xs + 2,
+    left: S.xs + 2,
+    maxWidth: '68%',
     paddingHorizontal: S.xs + 2,
-    paddingVertical: 4,
+    paddingVertical: 3,
     borderRadius: R.pill,
     backgroundColor: 'rgba(255, 253, 248, 0.94)',
     borderWidth: 1,
@@ -427,12 +423,12 @@ const s = StyleSheet.create({
     gap: 3,
     zIndex: 2,
   },
-  verifiedShield: {
-    color: C.coralDeep,
-    fontSize: T.size.xs,
-    fontWeight: T.weight.heavy,
+  protectedBadge: {
+    backgroundColor: 'rgba(246, 251, 250, 0.94)',
   },
   verifiedBadgeText: {
+    minWidth: 0,
+    flexShrink: 1,
     color: C.petrolDeep,
     fontSize: T.size.xs - 1,
     fontWeight: T.weight.heavy,
@@ -456,11 +452,11 @@ const s = StyleSheet.create({
   },
   heartBtn: {
     position: 'absolute',
-    top: S.sm,
-    right: S.sm,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    top: S.xs + 2,
+    right: S.xs + 2,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     backgroundColor: 'rgba(255,253,248,0.90)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -471,18 +467,13 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.border,
   },
-  heartGlyph: {
-    fontSize: T.size.md,
-    color: C.text,
-    fontWeight: T.weight.bold,
-  },
   feedMeta: {
     paddingHorizontal: S.sm + 2,
-    paddingTop: S.sm + 2,
-    paddingBottom: S.xs + 1,
+    paddingTop: S.sm,
+    paddingBottom: 2,
   },
   feedTitle: {
-    marginTop: 4,
+    marginTop: 3,
     fontSize: T.size.sm + 1,
     lineHeight: 16,
     fontWeight: T.weight.semi,
@@ -498,7 +489,7 @@ const s = StyleSheet.create({
     fontSize: T.size.lg,
     fontWeight: T.weight.heavy,
     color: C.ink,
-    letterSpacing: -0.2,
+    letterSpacing: 0,
   },
   feedStrike: {
     fontSize: T.size.xs,
@@ -506,61 +497,15 @@ const s = StyleSheet.create({
     color: C.text3,
     textDecorationLine: 'line-through',
   },
-  discountInline: {
-    paddingHorizontal: S.sm,
-    paddingVertical: 3,
-    borderRadius: R.pill,
-    backgroundColor: C.coralLight,
-  },
-  discountInlineText: {
-    fontSize: T.size.xs,
-    fontWeight: T.weight.heavy,
-    color: C.coralDeep,
-  },
-  pillsRow: {
-    marginTop: S.xs,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: S.xs,
-  },
-  pill: {
-    paddingHorizontal: S.xs + 2,
-    paddingVertical: 2,
-    borderRadius: R.xs,
-  },
-  pillGreen: { backgroundColor: C.greenLight },  // conditionBg #EEF8F0
-  pillBlue:  { backgroundColor: C.blueSoft },
-  pillAmber: { backgroundColor: C.amberSoft },
-  pillText: {
-    fontSize: T.size.xs,
-    fontWeight: T.weight.heavy,
-    letterSpacing: 0.1,
-  },
-  pillTextGreen: { color: C.green },  // conditionText #2F6F46
-  pillTextBlue:  { color: C.blueDeep },
-  pillTextAmber: { color: C.amberDeep },
-  protectionRow: {
-    marginTop: S.xs + 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    minWidth: 0,
-  },
-  protectionText: {
-    flex: 1,
-    fontSize: T.size.xs,
-    color: C.petrolDeep,
-    fontWeight: T.weight.heavy,
-  },
   proofRow: {
-    marginTop: S.xs + 1,
+    marginTop: S.xs,
     flexDirection: 'row',
     gap: 4,
   },
   proofChip: {
-    maxWidth: 76,
+    maxWidth: 68,
     paddingHorizontal: S.xs + 2,
-    paddingVertical: 3,
+    paddingVertical: 2,
     borderRadius: R.xs,
     backgroundColor: C.petrolLight,
     borderWidth: 1,
@@ -572,32 +517,16 @@ const s = StyleSheet.create({
     fontWeight: T.weight.medium,
   },
   metaRow: {
-    marginTop: S.xs + 2,
+    marginTop: S.xs + 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
   },
-  metaPin: { fontSize: T.size.xs - 1, color: C.text3 },
   metaText: {
     fontSize: T.size.xs,
     color: C.text3,
     fontWeight: T.weight.medium,
     flexShrink: 1,
-  },
-  metaSep: {
-    fontSize: T.size.xs,
-    color: C.text3,
-    marginHorizontal: 1,
-  },
-  metaShield: {
-    fontSize: T.size.xs,
-    color: Home.verifiedDot,
-    fontWeight: T.weight.heavy,
-  },
-  metaVerified: {
-    fontSize: T.size.xs,
-    color: Home.verifiedText,
-    fontWeight: T.weight.semi,
   },
   feedActions: {
     flexDirection: 'row',
@@ -606,13 +535,13 @@ const s = StyleSheet.create({
   },
   feedActionWrap: {
     paddingHorizontal: S.sm + 2,
-    paddingTop: S.xs + 1,
-    paddingBottom: S.sm + 2,
+    paddingTop: S.xs,
+    paddingBottom: S.sm,
   },
   buySafeBtn: {
     flex: 1.3,
     minWidth: 0,
-    minHeight: 34,
+    minHeight: 31,
     borderRadius: R.pill,
     backgroundColor: C.petrolDeep,
     alignItems: 'center',
@@ -636,7 +565,7 @@ const s = StyleSheet.create({
   offerBtn: {
     flex: 0.82,
     minWidth: 0,
-    minHeight: 34,
+    minHeight: 31,
     borderRadius: R.pill,
     backgroundColor: '#FFF8F3',
     borderWidth: 1,

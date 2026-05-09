@@ -85,9 +85,18 @@ async def _get_user_coords(db, user_id):
 
 
 def _serialize_row(r, distance_km):
+    reviewed_by = (r.get("reviewed_by") or "none").lower()
     is_owmee_verified = bool(
         r.get("seller_kyc_status") == "verified"
-        and r.get("seller_kyc_verified_at_listing_time")
+        or r.get("seller_kyc_verified_at_listing_time")
+        or reviewed_by in {"fe", "ops", "fe_and_ops"}
+    )
+    accessories = (r.get("accessories") or "").lower()
+    warranty_info = (r.get("warranty_info") or "").strip()
+    warranty_lower = warranty_info.lower()
+    warranty_active = bool(
+        warranty_info
+        and not any(token in warranty_lower for token in ("no warranty", "none", "expired"))
     )
     created_at = r.get("created_at")
     return {
@@ -109,6 +118,10 @@ def _serialize_row(r, distance_km):
         "seller_id": str(r["seller_id"]),
         "seller_name": _seller_short_name(r.get("seller_name")),
         "is_owmee_verified": is_owmee_verified,
+        "bill_available": "bill" in accessories or "invoice" in accessories,
+        "box_available": "box" in accessories,
+        "warranty_active": warranty_active,
+        "is_negotiable": bool(r.get("is_negotiable")),
         "distance_km": round(distance_km, 1) if distance_km is not None else None,
     }
 
@@ -132,6 +145,7 @@ async def blockbuster_deals(current_user: OptionalUser, db: DBSession):
             l.id, l.title, l.description, l.price, l.original_price, l.discount_pct,
             l.image_urls, l.thumbnail_url, l.city, l.state, l.created_at,
             l.seller_id, l.seller_kyc_verified_at_listing_time,
+            l.reviewed_by, l.is_negotiable, l.accessories, l.warranty_info,
             ST_Y(l.geo_point::geometry) AS listing_lat,
             ST_X(l.geo_point::geometry) AS listing_lng,
             c.slug AS category_slug, c.shipping_eligible,
@@ -197,6 +211,7 @@ async def explore_feed(
             l.id, l.title, l.description, l.price, l.original_price, l.discount_pct,
             l.image_urls, l.thumbnail_url, l.city, l.state, l.created_at,
             l.seller_id, l.seller_kyc_verified_at_listing_time,
+            l.reviewed_by, l.is_negotiable, l.accessories, l.warranty_info,
             ST_Y(l.geo_point::geometry) AS listing_lat,
             ST_X(l.geo_point::geometry) AS listing_lng,
             c.slug AS category_slug, c.shipping_eligible,
@@ -236,7 +251,12 @@ async def explore_feed(
 
         proximity = (1.0 / (1.0 + d_km / max(radius_km, 1))) if d_km is not None else 0.5
         deal = max(0.0, float(r.get("discount_pct") or 0) / 100.0)
-        trust = 1.0 if r.get("seller_kyc_status") == "verified" else 0.0
+        reviewed_by = (r.get("reviewed_by") or "none").lower()
+        trust = 1.0 if (
+            r.get("seller_kyc_status") == "verified"
+            or r.get("seller_kyc_verified_at_listing_time")
+            or reviewed_by in {"fe", "ops", "fe_and_ops"}
+        ) else 0.0
 
         score = 0.30 * freshness + 0.40 * proximity + 0.20 * deal + 0.10 * trust
         scored.append((score, _serialize_row(dict(r), d_km)))
