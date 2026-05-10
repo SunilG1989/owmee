@@ -5,8 +5,6 @@
  * approved Warm Clay + Deep Teal home direction. The images are framed
  * like small commerce thumbnails instead of loose cutouts.
  *
- * Books has no canonical category_slug in the backend taxonomy yet, so
- * the home screen opens general search instead of leaving the tile dead.
  */
 import React, { useMemo } from 'react';
 import {
@@ -14,6 +12,8 @@ import {
   ImageSourcePropType, useWindowDimensions,
 } from 'react-native';
 import { C, T, S, R, Shadow } from '../utils/tokens';
+
+const SECTION_GAP = 7;
 
 export interface CategoryDef {
   label: string;
@@ -34,11 +34,10 @@ interface Props {
 // mobile/assets/owmee/home/cat-*.webp — placeholders resolve until
 // real assets land. NO emoji fallback per rule 14.
 const DEFAULT_CATEGORIES: CategoryDef[] = [
-  { label: 'Mobile', slug: 'smartphones', image: require('../../assets/owmee/home/cat-mobile-photo-v2.png') },
-  { label: 'Laptop', slug: 'laptops', image: require('../../assets/owmee/home/cat-laptop-photo-v2.png') },
-  { label: 'Home', slug: 'small-appliances', image: require('../../assets/owmee/home/cat-appliances-photo-v2.png') },
-  { label: 'Kids', slug: 'kids-utility', image: require('../../assets/owmee/home/cat-kids-photo-v2.png') },
-  { label: 'Books', slug: null, image: require('../../assets/owmee/home/cat-books-photo-v2.png') },
+  { label: 'Phones', slug: 'smartphones', image: require('../../assets/owmee/home/cat-mobile-photo-v2.png') },
+  { label: 'Laptops', slug: 'laptops', image: require('../../assets/owmee/home/cat-laptop-photo-v2.png') },
+  { label: 'Kids & Toys', slug: 'kids-utility', image: require('../../assets/owmee/home/cat-kids-photo-v2.png') },
+  { label: 'Appliances', slug: 'small-appliances', image: require('../../assets/owmee/home/cat-appliances-photo-v2.png') },
 ];
 
 export default function CategoryRail({
@@ -50,7 +49,7 @@ export default function CategoryRail({
     const available = width - (S.lg * 2) - (gap * (categories.length - 1));
     return Math.floor(available / categories.length);
   }, [categories.length, width]);
-  const iconWidth = Math.max(30, Math.min(36, tileWidth - 18));
+  const iconWidth = Math.max(30, Math.min(38, tileWidth - 18));
 
   return (
     <View style={s.block}>
@@ -81,27 +80,27 @@ export default function CategoryRail({
 
 const s = StyleSheet.create({
   block: {
-    marginTop: S.xs,
+    marginTop: SECTION_GAP,
   },
   row: {
     paddingHorizontal: S.lg,
     gap: S.xs + 2,
   },
   tile: {
-    height: 46,
+    height: 50,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: R.lg - 1,
+    borderRadius: R.md,
     backgroundColor: 'rgba(255, 253, 248, 0.94)',
     borderWidth: 1,
     borderColor: 'rgba(224, 203, 188, 0.9)',
-    paddingTop: 3,
+    paddingTop: 4,
     paddingHorizontal: S.xs,
-    paddingBottom: 3,
+    paddingBottom: 4,
     ...Shadow.subtle,
   },
   iconFrame: {
-    height: 24,
+    height: 25,
     borderRadius: R.sm + 2,
     backgroundColor: '#FFF8EE',
     borderWidth: 1,
@@ -116,11 +115,11 @@ const s = StyleSheet.create({
   },
   label: {
     width: 60,
-    marginTop: 1,
-    fontSize: T.size.xs - 2,
+    marginTop: 2,
+    fontSize: T.size.xs - 1,
     fontWeight: T.weight.medium,
     color: C.text2,
     textAlign: 'center',
-    lineHeight: T.size.xs,
+    lineHeight: T.size.xs + 1,
   },
 });

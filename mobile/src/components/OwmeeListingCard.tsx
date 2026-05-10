@@ -2,7 +2,7 @@
  * OwmeeListingCard — Sprint 8 Phase 1
  *
  * Two variants:
- *   - feed: full card for the masonry explore feed (image + title + price + meta + Owmee Verified badge)
+ *   - feed: horizontal catalog row with image + customer decision details
  *   - deal: compact card for the blockbuster deals strip (image + discount % + title + price + savings)
  *
  * Reads from the FeedListing type returned by /v1/feed/* endpoints.
@@ -11,35 +11,18 @@ import React from 'react';
 import {
   View, Text, StyleSheet, Image, TouchableOpacity, type ImageSourcePropType,
 } from 'react-native';
-import { Heart, MapPin, ShieldCheck } from 'lucide-react-native';
+import { Heart, MapPin, ShieldCheck, UserCheck } from 'lucide-react-native';
 import { C, T, S, R, Home, pickCardBg } from '../utils/tokens';
 import type { FeedListing } from '../services/api';
 
 interface Props {
   listing: FeedListing;
   variant: 'deal' | 'feed';
-  cardWidth?: number;
-  aspectRatio?: number;
   index?: number;
   onPress: () => void;
-  onBuySafely?: () => void;
   onMakeOffer?: () => void;
   onWishlist?: () => void;
   isWishlisted?: boolean;
-}
-
-function timeAgo(iso?: string | null): string {
-  if (!iso) return '';
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return '';
-  const seconds = Math.max(0, (Date.now() - then) / 1000);
-  if (seconds < 3600) {
-    const m = Math.floor(seconds / 60);
-    return m <= 1 ? 'just now' : `${m}m ago`;
-  }
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-  if (seconds < 86400 * 7) return `${Math.floor(seconds / 86400)}d ago`;
-  return `${Math.floor(seconds / (86400 * 7))}w ago`;
 }
 
 function formatPrice(n: number | null | undefined): string {
@@ -97,6 +80,96 @@ function fallbackImageForCategory(slug?: string | null): ImageSourcePropType {
     : FALLBACK_IMAGES.smartphones;
 }
 
+const TITLE_COLORS = [
+  'black', 'blue', 'brown', 'cream', 'gold', 'green', 'grey', 'gray', 'orange',
+  'pink', 'purple', 'red', 'silver', 'white', 'yellow', 'space grey', 'space gray',
+];
+
+function titleCaseWords(value: string): string {
+  return value
+    .split(' ')
+    .filter(Boolean)
+    .map(word => {
+      if (/^[A-Z0-9]+$/.test(word) && word.length <= 4) return word;
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    })
+    .join(' ');
+}
+
+function cleanListingTitle(title: string): string {
+  let cleaned = title
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b(pre owned|preowned|used|excellent condition|good condition)\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (/\bkids?\b/i.test(cleaned) && /\bwater\s+bottle\b/i.test(cleaned)) {
+    cleaned = cleaned
+      .replace(/\bsmash\b/gi, '')
+      .replace(/\bkids?\s+water\s+bottle\b/gi, 'Kids Water Bottle')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  cleaned = titleCaseWords(cleaned || title);
+  const lower = cleaned.toLowerCase();
+  const color = TITLE_COLORS
+    .sort((a, b) => b.length - a.length)
+    .find(c => lower.endsWith(` ${c}`));
+
+  if (!color) return cleaned;
+  const base = cleaned.slice(0, cleaned.length - color.length).trim();
+  const colorLabel = titleCaseWords(color.replace('gray', 'grey'));
+  return base ? `${base} • ${colorLabel}` : cleaned;
+}
+
+function conditionSummary(condition?: string | null): string {
+  const value = (condition || '').toLowerCase().trim();
+  if (!value) return 'Good condition';
+  if (value === 'like_new' || value.includes('like new') || value.includes('flawless')) {
+    return 'Looks well kept';
+  }
+  if (value === 'fair' || value.includes('minor') || value.includes('scratch') || value.includes('dent')) {
+    return 'Minor signs of use';
+  }
+  if (value.includes('working')) return 'Working condition';
+  return 'Good condition';
+}
+
+function pickupSummary(listing: FeedListing): string {
+  const area = (listing.city || '').trim();
+  const nearby = listing.distance_km == null || listing.distance_km <= 15;
+  if (nearby) return area ? `Nearby pickup • ${area}` : 'Nearby pickup';
+  if (listing.shipping_eligible) return 'Safer handover supported';
+  return area ? `Pickup available • ${area}` : 'Pickup available';
+}
+
+function sellerTenureLabel(memberSince?: string | null): string | null {
+  if (!memberSince) return null;
+  const joined = new Date(memberSince).getTime();
+  if (Number.isNaN(joined)) return null;
+
+  const months = Math.max(0, Math.floor((Date.now() - joined) / (86400 * 1000 * 30.4375)));
+  if (months >= 24) return `${Math.floor(months / 12)} years on Owmee`;
+  if (months >= 12) return '1 year on Owmee';
+  if (months >= 2) return `${months} months on Owmee`;
+  return 'New on Owmee';
+}
+
+function sellerTrustSummary(listing: FeedListing): string {
+  const prefix = 'Verified seller';
+  const tenure = sellerTenureLabel(listing.seller_member_since);
+  if (tenure) return `${prefix} • ${tenure}`;
+
+  const completedDeals = Math.max(0, listing.seller_completed_deals || 0);
+  if (completedDeals > 0) {
+    const itemWord = completedDeals === 1 ? 'item' : 'items';
+    return `${prefix} • ${completedDeals} ${itemWord} sold`;
+  }
+
+  return `${prefix} • New on Owmee`;
+}
+
 // ── DEAL VARIANT ─────────────────────────────────────────────────────────────
 
 export function DealCard({ listing, onPress, index = 0 }: Props) {
@@ -152,43 +225,30 @@ export function DealCard({ listing, onPress, index = 0 }: Props) {
   );
 }
 
-// ── FEED VARIANT (masonry) ───────────────────────────────────────────────────
+// ── FEED VARIANT (horizontal catalog row) ────────────────────────────────────
 
 export function FeedCard({
-  listing, onPress, onBuySafely, onMakeOffer, onWishlist, isWishlisted = false, cardWidth, index = 0,
+  listing, onPress, onMakeOffer, onWishlist, isWishlisted = false, index = 0,
 }: Props) {
   const img = firstImage(listing);
   const bg = pickCardBg(index);
   const fallbackImage = fallbackImageForCategory(listing.category_slug);
 
-  const distanceText = formatDistance(listing.distance_km);
-  const placeText = listing.city || (listing.shipping_eligible ? 'Delivery available' : null);
-
   const showOriginal =
     listing.original_price != null && listing.original_price > listing.price;
 
-  const showDiscount =
-    listing.discount_pct != null && listing.discount_pct > 0;
+  const displayTitle = cleanListingTitle(listing.title);
+  const conditionLine = conditionSummary(listing.condition);
+  const sellerTrustLine = sellerTrustSummary(listing);
+  const pickupLine = pickupSummary(listing);
 
-  const postedAgo = timeAgo(listing.created_at);
-  const metaLine = [distanceText, placeText].filter(Boolean).join(' · ') || postedAgo;
-  const isVerified = Boolean(listing.is_owmee_verified);
-  const trustChips = [
-    listing.warranty_active ? 'Warranty' : null,
-    listing.bill_available ? 'Bill' : null,
-    listing.box_available ? 'Box' : null,
-    listing.is_negotiable ? 'Offer ok' : null,
-  ].filter(Boolean).slice(0, 2) as string[];
-
-  const handleBuySafely = () => {
-    (onBuySafely || onPress)();
-  };
+  const handleViewDetails = () => onPress();
   const handleMakeOffer = () => {
     (onMakeOffer || onPress)();
   };
 
   return (
-    <View style={[s.feedCard, cardWidth ? { width: cardWidth } : null]}>
+    <View style={s.feedCard}>
       <View style={[s.feedImgWrap, { backgroundColor: bg }]}>
         <TouchableOpacity
           activeOpacity={0.9}
@@ -197,23 +257,22 @@ export function FeedCard({
           accessibilityRole="button"
           accessibilityLabel={`Open ${listing.title}`}
         >
-          {img ? (
-            <Image source={{ uri: img }} style={s.imgFill} resizeMode="cover" />
-          ) : (
-            <Image source={fallbackImage} style={s.imgFill} resizeMode="cover" />
-          )}
+          <View style={s.imageStage}>
+            {img ? (
+              <Image source={{ uri: img }} style={s.feedImage} resizeMode="cover" resizeMethod="resize" />
+            ) : (
+              <Image source={fallbackImage} style={s.feedImage} resizeMode="cover" resizeMethod="resize" />
+            )}
+            <View pointerEvents="none" style={s.imageWash} />
+          </View>
         </TouchableOpacity>
 
-        <View style={[s.verifiedBadge, !isVerified && s.safeIconBadge]}>
-          <ShieldCheck size={12} strokeWidth={2.35} color={C.petrolDeep} />
-          {isVerified ? (
-            <Text style={s.verifiedBadgeText} numberOfLines={1}>
-              Verified
-            </Text>
-          ) : null}
+        <View style={s.imageTrustBadge}>
+          <ShieldCheck size={11} strokeWidth={2.35} color={C.petrolDeep} />
+          <Text style={s.imageTrustText} numberOfLines={1}>Owmee verified</Text>
         </View>
 
-        {showDiscount && (
+        {listing.discount_pct != null && listing.discount_pct > 0 && (
           <View style={s.imageDealBadge}>
             <Text style={s.imageDealText}>{Math.round(listing.discount_pct!)}% off</Text>
           </View>
@@ -236,67 +295,84 @@ export function FeedCard({
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity
-        activeOpacity={0.9}
-        onPress={onPress}
-        style={s.feedMeta}
-        accessibilityRole="button"
-        accessibilityLabel={`Open ${listing.title}`}
-      >
-        <View style={s.priceBlock}>
-          <Text style={s.feedPrice}>{formatPriceFull(listing.price)}</Text>
-          {showOriginal && (
-            <Text style={s.feedStrike}>{formatPriceFull(listing.original_price)}</Text>
-          )}
-        </View>
+      <View style={s.feedInfo}>
+        <TouchableOpacity
+          activeOpacity={0.9}
+          onPress={onPress}
+          style={s.feedMeta}
+          accessibilityRole="button"
+          accessibilityLabel={`Open ${listing.title}`}
+        >
+          <Text style={s.feedTitle} numberOfLines={2}>{displayTitle}</Text>
 
-        <Text style={s.feedTitle} numberOfLines={2}>{listing.title}</Text>
-
-        {trustChips.length > 0 && (
-          <View style={s.proofRow}>
-            {trustChips.map(chip => (
-              <View key={chip} style={s.proofChip}>
-                <Text style={s.proofText} numberOfLines={1}>{chip}</Text>
-              </View>
-            ))}
+          <View style={s.priceBlock}>
+            <Text style={s.feedPrice}>{formatPriceFull(listing.price)}</Text>
+            {showOriginal && (
+              <Text style={s.feedStrike}>{formatPriceFull(listing.original_price)}</Text>
+            )}
           </View>
-        )}
 
-        {metaLine ? (
-          <View style={s.metaRow}>
-            <MapPin size={11} strokeWidth={2.25} color={C.text3} />
-            <Text style={s.metaText} numberOfLines={1}>{metaLine}</Text>
-          </View>
-        ) : null}
-      </TouchableOpacity>
+          <View style={s.detailRows}>
+            <Text style={s.conditionText} numberOfLines={1}>{conditionLine}</Text>
 
-      <View style={s.feedActionWrap}>
-        <View style={s.feedActions}>
-          <TouchableOpacity
-            activeOpacity={0.84}
-            onPress={handleBuySafely}
-            style={s.buySafeBtn}
-            accessibilityRole="button"
-            accessibilityLabel={`Buy ${listing.title} safely`}
-          >
-            <View style={s.buySafeContent}>
-              <ShieldCheck size={14} strokeWidth={2.4} color={C.white} />
-              <Text style={s.buySafeText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82}>
-                Buy safely
+            <View style={s.metaRow}>
+              <UserCheck size={12} strokeWidth={2.25} color={C.petrolText} />
+              <Text
+                style={[s.metaText, s.sellerTrustText]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.82}
+              >
+                {sellerTrustLine}
               </Text>
             </View>
-          </TouchableOpacity>
-          <TouchableOpacity
-            activeOpacity={0.84}
-            onPress={handleMakeOffer}
-            style={s.offerBtn}
-            accessibilityRole="button"
-            accessibilityLabel={`Make an offer for ${listing.title}`}
-          >
-            <Text style={s.offerText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82}>
-              Offer
-            </Text>
-          </TouchableOpacity>
+
+            <View style={s.metaRow}>
+              <ShieldCheck size={12} strokeWidth={2.25} color={C.petrolText} />
+              <Text style={s.metaText} numberOfLines={1}>Protected payment available</Text>
+            </View>
+
+            <View style={s.metaRow}>
+              <MapPin size={12} strokeWidth={2.25} color={C.text3} />
+              <Text
+                style={s.metaText}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.84}
+              >
+                {pickupLine}
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+
+        <View style={s.feedActionWrap}>
+          <View style={s.feedActions}>
+            <TouchableOpacity
+              activeOpacity={0.84}
+              onPress={handleViewDetails}
+              style={s.buySafeBtn}
+              accessibilityRole="button"
+              accessibilityLabel={`Buy ${listing.title} safely`}
+            >
+              <View style={s.buySafeContent}>
+                <Text style={s.buySafeText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82}>
+                  Buy safely
+                </Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              activeOpacity={0.84}
+              onPress={handleMakeOffer}
+              style={s.offerBtn}
+              accessibilityRole="button"
+              accessibilityLabel={`Make an offer for ${listing.title}`}
+            >
+              <Text style={s.offerText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82}>
+                Make offer
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </View>
@@ -313,7 +389,26 @@ export default function OwmeeListingCard(props: Props) {
 const s = StyleSheet.create({
   // shared
   imgFill: { width: '100%', height: '100%' },
-  imagePressTarget: { ...StyleSheet.absoluteFillObject },
+  imagePressTarget: {
+    ...StyleSheet.absoluteFillObject,
+    padding: S.xs + 1,
+  },
+  imageStage: {
+    flex: 1,
+    borderRadius: R.md - 2,
+    overflow: 'hidden',
+    backgroundColor: '#F7EFE7',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 253, 248, 0.74)',
+  },
+  feedImage: {
+    width: '100%',
+    height: '100%',
+  },
+  imageWash: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255, 253, 248, 0.035)',
+  },
   // deal variant
   dealCard: {
     width: 152,
@@ -384,12 +479,15 @@ const s = StyleSheet.create({
 
   // feed variant
   feedCard: {
+    marginHorizontal: S.md,
+    flexDirection: 'row',
+    minHeight: 172,
     backgroundColor: 'rgba(255,253,248,0.98)',
     borderRadius: R.md,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(224, 203, 188, 0.72)',
-    marginBottom: S.sm + 2,
+    marginBottom: S.xs + 2,
     shadowColor: '#172033',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.045,
@@ -397,47 +495,19 @@ const s = StyleSheet.create({
     elevation: 1,
   },
   feedImgWrap: {
-    width: '100%',
-    aspectRatio: 4 / 3,
+    width: 132,
+    alignSelf: 'stretch',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
     position: 'relative',
   },
-  verifiedBadge: {
-    position: 'absolute',
-    top: S.xs + 2,
-    left: S.xs + 2,
-    paddingHorizontal: S.xs + 2,
-    paddingVertical: 3,
-    borderRadius: R.pill,
-    backgroundColor: 'rgba(255, 253, 248, 0.94)',
-    borderWidth: 1,
-    borderColor: 'rgba(79, 127, 134, 0.16)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    zIndex: 2,
-  },
-  safeIconBadge: {
-    backgroundColor: 'rgba(246, 251, 250, 0.94)',
-    width: 30,
-    height: 30,
-    paddingHorizontal: 0,
-    paddingVertical: 0,
-    justifyContent: 'center',
-  },
-  verifiedBadgeText: {
-    color: C.petrolDeep,
-    fontSize: T.size.xs - 1,
-    fontWeight: T.weight.heavy,
-  },
   imageDealBadge: {
     position: 'absolute',
-    left: S.sm,
-    bottom: S.sm,
-    paddingHorizontal: S.sm,
-    paddingVertical: 4,
+    left: S.sm + 2,
+    bottom: S.sm + 2,
+    paddingHorizontal: S.xs + 2,
+    paddingVertical: 3,
     borderRadius: R.pill,
     backgroundColor: 'rgba(251, 233, 226, 0.96)',
     borderWidth: 1,
@@ -449,13 +519,35 @@ const s = StyleSheet.create({
     fontWeight: T.weight.heavy,
     color: C.coralDeep,
   },
+  imageTrustBadge: {
+    position: 'absolute',
+    top: S.sm,
+    left: S.sm,
+    maxWidth: 104,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: S.xs + 1,
+    paddingVertical: 3,
+    borderRadius: R.pill,
+    backgroundColor: 'rgba(255, 253, 248, 0.94)',
+    borderWidth: 1,
+    borderColor: 'rgba(79, 127, 134, 0.18)',
+    zIndex: 2,
+  },
+  imageTrustText: {
+    fontSize: T.size.xs - 2,
+    lineHeight: T.size.xs + 1,
+    color: C.petrolDeep,
+    fontWeight: T.weight.heavy,
+  },
   heartBtn: {
     position: 'absolute',
-    top: S.xs + 2,
-    right: S.xs + 2,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    bottom: S.sm,
+    right: S.sm,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: 'rgba(255,253,248,0.90)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -466,26 +558,33 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.border,
   },
+  feedInfo: {
+    flex: 1,
+    minWidth: 0,
+    paddingTop: S.sm + 2,
+    paddingRight: S.sm + 2,
+    paddingBottom: S.sm + 2,
+    paddingLeft: S.sm + 2,
+  },
   feedMeta: {
-    paddingHorizontal: S.sm + 2,
-    paddingTop: S.sm,
-    paddingBottom: 2,
+    flex: 1,
+    minWidth: 0,
   },
   feedTitle: {
-    marginTop: 3,
-    fontSize: T.size.sm + 1,
-    lineHeight: 16,
-    fontWeight: T.weight.semi,
-    color: C.text2,
+    fontSize: T.size.base,
+    lineHeight: 17,
+    fontWeight: T.weight.heavy,
+    color: C.ink,
   },
   priceBlock: {
+    marginTop: S.xs,
     flexDirection: 'row',
     alignItems: 'baseline',
     flexWrap: 'wrap',
     gap: 5,
   },
   feedPrice: {
-    fontSize: T.size.lg,
+    fontSize: T.size.md,
     fontWeight: T.weight.heavy,
     color: C.ink,
     letterSpacing: 0,
@@ -496,27 +595,17 @@ const s = StyleSheet.create({
     color: C.text3,
     textDecorationLine: 'line-through',
   },
-  proofRow: {
-    marginTop: S.xs,
-    flexDirection: 'row',
-    gap: 4,
+  detailRows: {
+    marginTop: 3,
+    gap: 1,
   },
-  proofChip: {
-    maxWidth: 68,
-    paddingHorizontal: S.xs + 2,
-    paddingVertical: 2,
-    borderRadius: R.xs,
-    backgroundColor: C.petrolLight,
-    borderWidth: 1,
-    borderColor: 'rgba(79, 127, 134, 0.12)',
-  },
-  proofText: {
-    fontSize: T.size.xs - 1,
-    color: C.petrolText,
-    fontWeight: T.weight.medium,
+  conditionText: {
+    fontSize: T.size.xs + 1,
+    lineHeight: T.size.xs + 3,
+    color: C.text2,
+    fontWeight: T.weight.semi,
   },
   metaRow: {
-    marginTop: S.xs + 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
@@ -527,20 +616,22 @@ const s = StyleSheet.create({
     fontWeight: T.weight.medium,
     flexShrink: 1,
   },
+  sellerTrustText: {
+    color: C.petrolText,
+    fontWeight: T.weight.semi,
+  },
   feedActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
   feedActionWrap: {
-    paddingHorizontal: S.sm + 2,
-    paddingTop: S.xs,
-    paddingBottom: S.sm,
+    marginTop: S.xs + 3,
   },
   buySafeBtn: {
-    flex: 1.3,
+    flex: 1.38,
     minWidth: 0,
-    minHeight: 31,
+    minHeight: 30,
     borderRadius: R.pill,
     backgroundColor: C.petrolDeep,
     alignItems: 'center',
@@ -558,13 +649,13 @@ const s = StyleSheet.create({
   },
   buySafeText: {
     color: C.white,
-    fontSize: T.size.xs + 1,
+    fontSize: T.size.sm,
     fontWeight: T.weight.heavy,
   },
   offerBtn: {
     flex: 0.82,
     minWidth: 0,
-    minHeight: 31,
+    minHeight: 30,
     borderRadius: R.pill,
     backgroundColor: '#FFF8F3',
     borderWidth: 1,
@@ -575,7 +666,7 @@ const s = StyleSheet.create({
   },
   offerText: {
     color: C.coralDeep,
-    fontSize: T.size.xs + 1,
+    fontSize: T.size.sm,
     fontWeight: T.weight.heavy,
   },
 });

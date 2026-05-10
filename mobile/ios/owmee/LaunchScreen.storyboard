@@ -8,7 +8,6 @@
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <scenes>
-        <!--View Controller-->
         <scene sceneID="EHf-IW-A2E">
             <objects>
                 <viewController id="01J-lp-oVM" sceneMemberID="viewController">
@@ -16,27 +15,18 @@
                         <rect key="frame" x="0.0" y="0.0" width="390" height="844"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
-                            <label opaque="NO" clipsSubviews="YES" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="owmee" textAlignment="center" lineBreakMode="middleTruncation" baselineAdjustment="alignBaselines" minimumFontSize="18" translatesAutoresizingMaskIntoConstraints="NO" id="GJd-Yh-RWb">
-                                <rect key="frame" x="0.0" y="382" width="390" height="58"/>
-                                <fontDescription key="fontDescription" type="boldSystem" pointSize="48"/>
-                                <color key="textColor" red="0.847" green="0.541" blue="0.212" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
-                                <nil key="highlightedColor"/>
-                            </label>
-                            <label opaque="NO" clipsSubviews="YES" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="trusted resale, hyperlocal" textAlignment="center" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" minimumFontSize="9" translatesAutoresizingMaskIntoConstraints="NO" id="MN2-I3-ftu">
-                                <rect key="frame" x="0.0" y="446" width="390" height="20"/>
-                                <fontDescription key="fontDescription" type="system" pointSize="15"/>
-                                <color key="textColor" red="0.541" green="0.494" blue="0.420" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
-                                <nil key="highlightedColor"/>
-                            </label>
+                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" image="OwmeeLaunchMark" translatesAutoresizingMaskIntoConstraints="NO" id="McG-fB-Vnm">
+                                <rect key="frame" x="129" y="356" width="132" height="132"/>
+                                <constraints>
+                                    <constraint firstAttribute="width" constant="132" id="SgZ-pq-py7"/>
+                                    <constraint firstAttribute="height" constant="132" id="BSm-oW-QdK"/>
+                                </constraints>
+                            </imageView>
                         </subviews>
-                        <color key="backgroundColor" red="0.980" green="0.965" blue="0.933" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+                        <color key="backgroundColor" red="1" green="0.973" blue="0.933" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                         <constraints>
-                            <constraint firstItem="GJd-Yh-RWb" firstAttribute="centerY" secondItem="Ze5-6b-2t3" secondAttribute="centerY" id="moa-c2-u7t"/>
-                            <constraint firstItem="GJd-Yh-RWb" firstAttribute="leading" secondItem="Bcu-3y-fUS" secondAttribute="leading" id="x7j-FC-K8j"/>
-                            <constraint firstItem="GJd-Yh-RWb" firstAttribute="trailing" secondItem="Bcu-3y-fUS" secondAttribute="trailing" id="Q3B-4B-g5h"/>
-                            <constraint firstItem="MN2-I3-ftu" firstAttribute="top" secondItem="GJd-Yh-RWb" secondAttribute="bottom" constant="6" id="OZV-Vh-mqD"/>
-                            <constraint firstItem="MN2-I3-ftu" firstAttribute="leading" secondItem="Bcu-3y-fUS" secondAttribute="leading" id="i1E-0Y-4RG"/>
-                            <constraint firstItem="MN2-I3-ftu" firstAttribute="trailing" secondItem="Bcu-3y-fUS" secondAttribute="trailing" id="akx-eg-2ui"/>
+                            <constraint firstItem="McG-fB-Vnm" firstAttribute="centerX" secondItem="Ze5-6b-2t3" secondAttribute="centerX" id="FHR-tp-0XD"/>
+                            <constraint firstItem="McG-fB-Vnm" firstAttribute="centerY" secondItem="Ze5-6b-2t3" secondAttribute="centerY" id="Oac-wc-VPT"/>
                         </constraints>
                         <viewLayoutGuide key="safeArea" id="Bcu-3y-fUS"/>
                     </view>
@@ -46,4 +36,7 @@
             <point key="canvasLocation" x="52" y="375"/>
         </scene>
     </scenes>
+    <resources>
+        <image name="OwmeeLaunchMark" width="132" height="132"/>
+    </resources>
 </document>

@@ -1,15 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Native launch screen drawable. Shown instantly on cold start
-    before the React Native runtime mounts (same pattern as Amazon /
-    Meesho / Flipkart). MainActivity swaps back to AppTheme in
-    onCreate so the splash isn't redrawn on every config change.
-
-    Logo is rendered as a vector text drawable rather than a bitmap
-    so the splash stays sharp at every density without shipping
-    eight PNGs. Replace this with a real logo bitmap once the brand
-    asset is finalised — same drawable name, different contents.
+    Native cold-start surface. Keep it brand-only: app icon, warm canvas,
+    no slogans. The React splash uses the same visual system once mounted.
 -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@color/splash_bg" />
+    <item android:drawable="@drawable/owmee_splash_icon" />
 </layer-list>

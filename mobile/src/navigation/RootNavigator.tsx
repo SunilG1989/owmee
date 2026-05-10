@@ -322,6 +322,7 @@ function FeRootStack() {
 export default function RootNavigator() {
   const { hydrate, hydrated, isAuthenticated, role } = useAuthStore();
   const [onboardingSeen, setOnboardingSeen] = useState<boolean | null>(null);
+  const [showSplash, setShowSplash] = useState(true);
   // Minimum-display floor so the splash doesn't flash on fast devices —
   // same 700ms guard Amazon / Meesho use to keep brand perception
   // consistent regardless of cold-start speed.
@@ -338,6 +339,8 @@ export default function RootNavigator() {
       setOnboardingSeen(!!onb);
     });
   }, [hydrate]);
+
+  const appReady = hydrated && onboardingSeen !== null && splashMinElapsed;
 
   useEffect(() => {
     if (!hydrated || !isAuthenticated) return;
@@ -366,79 +369,94 @@ export default function RootNavigator() {
     };
   }, [hydrated, isAuthenticated]);
 
-  if (!hydrated || onboardingSeen === null || !splashMinElapsed) {
+  if (!appReady) {
     return <SplashScreen />;
   }
 
+  const splashOverlay = showSplash ? (
+    <SplashScreen hide onFadeOut={() => setShowSplash(false)} />
+  ) : null;
+
   // ── FE branch: if logged-in user has FE role, show the FE app ──────────────
   if (isAuthenticated && role === 'fe') {
-    return <FeRootStack />;
+    return (
+      <>
+        <FeRootStack />
+        {splashOverlay}
+      </>
+    );
   }
 
   if (!onboardingSeen) {
     return (
-      <OnboardingScreen
-        navigation={{
-          navigate: () => {
-            AsyncStorage.setItem(ONBOARDING_SEEN_KEY, 'true');
-            setOnboardingSeen(true);
-          },
-        }}
-      />
+      <>
+        <OnboardingScreen
+          navigation={{
+            navigate: () => {
+              AsyncStorage.setItem(ONBOARDING_SEEN_KEY, 'true');
+              setOnboardingSeen(true);
+            },
+          }}
+        />
+        {splashOverlay}
+      </>
     );
   }
 
   return (
-    <NavigationContainer>
-      <RootStack.Navigator screenOptions={{ headerShown: false }}>
-        <RootStack.Screen name="MainTabs" component={MainTabsWithAddressGate} />
-        <RootStack.Screen name="ListingDetail" component={ListingDetailScreen} options={{ animation: 'slide_from_right' }} />
-        <RootStack.Screen name="TransactionDetail" component={TransactionDetailScreen} options={{ animation: 'slide_from_right' }} />
-        <RootStack.Screen name="KidsSection" component={KidsSectionScreen} options={{ animation: 'slide_from_right' }} />
-        <RootStack.Screen name="AuthFlow" component={AuthFlowNavigator} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
-        <RootStack.Screen name="KycFlow" component={KycFlowScreen} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
-        <RootStack.Screen name="KycRequiredForAction" component={KycRequiredForActionScreen} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
-        {/* Profile sub-screens */}
-        <RootStack.Screen name="MyListings" component={MyListingsScreen} options={{ animation: 'slide_from_right' }} />
-        <RootStack.Screen name="MyFeVisits" component={MyFeVisitsScreen} options={{ animation: 'slide_from_right' }} />
-        <RootStack.Screen name="SavedItems" component={WishlistScreen} options={{ animation: 'slide_from_right' }} />
-        <RootStack.Screen name="TransactionList" component={TransactionListScreen} options={{ animation: 'slide_from_right' }} />
-        <RootStack.Screen name="EditProfile" component={EditProfileScreen} options={{ animation: 'slide_from_right' }} />
-        <RootStack.Screen name="Notifications" component={NotificationsScreen} options={{ animation: 'slide_from_right' }} />
-        <RootStack.Screen name="SellerProfile" component={SellerProfileScreen} options={{ animation: 'slide_from_right' }} />
-        {/* Purchase flow */}
-        <RootStack.Screen name="Checkout" component={CheckoutScreen} options={{ animation: 'slide_from_right' }} />
-        <RootStack.Screen name="OrderConfirmation" component={OrderConfirmationScreen} options={{ animation: 'fade', gestureEnabled: false }} />
-        {/* Concierge master spec — Phase 1 booking flow */}
-        <RootStack.Screen name="SellModeFork" component={SellModeForkScreen} options={{ animation: 'slide_from_right' }} />
-        <RootStack.Screen name="ConciergeBooking" component={ConciergeBookingScreen} options={{ animation: 'slide_from_right' }} />
-        <RootStack.Screen name="ConciergeBookingConfirmed" component={ConciergeBookingConfirmedScreen} options={{ animation: 'fade', gestureEnabled: false }} />
-        <RootStack.Screen name="MyConcierge" component={MyConciergeScreen} options={{ animation: 'slide_from_right' }} />
-        {/* Concierge Phase 2 — trust theater deep links */}
-        <RootStack.Screen name="VisitDetail" component={VisitDetailScreen} options={{ animation: 'slide_from_right' }} />
-        <RootStack.Screen name="ArrivalVerification" component={ArrivalVerificationScreen} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
-        {/* Concierge Phase 5 — seller NPS (deep-linked from notification) */}
-        <RootStack.Screen name="ConciergeNps" component={NpsScreen} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
-        <RootStack.Screen name="FeVisitConfirmation" component={FeVisitConfirmationScreen} options={{ animation: 'slide_from_right' }} />
-        <RootStack.Screen name="VerificationWall" component={VerificationWallScreen} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
-        {/* Sprint 7 / Phase 1: Community proof */}
-        <RootStack.Screen name="CommunityProof" component={CommunityProofScreen} options={{ animation: 'slide_from_right' }} />
-        {/* Sprint 6b: My Offers (Received / Sent / Deals) */}
-        <RootStack.Screen name="MyOffers" component={OffersScreen} options={{ animation: 'slide_from_right' }} />
-        {/* Sprint 8 / Phase 2: AI-Assisted Listing — SPRINT8_PHASE2_AI */}
-        <RootStack.Screen name="AIListingCamera" component={AIListingCameraScreen} options={{ animation: 'slide_from_bottom', presentation: 'fullScreenModal' }} />
-        <RootStack.Screen name="AIListingSuggest" component={AIListingSuggestScreen} options={{ animation: 'slide_from_right' }} />
-        <RootStack.Screen name="AIListingIdentifier" component={AIListingIdentifierScreen} options={{ animation: 'slide_from_right' }} />
-        <RootStack.Screen name="EditListing" component={EditListingScreen} options={{ animation: 'slide_from_right' }} />
-        {/* Manual-entry listing form — fallback when AI can't run. */}
-        <RootStack.Screen name="CreateListing" component={CreateListingScreen} options={{ animation: 'slide_from_right' }} />
-        {/* Address PRD: 3-screen flow + picker */}
-        <RootStack.Screen name="LocationDetect" component={LocationDetectScreen} options={{ animation: 'slide_from_right' }} />
-        <RootStack.Screen name="LocationMap" component={LocationMapScreen} options={{ animation: 'slide_from_right' }} />
-        <RootStack.Screen name="AddressDetails" component={AddressDetailsScreen} options={{ animation: 'slide_from_right' }} />
-        <RootStack.Screen name="AddressPicker" component={AddressPickerScreen} options={{ animation: 'slide_from_right' }} />
-      </RootStack.Navigator>
-    </NavigationContainer>
+    <>
+      <NavigationContainer>
+        <RootStack.Navigator screenOptions={{ headerShown: false }}>
+          <RootStack.Screen name="MainTabs" component={MainTabsWithAddressGate} />
+          <RootStack.Screen name="ListingDetail" component={ListingDetailScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="TransactionDetail" component={TransactionDetailScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="KidsSection" component={KidsSectionScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="AuthFlow" component={AuthFlowNavigator} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
+          <RootStack.Screen name="KycFlow" component={KycFlowScreen} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
+          <RootStack.Screen name="KycRequiredForAction" component={KycRequiredForActionScreen} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
+          {/* Profile sub-screens */}
+          <RootStack.Screen name="MyListings" component={MyListingsScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="MyFeVisits" component={MyFeVisitsScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="SavedItems" component={WishlistScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="TransactionList" component={TransactionListScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="EditProfile" component={EditProfileScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="Notifications" component={NotificationsScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="SellerProfile" component={SellerProfileScreen} options={{ animation: 'slide_from_right' }} />
+          {/* Purchase flow */}
+          <RootStack.Screen name="Checkout" component={CheckoutScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="OrderConfirmation" component={OrderConfirmationScreen} options={{ animation: 'fade', gestureEnabled: false }} />
+          {/* Concierge master spec — Phase 1 booking flow */}
+          <RootStack.Screen name="SellModeFork" component={SellModeForkScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="ConciergeBooking" component={ConciergeBookingScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="ConciergeBookingConfirmed" component={ConciergeBookingConfirmedScreen} options={{ animation: 'fade', gestureEnabled: false }} />
+          <RootStack.Screen name="MyConcierge" component={MyConciergeScreen} options={{ animation: 'slide_from_right' }} />
+          {/* Concierge Phase 2 — trust theater deep links */}
+          <RootStack.Screen name="VisitDetail" component={VisitDetailScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="ArrivalVerification" component={ArrivalVerificationScreen} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
+          {/* Concierge Phase 5 — seller NPS (deep-linked from notification) */}
+          <RootStack.Screen name="ConciergeNps" component={NpsScreen} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
+          <RootStack.Screen name="FeVisitConfirmation" component={FeVisitConfirmationScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="VerificationWall" component={VerificationWallScreen} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
+          {/* Sprint 7 / Phase 1: Community proof */}
+          <RootStack.Screen name="CommunityProof" component={CommunityProofScreen} options={{ animation: 'slide_from_right' }} />
+          {/* Sprint 6b: My Offers (Received / Sent / Deals) */}
+          <RootStack.Screen name="MyOffers" component={OffersScreen} options={{ animation: 'slide_from_right' }} />
+          {/* Sprint 8 / Phase 2: AI-Assisted Listing — SPRINT8_PHASE2_AI */}
+          <RootStack.Screen name="AIListingCamera" component={AIListingCameraScreen} options={{ animation: 'slide_from_bottom', presentation: 'fullScreenModal' }} />
+          <RootStack.Screen name="AIListingSuggest" component={AIListingSuggestScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="AIListingIdentifier" component={AIListingIdentifierScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="EditListing" component={EditListingScreen} options={{ animation: 'slide_from_right' }} />
+          {/* Manual-entry listing form — fallback when AI can't run. */}
+          <RootStack.Screen name="CreateListing" component={CreateListingScreen} options={{ animation: 'slide_from_right' }} />
+          {/* Address PRD: 3-screen flow + picker */}
+          <RootStack.Screen name="LocationDetect" component={LocationDetectScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="LocationMap" component={LocationMapScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="AddressDetails" component={AddressDetailsScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="AddressPicker" component={AddressPickerScreen} options={{ animation: 'slide_from_right' }} />
+        </RootStack.Navigator>
+      </NavigationContainer>
+      {splashOverlay}
+    </>
   );
 }
 

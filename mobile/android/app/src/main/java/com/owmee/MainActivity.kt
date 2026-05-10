@@ -13,12 +13,9 @@ class MainActivity : ReactActivity() {
   override fun createReactActivityDelegate(): ReactActivityDelegate =
       DefaultReactActivityDelegate(this, mainComponentName, fabricEnabled)
 
-  // Swap the cold-start LaunchTheme (cream window background) for the
-  // regular AppTheme as soon as the activity is alive. The JS side then
-  // shows the branded SplashScreen overlay until bootstrap completes —
-  // same handoff pattern as Amazon / Meesho / Flipkart.
+  // Keep LaunchTheme through the native-to-React handoff so Android never
+  // shows a blank frame between the native icon and the JS brand splash.
   override fun onCreate(savedInstanceState: Bundle?) {
-    setTheme(R.style.AppTheme)
     super.onCreate(null)
   }
 }

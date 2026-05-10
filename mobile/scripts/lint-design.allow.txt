@@ -56,6 +56,9 @@ src/screens/TransactionDetailScreen.tsx
 src/screens/auth/LocationPickerScreen.tsx
 src/screens/auth/VerificationWallScreen.tsx
 src/screens/auth/address/AddressDetailsScreen.tsx
+# LocationMapScreen owns floating map controls, fallback-map nudges, and
+# live-map overlays that are not button-shaped design-system primitives.
+src/screens/auth/address/LocationMapScreen.tsx
 
 # ── Community: 6 step-form TOs (tabs, upload tile, etc) ──────────
 src/screens/community/CommunityProofScreen.tsx

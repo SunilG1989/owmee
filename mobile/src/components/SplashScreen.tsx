@@ -6,13 +6,16 @@
  * This component takes over once React mounts and stays visible until
  * `RootNavigator` finishes hydrating auth + location, then fades out.
  *
- * Same handoff pattern as Amazon, Meesho, Flipkart: native cold-start
- * background → JS branded splash → first content screen, with no
- * white-flash between the two.
+ * Commerce-app rule: splash is identity, not marketing. Keep it quiet,
+ * centered and fast; the home screen does the explaining.
  */
 import React, { useEffect, useRef } from 'react';
-import { Animated, StyleSheet, Text, View } from 'react-native';
-import { C, T } from '../utils/tokens';
+import {
+  Animated, Image, StyleSheet, View,
+} from 'react-native';
+import { C, R } from '../utils/tokens';
+
+const SPLASH_MARK = require('../../assets/owmee/brand/owmee-splash-icon-approved.png');
 
 interface Props {
   /** When true, fades out and unmounts. Defaults to false (visible). */
@@ -23,21 +26,12 @@ interface Props {
 
 export default function SplashScreen({ hide = false, onFadeOut }: Props) {
   const fade = useRef(new Animated.Value(1)).current;
-  const lift = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.timing(lift, {
-      toValue: 1,
-      duration: 320,
-      useNativeDriver: true,
-    }).start();
-  }, [lift]);
 
   useEffect(() => {
     if (!hide) return;
     Animated.timing(fade, {
       toValue: 0,
-      duration: 220,
+      duration: 160,
       useNativeDriver: true,
     }).start(({ finished }) => {
       if (finished) onFadeOut?.();
@@ -46,24 +40,12 @@ export default function SplashScreen({ hide = false, onFadeOut }: Props) {
 
   return (
     <Animated.View style={[s.root, { opacity: fade }]} pointerEvents="none">
-      <Animated.View
-        style={{
-          opacity: lift,
-          transform: [
-            {
-              translateY: lift.interpolate({
-                inputRange: [0, 1],
-                outputRange: [8, 0],
-              }),
-            },
-          ],
-        }}
-      >
-        <Text style={s.wordmark}>owmee</Text>
-        <Text style={s.tagline}>trusted resale, hyperlocal</Text>
-      </Animated.View>
-      <View style={s.footer}>
-        <Text style={s.footerText}>Bengaluru pilot</Text>
+      <View style={s.brandStage}>
+        <Image
+          source={SPLASH_MARK}
+          resizeMode="cover"
+          style={s.icon}
+        />
       </View>
     </Animated.View>
   );
@@ -75,29 +57,17 @@ const s = StyleSheet.create({
     backgroundColor: C.bone,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
-  wordmark: {
-    fontSize: T.size.display + 18,                                  // 48
-    fontWeight: T.weight.bold,
-    color: C.petrol,
-    textAlign: 'center',
-    letterSpacing: -1,
+  brandStage: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 132,
+    height: 132,
   },
-  tagline: {
-    fontSize: T.size.md,
-    color: C.text2,
-    textAlign: 'center',
-    marginTop: 6,
-  },
-  footer: {
-    position: 'absolute',
-    bottom: 36,
-    alignSelf: 'center',
-  },
-  footerText: {
-    fontSize: T.size.sm,
-    color: C.text2,
-    opacity: 0.6,
-    letterSpacing: 0.5,
+  icon: {
+    width: 132,
+    height: 132,
+    borderRadius: R.xl + R.md - 2,
   },
 });

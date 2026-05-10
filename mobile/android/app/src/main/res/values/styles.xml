@@ -20,6 +20,7 @@
         window background, and the JS SplashScreen all the same cream.
     -->
     <style name="LaunchTheme" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
         <item name="android:windowBackground">@drawable/launch_screen</item>
         <item name="android:statusBarColor">@color/splash_bg</item>
         <item name="android:navigationBarColor">@color/splash_bg</item>

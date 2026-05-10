@@ -99,11 +99,13 @@ def _serialize_row(r, distance_km):
         and not any(token in warranty_lower for token in ("no warranty", "none", "expired"))
     )
     created_at = r.get("created_at")
+    seller_created_at = r.get("seller_created_at")
     return {
         "id": str(r["id"]),
         "title": r.get("title"),
         "description": r.get("description"),
         "price": float(r["price"]) if r.get("price") is not None else 0.0,
+        "condition": r.get("condition"),
         "original_price": float(r["original_price"]) if r.get("original_price") is not None else None,
         "discount_pct": float(r["discount_pct"]) if r.get("discount_pct") is not None else None,
         # image_urls in DB is a list of object keys, not absolute URLs —
@@ -117,9 +119,11 @@ def _serialize_row(r, distance_km):
         "created_at": created_at.isoformat() if created_at else None,
         "seller_id": str(r["seller_id"]),
         "seller_name": _seller_short_name(r.get("seller_name")),
+        "seller_member_since": seller_created_at.isoformat() if seller_created_at else None,
+        "seller_completed_deals": int(r.get("seller_completed_deals") or 0),
         "is_owmee_verified": is_owmee_verified,
-        "bill_available": "bill" in accessories or "invoice" in accessories,
-        "box_available": "box" in accessories,
+        "bill_available": bool(r.get("has_bill")) or "bill" in accessories or "invoice" in accessories,
+        "box_available": bool(r.get("has_box")) or "box" in accessories,
         "warranty_active": warranty_active,
         "is_negotiable": bool(r.get("is_negotiable")),
         "distance_km": round(distance_km, 1) if distance_km is not None else None,
@@ -143,16 +147,25 @@ async def blockbuster_deals(current_user: OptionalUser, db: DBSession):
     sql = text("""
         SELECT
             l.id, l.title, l.description, l.price, l.original_price, l.discount_pct,
-            l.image_urls, l.thumbnail_url, l.city, l.state, l.created_at,
+            l.condition, l.image_urls, l.thumbnail_url, l.city, l.state, l.created_at,
             l.seller_id, l.seller_kyc_verified_at_listing_time,
             l.reviewed_by, l.is_negotiable, l.accessories, l.warranty_info,
+            l.has_bill, l.has_box,
             ST_Y(l.geo_point::geometry) AS listing_lat,
             ST_X(l.geo_point::geometry) AS listing_lng,
             c.slug AS category_slug, c.shipping_eligible,
-            u.name AS seller_name, u.kyc_status AS seller_kyc_status
+            u.name AS seller_name, u.kyc_status AS seller_kyc_status,
+            u.created_at AS seller_created_at,
+            COALESCE(sd.seller_completed_deals, 0) AS seller_completed_deals
         FROM listings l
         JOIN categories c ON l.category_id = c.id
         JOIN users u ON l.seller_id = u.id
+        LEFT JOIN (
+            SELECT seller_id, COUNT(*)::int AS seller_completed_deals
+            FROM transactions
+            WHERE status IN ('completed', 'auto_completed')
+            GROUP BY seller_id
+        ) sd ON sd.seller_id = l.seller_id
         WHERE l.status = 'active'
           AND l.discount_pct IS NOT NULL
           AND l.discount_pct >= 15
@@ -209,16 +222,25 @@ async def explore_feed(
     sql = text("""
         SELECT
             l.id, l.title, l.description, l.price, l.original_price, l.discount_pct,
-            l.image_urls, l.thumbnail_url, l.city, l.state, l.created_at,
+            l.condition, l.image_urls, l.thumbnail_url, l.city, l.state, l.created_at,
             l.seller_id, l.seller_kyc_verified_at_listing_time,
             l.reviewed_by, l.is_negotiable, l.accessories, l.warranty_info,
+            l.has_bill, l.has_box,
             ST_Y(l.geo_point::geometry) AS listing_lat,
             ST_X(l.geo_point::geometry) AS listing_lng,
             c.slug AS category_slug, c.shipping_eligible,
-            u.name AS seller_name, u.kyc_status AS seller_kyc_status
+            u.name AS seller_name, u.kyc_status AS seller_kyc_status,
+            u.created_at AS seller_created_at,
+            COALESCE(sd.seller_completed_deals, 0) AS seller_completed_deals
         FROM listings l
         JOIN categories c ON l.category_id = c.id
         JOIN users u ON l.seller_id = u.id
+        LEFT JOIN (
+            SELECT seller_id, COUNT(*)::int AS seller_completed_deals
+            FROM transactions
+            WHERE status IN ('completed', 'auto_completed')
+            GROUP BY seller_id
+        ) sd ON sd.seller_id = l.seller_id
         WHERE l.status = 'active'
           AND l.state = :state
         ORDER BY l.created_at DESC

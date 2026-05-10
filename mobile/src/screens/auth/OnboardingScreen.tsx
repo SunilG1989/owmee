@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { C, T, S, R, Shadow } from '../../utils/tokens';
 import { Button } from '../../components/ui';
+import OwmeeLogo from '../../components/OwmeeLogo';
 
 const SLIDES = [
   {
@@ -58,7 +59,7 @@ export default function OnboardingScreen({ navigation }: any) {
     <SafeAreaView style={s.safe}>
       <View style={s.topBar}>
         <View style={s.topSpacer} />
-        <Text style={s.logo}>owm<Text style={s.logoAccent}>ee</Text></Text>
+        <OwmeeLogo markSize={32} textSize={22} />
         {idx < SLIDES.length - 1 ? (
           <Button label="Skip" variant="ghost" size="sm" onPress={skip} style={s.skipBtn} />
         ) : (
@@ -119,8 +120,6 @@ const s = StyleSheet.create({
     paddingHorizontal: S.xl, paddingVertical: S.sm,
   },
   topSpacer: { width: 60 },
-  logo: { fontSize: T.size.xl, fontWeight: T.weight.bold, color: C.ink, letterSpacing: -0.8 },
-  logoAccent: { color: C.petrol },
   skipBtn: { width: 60 },
 
   slide: {

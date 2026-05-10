@@ -145,7 +145,7 @@ def resize_listing_image(
     """
     try:
         from io import BytesIO
-        from PIL import Image  # type: ignore
+        from PIL import Image, ImageEnhance, ImageOps  # type: ignore
     except Exception:
         logger.warning("resize.pillow_missing", original_key=original_key)
         return None
@@ -153,10 +153,17 @@ def resize_listing_image(
     try:
         raw = download_bytes(original_key, bucket=bucket)
         img = Image.open(BytesIO(raw))
+        img = ImageOps.exif_transpose(img)
         # Strip EXIF + alpha mode handling so webp encode is deterministic.
         if img.mode in ("RGBA", "P"):
             img = img.convert("RGB")
-        img.thumbnail((max_dimension, max_dimension))
+        img.thumbnail((max_dimension, max_dimension), Image.Resampling.LANCZOS)
+        # Gentle catalog cleanup: better phone-photo contrast and crispness
+        # without making used-item photos look artificially edited.
+        img = ImageOps.autocontrast(img, cutoff=1)
+        img = ImageEnhance.Contrast(img).enhance(1.03)
+        img = ImageEnhance.Color(img).enhance(1.04)
+        img = ImageEnhance.Sharpness(img).enhance(1.08)
         out = BytesIO()
         img.save(out, format="WEBP", quality=webp_quality, method=4)
         out.seek(0)

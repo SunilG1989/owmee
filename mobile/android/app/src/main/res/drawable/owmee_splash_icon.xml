@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Single Android splash mark used by every native launch stage. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:width="132dp"
+        android:height="132dp"
+        android:gravity="center"
+        android:drawable="@mipmap/ic_launcher" />
+</layer-list>

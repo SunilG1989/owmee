@@ -14,6 +14,8 @@ import Svg, {
 } from 'react-native-svg';
 import { C, T, S, R, Shadow } from '../utils/tokens';
 
+const SECTION_GAP = 7;
+
 type HeroSlide = {
   image: ImageSourcePropType;
   kicker: string;
@@ -29,22 +31,10 @@ type HeroSlide = {
 
 const SLIDES: HeroSlide[] = [
   {
-    image: require('../../assets/owmee/home/safetrade-real-banner-v3.png'),
-    kicker: 'TRUSTED C2C',
-    title: 'Buy used items safely.',
-    subtitle: 'Checked seller. Owmee handover.',
-    wash: '#2F766B',
-    plate: '#245E56',
-    kickerColor: '#FFE0C5',
-    subtitleColor: '#E9F8F2',
-    accessibilityLabel: 'Browse safe buying deals',
-    action: 'browse',
-  },
-  {
     image: require('../../assets/owmee/home/assist-photo-v2.png'),
     kicker: 'OWMEE ASSIST',
-    title: 'Sell without effort.',
-    subtitle: 'Home visit, photos, price and pickup.',
+    title: "Selling something? We'll help.",
+    subtitle: 'From photos to pickup, Owmee Assist makes selling easier.',
     wash: '#B86F59',
     plate: '#8F5749',
     kickerColor: '#FFE8D9',
@@ -53,10 +43,22 @@ const SLIDES: HeroSlide[] = [
     action: 'sell',
   },
   {
+    image: require('../../assets/owmee/home/safetrade-real-banner-v3.png'),
+    kicker: 'TRUSTED RESALE',
+    title: 'Resale, with less risk.',
+    subtitle: 'Verified details, protected payments and easier handovers.',
+    wash: '#2F766B',
+    plate: '#245E56',
+    kickerColor: '#FFE0C5',
+    subtitleColor: '#E9F8F2',
+    accessibilityLabel: 'Browse safe buying deals',
+    action: 'browse',
+  },
+  {
     image: require('../../assets/owmee/home/safetrade-real-banner.png'),
-    kicker: 'HOME HANDOVER',
-    title: 'No buyer-seller meetups.',
-    subtitle: 'Owmee manages pickup and delivery.',
+    kicker: 'EASIER HANDOVER',
+    title: 'Buy with better details.',
+    subtitle: 'Know more before you decide.',
     wash: '#496F72',
     plate: '#2F5E61',
     kickerColor: '#FFE4CC',
@@ -126,9 +128,15 @@ export default function HeroCard({ onBrowse, onSell }: Props) {
             />
           </Svg>
           <View style={s.copy}>
-            <Text style={[s.kicker, { color: slide.kickerColor }]}>{slide.kicker}</Text>
-            <Text style={s.title}>{slide.title}</Text>
-            <Text style={[s.subtitle, { color: slide.subtitleColor }]}>{slide.subtitle}</Text>
+            <Text style={[s.kicker, { color: slide.kickerColor }]} numberOfLines={1}>
+              {slide.kicker}
+            </Text>
+            <Text style={s.title} numberOfLines={2}>
+              {slide.title}
+            </Text>
+            <Text style={[s.subtitle, { color: slide.subtitleColor }]} numberOfLines={2}>
+              {slide.subtitle}
+            </Text>
           </View>
         </ImageBackground>
       </TouchableOpacity>
@@ -155,55 +163,57 @@ export default function HeroCard({ onBrowse, onSell }: Props) {
 
 const s = StyleSheet.create({
   wrap: {
-    marginTop: S.xs + 2,
+    marginTop: SECTION_GAP,
     paddingHorizontal: S.lg,
   },
   card: {
-    minHeight: 84,
-    borderRadius: R.xl,
+    height: 135,
+    borderRadius: R.md,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(47, 118, 107, 0.20)',
     ...Shadow.lifted,
   },
   image: {
-    borderRadius: R.xl,
+    borderRadius: R.md,
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
   },
   copy: {
-    width: '56%',
-    paddingTop: S.xs + 2,
+    width: '60%',
+    minHeight: '100%',
+    justifyContent: 'center',
+    paddingTop: S.sm,
     paddingLeft: S.md,
-    paddingBottom: S.xs + 2,
+    paddingBottom: S.sm,
     zIndex: 2,
   },
   kicker: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: T.weight.heavy,
     letterSpacing: 1,
-    marginBottom: S.xs,
+    marginBottom: 3,
   },
   title: {
     color: C.white,
-    fontSize: T.size.base + 2,
+    fontSize: T.size.base + 1,
     fontWeight: T.weight.heavy,
-    lineHeight: T.size.base + 6,
+    lineHeight: T.size.base + 5,
     letterSpacing: 0,
     textShadowColor: 'rgba(12, 33, 31, 0.20)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
   },
   subtitle: {
-    marginTop: S.xs,
-    fontSize: T.size.xs,
-    lineHeight: T.size.xs + 3,
+    marginTop: 3,
+    fontSize: T.size.xs + 1,
+    lineHeight: T.size.xs + 4,
     fontWeight: T.weight.medium,
   },
   dots: {
-    height: 8,
-    marginTop: 1,
+    height: 7,
+    marginTop: 0,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',

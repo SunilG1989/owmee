@@ -74,19 +74,16 @@ export default function LocationMapScreen({
 
   const fetchReverse = useCallback(async (lat: number, lng: number) => {
     const seq = ++inFlightRef.current;
-    const startedAt = Date.now();
     setLoadingReverse(true);
     setReverseError(false);
     try {
       const r = await Geo.reverseGeocodeStructured(lat, lng);
       if (seq !== inFlightRef.current) return;
       setReverse(r.data);
-      console.info(`[LocationPerf] reverse_geocode_ms=${Date.now() - startedAt}`);
     } catch {
       if (seq !== inFlightRef.current) return;
       setReverseError(true);
       setReverse(null);
-      console.info(`[LocationPerf] reverse_geocode_error_ms=${Date.now() - startedAt}`);
     } finally {
       if (seq === inFlightRef.current) setLoadingReverse(false);
     }

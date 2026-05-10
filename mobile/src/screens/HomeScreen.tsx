@@ -6,10 +6,10 @@
  *   2. Hero carousel — SafeTrade · Assist · Payment protected
  *   3. Search bar (taps into Search tab)
  *   4. Trust chips (mint / blue / amber)
- *   5. Category rail — Mobiles · Laptops · Kids · Books · Home Appliances
+ *   5. Category rail — Phones · Laptops · Kids & Toys · Appliances
  *   6. Sell banner
  *   7. "Trusted deals near you" + Filter
- *   8. Masonry feed (2 columns, infinite scroll)
+ *   8. Horizontal catalog rows (single column, infinite scroll)
  *
  * Auth & gating:
  *   - Bell: AuthFlow if guest, else Notifications
@@ -19,18 +19,17 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, FlatList, RefreshControl,
-  ActivityIndicator, Alert, useWindowDimensions,
+  ActivityIndicator, Alert, ScrollView, Image, type ImageSourcePropType,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, {
   Circle, Defs, LinearGradient, RadialGradient, Rect, Stop,
 } from 'react-native-svg';
 import {
-  Bell, ChevronDown, ChevronRight, CreditCard, MapPin, Search,
-  ShieldCheck, SlidersHorizontal, Truck,
+  Bell, ChevronDown, ChevronRight, MapPin, Search,
+  ShieldCheck, SlidersHorizontal,
 } from 'lucide-react-native';
-import type { LucideIcon } from 'lucide-react-native';
-import { C, T, S, R, Shadow, pickAspectRatio } from '../utils/tokens';
+import { C, T, S, R, Shadow } from '../utils/tokens';
 import type { TabScreen } from '../navigation/types';
 import { Feed, Wishlist, type FeedListing } from '../services/api';
 import { useAuthStore } from '../store/authStore';
@@ -39,15 +38,47 @@ import HeroCard from '../components/HeroCard';
 import CategoryRail, { type CategoryDef } from '../components/CategoryRail';
 import SellBlock from '../components/SellBlock';
 import { FeedCard } from '../components/OwmeeListingCard';
+import OwmeeLogo from '../components/OwmeeLogo';
 import { parseApiError } from '../utils/errors';
 import { locationDisplayLabel } from '../utils/addressLocation';
+
+const HOME_SECTION_GAP = 7;
+
+const RECENT_FALLBACK_IMAGES: Record<string, ImageSourcePropType> = {
+  smartphones: require('../../assets/owmee/home/cat-mobile-photo-v2.png'),
+  phones: require('../../assets/owmee/home/cat-mobile-photo-v2.png'),
+  laptops: require('../../assets/owmee/home/cat-laptop-photo-v2.png'),
+  'kids-utility': require('../../assets/owmee/home/cat-kids-photo-v2.png'),
+  kids: require('../../assets/owmee/home/cat-kids-photo-v2.png'),
+  'small-appliances': require('../../assets/owmee/home/cat-appliances-photo-v2.png'),
+  appliances: require('../../assets/owmee/home/cat-appliances-photo-v2.png'),
+};
+
+function recentImageSource(item: FeedListing): ImageSourcePropType {
+  const url = item.thumbnail_url || item.image_urls?.[0];
+  if (url?.startsWith('https://')) return { uri: url };
+  return (item.category_slug && RECENT_FALLBACK_IMAGES[item.category_slug])
+    ? RECENT_FALLBACK_IMAGES[item.category_slug]
+    : RECENT_FALLBACK_IMAGES.smartphones;
+}
+
+function recentPostedLabel(iso?: string | null): string {
+  if (!iso) return 'Recently listed';
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return 'Recently listed';
+  const seconds = Math.max(0, (Date.now() - then) / 1000);
+  if (seconds < 3600) {
+    const minutes = Math.floor(seconds / 60);
+    return minutes <= 1 ? 'Just listed' : `Posted ${minutes}m ago`;
+  }
+  if (seconds < 86400) return `Posted ${Math.floor(seconds / 3600)}h ago`;
+  if (seconds < 86400 * 7) return `Posted ${Math.floor(seconds / 86400)}d ago`;
+  return 'Recently listed';
+}
 
 export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
   const { isAuthenticated } = useAuthStore();
   const { location } = useLocation();
-  const { width: sw } = useWindowDimensions();
-
-  const cardWidth = useMemo(() => Math.floor((sw - S.sm * 2 - (S.xs + 2)) / 2), [sw]);
 
   // Explore feed state
   const [feedItems, setFeedItems] = useState<FeedListing[]>([]);
@@ -62,8 +93,14 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
   const [savedIds, setSavedIds] = useState<Set<string>>(() => new Set());
 
   const loadingMore = useRef(false);
-  const listRef = useRef<FlatList>(null);
+  const listRef = useRef<FlatList<FeedListing>>(null);
   const listingsOffsetY = useRef<number>(0);
+
+  const recentItems = useMemo(() => (
+    [...feedItems]
+      .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+      .slice(0, 6)
+  ), [feedItems]);
 
   const loadFeed = useCallback(async (resetPage = false) => {
     if (resetPage) {
@@ -161,14 +198,6 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
     navigation.navigate('ListingDetail', { listingId: l.id });
   };
 
-  const handleBuySafely = (l: FeedListing) => {
-    if (!isAuthenticated) {
-      navigation.navigate('AuthFlow');
-      return;
-    }
-    navigation.navigate('Checkout', { listingId: l.id });
-  };
-
   const handleMakeOffer = (l: FeedListing) => {
     if (!isAuthenticated) {
       navigation.navigate('AuthFlow');
@@ -259,12 +288,9 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
   // ── Header section (rendered as ListHeaderComponent) ────────────────────
   const Header = useMemo(() => () => (
     <View>
-      {/* Top bar — logo + address (chip-next-to-logo) · bell right. */}
+      {/* Top bar — compact brand mark + location + notifications. */}
       <View style={s.hdr}>
-        <Text style={s.logo}>
-          <Text style={{ color: '#1A1F1F' }}>ow</Text>
-          <Text style={{ color: '#BB684F' }}>mee</Text>
-        </Text>
+        <OwmeeLogo markSize={36} textSize={31} />
 
         <TouchableOpacity
           onPress={handleLocationPress}
@@ -308,7 +334,7 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
         >
           <Search size={21} strokeWidth={1.8} color={C.text} />
           <Text style={s.searchPh} numberOfLines={1}>
-            Search phones, laptops, home items
+            Find trusted resale nearby
           </Text>
         </TouchableOpacity>
         <View style={s.searchDivider} />
@@ -323,7 +349,7 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
         </TouchableOpacity>
       </View>
 
-      <TrustProof />
+      <TrustBanner />
 
       <HeroCard onBrowse={handleBrowsePress} onSell={handleSellPress} />
 
@@ -340,7 +366,7 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
         onLayout={e => { listingsOffsetY.current = e.nativeEvent.layout.y; }}
       >
         <View style={s.listingsTitleBlock}>
-          <Text style={s.sectionTitle}>Nearby deals</Text>
+          <Text style={s.sectionTitle}>Trusted listings nearby</Text>
           <View style={s.radiusHint}>
             <MapPin size={12} strokeWidth={2.2} color={C.petrolText} />
             <Text style={s.radiusText}>
@@ -359,6 +385,13 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
   // ── Footer ─────────────────────────────────────────────────────────────
   const Footer = () => (
     <View>
+      {!feedLoading && !feedError && recentItems.length > 0 && (
+        <RecentListingsSection
+          items={recentItems}
+          onItemPress={handleCardPress}
+          onSeeAll={handleSearchPress}
+        />
+      )}
       {isLoadingMore && (
         <View style={s.footerLoading}>
           <ActivityIndicator size="small" color={C.petrol} />
@@ -398,17 +431,6 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
     );
   };
 
-  // ── Two-column masonry split ───────────────────────────────────────────
-  const { leftColumn, rightColumn } = useMemo(() => {
-    const left: { item: FeedListing; idx: number }[] = [];
-    const right: { item: FeedListing; idx: number }[] = [];
-    feedItems.forEach((item, idx) => {
-      if (idx % 2 === 0) left.push({ item, idx });
-      else right.push({ item, idx });
-    });
-    return { leftColumn: left, rightColumn: right };
-  }, [feedItems]);
-
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <Svg pointerEvents="none" style={s.screenBg} viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -433,51 +455,22 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
       </Svg>
       <FlatList
         ref={listRef}
-        data={[1]}
-        keyExtractor={() => 'masonry'}
+        data={feedItems}
+        keyExtractor={item => item.id}
         ListHeaderComponent={Header}
         ListFooterComponent={Footer}
-        renderItem={() => {
-          if (feedItems.length === 0) return <EmptyState />;
-          return (
-            <View style={s.masonry}>
-              <View style={s.masonryCol}>
-                {leftColumn.map(({ item, idx }) => (
-                  <FeedCard
-                    key={item.id}
-                    listing={item}
-                    variant="feed"
-                    cardWidth={cardWidth}
-                    aspectRatio={pickAspectRatio(idx)}
-                    index={idx}
-                    onPress={() => handleCardPress(item)}
-                    onBuySafely={() => handleBuySafely(item)}
-                    onMakeOffer={() => handleMakeOffer(item)}
-                    onWishlist={() => handleWishlistPress(item)}
-                    isWishlisted={savedIds.has(item.id)}
-                  />
-                ))}
-              </View>
-              <View style={s.masonryCol}>
-                {rightColumn.map(({ item, idx }) => (
-                  <FeedCard
-                    key={item.id}
-                    listing={item}
-                    variant="feed"
-                    cardWidth={cardWidth}
-                    aspectRatio={pickAspectRatio(idx)}
-                    index={idx}
-                    onPress={() => handleCardPress(item)}
-                    onBuySafely={() => handleBuySafely(item)}
-                    onMakeOffer={() => handleMakeOffer(item)}
-                    onWishlist={() => handleWishlistPress(item)}
-                    isWishlisted={savedIds.has(item.id)}
-                  />
-                ))}
-              </View>
-            </View>
-          );
-        }}
+        ListEmptyComponent={EmptyState}
+        renderItem={({ item, index }) => (
+          <FeedCard
+            listing={item}
+            variant="feed"
+            index={index}
+            onPress={() => handleCardPress(item)}
+            onMakeOffer={() => handleMakeOffer(item)}
+            onWishlist={() => handleWishlistPress(item)}
+            isWishlisted={savedIds.has(item.id)}
+          />
+        )}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -494,24 +487,80 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
   );
 }
 
-const TRUST_PROOFS: { icon: LucideIcon; label: string }[] = [
-  { icon: ShieldCheck, label: 'Checked sellers' },
-  { icon: CreditCard, label: 'Safe payments' },
-  { icon: Truck, label: 'No meetups' },
-];
+function RecentListingsSection({
+  items,
+  onItemPress,
+  onSeeAll,
+}: {
+  items: FeedListing[];
+  onItemPress: (item: FeedListing) => void;
+  onSeeAll: () => void;
+}) {
+  if (items.length === 0) return null;
 
-function TrustProof() {
   return (
-    <View style={s.trustProof}>
-      {TRUST_PROOFS.map(({ icon: Icon, label }, index) => (
-        <React.Fragment key={label}>
-          {index > 0 && <View style={s.trustSep} />}
-          <View style={s.trustProofItem}>
-            <Icon size={12} strokeWidth={2.35} color="#2F766B" />
-            <Text style={s.trustProofText} numberOfLines={1}>{label}</Text>
-          </View>
-        </React.Fragment>
-      ))}
+    <View style={s.recentSection}>
+      <View style={s.recentHead}>
+        <View style={s.recentTitleBlock}>
+          <Text style={s.recentTitle}>Recently listed</Text>
+          <Text style={s.recentSub}>Fresh items added near you.</Text>
+        </View>
+        <TouchableOpacity activeOpacity={0.75} style={s.recentSeeAll} onPress={onSeeAll}>
+          <Text style={s.recentSeeAllText}>See all</Text>
+          <ChevronRight size={14} strokeWidth={2.3} color={C.petrolText} />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={s.recentRow}
+      >
+        {items.map(item => (
+          <TouchableOpacity
+            key={`recent-${item.id}`}
+            activeOpacity={0.86}
+            style={s.recentCard}
+            onPress={() => onItemPress(item)}
+            accessibilityRole="button"
+            accessibilityLabel={`Open recently listed ${item.title}`}
+          >
+            <Image source={recentImageSource(item)} style={s.recentImage} resizeMode="cover" />
+            <View style={s.recentCopy}>
+              <Text style={s.recentCardTitle} numberOfLines={2}>
+                {item.title}
+              </Text>
+              <Text style={s.recentPrice} numberOfLines={1}>
+                ₹{Math.round(item.price).toLocaleString('en-IN')}
+              </Text>
+              <Text style={s.recentTime} numberOfLines={1}>
+                {recentPostedLabel(item.created_at)}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
+function TrustBanner() {
+  return (
+    <View style={s.trustBanner}>
+      <View style={s.trustBannerIcon}>
+        <ShieldCheck size={15} strokeWidth={2.35} color="#2F766B" />
+      </View>
+      <View style={s.trustBannerCopy}>
+        <Text style={s.trustBannerTitle} numberOfLines={1}>Resale, with less risk</Text>
+        <Text
+          style={s.trustBannerText}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.9}
+        >
+          Verified details, protected payments and easier handovers.
+        </Text>
+      </View>
     </View>
   );
 }
@@ -532,18 +581,12 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: S.lg,
-    paddingTop: S.xs,
-    paddingBottom: S.xs,
+    paddingTop: S.xs + 1,
+    paddingBottom: S.xs + 1,
     backgroundColor: 'transparent',
     gap: S.sm + 2,
   },
   hdrSpacer: { flex: 1 },
-  logo: {
-    fontSize: T.size.xxl + 2,
-    fontWeight: T.weight.heavy,
-    color: '#1A1F1F',
-    letterSpacing: 0,
-  },
   locChip: {
     height: 32,
     flexDirection: 'row',
@@ -554,7 +597,8 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(255, 253, 248, 0.94)',
     borderWidth: 1,
     borderColor: 'rgba(224, 203, 188, 0.90)',
-    maxWidth: 158,
+    flexShrink: 1,
+    maxWidth: 188,
     ...Shadow.subtle,
   },
   locName: {
@@ -587,7 +631,7 @@ const s = StyleSheet.create({
   search: {
     marginHorizontal: S.lg,
     marginTop: 2,
-    height: 40,
+    height: 42,
     borderRadius: R.lg,
     backgroundColor: 'rgba(255, 253, 248, 0.94)',
     borderWidth: 1,
@@ -607,60 +651,68 @@ const s = StyleSheet.create({
   },
   searchPh: {
     flex: 1,
-    fontSize: T.size.sm + 2,
+    fontSize: T.size.md,
     color: '#68716F',
     fontWeight: T.weight.medium,
   },
   searchDivider: {
     width: 1,
-    height: 20,
+    height: 24,
     backgroundColor: 'rgba(224, 203, 188, 0.90)',
   },
   filterBtn: {
-    width: 40,
+    width: 42,
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    borderTopRightRadius: R.xl - 1,
-    borderBottomRightRadius: R.xl - 1,
+    borderTopRightRadius: R.lg,
+    borderBottomRightRadius: R.lg,
   },
-  trustProof: {
+  trustBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 28,
+    height: 44,
     marginHorizontal: S.lg,
-    marginTop: S.xs + 2,
+    marginTop: HOME_SECTION_GAP,
     paddingHorizontal: S.sm + 2,
-    paddingVertical: S.xs,
-    borderRadius: R.pill,
-    backgroundColor: 'rgba(241, 248, 246, 0.72)',
+    borderRadius: R.md,
+    backgroundColor: 'rgba(255,253,248,0.90)',
+    borderWidth: 1,
+    borderColor: 'rgba(224, 203, 188, 0.78)',
+    gap: S.sm,
+  },
+  trustBannerIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: 'rgba(241, 248, 246, 0.92)',
     borderWidth: 1,
     borderColor: 'rgba(79, 127, 134, 0.12)',
-  },
-  trustProofItem: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 3,
   },
-  trustProofText: {
-    color: '#205D58',
-    fontSize: T.size.xs - 1,
-    fontWeight: T.weight.semi,
+  trustBannerCopy: {
+    flex: 1,
+    minWidth: 0,
   },
-  trustSep: {
-    width: 1,
-    height: 12,
-    backgroundColor: 'rgba(79, 127, 134, 0.18)',
+  trustBannerTitle: {
+    color: C.text,
+    fontSize: T.size.sm,
+    lineHeight: T.size.sm + 3,
+    fontWeight: T.weight.heavy,
+  },
+  trustBannerText: {
+    color: '#55716D',
+    fontSize: T.size.xs,
+    lineHeight: T.size.xs + 2,
+    fontWeight: T.weight.medium,
   },
 
   // ── Listings header ─────────────────────────────────────────────────
   listingsHdr: {
-    marginTop: S.sm,
+    marginTop: HOME_SECTION_GAP,
     paddingHorizontal: S.lg,
-    paddingBottom: S.xs,
+    paddingBottom: S.sm,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -669,9 +721,6 @@ const s = StyleSheet.create({
   listingsTitleBlock: {
     flex: 1,
     minWidth: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: S.sm,
   },
   sectionTitle: {
     fontSize: T.size.base + 2,
@@ -680,6 +729,8 @@ const s = StyleSheet.create({
     letterSpacing: 0,
   },
   radiusHint: {
+    alignSelf: 'flex-start',
+    marginTop: S.xs + 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
@@ -706,15 +757,88 @@ const s = StyleSheet.create({
     fontWeight: T.weight.medium,
   },
 
-  // ── Masonry grid ────────────────────────────────────────────────────
-  masonry: {
-    flexDirection: 'row',
-    paddingHorizontal: S.sm,
-    gap: S.xs + 2,
+  // ── Recently listed ─────────────────────────────────────────────────
+  recentSection: {
+    marginTop: S.md,
+    paddingBottom: S.md,
   },
-  masonryCol: {
+  recentHead: {
+    paddingHorizontal: S.lg,
+    paddingBottom: S.xs,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: S.md,
+  },
+  recentTitleBlock: {
     flex: 1,
-    gap: S.xs + 2,
+    minWidth: 0,
+  },
+  recentTitle: {
+    fontSize: T.size.base + 2,
+    color: C.text,
+    fontWeight: T.weight.heavy,
+  },
+  recentSub: {
+    marginTop: 2,
+    fontSize: T.size.xs,
+    color: C.text3,
+    fontWeight: T.weight.medium,
+  },
+  recentSeeAll: {
+    minHeight: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingLeft: S.sm,
+  },
+  recentSeeAllText: {
+    fontSize: T.size.sm,
+    color: C.petrolText,
+    fontWeight: T.weight.medium,
+  },
+  recentRow: {
+    paddingHorizontal: S.md,
+    gap: S.sm,
+  },
+  recentCard: {
+    width: 154,
+    minHeight: 162,
+    borderRadius: R.md,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,253,248,0.96)',
+    borderWidth: 1,
+    borderColor: 'rgba(224, 203, 188, 0.68)',
+    ...Shadow.subtle,
+  },
+  recentImage: {
+    width: '100%',
+    height: 82,
+    backgroundColor: '#F7EFE7',
+  },
+  recentCopy: {
+    paddingHorizontal: S.sm,
+    paddingTop: S.xs + 2,
+    paddingBottom: S.sm,
+  },
+  recentCardTitle: {
+    minHeight: 32,
+    fontSize: T.size.sm + 1,
+    lineHeight: T.size.sm + 5,
+    color: C.text,
+    fontWeight: T.weight.heavy,
+  },
+  recentPrice: {
+    marginTop: S.xs,
+    fontSize: T.size.sm + 2,
+    color: C.ink,
+    fontWeight: T.weight.heavy,
+  },
+  recentTime: {
+    marginTop: 2,
+    fontSize: T.size.xs,
+    color: C.text3,
+    fontWeight: T.weight.medium,
   },
 
   // ── Footer / hints ──────────────────────────────────────────────────

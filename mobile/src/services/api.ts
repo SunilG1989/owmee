@@ -136,6 +136,7 @@ export interface FeedListing {
   title: string;
   description: string | null;
   price: number;
+  condition?: string | null;
   original_price: number | null;
   discount_pct: number | null;
   image_urls: string[];
@@ -147,6 +148,8 @@ export interface FeedListing {
   created_at: string | null;
   seller_id: string;
   seller_name: string;
+  seller_member_since?: string | null;
+  seller_completed_deals?: number;
   is_owmee_verified: boolean;
   distance_km: number | null;
 
