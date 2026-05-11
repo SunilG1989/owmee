@@ -14,7 +14,7 @@ import Svg, {
 } from 'react-native-svg';
 import { C, T, S, R, Shadow } from '../utils/tokens';
 
-const SECTION_GAP = 7;
+const SECTION_GAP = S.sm;
 
 type HeroSlide = {
   image: ImageSourcePropType;
@@ -31,18 +31,6 @@ type HeroSlide = {
 
 const SLIDES: HeroSlide[] = [
   {
-    image: require('../../assets/owmee/home/assist-photo-v2.png'),
-    kicker: 'OWMEE ASSIST',
-    title: "Selling something? We'll help.",
-    subtitle: 'From photos to pickup, Owmee Assist makes selling easier.',
-    wash: '#B86F59',
-    plate: '#8F5749',
-    kickerColor: '#FFE8D9',
-    subtitleColor: '#FFF5EF',
-    accessibilityLabel: 'Book Owmee Assist to sell from home',
-    action: 'sell',
-  },
-  {
     image: require('../../assets/owmee/home/safetrade-real-banner-v3.png'),
     kicker: 'TRUSTED RESALE',
     title: 'Resale, with less risk.',
@@ -53,6 +41,18 @@ const SLIDES: HeroSlide[] = [
     subtitleColor: '#E9F8F2',
     accessibilityLabel: 'Browse safe buying deals',
     action: 'browse',
+  },
+  {
+    image: require('../../assets/owmee/home/assist-photo-v2.png'),
+    kicker: 'OWMEE ASSIST',
+    title: "Selling something? We'll help.",
+    subtitle: 'From photos to pickup, Owmee Assist makes selling easier.',
+    wash: '#B86F59',
+    plate: '#8F5749',
+    kickerColor: '#FFE8D9',
+    subtitleColor: '#FFF5EF',
+    accessibilityLabel: 'Book Owmee Assist to sell from home',
+    action: 'sell',
   },
   {
     image: require('../../assets/owmee/home/safetrade-real-banner.png'),
@@ -212,8 +212,8 @@ const s = StyleSheet.create({
     fontWeight: T.weight.medium,
   },
   dots: {
-    height: 7,
-    marginTop: 0,
+    height: 10,
+    marginTop: 2,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',

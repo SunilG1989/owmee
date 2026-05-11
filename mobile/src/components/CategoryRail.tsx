@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { C, T, S, R, Shadow } from '../utils/tokens';
 
-const SECTION_GAP = 7;
+const SECTION_GAP = S.sm;
 
 export interface CategoryDef {
   label: string;
@@ -49,7 +49,7 @@ export default function CategoryRail({
     const available = width - (S.lg * 2) - (gap * (categories.length - 1));
     return Math.floor(available / categories.length);
   }, [categories.length, width]);
-  const iconWidth = Math.max(30, Math.min(38, tileWidth - 18));
+  const iconWidth = Math.max(34, Math.min(42, tileWidth - 18));
 
   return (
     <View style={s.block}>
@@ -87,20 +87,20 @@ const s = StyleSheet.create({
     gap: S.xs + 2,
   },
   tile: {
-    height: 50,
+    height: 54,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: R.md,
     backgroundColor: 'rgba(255, 253, 248, 0.94)',
     borderWidth: 1,
     borderColor: 'rgba(224, 203, 188, 0.9)',
-    paddingTop: 4,
+    paddingTop: S.xs + 1,
     paddingHorizontal: S.xs,
-    paddingBottom: 4,
+    paddingBottom: S.xs + 1,
     ...Shadow.subtle,
   },
   iconFrame: {
-    height: 25,
+    height: 28,
     borderRadius: R.sm + 2,
     backgroundColor: '#FFF8EE',
     borderWidth: 1,
@@ -116,10 +116,10 @@ const s = StyleSheet.create({
   label: {
     width: 60,
     marginTop: 2,
-    fontSize: T.size.xs - 1,
+    fontSize: T.size.xs,
     fontWeight: T.weight.medium,
     color: C.text2,
     textAlign: 'center',
-    lineHeight: T.size.xs + 1,
+    lineHeight: T.size.xs + 2,
   },
 });

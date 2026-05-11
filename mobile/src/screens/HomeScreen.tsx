@@ -42,7 +42,7 @@ import OwmeeLogo from '../components/OwmeeLogo';
 import { parseApiError } from '../utils/errors';
 import { locationDisplayLabel } from '../utils/addressLocation';
 
-const HOME_SECTION_GAP = 7;
+const HOME_SECTION_GAP = S.sm;
 
 const RECENT_FALLBACK_IMAGES: Record<string, ImageSourcePropType> = {
   smartphones: require('../../assets/owmee/home/cat-mobile-photo-v2.png'),
@@ -288,9 +288,9 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
   // ── Header section (rendered as ListHeaderComponent) ────────────────────
   const Header = useMemo(() => () => (
     <View>
-      {/* Top bar — compact brand mark + location + notifications. */}
+      {/* Top bar — full wordmark + location + notifications. */}
       <View style={s.hdr}>
-        <OwmeeLogo markSize={36} textSize={31} />
+        <OwmeeLogo textSize={28} />
 
         <TouchableOpacity
           onPress={handleLocationPress}
@@ -548,17 +548,16 @@ function TrustBanner() {
   return (
     <View style={s.trustBanner}>
       <View style={s.trustBannerIcon}>
-        <ShieldCheck size={15} strokeWidth={2.35} color="#2F766B" />
+        <ShieldCheck size={14} strokeWidth={2.35} color={C.petrolDeep} />
       </View>
       <View style={s.trustBannerCopy}>
-        <Text style={s.trustBannerTitle} numberOfLines={1}>Resale, with less risk</Text>
         <Text
-          style={s.trustBannerText}
+          style={s.trustBannerTitle}
           numberOfLines={1}
           adjustsFontSizeToFit
-          minimumFontScale={0.9}
+          minimumFontScale={0.84}
         >
-          Verified details, protected payments and easier handovers.
+          Verified items • Protected payments • Assisted handover
         </Text>
       </View>
     </View>
@@ -581,14 +580,14 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: S.lg,
-    paddingTop: S.xs + 1,
-    paddingBottom: S.xs + 1,
+    paddingTop: S.sm,
+    paddingBottom: S.xs + 2,
     backgroundColor: 'transparent',
-    gap: S.sm + 2,
+    gap: S.sm,
   },
   hdrSpacer: { flex: 1 },
   locChip: {
-    height: 32,
+    height: 31,
     flexDirection: 'row',
     alignItems: 'center',
     gap: S.xs + 2,
@@ -598,7 +597,7 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(224, 203, 188, 0.90)',
     flexShrink: 1,
-    maxWidth: 188,
+    maxWidth: 154,
     ...Shadow.subtle,
   },
   locName: {
@@ -630,10 +629,10 @@ const s = StyleSheet.create({
   // ── Search ──────────────────────────────────────────────────────────
   search: {
     marginHorizontal: S.lg,
-    marginTop: 2,
-    height: 42,
-    borderRadius: R.lg,
-    backgroundColor: 'rgba(255, 253, 248, 0.94)',
+    marginTop: S.xs,
+    height: 44,
+    borderRadius: R.md,
+    backgroundColor: 'rgba(255, 253, 248, 0.96)',
     borderWidth: 1,
     borderColor: 'rgba(224, 203, 188, 0.90)',
     flexDirection: 'row',
@@ -652,7 +651,7 @@ const s = StyleSheet.create({
   searchPh: {
     flex: 1,
     fontSize: T.size.md,
-    color: '#68716F',
+    color: C.text2,
     fontWeight: T.weight.medium,
   },
   searchDivider: {
@@ -665,26 +664,26 @@ const s = StyleSheet.create({
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    borderTopRightRadius: R.lg,
-    borderBottomRightRadius: R.lg,
+    borderTopRightRadius: R.md,
+    borderBottomRightRadius: R.md,
   },
   trustBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 44,
+    height: 34,
     marginHorizontal: S.lg,
     marginTop: HOME_SECTION_GAP,
     paddingHorizontal: S.sm + 2,
     borderRadius: R.md,
-    backgroundColor: 'rgba(255,253,248,0.90)',
+    backgroundColor: 'rgba(255,253,248,0.93)',
     borderWidth: 1,
     borderColor: 'rgba(224, 203, 188, 0.78)',
-    gap: S.sm,
+    gap: S.xs + 2,
   },
   trustBannerIcon: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: 'rgba(241, 248, 246, 0.92)',
     borderWidth: 1,
     borderColor: 'rgba(79, 127, 134, 0.12)',
@@ -696,21 +695,15 @@ const s = StyleSheet.create({
     minWidth: 0,
   },
   trustBannerTitle: {
-    color: C.text,
-    fontSize: T.size.sm,
-    lineHeight: T.size.sm + 3,
+    color: C.petrolText,
+    fontSize: T.size.xs + 1,
+    lineHeight: T.size.xs + 3,
     fontWeight: T.weight.heavy,
-  },
-  trustBannerText: {
-    color: '#55716D',
-    fontSize: T.size.xs,
-    lineHeight: T.size.xs + 2,
-    fontWeight: T.weight.medium,
   },
 
   // ── Listings header ─────────────────────────────────────────────────
   listingsHdr: {
-    marginTop: HOME_SECTION_GAP,
+    marginTop: HOME_SECTION_GAP + 2,
     paddingHorizontal: S.lg,
     paddingBottom: S.sm,
     flexDirection: 'row',

@@ -11,7 +11,7 @@ import {
 import { ArrowRight } from 'lucide-react-native';
 import { C, T, S, R, Shadow } from '../utils/tokens';
 
-const SECTION_GAP = 7;
+const SECTION_GAP = S.sm;
 
 interface Props {
   onPress: () => void;
@@ -22,9 +22,9 @@ export default function SellBlock({ onPress }: Props) {
     <View style={s.outer}>
       <View style={s.banner}>
         <View style={s.copy}>
-          <Text style={s.title} numberOfLines={1}>Sell easier with Owmee</Text>
+          <Text style={s.title} numberOfLines={1}>Selling something? We'll help</Text>
           <Text style={s.subtitle} numberOfLines={1}>
-            Photos, pickup and listing help.
+            Photos, pricing and pickup support.
           </Text>
         </View>
 
@@ -49,14 +49,14 @@ const s = StyleSheet.create({
     paddingTop: SECTION_GAP,
   },
   banner: {
-    height: 46,
+    height: 48,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: S.md,
-    borderRadius: R.lg,
-    backgroundColor: 'rgba(255, 253, 248, 0.30)',
+    borderRadius: R.md,
+    backgroundColor: 'rgba(255, 253, 248, 0.68)',
     borderWidth: 1,
-    borderColor: 'rgba(224, 203, 188, 0.32)',
+    borderColor: 'rgba(224, 203, 188, 0.52)',
     overflow: 'hidden',
   },
   copy: {
@@ -64,14 +64,14 @@ const s = StyleSheet.create({
     minWidth: 0,
   },
   title: {
-    fontSize: T.size.sm + 1,
+    fontSize: T.size.base,
     fontWeight: T.weight.heavy,
     color: C.text,
     lineHeight: T.size.sm + 3,
   },
   subtitle: {
-    fontSize: T.size.xs,
-    color: '#4B7280',
+    fontSize: T.size.xs + 1,
+    color: C.petrolText,
     lineHeight: T.size.xs + 2,
     fontWeight: T.weight.medium,
   },
