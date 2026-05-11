@@ -34,10 +34,10 @@ interface Props {
 // mobile/assets/owmee/home/cat-*.webp — placeholders resolve until
 // real assets land. NO emoji fallback per rule 14.
 const DEFAULT_CATEGORIES: CategoryDef[] = [
-  { label: 'Phones', slug: 'smartphones', image: require('../../assets/owmee/home/cat-mobile-photo-v2.png') },
-  { label: 'Laptops', slug: 'laptops', image: require('../../assets/owmee/home/cat-laptop-photo-v2.png') },
-  { label: 'Kids & Toys', slug: 'kids-utility', image: require('../../assets/owmee/home/cat-kids-photo-v2.png') },
-  { label: 'Appliances', slug: 'small-appliances', image: require('../../assets/owmee/home/cat-appliances-photo-v2.png') },
+  { label: 'Phones', slug: 'smartphones', image: require('../../assets/owmee/home/cat-mobile.webp') },
+  { label: 'Laptops', slug: 'laptops', image: require('../../assets/owmee/home/cat-laptop.webp') },
+  { label: 'Kids & Toys', slug: 'kids-utility', image: require('../../assets/owmee/home/cat-kids.webp') },
+  { label: 'Appliances', slug: 'small-appliances', image: require('../../assets/owmee/home/cat-appliances.webp') },
 ];
 
 export default function CategoryRail({
@@ -45,11 +45,11 @@ export default function CategoryRail({
 }: Props) {
   const { width } = useWindowDimensions();
   const tileWidth = useMemo(() => {
-    const gap = S.xs + 2;
+    const gap = S.xs + 1;
     const available = width - (S.lg * 2) - (gap * (categories.length - 1));
     return Math.floor(available / categories.length);
   }, [categories.length, width]);
-  const iconWidth = Math.max(34, Math.min(42, tileWidth - 18));
+  const iconWidth = Math.max(42, Math.min(48, tileWidth - 18));
 
   return (
     <View style={s.block}>
@@ -68,7 +68,7 @@ export default function CategoryRail({
             accessibilityLabel={`${cat.label.replace('\n', ' ')} category`}
           >
             <View style={[s.iconFrame, { width: iconWidth }]}>
-              <Image source={cat.image} style={s.iconImage} resizeMode="cover" />
+              <Image source={cat.image} style={s.iconImage} resizeMode="contain" />
             </View>
             <Text style={[s.label, { width: tileWidth - 10 }]} numberOfLines={2}>{cat.label}</Text>
           </TouchableOpacity>
@@ -84,27 +84,25 @@ const s = StyleSheet.create({
   },
   row: {
     paddingHorizontal: S.lg,
-    gap: S.xs + 2,
+    gap: S.xs + 1,
   },
   tile: {
-    height: 54,
+    height: 58,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: R.md,
     backgroundColor: 'rgba(255, 253, 248, 0.94)',
     borderWidth: 1,
     borderColor: 'rgba(224, 203, 188, 0.9)',
-    paddingTop: S.xs + 1,
+    paddingTop: 4,
     paddingHorizontal: S.xs,
-    paddingBottom: S.xs + 1,
+    paddingBottom: 4,
     ...Shadow.subtle,
   },
   iconFrame: {
-    height: 28,
-    borderRadius: R.sm + 2,
-    backgroundColor: '#FFF8EE',
-    borderWidth: 1,
-    borderColor: 'rgba(224, 203, 188, 0.58)',
+    height: 33,
+    borderRadius: R.sm + 1,
+    backgroundColor: 'rgba(255, 248, 238, 0.62)',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',

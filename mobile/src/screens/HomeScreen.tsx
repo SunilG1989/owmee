@@ -358,14 +358,12 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
         onCategoryPress={handleCategoryPress}
       />
 
-      <SellBlock onPress={handleSellPress} />
-
       {/* Listings header */}
       <View
         style={s.listingsHdr}
         onLayout={e => { listingsOffsetY.current = e.nativeEvent.layout.y; }}
       >
-        <View style={s.listingsTitleBlock}>
+        <View style={s.listingsTitleRow}>
           <Text style={s.sectionTitle}>Trusted listings nearby</Text>
           <View style={s.radiusHint}>
             <MapPin size={12} strokeWidth={2.2} color={C.petrolText} />
@@ -461,15 +459,18 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
         ListFooterComponent={Footer}
         ListEmptyComponent={EmptyState}
         renderItem={({ item, index }) => (
-          <FeedCard
-            listing={item}
-            variant="feed"
-            index={index}
-            onPress={() => handleCardPress(item)}
-            onMakeOffer={() => handleMakeOffer(item)}
-            onWishlist={() => handleWishlistPress(item)}
-            isWishlisted={savedIds.has(item.id)}
-          />
+          <>
+            <FeedCard
+              listing={item}
+              variant="feed"
+              index={index}
+              onPress={() => handleCardPress(item)}
+              onMakeOffer={() => handleMakeOffer(item)}
+              onWishlist={() => handleWishlistPress(item)}
+              isWishlisted={savedIds.has(item.id)}
+            />
+            {index === 0 && <SellBlock onPress={handleSellPress} />}
+          </>
         )}
         refreshControl={
           <RefreshControl
@@ -557,7 +558,7 @@ function TrustBanner() {
           adjustsFontSizeToFit
           minimumFontScale={0.84}
         >
-          Verified items • Protected payments • Assisted handover
+          Owmee verified • Protected payments • Assisted handover
         </Text>
       </View>
     </View>
@@ -597,7 +598,7 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(224, 203, 188, 0.90)',
     flexShrink: 1,
-    maxWidth: 154,
+    maxWidth: 158,
     ...Shadow.subtle,
   },
   locName: {
@@ -670,21 +671,21 @@ const s = StyleSheet.create({
   trustBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 34,
+    height: 32,
     marginHorizontal: S.lg,
     marginTop: HOME_SECTION_GAP,
     paddingHorizontal: S.sm + 2,
     borderRadius: R.md,
-    backgroundColor: 'rgba(255,253,248,0.93)',
+    backgroundColor: 'rgba(241, 248, 246, 0.68)',
     borderWidth: 1,
-    borderColor: 'rgba(224, 203, 188, 0.78)',
+    borderColor: 'rgba(79, 127, 134, 0.14)',
     gap: S.xs + 2,
   },
   trustBannerIcon: {
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: 'rgba(241, 248, 246, 0.92)',
+    backgroundColor: 'rgba(255, 253, 248, 0.72)',
     borderWidth: 1,
     borderColor: 'rgba(79, 127, 134, 0.12)',
     alignItems: 'center',
@@ -695,7 +696,7 @@ const s = StyleSheet.create({
     minWidth: 0,
   },
   trustBannerTitle: {
-    color: C.petrolText,
+    color: C.petrolDeep,
     fontSize: T.size.xs + 1,
     lineHeight: T.size.xs + 3,
     fontWeight: T.weight.heavy,
@@ -703,34 +704,38 @@ const s = StyleSheet.create({
 
   // ── Listings header ─────────────────────────────────────────────────
   listingsHdr: {
-    marginTop: HOME_SECTION_GAP + 2,
+    marginTop: HOME_SECTION_GAP,
     paddingHorizontal: S.lg,
-    paddingBottom: S.sm,
+    paddingBottom: S.xs + 2,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: S.md,
   },
-  listingsTitleBlock: {
+  listingsTitleRow: {
     flex: 1,
     minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: S.xs + 2,
   },
   sectionTitle: {
-    fontSize: T.size.base + 2,
+    fontSize: T.size.base + 1,
     fontWeight: T.weight.heavy,
     color: C.text,
     letterSpacing: 0,
+    flexShrink: 1,
   },
   radiusHint: {
-    alignSelf: 'flex-start',
-    marginTop: S.xs + 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    paddingHorizontal: S.xs + 2,
+    paddingHorizontal: S.xs + 1,
     paddingVertical: 2,
     borderRadius: R.pill,
-    backgroundColor: 'rgba(241, 248, 246, 0.74)',
+    backgroundColor: 'rgba(241, 248, 246, 0.80)',
+    borderWidth: 1,
+    borderColor: 'rgba(79, 127, 134, 0.10)',
   },
   radiusText: {
     fontSize: T.size.xs,

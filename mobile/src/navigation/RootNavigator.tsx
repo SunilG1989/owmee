@@ -117,9 +117,9 @@ function TabCell({
     <View style={st.cell}>
       <View style={[st.iconPill, active && st.iconPillActive]}>
         <Icon
-          size={22}
+          size={21}
           strokeWidth={active ? 2.25 : 2}
-          color={active ? '#2F766B' : C.text2}
+          color={active ? C.petrolDeep : C.text2}
         />
         {badge && badge > 0 ? (
           <View style={st.badge}>
@@ -150,7 +150,7 @@ function SellFab({ active }: { active: boolean }) {
   return (
     <View style={st.fabSlot}>
       <View style={[st.fab, active && st.fabActive]}>
-        <CameraIcon size={18} strokeWidth={2.25} color="#BB684F" />
+        <CameraIcon size={18} strokeWidth={2.25} color={C.coralDeep} />
       </View>
       <Text style={[st.fabLabel, active && st.fabLabelActive]}>Sell</Text>
     </View>
@@ -463,14 +463,14 @@ export default function RootNavigator() {
 const st = StyleSheet.create({
   tabBar: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(255,253,248,0.96)',
+    backgroundColor: 'rgba(255,253,248,0.94)',
     borderWidth: 1,
-    borderColor: 'rgba(224, 203, 188, 0.9)',
-    borderRadius: R.xl + 4,
+    borderColor: 'rgba(224, 203, 188, 0.74)',
+    borderRadius: R.xl + 2,
     marginHorizontal: S.lg,
-    marginBottom: S.sm,
-    paddingTop: S.sm,
-    minHeight: 64,
+    marginBottom: S.xs + 2,
+    paddingTop: S.xs + 2,
+    minHeight: 60,
     ...Shadow.subtle,
   },
   tabTouch: { flex: 1, alignItems: 'center', justifyContent: 'flex-start' },
@@ -492,7 +492,7 @@ const st = StyleSheet.create({
     color: C.text2,
     marginTop: 2,
   },
-  cellLabelActive: { color: '#2F766B', fontWeight: T.weight.semi },
+  cellLabelActive: { color: C.petrolDeep, fontWeight: T.weight.semi },
 
   // ── Notification badge (unread count) ───────────────────────────────────
   badge: {
@@ -521,12 +521,12 @@ const st = StyleSheet.create({
   // feel heavy.
   fabSlot: { alignItems: 'center', justifyContent: 'flex-start' },
   fab: {
-    width: 34,
-    height: 34,
-    borderRadius: 15,
-    backgroundColor: '#FFF3E8',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(251, 233, 226, 0.92)',
     borderWidth: 1,
-    borderColor: '#EFD0BD',
+    borderColor: 'rgba(215, 168, 158, 0.46)',
     alignItems: 'center',
     justifyContent: 'center',
     ...Shadow.subtle,
@@ -540,5 +540,5 @@ const st = StyleSheet.create({
     color: C.text2,
     marginTop: 2,
   },
-  fabLabelActive: { color: '#BB684F', fontWeight: T.weight.semi },
+  fabLabelActive: { color: C.coralDeep, fontWeight: T.weight.semi },
 });

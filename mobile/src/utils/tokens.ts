@@ -41,8 +41,8 @@ export const C = {
   coralLight:    '#FBE9E2',
   coralDeep:     '#6E4C45',
   coralBright:   '#D7A89E',
-  wordmarkCoral: '#D77861',
-  wordmarkTeal:  '#198A7D',
+  wordmarkCoral: '#C97861',
+  wordmarkTeal:  '#2F766B',
 
   // ── TRUST CHIP PALETTE ──────────────────────────────────────────────
   mintSoft:      '#EDF8EF',

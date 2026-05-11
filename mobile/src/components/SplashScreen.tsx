@@ -43,7 +43,7 @@ export default function SplashScreen({ hide = false, onFadeOut }: Props) {
       <View style={s.brandStage}>
         <Image
           source={SPLASH_MARK}
-          resizeMode="cover"
+          resizeMode="contain"
           style={s.icon}
         />
       </View>
@@ -66,8 +66,8 @@ const s = StyleSheet.create({
     height: 132,
   },
   icon: {
-    width: 132,
-    height: 132,
+    width: 120,
+    height: 120,
     borderRadius: R.xl + R.md - 2,
   },
 });

@@ -13,8 +13,8 @@ type Props = {
 const BRAND = {
   coral: C.wordmarkCoral,
   teal: C.wordmarkTeal,
-  clayShadow: 'rgba(87, 45, 35, 0.12)',
-  tealShadow: 'rgba(11, 67, 62, 0.10)',
+  clayShadow: 'rgba(87, 45, 35, 0.08)',
+  tealShadow: 'rgba(11, 67, 62, 0.08)',
 };
 
 export default function OwmeeLogo({ textSize = 28 }: Props) {
@@ -48,7 +48,7 @@ const s = StyleSheet.create({
     letterSpacing: 0,
     textShadowColor: BRAND.clayShadow,
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 0.8,
+    textShadowRadius: 0.6,
   },
   wordCoral: {
     color: BRAND.coral,
