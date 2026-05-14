@@ -17,7 +17,25 @@ def readLocalOrEnvProperty(String key) {
 }
 
 def googleMapsApiKey = readLocalOrEnvProperty("GOOGLE_MAPS_API_KEY")
-def hasGoogleMapsApiKey = googleMapsApiKey.length() > 0
+def missingGoogleMapsApiKeyValues = [
+    "",
+    "YOUR_ANDROID_MAPS_API_KEY",
+    "MISSING_GOOGLE_MAPS_API_KEY"
+] as Set
+def hasGoogleMapsApiKey = !missingGoogleMapsApiKeyValues.contains(googleMapsApiKey)
+
+gradle.taskGraph.whenReady { taskGraph ->
+    def buildsReleaseApk = taskGraph.allTasks.any {
+        it.path == ":app:assembleRelease" || it.path == ":app:bundleRelease"
+    }
+    if (buildsReleaseApk && !hasGoogleMapsApiKey) {
+        throw new GradleException(
+            "GOOGLE_MAPS_API_KEY is required for Android release builds. " +
+            "Add it to mobile/android/local.properties or pass -PGOOGLE_MAPS_API_KEY=... " +
+            "before running assembleRelease/bundleRelease."
+        )
+    }
+}
 
 /**
  * This is the configuration block to customize your React Native Android app.
@@ -102,7 +120,7 @@ android {
         versionCode 1
         versionName "1.0"
         manifestPlaceholders = [
-            GOOGLE_MAPS_API_KEY: hasGoogleMapsApiKey ? googleMapsApiKey : "MISSING_GOOGLE_MAPS_API_KEY"
+            GOOGLE_MAPS_API_KEY: hasGoogleMapsApiKey ? googleMapsApiKey : ""
         ]
         buildConfigField "boolean", "GOOGLE_MAPS_ENABLED", hasGoogleMapsApiKey ? "true" : "false"
     }

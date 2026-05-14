@@ -4,6 +4,38 @@ This is a new [**React Native**](https://reactnative.dev) project, bootstrapped 
 
 >**Note**: Make sure you have completed the [React Native - Environment Setup](https://reactnative.dev/docs/environment-setup) instructions till "Creating a new application" step, before proceeding.
 
+## Google Maps setup
+
+Owmee uses Google Maps on the precise address pin screen. Release Android builds now fail fast if a real maps key is not provided, so we do not accidentally ship an APK with a placeholder key.
+
+### Android
+
+1. Enable **Maps SDK for Android** in Google Cloud.
+2. Copy `android/local.properties.example` to `android/local.properties`.
+3. Set `GOOGLE_MAPS_API_KEY=...` in `android/local.properties`.
+4. Restrict the key to package name `com.owmee` and the SHA-1 fingerprint of the keystore used to sign the build.
+
+To find the SHA-1 for the current local signing setup:
+
+```bash
+cd android
+./gradlew signingReport
+```
+
+CI can also pass the key without writing a file:
+
+```bash
+cd android
+./gradlew assembleRelease -PGOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_API_KEY"
+```
+
+### iOS
+
+1. Enable **Maps SDK for iOS** in Google Cloud.
+2. Copy `ios/Config/GoogleMaps.local.xcconfig.example` to `ios/Config/GoogleMaps.local.xcconfig`.
+3. Set `GOOGLE_MAPS_API_KEY = ...`.
+4. Restrict the key to bundle id `com.owmee`.
+
 ## Step 1: Start the Metro Server
 
 First, you will need to start **Metro**, the JavaScript _bundler_ that ships _with_ React Native.
