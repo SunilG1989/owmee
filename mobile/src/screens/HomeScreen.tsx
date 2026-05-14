@@ -7,13 +7,12 @@
  *   3. Search bar (taps into Search tab)
  *   4. Trust chips (mint / blue / amber)
  *   5. Category rail — Phones · Laptops · Kids & Toys · Appliances
- *   6. Sell banner
- *   7. "Trusted deals near you" + Filter
- *   8. Horizontal catalog rows (single column, infinite scroll)
+ *   6. "Trusted deals near you" + Filter
+ *   7. Horizontal catalog rows (single column, infinite scroll)
  *
  * Auth & gating:
  *   - Bell: AuthFlow if guest, else Notifications
- *   - Hero "Sell from home" + SellBlock CTA: AuthFlow if guest, else Sell tab
+ *   - Hero "Sell from home": AuthFlow if guest, else Sell tab
  *   - Card tap: ListingDetail (works for guests too)
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -36,7 +35,6 @@ import { useAuthStore } from '../store/authStore';
 import { useLocation } from '../hooks/useLocation';
 import HeroCard from '../components/HeroCard';
 import CategoryRail, { type CategoryDef } from '../components/CategoryRail';
-import SellBlock from '../components/SellBlock';
 import { FeedCard } from '../components/OwmeeListingCard';
 import OwmeeLogo from '../components/OwmeeLogo';
 import { parseApiError } from '../utils/errors';
@@ -74,6 +72,20 @@ function recentPostedLabel(iso?: string | null): string {
   if (seconds < 86400) return `Posted ${Math.floor(seconds / 3600)}h ago`;
   if (seconds < 86400 * 7) return `Posted ${Math.floor(seconds / 86400)}d ago`;
   return 'Recently listed';
+}
+
+function recentDealSignal(item: FeedListing): string | null {
+  const discountPct = item.discount_pct
+    ?? (
+      item.original_price != null && item.original_price > item.price
+        ? Math.round((1 - item.price / item.original_price) * 100)
+        : null
+  );
+  if (discountPct != null && discountPct >= 20) return 'Great deal';
+  if (discountPct != null && discountPct >= 8) return 'Price dropped';
+  if (item.is_negotiable) return 'Negotiable';
+  if (item.distance_km != null && item.distance_km <= 15) return 'Popular nearby';
+  return null;
 }
 
 export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
@@ -469,7 +481,6 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
               onWishlist={() => handleWishlistPress(item)}
               isWishlisted={savedIds.has(item.id)}
             />
-            {index === 0 && <SellBlock onPress={handleSellPress} />}
           </>
         )}
         refreshControl={
@@ -503,8 +514,8 @@ function RecentListingsSection({
     <View style={s.recentSection}>
       <View style={s.recentHead}>
         <View style={s.recentTitleBlock}>
-          <Text style={s.recentTitle}>Recently listed</Text>
-          <Text style={s.recentSub}>Fresh items added near you.</Text>
+          <Text style={s.recentTitle}>Fresh listings near you</Text>
+          <Text style={s.recentSub}>Recently added items with safer pickup.</Text>
         </View>
         <TouchableOpacity activeOpacity={0.75} style={s.recentSeeAll} onPress={onSeeAll}>
           <Text style={s.recentSeeAllText}>See all</Text>
@@ -517,29 +528,33 @@ function RecentListingsSection({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={s.recentRow}
       >
-        {items.map(item => (
-          <TouchableOpacity
-            key={`recent-${item.id}`}
-            activeOpacity={0.86}
-            style={s.recentCard}
-            onPress={() => onItemPress(item)}
-            accessibilityRole="button"
-            accessibilityLabel={`Open recently listed ${item.title}`}
-          >
-            <Image source={recentImageSource(item)} style={s.recentImage} resizeMode="cover" />
-            <View style={s.recentCopy}>
-              <Text style={s.recentCardTitle} numberOfLines={2}>
-                {item.title}
-              </Text>
-              <Text style={s.recentPrice} numberOfLines={1}>
-                ₹{Math.round(item.price).toLocaleString('en-IN')}
-              </Text>
-              <Text style={s.recentTime} numberOfLines={1}>
-                {recentPostedLabel(item.created_at)}
-              </Text>
-            </View>
-          </TouchableOpacity>
-        ))}
+        {items.map(item => {
+          const signal = recentDealSignal(item);
+          return (
+            <TouchableOpacity
+              key={`recent-${item.id}`}
+              activeOpacity={0.86}
+              style={s.recentCard}
+              onPress={() => onItemPress(item)}
+              accessibilityRole="button"
+              accessibilityLabel={`Open recently listed ${item.title}`}
+            >
+              <Image source={recentImageSource(item)} style={s.recentImage} resizeMode="cover" />
+              <View style={s.recentCopy}>
+                <Text style={s.recentCardTitle} numberOfLines={2}>
+                  {item.title}
+                </Text>
+                <Text style={s.recentPrice} numberOfLines={1}>
+                  ₹{Math.round(item.price).toLocaleString('en-IN')}
+                  {signal ? ` · ${signal}` : ''}
+                </Text>
+                <Text style={s.recentTime} numberOfLines={1}>
+                  {recentPostedLabel(item.created_at)}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
       </ScrollView>
     </View>
   );
@@ -558,7 +573,7 @@ function TrustBanner() {
           adjustsFontSizeToFit
           minimumFontScale={0.84}
         >
-          Owmee verified • Protected payments • Assisted handover
+          Verified listings • Protected payment • Pickup support
         </Text>
       </View>
     </View>

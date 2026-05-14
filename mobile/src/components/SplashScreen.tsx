@@ -54,7 +54,7 @@ export default function SplashScreen({ hide = false, onFadeOut }: Props) {
 const s = StyleSheet.create({
   root: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: C.bone,
+    backgroundColor: '#04282C',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',

@@ -17,15 +17,16 @@
         this, the user sees the default theme color (white) for ~150ms
         on cold start, which is exactly the flash the user reported.
         Pinning it to splash_bg makes the system splash, the activity
-        window background, and the JS SplashScreen all the same cream.
+        window background, and the JS SplashScreen all the same dark
+        warm brand field.
     -->
     <style name="LaunchTheme" parent="Theme.AppCompat.Light.NoActionBar">
         <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
         <item name="android:windowBackground">@drawable/launch_screen</item>
         <item name="android:statusBarColor">@color/splash_bg</item>
         <item name="android:navigationBarColor">@color/splash_bg</item>
-        <item name="android:windowLightStatusBar">true</item>
-        <!-- Android 12+ system splash: cream all the way through. -->
+        <item name="android:windowLightStatusBar">false</item>
+        <!-- Android 12+ system splash: brand field all the way through. -->
         <item name="android:windowSplashScreenBackground">@color/splash_bg</item>
         <!-- Suppress the legacy "preview window" that fills with the
              default windowBackground on older API levels — we already

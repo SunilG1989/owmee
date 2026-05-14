@@ -144,30 +144,31 @@ function pickupSummary(listing: FeedListing): string {
   return area ? `Pickup available • ${area}` : 'Pickup available';
 }
 
-function sellerTenureLabel(memberSince?: string | null): string | null {
-  if (!memberSince) return null;
-  const joined = new Date(memberSince).getTime();
-  if (Number.isNaN(joined)) return null;
+function sellerTrustSummary(listing: FeedListing): string {
+  const completedDeals = Math.max(0, listing.seller_completed_deals || 0);
+  if (completedDeals >= 3) return `Verified seller • ${completedDeals} sold`;
 
-  const months = Math.max(0, Math.floor((Date.now() - joined) / (86400 * 1000 * 30.4375)));
-  if (months >= 24) return `${Math.floor(months / 12)} years on Owmee`;
-  if (months >= 12) return '1 year on Owmee';
-  if (months >= 2) return `${months} months on Owmee`;
-  return 'New on Owmee';
+  return 'Verified seller • Payment protected';
 }
 
-function sellerTrustSummary(listing: FeedListing): string {
-  const prefix = 'Verified seller';
-  const tenure = sellerTenureLabel(listing.seller_member_since);
-  if (tenure) return `${prefix} • ${tenure}`;
-
-  const completedDeals = Math.max(0, listing.seller_completed_deals || 0);
-  if (completedDeals > 0) {
-    const itemWord = completedDeals === 1 ? 'item' : 'items';
-    return `${prefix} • ${completedDeals} ${itemWord} sold`;
+function dealSignal(listing: FeedListing): string | null {
+  const discountPct = listing.discount_pct
+    ?? (
+      listing.original_price != null && listing.original_price > listing.price
+        ? Math.round((1 - listing.price / listing.original_price) * 100)
+        : null
+    );
+  if (discountPct != null && discountPct >= 20) return 'Great deal';
+  if (discountPct != null && discountPct >= 8) return 'Price dropped';
+  if (listing.created_at) {
+    const posted = new Date(listing.created_at).getTime();
+    if (!Number.isNaN(posted) && Date.now() - posted < 86400 * 1000 * 3) {
+      return 'Recently listed';
+    }
   }
-
-  return `${prefix} • New on Owmee`;
+  if (listing.is_negotiable) return 'Negotiable';
+  if (listing.distance_km != null && listing.distance_km <= 15) return 'Popular nearby';
+  return null;
 }
 
 // ── DEAL VARIANT ─────────────────────────────────────────────────────────────
@@ -241,6 +242,7 @@ export function FeedCard({
   const conditionLine = conditionSummary(listing.condition);
   const sellerTrustLine = sellerTrustSummary(listing);
   const pickupLine = pickupSummary(listing);
+  const signal = dealSignal(listing);
 
   const handleViewDetails = () => onPress();
   const handleMakeOffer = () => {
@@ -269,7 +271,7 @@ export function FeedCard({
 
         <View style={s.imageTrustBadge}>
           <ShieldCheck size={11} strokeWidth={2.35} color={C.petrolDeep} />
-          <Text style={s.imageTrustText} numberOfLines={1}>Owmee verified</Text>
+          <Text style={s.imageTrustText} numberOfLines={1}>Verified listing</Text>
         </View>
 
         {listing.discount_pct != null && listing.discount_pct > 0 && (
@@ -307,6 +309,9 @@ export function FeedCard({
 
           <View style={s.priceBlock}>
             <Text style={s.feedPrice}>{formatPriceFull(listing.price)}</Text>
+            {signal && (
+              <Text style={s.dealSignal} numberOfLines={1}>{signal}</Text>
+            )}
             {showOriginal && (
               <Text style={s.feedStrike}>{formatPriceFull(listing.original_price)}</Text>
             )}
@@ -329,7 +334,7 @@ export function FeedCard({
 
             <View style={s.metaRow}>
               <ShieldCheck size={12} strokeWidth={2.25} color={C.petrolText} />
-              <Text style={s.metaText} numberOfLines={1}>Protected payment available</Text>
+              <Text style={s.metaText} numberOfLines={1}>Pay safely through Owmee</Text>
             </View>
 
             <View style={s.metaRow}>
@@ -594,6 +599,17 @@ const s = StyleSheet.create({
     fontWeight: T.weight.semi,
     color: C.text3,
     textDecorationLine: 'line-through',
+  },
+  dealSignal: {
+    paddingHorizontal: S.xs + 2,
+    paddingVertical: 2,
+    borderRadius: R.xs,
+    overflow: 'hidden',
+    backgroundColor: C.coralLight,
+    color: C.coralDeep,
+    fontSize: T.size.xs,
+    lineHeight: T.size.xs + 3,
+    fontWeight: T.weight.heavy,
   },
   detailRows: {
     marginTop: 3,

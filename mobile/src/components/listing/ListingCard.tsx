@@ -49,6 +49,21 @@ function formatDistance(km: number | null | undefined): string | null {
   return `${km.toFixed(1)} km`;
 }
 
+function dealSignal(listing: Listing): string | null {
+  const off = percentOff(listing.price, listing.original_price);
+  if (off != null && off >= 20) return 'Great deal';
+  if (off != null && off >= 8) return 'Price dropped';
+  if (listing.published_at) {
+    const posted = new Date(listing.published_at).getTime();
+    if (!Number.isNaN(posted) && Date.now() - posted < 86400 * 1000 * 3) {
+      return 'Recently listed';
+    }
+  }
+  if (listing.is_negotiable) return 'Negotiable';
+  if (listing.distance_km != null && listing.distance_km <= 15) return 'Popular nearby';
+  return null;
+}
+
 // T2-07: REMOVED useWindowDimensions — parent calculates once, passes to all cards
 export const ListingCard = memo(function ListingCard({
   listing, onPress, onBuySafely, onMakeOffer, onWishlist, isWishlisted, showDistance = true, cardWidth,
@@ -67,9 +82,11 @@ export const ListingCard = memo(function ListingCard({
     || listing.seller?.kyc_verified
     || (listing.reviewed_by && listing.reviewed_by !== 'none'),
   );
+  const signal = dealSignal(listing);
   const proofChips = [
+    hasOwmeeCheck ? 'Payment protected' : null,
+    signal,
     listing.warranty_status && !/no|none|expired/i.test(listing.warranty_status) ? 'Warranty' : null,
-    listing.is_negotiable ? 'Offer ok' : null,
   ].filter(Boolean).slice(0, 2) as string[];
   const distanceText = showDistance ? formatDistance(listing.distance_km) : null;
   const placeText = listing.city || null;
@@ -192,7 +209,7 @@ export const ListingCard = memo(function ListingCard({
             accessibilityLabel={`Make an offer for ${listing.title}`}
           >
             <Text style={s.offerText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82}>
-              Offer
+              Make offer
             </Text>
           </TouchableOpacity>
         </View>
@@ -312,7 +329,7 @@ const s = StyleSheet.create({
     flexWrap: 'wrap',
   },
   proofChip: {
-    maxWidth: 68,
+    maxWidth: 108,
     paddingHorizontal: S.xs + 2,
     paddingVertical: 2,
     borderRadius: R.xs,

@@ -152,6 +152,23 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
     ]);
   };
 
+  const askOwmeeToVerify = async () => {
+    if (!isAuthenticated) { navigation.navigate('AuthFlow'); return; }
+    try {
+      await Reports.reportListing(
+        listingId,
+        'other',
+        'Buyer requested Owmee verification before purchase.',
+      );
+      Alert.alert(
+        'Verification requested',
+        'Owmee will review this listing and support the next step if you choose to buy safely.',
+      );
+    } catch (e) {
+      Alert.alert('Could not request verification', parseApiError(e, 'Please try again.'));
+    }
+  };
+
   const makeOffer = async () => {
     if (!isAuthenticated) { navigation.navigate('AuthFlow'); return; }
     try {
@@ -191,6 +208,23 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
   const fairPriceOff = listing.original_price && listing.price < listing.original_price
     ? Math.round((1 - listing.price / listing.original_price) * 100)
     : null;
+  const postedAt = listing.published_at || listing.created_at;
+  const isRecentlyListed = postedAt
+    ? Date.now() - new Date(postedAt).getTime() < 86400 * 1000 * 3
+    : false;
+  const detailDealSignal = fairPriceOff != null
+    ? fairPriceOff >= 20
+      ? 'Great deal'
+      : fairPriceOff >= 8
+        ? 'Price dropped'
+        : 'Fair price'
+    : isRecentlyListed
+      ? 'Recently listed'
+      : listing.is_negotiable
+      ? 'Negotiable'
+      : listing.distance_km != null && listing.distance_km <= 15
+        ? 'Popular nearby'
+      : null;
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
@@ -288,7 +322,7 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
           )}
           {fairPriceOff != null && (
             <View style={s.fairPriceRow}>
-              <Text style={s.fairPriceLabel}>✓ Fair price</Text>
+              <Text style={s.fairPriceLabel}>✓ {detailDealSignal}</Text>
               <Text style={s.fairPriceMrp}>{formatPrice(listing.original_price!)}</Text>
               <Text style={s.fairPriceOff}>{fairPriceOff}% off</Text>
             </View>
@@ -391,6 +425,29 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
           </View>
         )}
 
+        <View style={s.trustHelpCard}>
+          <View style={s.trustHelpCopy}>
+            <Text style={s.trustHelpTitle}>Need extra confidence?</Text>
+            <Text style={s.trustHelpText}>
+              Ask Owmee to run an extra listing check before you buy.
+            </Text>
+          </View>
+          <Button
+            label="Ask Owmee to verify"
+            variant="secondary"
+            size="sm"
+            onPress={askOwmeeToVerify}
+            style={s.verifyBtn}
+          />
+        </View>
+
+        <View style={s.paymentInfoCard}>
+          <Text style={s.paymentInfoTitle}>How protected payment works</Text>
+          <Text style={s.paymentInfoText}>
+            Pay through Owmee. The seller is paid only after the handover is completed as per Owmee's policy.
+          </Text>
+        </View>
+
         {listing.description && (
           <View style={s.section}>
             <Text style={s.sectionTitle}>Description</Text>
@@ -446,26 +503,31 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
       {/* Bottom CTA */}
       {!isOwn && (
         <View style={[s.bottomBar, { paddingBottom: Math.max(insets.bottom, S.lg) }]}>
-          {listing.is_negotiable && (
+          <View style={s.bottomActionRow}>
             <Button
-              label="Make offer"
-              variant="secondary"
+              label="Buy safely"
+              variant="primary"
               onPress={() => {
                 if (!isAuthenticated) { navigation.navigate('AuthFlow'); return; }
-                setShowOffer(true);
+                navigation.navigate('Checkout', { listingId });
               }}
-              style={s.offerOutlineBtn}
+              style={s.buyBtn}
             />
-          )}
-          <Button
-            label="Buy safely"
-            variant="primary"
-            onPress={() => {
-              if (!isAuthenticated) { navigation.navigate('AuthFlow'); return; }
-              navigation.navigate('Checkout', { listingId });
-            }}
-            style={s.buyBtn}
-          />
+            {listing.is_negotiable && (
+              <Button
+                label="Make offer"
+                variant="secondary"
+                onPress={() => {
+                  if (!isAuthenticated) { navigation.navigate('AuthFlow'); return; }
+                  setShowOffer(true);
+                }}
+                style={s.offerOutlineBtn}
+              />
+            )}
+          </View>
+          <Text style={s.bottomHelper}>
+            No seller chat needed. Owmee manages payment and handover support.
+          </Text>
         </View>
       )}
 
@@ -642,6 +704,33 @@ const s = StyleSheet.create({
   sellerBadgeText: { fontSize: T.size.xs, fontWeight: T.weight.bold, color: C.petrol },
   sellerStat: { fontSize: T.size.sm, color: C.text3 },
 
+  trustHelpCard: {
+    marginHorizontal: S.xl,
+    marginTop: S.md,
+    padding: S.md + 2,
+    backgroundColor: C.petrolLight,
+    borderWidth: 1,
+    borderColor: C.blueBorder,
+    borderRadius: R.lg,
+    gap: S.sm,
+  },
+  trustHelpCopy: { gap: 3 },
+  trustHelpTitle: { fontSize: T.size.base, fontWeight: T.weight.bold, color: C.petrolDeep },
+  trustHelpText: { fontSize: T.size.sm + 1, lineHeight: 18, color: C.petrolText },
+  verifyBtn: { alignSelf: 'flex-start', borderColor: C.blueBorder },
+
+  paymentInfoCard: {
+    marginHorizontal: S.xl,
+    marginTop: S.md,
+    padding: S.md + 2,
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: R.lg,
+  },
+  paymentInfoTitle: { fontSize: T.size.base, fontWeight: T.weight.bold, color: C.text },
+  paymentInfoText: { marginTop: 4, fontSize: T.size.sm + 1, lineHeight: 18, color: C.text2 },
+
   section: { paddingHorizontal: S.xl, marginTop: S.lg },
   sectionTitle: {
     fontSize: T.size.md, fontWeight: T.weight.semi,
@@ -663,7 +752,7 @@ const s = StyleSheet.create({
   feAssistedTitle: { fontSize: T.size.base, fontWeight: T.weight.bold, color: C.text },
   feAssistedSub: { fontSize: T.size.sm, color: C.text3, marginTop: 2 },
 
-  bottomSpacer: { height: 120 },
+  bottomSpacer: { height: 156 },
 
   reportRow: { paddingVertical: S.md + 2, paddingHorizontal: S.lg },
   reportText: { fontSize: T.size.base, color: C.red },
@@ -673,8 +762,15 @@ const s = StyleSheet.create({
     backgroundColor: C.surface,
     borderTopWidth: 1, borderTopColor: C.border,
     paddingHorizontal: S.xl, paddingTop: S.md,
-    flexDirection: 'row', gap: S.sm + 2,                            // 10
+    gap: S.sm,
   },
+  bottomHelper: {
+    fontSize: T.size.sm,
+    lineHeight: 16,
+    color: C.text3,
+    textAlign: 'center',
+  },
+  bottomActionRow: { flexDirection: 'row', gap: S.sm + 2 },
   offerOutlineBtn:{ flex: 1, borderWidth: 1.5, borderColor: C.petrol },
   buyBtn:         { flex: 2, ...Shadow.glow },
 
