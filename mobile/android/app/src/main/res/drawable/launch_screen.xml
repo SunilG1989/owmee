@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Native cold-start surface. Keep it brand-only: app icon, warm canvas,
-    no slogans. The React splash uses the same visual system once mounted.
+    Native cold-start surface. Keep it visually identical to the JS splash:
+    one logo-matched field, one centered mark, no second background design.
 -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@color/splash_bg" />

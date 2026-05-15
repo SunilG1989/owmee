@@ -7,7 +7,9 @@
  *   - Stub functions and stub styles removed
  */
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import {
+  NativeModules, Platform, StatusBar, View, Text, StyleSheet, TouchableOpacity,
+} from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -93,6 +95,13 @@ const RootStack = createNativeStackNavigator<RootStackParams>();
 const FeStack = createNativeStackNavigator<RootStackParams>();
 const AuthStack = createNativeStackNavigator<AuthStackParams>();
 const Tab = createBottomTabNavigator<TabParams>();
+const SPLASH_STATUS_BG = '#003F4B';
+const APP_STATUS_BG = '#FEFBF4';
+
+function setAndroidNavigationBar(backgroundColor: string, darkIcons: boolean) {
+  if (Platform.OS !== 'android') return;
+  NativeModules.SystemBars?.setNavigationBarColor(backgroundColor, darkIcons);
+}
 
 /**
  * Bottom tab cell (non-Sell). Material You–style: contained pill
@@ -322,7 +331,7 @@ function FeRootStack() {
 export default function RootNavigator() {
   const { hydrate, hydrated, isAuthenticated, role } = useAuthStore();
   const [onboardingSeen, setOnboardingSeen] = useState<boolean | null>(null);
-  const [showSplash, setShowSplash] = useState(true);
+  const [appChromeReady, setAppChromeReady] = useState(false);
   // Minimum-display floor so the splash doesn't flash on fast devices —
   // same 700ms guard Amazon / Meesho use to keep brand perception
   // consistent regardless of cold-start speed.
@@ -341,6 +350,22 @@ export default function RootNavigator() {
   }, [hydrate]);
 
   const appReady = hydrated && onboardingSeen !== null && splashMinElapsed;
+
+  useEffect(() => {
+    if (!appReady) {
+      setAppChromeReady(false);
+      return undefined;
+    }
+    const t = setTimeout(() => setAppChromeReady(true), 180);
+    return () => clearTimeout(t);
+  }, [appReady]);
+
+  useEffect(() => {
+    setAndroidNavigationBar(
+      appChromeReady ? APP_STATUS_BG : SPLASH_STATUS_BG,
+      appChromeReady,
+    );
+  }, [appChromeReady]);
 
   useEffect(() => {
     if (!hydrated || !isAuthenticated) return;
@@ -373,16 +398,20 @@ export default function RootNavigator() {
     return <SplashScreen />;
   }
 
-  const splashOverlay = showSplash ? (
-    <SplashScreen hide onFadeOut={() => setShowSplash(false)} />
-  ) : null;
+  const appStatusBar = (
+    <StatusBar
+      barStyle={appChromeReady ? 'dark-content' : 'light-content'}
+      backgroundColor={appChromeReady ? APP_STATUS_BG : SPLASH_STATUS_BG}
+      translucent={false}
+    />
+  );
 
   // ── FE branch: if logged-in user has FE role, show the FE app ──────────────
   if (isAuthenticated && role === 'fe') {
     return (
       <>
+        {appStatusBar}
         <FeRootStack />
-        {splashOverlay}
       </>
     );
   }
@@ -390,6 +419,7 @@ export default function RootNavigator() {
   if (!onboardingSeen) {
     return (
       <>
+        {appStatusBar}
         <OnboardingScreen
           navigation={{
             navigate: () => {
@@ -398,13 +428,13 @@ export default function RootNavigator() {
             },
           }}
         />
-        {splashOverlay}
       </>
     );
   }
 
   return (
     <>
+      {appStatusBar}
       <NavigationContainer>
         <RootStack.Navigator screenOptions={{ headerShown: false }}>
           <RootStack.Screen name="MainTabs" component={MainTabsWithAddressGate} />
@@ -455,7 +485,6 @@ export default function RootNavigator() {
           <RootStack.Screen name="AddressPicker" component={AddressPickerScreen} options={{ animation: 'slide_from_right' }} />
         </RootStack.Navigator>
       </NavigationContainer>
-      {splashOverlay}
     </>
   );
 }

@@ -173,15 +173,15 @@ export default function AIListingIdentifierScreen({
       <SafeAreaView style={st.root}>
         <View style={st.successWrap}>
           <Text style={st.successCheck}>✓</Text>
-          <Text style={st.successTitle}>Your listing is live</Text>
+          <Text style={st.successTitle}>Your listing is ready</Text>
           <Text style={st.successSpecs}>{success.title}</Text>
           <Text style={st.successPrice}>{formatPrice(success.price)}</Text>
 
           <View style={st.successDivider} />
           <Text style={st.successSection}>WHAT HAPPENS NEXT</Text>
-          <Text style={st.successStep}>• A buyer commits (usually within 72 hours)</Text>
-          <Text style={st.successStep}>• We schedule pickup from your address</Text>
-          <Text style={st.successStep}>• You get paid 2 days after pickup</Text>
+          <Text style={st.successStep}>• A verified buyer commits (usually within 72 hours)</Text>
+          <Text style={st.successStep}>• Owmee manages payment and handover support</Text>
+          <Text style={st.successStep}>• Payout is released after handover as per Owmee policy</Text>
 
           <View style={st.flex} />
           <Button

@@ -72,6 +72,10 @@ export default function MyListingsScreen({ navigation }: any) {
     setShowActions(false);
   }, []);
 
+  const goToSell = useCallback(() => {
+    navigation.navigate('MainTabs', { screen: 'Sell' });
+  }, [navigation]);
+
   const startDelete = useCallback(() => {
     setShowActions(false);
     // Tiny delay so the modal-stack swap doesn't jank on Android.
@@ -122,6 +126,25 @@ export default function MyListingsScreen({ navigation }: any) {
       Alert.alert('Could not update', parseApiError(e));
     }
   }, [selectedListing, load]);
+
+  const confirmMarkSold = useCallback((where: 'on_owmee' | 'elsewhere') => {
+    if (!selectedListing) return;
+    const soldOnOwmee = where === 'on_owmee';
+    Alert.alert(
+      soldOnOwmee ? 'Mark sold on Owmee?' : 'Mark sold elsewhere?',
+      soldOnOwmee
+        ? 'This will move the listing out of the active marketplace.'
+        : 'This will remove the listing from buyer discovery because it sold outside Owmee.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Mark sold',
+          style: soldOnOwmee ? 'default' : 'destructive',
+          onPress: () => markSold(where),
+        },
+      ],
+    );
+  }, [markSold, selectedListing]);
 
   const renderItem = ({ item }: { item: Listing }) => {
     const st = STATUS_MAP[item.status] || STATUS_MAP.draft;
@@ -190,7 +213,7 @@ export default function MyListingsScreen({ navigation }: any) {
         <Text style={s.headerTitle}>My Listings</Text>
         <IconButton
           icon="+"
-          onPress={() => navigation.navigate('Sell')}
+          onPress={goToSell}
           a11y="Create listing"
           variant="solid"
           size="sm"
@@ -210,7 +233,7 @@ export default function MyListingsScreen({ navigation }: any) {
             <Button
               label="Create listing"
               variant="primary"
-              onPress={() => navigation.navigate('Sell')}
+              onPress={goToSell}
             />
           </View>
         }
@@ -239,20 +262,20 @@ export default function MyListingsScreen({ navigation }: any) {
                 <Text style={s.actionEmoji}>✏️</Text>
                 <View style={s.actionTextWrap}>
                   <Text style={s.actionTitle}>Edit details</Text>
-                  <Text style={s.actionSub}>Change price, photos, description</Text>
+                  <Text style={s.actionSub}>Change price, item details, description</Text>
                 </View>
               </TouchableOpacity>
             ) : null}
             {canMarkSold ? (
               <>
-                <TouchableOpacity style={s.actionItem} onPress={() => markSold('on_owmee')}>
+                <TouchableOpacity style={s.actionItem} onPress={() => confirmMarkSold('on_owmee')}>
                   <Text style={s.actionEmoji}>✅</Text>
                   <View style={s.actionTextWrap}>
                     <Text style={s.actionTitle}>Mark sold on Owmee</Text>
                     <Text style={s.actionSub}>You sold it through Owmee</Text>
                   </View>
                 </TouchableOpacity>
-                <TouchableOpacity style={s.actionItem} onPress={() => markSold('elsewhere')}>
+                <TouchableOpacity style={s.actionItem} onPress={() => confirmMarkSold('elsewhere')}>
                   <Text style={s.actionEmoji}>🛒</Text>
                   <View style={s.actionTextWrap}>
                     <Text style={s.actionTitle}>Mark sold elsewhere</Text>

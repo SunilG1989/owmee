@@ -19,9 +19,9 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import Geolocation from '@react-native-community/geolocation';
 import MapView, { Circle, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LocateFixed, MapPin } from 'lucide-react-native';
 
 import { Addresses, Geo, type PhotonReverseResponse, type UserAddress } from '../../../services/api';
 import { BackButton, Button } from '../../../components/ui';
@@ -29,6 +29,11 @@ import { C, R, S, Shadow, T } from '../../../utils/tokens';
 import type { RootScreen } from '../../../navigation/types';
 import { cacheAddressLocation } from '../../../utils/addressLocation';
 import { parseApiError } from '../../../utils/errors';
+import {
+  getBestCurrentLocationFix,
+  locationErrorCopy,
+  requestFineLocationPermission,
+} from '../../../utils/locationGps';
 
 const STREET_DELTA = 0.0048;
 const REVERSE_DEBOUNCE_MS = 650;
@@ -142,23 +147,30 @@ export default function LocationMapScreen({
   const recenterToGps = () => {
     if (locating) return;
     setLocating(true);
-    Geolocation.getCurrentPosition(
-      (pos) => {
-        const next = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        const accuracy = pos.coords.accuracy ?? undefined;
-        setGpsPoint({ ...next, accuracy });
+
+    (async () => {
+      try {
+        const granted = await requestFineLocationPermission();
+        if (!granted) {
+          Alert.alert(
+            'Location permission is off',
+            'Allow location access or move the map manually to your building.',
+          );
+          return;
+        }
+
+        const fix = await getBestCurrentLocationFix();
+        const next = { lat: fix.lat, lng: fix.lng };
+        setGpsPoint({ ...next, accuracy: fix.accuracy });
         setCenter(next);
-        mapRef.current?.animateToRegion(toRegion(next), 450);
+        mapRef.current?.animateToRegion(toRegion(next), 360);
         scheduleReverse(next, true);
+      } catch (e) {
+        Alert.alert('Could not find GPS', locationErrorCopy(e));
+      } finally {
         setLocating(false);
-      },
-      () => setLocating(false),
-      {
-        enableHighAccuracy: true,
-        timeout: 10_000,
-        maximumAge: 5_000,
-      },
-    );
+      }
+    })();
   };
 
   const onConfirm = async () => {
@@ -227,7 +239,7 @@ export default function LocationMapScreen({
               style={StyleSheet.absoluteFill}
               initialRegion={toRegion(center)}
               onRegionChangeComplete={onRegionChangeComplete}
-              showsUserLocation={source === 'gps_detected'}
+              showsUserLocation={!!gpsPoint}
               showsMyLocationButton={false}
               showsCompass
               toolbarEnabled={false}
@@ -259,15 +271,14 @@ export default function LocationMapScreen({
               {locating ? (
                 <ActivityIndicator color={C.petrolDeep} />
               ) : (
-                <Text style={s.recenterText}>Use GPS</Text>
+                <View style={s.recenterRow}>
+                  <LocateFixed size={17} color={C.petrolDeep} strokeWidth={2.4} />
+                  <Text style={s.recenterText}>My location</Text>
+                </View>
               )}
             </TouchableOpacity>
 
-            <View style={s.pinAnchor} pointerEvents="none">
-              <View style={s.pinHalo}>
-                <Text style={s.pinGlyph}>📍</Text>
-              </View>
-            </View>
+            <CenterPin />
           </View>
         ) : (
           <FallbackMap
@@ -356,9 +367,7 @@ function FallbackMap({
         <View style={s.gridA} />
         <View style={s.gridB} />
         <View style={s.gridC} />
-        <View style={s.pinHalo}>
-          <Text style={s.pinGlyph}>📍</Text>
-        </View>
+        <CenterPin compact />
       </View>
       <Text style={s.fallbackTitle}>Google Maps is not enabled in this build</Text>
       <Text style={s.fallbackBody}>
@@ -374,6 +383,24 @@ function FallbackMap({
         <NudgeButton label="Left" onPress={() => onNudge(0, -SMALL_STEP)} />
         <NudgeButton label="Right" onPress={() => onNudge(0, SMALL_STEP)} />
         <NudgeButton label="Down" onPress={() => onNudge(-SMALL_STEP, 0)} />
+      </View>
+    </View>
+  );
+}
+
+function CenterPin({ compact = false }: { compact?: boolean }) {
+  return (
+    <View style={s.pinAnchor} pointerEvents="none">
+      <View style={[s.pinStack, compact && s.pinStackCompact]}>
+        <View style={[s.pinShadow, compact && s.pinShadowCompact]} />
+        <View style={[s.pinHead, compact && s.pinHeadCompact]}>
+          <MapPin
+            size={compact ? 26 : 32}
+            color={C.coralDeep}
+            strokeWidth={2.4}
+          />
+        </View>
+        <View style={[s.pinStem, compact && s.pinStemCompact]} />
       </View>
     </View>
   );
@@ -492,7 +519,7 @@ const s = StyleSheet.create({
     position: 'absolute',
     right: S.md,
     bottom: S.md,
-    minWidth: 92,
+    minWidth: 132,
     minHeight: 42,
     borderRadius: R.pill,
     backgroundColor: C.surface,
@@ -501,6 +528,12 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     ...Shadow.subtle,
+  },
+  recenterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: S.xs,
   },
   recenterText: {
     color: C.petrolDeep,
@@ -516,19 +549,50 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  pinHalo: {
-    width: 78,
-    height: 78,
-    borderRadius: 39,
-    backgroundColor: 'rgba(255,253,248,0.92)',
+  pinStack: {
+    alignItems: 'center',
+    transform: [{ translateY: -39 }],
+  },
+  pinStackCompact: {
+    transform: [{ translateY: -32 }],
+  },
+  pinHead: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: 'rgba(255,253,248,0.96)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(47,118,107,0.18)',
+    borderColor: 'rgba(110,76,69,0.18)',
     ...Shadow.subtle,
   },
-  pinGlyph: {
-    fontSize: T.size.display + 10,
+  pinHeadCompact: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+  },
+  pinStem: {
+    width: 2,
+    height: 20,
+    marginTop: -1,
+    backgroundColor: C.coralDeep,
+    opacity: 0.55,
+  },
+  pinStemCompact: {
+    height: 16,
+  },
+  pinShadow: {
+    position: 'absolute',
+    width: 32,
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(23,32,51,0.18)',
+    transform: [{ translateY: 45 }],
+  },
+  pinShadowCompact: {
+    width: 26,
+    transform: [{ translateY: 38 }],
   },
   sheet: {
     backgroundColor: C.surface,

@@ -407,6 +407,9 @@ export default function BookingScreen({
       </KeyboardAvoidingView>
 
       <View style={s.bottomBar}>
+        {!slot ? (
+          <Text style={s.bottomHint}>Choose a visit time to continue.</Text>
+        ) : null}
         <Button
           label={STR.submitCta}
           onPress={onSubmit}
@@ -676,5 +679,11 @@ const s = StyleSheet.create({
     backgroundColor: C.bone,
     borderTopWidth: 1,
     borderTopColor: C.border,
+  },
+  bottomHint: {
+    color: C.text3,
+    fontSize: T.size.sm + 1,
+    textAlign: 'center',
+    marginBottom: S.sm,
   },
 });

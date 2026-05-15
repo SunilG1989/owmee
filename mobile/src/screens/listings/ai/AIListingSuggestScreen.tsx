@@ -181,7 +181,7 @@ export default function AIListingSuggestScreen({
           <View style={st.successCheckCircle}>
             <Text style={st.successCheck}>✓</Text>
           </View>
-          <Text style={st.successTitle}>Your listing is live!</Text>
+          <Text style={st.successTitle}>Your listing is ready</Text>
           <Text style={st.successHelper}>
             We'll notify you the moment a verified buyer commits.
           </Text>
@@ -193,9 +193,9 @@ export default function AIListingSuggestScreen({
 
           <Text style={st.successSection}>What happens next</Text>
           <SuccessStep num={1} text="A verified buyer commits — usually within 72 hours" />
-          <SuccessStep num={2} text="We pick up the item from your address" />
-          <SuccessStep num={3} text="We inspect and ship to the buyer" />
-          <SuccessStep num={4} text="Money lands in your bank 2 days after pickup" />
+          <SuccessStep num={2} text="Owmee manages payment and handover support" />
+          <SuccessStep num={3} text="Keep the item ready and update details if anything changes" />
+          <SuccessStep num={4} text="Payout is released after handover as per Owmee policy" />
         </ScrollView>
 
         <View style={st.successCtaBar}>
@@ -245,9 +245,9 @@ export default function AIListingSuggestScreen({
           </TouchableOpacity>
         </View>
 
-        {/* Set our price */}
+        {/* Set your price */}
         <View style={st.section}>
-          <Text style={st.sectionH1}>Set our price</Text>
+          <Text style={st.sectionH1}>Set your price</Text>
           <Text style={st.sectionSub}>
             {draft.price_source === 'comparables' && draft.comparables.length > 0
               ? `Based on ${draft.comparables.length} similar items sold recently.`
@@ -298,11 +298,12 @@ export default function AIListingSuggestScreen({
 
         {/* How Owmee protects your trust */}
         <View style={st.trustBlock}>
-          <Text style={st.trustHeading}>How Owmee protects your trust</Text>
-          <TrustRow text="We pick up, verify, photograph, and create your ad" />
-          <TrustRow text="We do all the bargaining for you" />
-          <TrustRow text="Only verified buyers — no scam calls" />
-          <TrustRow text="100% refund guarantee backs every sale" />
+          <Text style={st.trustHeading}>How Owmee protects your sale</Text>
+          <TrustRow text="KYC verification stays visible as your seller trust badge" />
+          <TrustRow text="Owmee manages protected payment and handover support" />
+          <TrustRow text="Verified buyers use safe payment — no seller chat needed" />
+          <TrustRow text="You can edit details until a buyer commits" />
+          <TrustRow text="Clear photos and honest condition help prevent returns" />
         </View>
 
         {/* TDS pre-disclosure (P0 launch fix) — surfacing IT Section 194-O
@@ -460,7 +461,7 @@ const st = StyleSheet.create({
   },
   itemEditGlyph: { fontSize: T.size.md, color: C.petrol, fontWeight: T.weight.semi },
 
-  // Section (Set our price / Condition)
+  // Section (Set your price / Condition)
   section: {
     backgroundColor: C.surface,
     marginHorizontal: S.lg,

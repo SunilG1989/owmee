@@ -1,60 +1,45 @@
 /**
- * SplashScreen — JS-side branded overlay shown during app bootstrap.
+ * SplashScreen — JS-side branded surface shown during app bootstrap.
  *
  * The native side (iOS LaunchScreen.storyboard / Android LaunchTheme)
- * already renders a cream window background instantly on cold start.
+ * already renders the sampled logo field instantly on cold start.
  * This component takes over once React mounts and stays visible until
- * `RootNavigator` finishes hydrating auth + location, then fades out.
+ * `RootNavigator` finishes hydrating auth + location.
  *
  * Commerce-app rule: splash is identity, not marketing. Keep it quiet,
  * centered and fast; the home screen does the explaining.
  */
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
 import {
-  Animated, Image, StyleSheet, View,
+  Image, StatusBar, StyleSheet, View,
 } from 'react-native';
 import { C, R } from '../utils/tokens';
 
 const SPLASH_MARK = require('../../assets/owmee/brand/owmee-splash-icon-approved.png');
+const SPLASH_BG = C.splashBg;
+const SPLASH_MARK_SIZE = 132;
 
-interface Props {
-  /** When true, fades out and unmounts. Defaults to false (visible). */
-  hide?: boolean;
-  /** Called once the fade-out animation completes. */
-  onFadeOut?: () => void;
-}
-
-export default function SplashScreen({ hide = false, onFadeOut }: Props) {
-  const fade = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    if (!hide) return;
-    Animated.timing(fade, {
-      toValue: 0,
-      duration: 160,
-      useNativeDriver: true,
-    }).start(({ finished }) => {
-      if (finished) onFadeOut?.();
-    });
-  }, [hide, fade, onFadeOut]);
-
+export default function SplashScreen() {
   return (
-    <Animated.View style={[s.root, { opacity: fade }]} pointerEvents="none">
-      <View style={s.brandStage}>
-        <Image
-          source={SPLASH_MARK}
-          resizeMode="contain"
-          style={s.icon}
-        />
+    <>
+      <StatusBar barStyle="light-content" backgroundColor={SPLASH_BG} translucent={false} />
+      <View style={s.root} pointerEvents="none">
+        <View style={s.brandStage}>
+          <Image
+            source={SPLASH_MARK}
+            resizeMode="contain"
+            style={s.icon}
+          />
+        </View>
       </View>
-    </Animated.View>
+    </>
   );
 }
 
 const s = StyleSheet.create({
   root: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#04282C',
+    backgroundColor: SPLASH_BG,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -62,12 +47,12 @@ const s = StyleSheet.create({
   brandStage: {
     alignItems: 'center',
     justifyContent: 'center',
-    width: 132,
-    height: 132,
+    width: SPLASH_MARK_SIZE,
+    height: SPLASH_MARK_SIZE,
   },
   icon: {
-    width: 120,
-    height: 120,
+    width: SPLASH_MARK_SIZE,
+    height: SPLASH_MARK_SIZE,
     borderRadius: R.xl + R.md - 2,
   },
 });

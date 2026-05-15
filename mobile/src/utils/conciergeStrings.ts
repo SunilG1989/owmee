@@ -28,19 +28,19 @@ export const CONCIERGE_STRINGS = {
       pillBadge: 'Recommended',
       heading: 'Owmee Concierge',
       tagline:
-        'We do all photos, pricing, KYC, ad creation, and pickup. List with confidence.',
+        'We help with photos, pricing, KYC guidance, ad creation, and pickup prep. List with verified trust.',
       bullets: [
         'Best price',
-        'Expert pricing + safe inflation',
+        'Expert pricing + safe inspection',
         'Pro-quality photos',
-        'Buyer-trust boost',
+        'KYC trust badge',
       ],
       cta: 'Book a free visit',
     },
     selfService: {
       heading: 'List it myself',
       tagline:
-        'We guide you through photos, pricing, verification, and pickup support — ending in doorstep handover.',
+        'We guide you through photos, pricing, verification, item details, and pickup support — you stay in control.',
       cta: 'Continue',
     },
     alreadyBooked: {

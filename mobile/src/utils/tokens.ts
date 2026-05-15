@@ -30,6 +30,7 @@ export const C = {
   petrolDeep:    '#355F63',  // pressed / readable brand surface
   petrolText:    '#4B7280',  // readable trust text on light surfaces
   petrolNight:   '#172033',  // inverse/navy text
+  splashBg:      '#003F4B',  // logo-matched native/JS splash background
 
   // ── SECONDARY · AQUA SUPPORT ────────────────────────────────────────
   aqua:          '#91B6B0',

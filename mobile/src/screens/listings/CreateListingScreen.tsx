@@ -423,7 +423,10 @@ export default function CreateListingScreen({ navigation }: any) {
       }
 
       await Listings.publish(lid);
-      Alert.alert('Listed! 🎉', 'Your item is now live.', [
+      const kycTrustLine = kycStatus === 'verified'
+        ? 'Your Verified seller badge helps buyers trust the listing.'
+        : 'Complete KYC from Profile to add the Verified seller trust badge.';
+      Alert.alert('Listing submitted', `Your item is submitted for review. Usually live within 2 hours.\n\n${kycTrustLine}`, [
         { text: 'View listing', onPress: () => navigation.navigate('ListingDetail', { listingId: lid }) },
       ]);
     } catch (e: any) {

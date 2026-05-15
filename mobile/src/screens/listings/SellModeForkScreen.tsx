@@ -68,6 +68,15 @@ export default function SellModeForkScreen({ navigation }: any) {
     return () => { cancelled = true; };
   }, []);
 
+  const openConcierge = () => {
+    if (visitLoading) return;
+    if (activeVisit) {
+      navigation.navigate('VisitDetail', { visit_id: activeVisit.id });
+      return;
+    }
+    navigation.navigate('ConciergeBooking');
+  };
+
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.headerRow}>
@@ -83,7 +92,7 @@ export default function SellModeForkScreen({ navigation }: any) {
         {/* ── Concierge card (hero) ─────────────────────────────────────── */}
         <TouchableOpacity
           style={s.heroCard}
-          onPress={() => navigation.navigate('ConciergeBooking')}
+          onPress={openConcierge}
           activeOpacity={0.92}
           accessibilityRole="button"
           accessibilityLabel={`${C_STR.concierge.heading}. ${C_STR.concierge.tagline}`}
@@ -114,7 +123,13 @@ export default function SellModeForkScreen({ navigation }: any) {
           </View>
 
           <View style={s.heroCta}>
-            <Text style={s.heroCtaText}>{C_STR.concierge.cta}</Text>
+            <Text style={s.heroCtaText}>
+              {visitLoading
+                ? 'Checking visits...'
+                : activeVisit
+                  ? C_STR.alreadyBooked.cta
+                  : C_STR.concierge.cta}
+            </Text>
             <Text style={s.heroCtaArrow} allowFontScaling={false}>→</Text>
           </View>
         </TouchableOpacity>

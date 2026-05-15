@@ -25,7 +25,7 @@
  * tested, and the value of vision-camera (custom overlays) doesn't
  * matter for this MVP.
  */
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -41,6 +41,13 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
+import {
+  Camera,
+  CheckCircle2,
+  Images,
+  Sparkles,
+  type LucideIcon,
+} from 'lucide-react-native';
 
 import { C, T, S, R, Shadow } from '../../../utils/tokens';
 import { Button, IconButton } from '../../../components/ui';
@@ -73,7 +80,6 @@ async function requestCameraPermission(): Promise<boolean> {
 export default function AIListingCameraScreen({ navigation }: RootScreen<'AIListingCamera'>) {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [uploading, setUploading] = useState(false);
-  const autoOpenedRef = useRef(false);
 
   const exitFlow = useCallback(() => {
     // Plain goBack(). The camera is presented as a fullScreenModal in the
@@ -143,15 +149,6 @@ export default function AIListingCameraScreen({ navigation }: RootScreen<'AIList
     );
   }, [photos.length]);
 
-  // Open camera once on first mount only. Avoids the v1 loop where
-  // navigating back would re-trigger camera launch.
-  useEffect(() => {
-    if (autoOpenedRef.current) return;
-    autoOpenedRef.current = true;
-    const t = setTimeout(openCamera, 200);
-    return () => clearTimeout(t);
-  }, [openCamera]);
-
   const removePhoto = useCallback((localId: string) => {
     setPhotos((p) => p.filter((x) => x.localId !== localId));
   }, []);
@@ -168,7 +165,7 @@ export default function AIListingCameraScreen({ navigation }: RootScreen<'AIList
         "Upload failed",
         msg + '\n\nWould you like to try again?',
         [
-          { text: 'Cancel', style: 'cancel', onPress: () => setUploading(false) },
+          { text: 'Keep photos', style: 'cancel', onPress: () => setUploading(false) },
           {
             text: 'Use manual form',
             onPress: () => {
@@ -258,13 +255,34 @@ export default function AIListingCameraScreen({ navigation }: RootScreen<'AIList
         </ScrollView>
       ) : (
         <View style={st.emptyBlock}>
-          <Text style={st.emptyEmoji}>📸</Text>
+          <View style={st.cameraGuideIcon}>
+            <Camera size={44} color={C.petrolDeep} strokeWidth={2.2} />
+          </View>
           <Text style={st.emptyTitle}>Take photos of what you're selling</Text>
           <Text style={st.emptySub}>
-            Front, back, both sides, and any damage. {MIN_PHOTOS}-{MAX_PHOTOS} photos.
+            Good photos build buyer trust. Add {MIN_PHOTOS}-{MAX_PHOTOS} clear shots before AI creates the listing.
           </Text>
+
+          <View style={st.guideCard}>
+            <PhotoGuideItem
+              Icon={Camera}
+              title="Start with the front"
+              text="Keep the item centered, clean, and in bright light."
+            />
+            <PhotoGuideItem
+              Icon={Images}
+              title="Show proof angles"
+              text="Add back, sides, accessories, bill, box, and any wear."
+            />
+            <PhotoGuideItem
+              Icon={Sparkles}
+              title="Be honest on defects"
+              text="Close-ups of scratches or damage reduce returns later."
+            />
+          </View>
+
           <Button
-            label="Take a photo"
+            label="Start with first photo"
             variant="primary"
             size="lg"
             onPress={openCamera}
@@ -309,6 +327,29 @@ export default function AIListingCameraScreen({ navigation }: RootScreen<'AIList
         </View>
       )}
     </SafeAreaView>
+  );
+}
+
+function PhotoGuideItem({
+  Icon,
+  title,
+  text,
+}: {
+  Icon: LucideIcon;
+  title: string;
+  text: string;
+}) {
+  return (
+    <View style={st.guideRow}>
+      <View style={st.guideIcon}>
+        <Icon size={18} color={C.petrolDeep} strokeWidth={2.2} />
+      </View>
+      <View style={st.guideTextWrap}>
+        <Text style={st.guideTitle}>{title}</Text>
+        <Text style={st.guideText}>{text}</Text>
+      </View>
+      <CheckCircle2 size={18} color={C.petrolMid} strokeWidth={2.2} />
+    </View>
   );
 }
 
@@ -413,8 +454,19 @@ const st = StyleSheet.create({
     lineHeight: T.size.base + 4,
   },
 
-  emptyBlock: { flex: 1, paddingHorizontal: S.xxl, justifyContent: 'center', alignItems: 'center' },
-  emptyEmoji: { fontSize: T.size.display + 26, marginBottom: S.lg },
+  emptyBlock: { flex: 1, paddingHorizontal: S.xl, justifyContent: 'center', alignItems: 'center' },
+  cameraGuideIcon: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: C.petrolLight,
+    borderWidth: 1,
+    borderColor: C.blueBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: S.lg,
+    ...Shadow.glow,
+  },
   emptyTitle: {
     fontSize: T.size.xl,
     fontWeight: T.weight.bold,
@@ -426,7 +478,46 @@ const st = StyleSheet.create({
     fontSize: T.size.md,
     color: C.text2,
     textAlign: 'center',
-    marginBottom: S.xxl,
+    lineHeight: 22,
+    marginBottom: S.lg,
+  },
+  guideCard: {
+    alignSelf: 'stretch',
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: R.lg,
+    padding: S.md,
+    marginBottom: S.xl,
+    ...Shadow.subtle,
+  },
+  guideRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: S.sm,
+    paddingVertical: S.sm,
+  },
+  guideIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: C.petrolLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  guideTextWrap: {
+    flex: 1,
+  },
+  guideTitle: {
+    fontSize: T.size.base,
+    color: C.text,
+    fontWeight: T.weight.bold,
+  },
+  guideText: {
+    marginTop: 2,
+    fontSize: T.size.sm + 1,
+    color: C.text3,
+    lineHeight: 18,
   },
   openCameraBtn: {
     minWidth: 220,
