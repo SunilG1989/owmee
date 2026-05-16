@@ -205,6 +205,10 @@ def _fmt_card(listing: Listing, seller_verified: bool = False) -> dict:
         "age_suitability": listing.age_suitability,
         "published_at": listing.published_at.isoformat() if listing.published_at else None,
         "created_at": listing.created_at.isoformat() if listing.created_at else None,
+        "listing_state": getattr(listing, "listing_state", None),
+        "verification_status": getattr(listing, "verification_status", None),
+        "imei_verified": getattr(listing, "verification_status", None) == "verified",
+        "video_url": getattr(listing, "video_url", None),
         "verified_by_owmee": seller_verified,  # Sprint 6a: mirror the badge signal
         # Sprint trust pillar: items >₹1000 get FE inspection at pickup;
         # mobile uses this flag to show the right copy on listing detail.
@@ -280,6 +284,10 @@ def _fmt_my(listing: Listing) -> dict:
         "reviewed_by": listing.reviewed_by,
         "created_at": listing.created_at.isoformat() if listing.created_at else None,
         "published_at": listing.published_at.isoformat() if listing.published_at else None,
+        "listing_state": getattr(listing, "listing_state", None),
+        "verification_status": getattr(listing, "verification_status", None),
+        "imei_verified": getattr(listing, "verification_status", None) == "verified",
+        "video_url": getattr(listing, "video_url", None),
         # Concierge Phase 4 timeline grouping pointer.
         "created_via_fe_visit_id": (
             str(listing.created_via_fe_visit_id)

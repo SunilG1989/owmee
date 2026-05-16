@@ -24,9 +24,8 @@ CATEGORY_SLUGS = [
     "laptops",
     "tablets",
     "small-appliances",
-    "kids-toys",
-    "kids-education",
     "kids-utility",
+    "others",
 ]
 
 CONDITION_VALUES = ["like_new", "good", "fair"]
@@ -166,19 +165,20 @@ category_slug must be one of:
 - "laptops"
 - "tablets"
 - "small-appliances"
-- "kids-toys"
-- "kids-education"
 - "kids-utility"
+- "others"
 - null
 
 Kids mapping:
-- toys, LEGO, dolls, puzzles, board games, ride-on toys -> "kids-toys"
-- books, flashcards, STEM kits, learning kits, school learning material -> "kids-education"
+- toys, LEGO, dolls, puzzles, board games, ride-on toys -> "kids-utility"
+- books, flashcards, STEM kits, learning kits, school learning material -> "kids-utility"
 - stroller, carrier, booster, baby monitor, baby chair, sterilizer, kids bag -> "kids-utility"
 
-If unsure between kids-toys and kids-education:
-- choose kids-education only if learning/education purpose is visible
-- otherwise choose kids-toys
+Other mapping:
+- If a real sellable product is visible but it does not fit smartphones,
+  laptops, tablets, small-appliances, or kids-utility, use "others".
+- Use null only when no sellable product is visible, the image is unsafe,
+  or the item cannot be identified enough to create a listing draft.
 
 ==================================================
 IDENTIFICATION
@@ -188,12 +188,17 @@ category_confidence:
 - 0.90-1.00: obvious category
 - 0.75-0.89: strong evidence
 - 0.50-0.74: broad inference only
-- below 0.50: category_slug = null
+- below 0.50: category_slug = "others" if a sellable product is visible; null only for no_product/blurry/unsafe images
 
 brand:
 - return consumer-facing brand only
 - examples: Apple, Samsung, OnePlus, Xiaomi, HP, Dell, Lenovo, Bosch, Philips, LEGO, Fisher-Price
 - do not return parent company names unless that is the consumer brand
+
+detected_item_type:
+- short human product type, especially useful for "others"
+- examples: "wireless headphones", "gaming monitor", "office chair", "camera lens"
+- use null only when no sellable product type can be identified
 
 model:
 - return exact model only when visible or extremely strongly supported
@@ -296,14 +301,8 @@ Look for RAM/storage/processor, charger, keyboard damage, screen damage, dents, 
 Small appliances:
 Look for brand/model, working indicator, attachments, cracks/dents, warranty/bill, hygiene or usage concerns.
 
-Kids-toys:
-Look for age range, missing parts, broken parts, box/manual, safety concerns, battery/electronic working evidence if visible.
-
-Kids-education:
-Look for subject/type, age/grade, full set vs partial set, missing cards/books/components, page condition, electronic kit working evidence if visible.
-
 Kids-utility:
-Look for item type, structural safety, cleanliness concerns, missing straps/parts, age/weight range if visible.
+Look for item type, age range, full set vs partial set, missing parts, structural safety, cleanliness concerns, page condition, box/manual, battery/electronic working evidence if visible.
 
 ==================================================
 ACCESSORIES
@@ -457,6 +456,31 @@ Examples:
 Do not frustrate the seller. If a value cannot be extracted, explain exactly what photo/action is needed.
 
 ==================================================
+SELLER EDIT FIELDS
+==================================================
+
+seller_edit_fields is a list of fields the seller should confirm or fix
+before listing. Use field keys only, for example:
+- "category_slug"
+- "title"
+- "brand"
+- "model"
+- "detected_item_type"
+- "storage"
+- "ram"
+- "processor"
+- "color"
+- "condition_guess"
+- "price"
+
+Rules:
+- For smartphones/laptops/tablets, include storage/ram/processor only when
+  important and not directly visible.
+- For "others", include at least title and detected_item_type.
+- If category confidence is below 0.75, include category_slug.
+- If exact model is unclear, include model.
+
+==================================================
 OUTPUT REQUIREMENTS
 ==================================================
 
@@ -467,6 +491,10 @@ Do not include markdown.
 Do not include chain-of-thought.
 
 Set field_confidence values from 0.0 to 1.0.
+
+Set category_rationale to a short seller-safe reason for the category,
+for example "Looks like a smartphone from the rear camera layout" or
+"Sellable product outside supported categories, so listed as Other."
 
 field_evidence values:
 - "direct_visible"

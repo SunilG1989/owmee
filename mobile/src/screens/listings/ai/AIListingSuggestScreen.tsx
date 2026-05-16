@@ -42,6 +42,16 @@ import type { RootScreen } from '../../../navigation/types';
 import EditDetailsSheet from './shared/EditDetailsSheet';
 import PriceSheet from './shared/PriceSheet';
 import ComparablesSheet from './shared/ComparablesSheet';
+import {
+  canonicalCategorySlug,
+  findCatalogOption,
+  getBrandsForCategory,
+  getCategoryKind,
+  getCategoryLabel,
+  getModelSuggestions,
+  getRamOptionsForCategory,
+  getStorageOptionsForCategory,
+} from '../../../utils/listingCatalog';
 
 const CONDITION_OPTIONS: { key: 'like_new' | 'good' | 'fair'; label: string; multiplier: number }[] = [
   { key: 'like_new', label: 'Like new', multiplier: 1.0 },
@@ -70,6 +80,7 @@ export default function AIListingSuggestScreen({
   );
   const [customPrice, setCustomPrice] = useState<number | null>(null);
   const [overrides, setOverrides] = useState<{
+    title?: string;
     brand?: string;
     model?: string;
     storage?: string;
@@ -86,6 +97,7 @@ export default function AIListingSuggestScreen({
   const [priceSheet, setPriceSheet] = useState(false);
   const [compsSheet, setCompsSheet] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [detailsConfirmed, setDetailsConfirmed] = useState(false);
   const [success, setSuccess] = useState<{ listingId: string; price: number; title: string } | null>(null);
 
   // Timer for the comparables → price sheet handoff. Tracked via ref so we
@@ -98,17 +110,74 @@ export default function AIListingSuggestScreen({
   }, []);
 
   // Effective fields (overrides win over AI)
-  const brand = overrides.brand ?? draft.detected.brand ?? '';
-  const model = overrides.model ?? draft.detected.model ?? '';
-  const storage = overrides.storage ?? draft.detected.storage ?? '';
-  const ram = overrides.ram ?? draft.detected.ram ?? '';
+  const categorySlug = canonicalCategorySlug(overrides.category_slug ?? draft.detected.category_slug ?? '');
+  const categoryKind = getCategoryKind(categorySlug);
+  const isElectronic = categoryKind === 'phone' || categoryKind === 'laptop' || categoryKind === 'tablet';
+  const isOther = categoryKind === 'other';
+  const brandOptions = useMemo(() => getBrandsForCategory(categorySlug), [categorySlug]);
+  const rawBrand = overrides.brand ?? draft.detected.brand ?? '';
+  const brand = findCatalogOption(rawBrand, brandOptions) || rawBrand;
+  const modelOptions = useMemo(() => getModelSuggestions(categorySlug, brand), [categorySlug, brand]);
+  const rawModel = overrides.model ?? draft.detected.model ?? draft.detected.detected_item_type ?? '';
+  const model = findCatalogOption(rawModel, modelOptions) || rawModel;
+  const storageOptions = useMemo(() => getStorageOptionsForCategory(categorySlug), [categorySlug]);
+  const ramOptions = useMemo(() => getRamOptionsForCategory(categorySlug), [categorySlug]);
+  const evidence = draft.detected.field_evidence || {};
+  const hasStorageOverride = Object.prototype.hasOwnProperty.call(overrides, 'storage');
+  const hasRamOverride = Object.prototype.hasOwnProperty.call(overrides, 'ram');
+  const rawStorage = hasStorageOverride
+    ? overrides.storage ?? ''
+    : evidence.storage && evidence.storage !== 'direct_visible'
+      ? ''
+      : draft.detected.storage ?? '';
+  const rawRam = hasRamOverride
+    ? overrides.ram ?? ''
+    : evidence.ram && evidence.ram !== 'direct_visible'
+      ? ''
+      : draft.detected.ram ?? '';
+  const storage = findCatalogOption(rawStorage, storageOptions) || rawStorage;
+  const ram = findCatalogOption(rawRam, ramOptions) || rawRam;
   const processor = overrides.processor ?? draft.detected.processor ?? '';
   const screenSize = overrides.screen_size ?? draft.detected.screen_size ?? '';
   const color = overrides.color ?? draft.detected.color ?? '';
   const purchaseYear = overrides.purchase_year ?? draft.detected.purchase_year ?? null;
   const accessories = overrides.accessories ?? draft.detected.accessories ?? '';
   const warrantyStatus = overrides.warranty_status ?? draft.detected.warranty_status ?? '';
-  const categorySlug = overrides.category_slug ?? draft.detected.category_slug ?? '';
+  const detailReviewIssues = useMemo(() => {
+    const issues: string[] = [];
+    if (!categorySlug) {
+      issues.push('category');
+      return issues;
+    }
+    if (isOther) {
+      const otherTitle = (overrides.title ?? draft.detected.title_suggestion ?? '').trim();
+      if (otherTitle.length < 4 || /^used item$/i.test(otherTitle)) issues.push('title');
+      return issues;
+    }
+    if (!isElectronic) return issues;
+    if (!findCatalogOption(brand, brandOptions)) issues.push('brand');
+    if (modelOptions.length > 0 && !findCatalogOption(model, modelOptions)) issues.push('model');
+    if (!findCatalogOption(storage, storageOptions)) issues.push('storage');
+    if (categoryKind === 'laptop' && !findCatalogOption(ram, ramOptions)) issues.push('RAM');
+    return issues;
+  }, [
+    brand,
+    brandOptions,
+    categoryKind,
+    categorySlug,
+    isElectronic,
+    isOther,
+    model,
+    modelOptions,
+    draft.detected.title_suggestion,
+    overrides.title,
+    ram,
+    ramOptions,
+    storage,
+    storageOptions,
+  ]);
+  const needsDetailsReview = !categorySlug
+    || ((isElectronic || isOther) && (!detailsConfirmed || detailReviewIssues.length > 0));
 
   // Live re-priced based on condition. Custom price short-circuits.
   const effectivePrice = useMemo(() => {
@@ -124,6 +193,7 @@ export default function AIListingSuggestScreen({
   }, [condition, customPrice, draft]);
 
   const titleGuess = useMemo(() => {
+    if (overrides.title?.trim()) return overrides.title.trim();
     const identityWasEdited = ['brand', 'model', 'storage', 'ram', 'color', 'category_slug']
       .some((key) => Object.prototype.hasOwnProperty.call(overrides, key));
     if (!identityWasEdited && draft.detected.title_suggestion) return draft.detected.title_suggestion;
@@ -156,7 +226,12 @@ export default function AIListingSuggestScreen({
       return;
     }
     if (!categorySlug) {
-      Alert.alert('Pick a category', 'Tap "Edit details" to confirm the category.');
+      setEditSheet(true);
+      Alert.alert('Pick a category', 'Confirm the product category before listing.');
+      return;
+    }
+    if (needsDetailsReview) {
+      setEditSheet(true);
       return;
     }
 
@@ -197,7 +272,7 @@ export default function AIListingSuggestScreen({
       Alert.alert('Could not list', parseApiError(e));
       setSubmitting(false);
     }
-  }, [draft, effectivePrice, condition, categorySlug, titleGuess, navigation, submitting, finalDetails]);
+  }, [draft, effectivePrice, condition, categorySlug, needsDetailsReview, titleGuess, navigation, submitting, finalDetails]);
 
   // ── Success state (in-place, replaces form) ─────────────────────────────
   if (success) {
@@ -270,6 +345,48 @@ export default function AIListingSuggestScreen({
             <Text style={st.itemEditGlyph}>✎</Text>
           </TouchableOpacity>
         </View>
+
+        {(isElectronic || isOther || !categorySlug) ? (
+          <View style={st.detailCard}>
+            <View style={st.detailHeader}>
+              <View>
+                <Text style={st.detailTitle}>Product details</Text>
+                <Text style={st.detailSub}>
+                  {needsDetailsReview
+                    ? 'Confirm exact specs before listing.'
+                    : 'Exact specs confirmed.'}
+                </Text>
+              </View>
+              <View style={[st.detailBadge, needsDetailsReview ? st.detailBadgeWarn : st.detailBadgeOk]}>
+                <Text style={[st.detailBadgeText, needsDetailsReview ? st.detailBadgeWarnText : st.detailBadgeOkText]}>
+                  {needsDetailsReview ? 'Review' : 'Ready'}
+                </Text>
+              </View>
+            </View>
+            <View style={st.specRow}>
+              <SpecPill label="Category" value={categorySlug ? getCategoryLabel(categorySlug) : ''} missing={!categorySlug} />
+              {isOther ? (
+                <SpecPill label="Item" value={titleGuess} missing={titleGuess.trim().length < 4} />
+              ) : null}
+              <SpecPill label="Brand" value={brand} missing={isElectronic && !findCatalogOption(brand, brandOptions)} />
+              <SpecPill label="Model" value={model} missing={isElectronic && modelOptions.length > 0 && !findCatalogOption(model, modelOptions)} />
+              {isElectronic ? (
+                <SpecPill label="Storage" value={storage} missing={!findCatalogOption(storage, storageOptions)} />
+              ) : null}
+              {categoryKind === 'laptop' ? (
+                <SpecPill label="RAM" value={ram} missing={!findCatalogOption(ram, ramOptions)} />
+              ) : null}
+            </View>
+            {detailReviewIssues.length > 0 ? (
+              <Text style={st.detailIssue}>
+                Select {detailReviewIssues.join(', ')} from the detail sheet.
+              </Text>
+            ) : null}
+            <TouchableOpacity style={st.detailAction} onPress={() => setEditSheet(true)} activeOpacity={0.82}>
+              <Text style={st.detailActionText}>{needsDetailsReview ? 'Confirm details' : 'Edit details'}</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
         {/* Set your price */}
         <View style={st.section}>
@@ -358,12 +475,12 @@ export default function AIListingSuggestScreen({
       {/* Sticky CTA */}
       <View style={st.ctaBar}>
         <Button
-          label="Continue to list"
+          label={needsDetailsReview ? 'Confirm details' : 'Continue to list'}
           variant="primary"
           size="lg"
           loading={submitting}
           disabled={submitting}
-          onPress={submit}
+          onPress={needsDetailsReview ? () => setEditSheet(true) : submit}
           fullWidth
           style={st.primaryBtn}
         />
@@ -373,6 +490,7 @@ export default function AIListingSuggestScreen({
       {editSheet && (
         <EditDetailsSheet
           initial={{
+            title: titleGuess,
             brand,
             model,
             storage,
@@ -386,7 +504,11 @@ export default function AIListingSuggestScreen({
             category_slug: categorySlug,
           }}
           onSave={(next) => {
-            setOverrides(next);
+            setOverrides({
+              ...next,
+              category_slug: canonicalCategorySlug(next.category_slug),
+            });
+            setDetailsConfirmed(true);
             setEditSheet(false);
           }}
           onClose={() => setEditSheet(false)}
@@ -430,6 +552,17 @@ function TrustRow({ text }: { text: string }) {
     <View style={st.trustRow}>
       <Text style={st.trustCheck}>✓</Text>
       <Text style={st.trustText}>{text}</Text>
+    </View>
+  );
+}
+
+function SpecPill({ label, value, missing }: { label: string; value: string; missing?: boolean }) {
+  return (
+    <View style={[st.specPill, missing && st.specPillMissing]}>
+      <Text style={[st.specPillLabel, missing && st.specPillMissingText]}>{label}</Text>
+      <Text style={[st.specPillValue, missing && st.specPillMissingText]} numberOfLines={1}>
+        {value || 'Select'}
+      </Text>
     </View>
   );
 }
@@ -498,6 +631,106 @@ const st = StyleSheet.create({
     justifyContent: 'center',
   },
   itemEditGlyph: { fontSize: T.size.md, color: C.petrol, fontWeight: T.weight.semi },
+
+  detailCard: {
+    backgroundColor: C.surface,
+    marginHorizontal: S.lg,
+    marginTop: S.md,
+    padding: S.lg,
+    borderRadius: R.lg,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  detailHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: S.md,
+  },
+  detailTitle: {
+    fontSize: T.size.md,
+    fontWeight: T.weight.bold,
+    color: C.text,
+  },
+  detailSub: {
+    marginTop: 2,
+    fontSize: T.size.sm,
+    color: C.text3,
+  },
+  detailBadge: {
+    paddingHorizontal: S.md,
+    paddingVertical: S.xs,
+    borderRadius: R.pill,
+    borderWidth: 1,
+  },
+  detailBadgeWarn: {
+    backgroundColor: C.amberSoft,
+    borderColor: C.amberBorder,
+  },
+  detailBadgeOk: {
+    backgroundColor: C.petrolLight,
+    borderColor: C.blueBorder,
+  },
+  detailBadgeText: {
+    fontSize: T.size.sm,
+    fontWeight: T.weight.bold,
+  },
+  detailBadgeWarnText: { color: C.amberDeep },
+  detailBadgeOkText: { color: C.petrolDeep },
+  specRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: S.sm,
+    marginTop: S.md,
+  },
+  specPill: {
+    minWidth: 92,
+    maxWidth: '48%',
+    paddingHorizontal: S.md,
+    paddingVertical: S.sm,
+    borderRadius: R.md,
+    borderWidth: 1,
+    borderColor: C.border2,
+    backgroundColor: C.bone,
+  },
+  specPillMissing: {
+    borderColor: C.amberBorder,
+    backgroundColor: C.amberSoft,
+  },
+  specPillLabel: {
+    fontSize: T.size.xs,
+    color: C.text4,
+    fontWeight: T.weight.semi,
+    textTransform: 'uppercase',
+  },
+  specPillValue: {
+    marginTop: 2,
+    color: C.text,
+    fontSize: T.size.base,
+    fontWeight: T.weight.bold,
+  },
+  specPillMissingText: { color: C.amberDeep },
+  detailIssue: {
+    marginTop: S.md,
+    fontSize: T.size.sm,
+    color: C.amberDeep,
+    fontWeight: T.weight.semi,
+  },
+  detailAction: {
+    marginTop: S.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: S.md,
+    borderRadius: R.md,
+    backgroundColor: C.petrolLight,
+    borderWidth: 1,
+    borderColor: C.blueBorder,
+  },
+  detailActionText: {
+    color: C.petrolDeep,
+    fontSize: T.size.base,
+    fontWeight: T.weight.bold,
+  },
 
   // Section (Set your price / Condition)
   section: {

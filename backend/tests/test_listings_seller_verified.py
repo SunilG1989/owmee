@@ -36,6 +36,8 @@ def _make_listing(snapshot: bool):
         screen_condition=None, body_condition=None, defects=None,
         original_price=None, serial_number=None, age_suitability=None,
         published_at=None, created_at=None,
+        listing_state="pending_buyer", verification_status="verified",
+        video_url="videos/test.webp",
         # Field under test:
         seller_kyc_verified_at_listing_time=snapshot,
         # Fields used by _fmt_detail:
@@ -103,6 +105,15 @@ def test_fmt_card_default_unverified():
     assert out["verified_by_owmee"] is False
 
 
+def test_fmt_card_exposes_ai_state_without_raw_identifiers():
+    out = _fmt_card(_make_listing(True))
+    assert out["listing_state"] == "pending_buyer"
+    assert out["verification_status"] == "verified"
+    assert out["imei_verified"] is True
+    assert "imei_1" not in out
+    assert "imei_2" not in out
+
+
 # ── _fmt_detail consistency invariant — Bug #4 ────────────────────────────────
 
 def test_fmt_detail_card_and_seller_block_agree_during_re_verification():
@@ -138,3 +149,4 @@ def test_fmt_detail_happy_path():
     assert out["seller"]["kyc_verified"] is True
     assert out["seller"]["avg_rating"] == 4.7
     assert out["seller"]["deal_count"] == 3
+    assert out["listing_state"] == "pending_buyer"

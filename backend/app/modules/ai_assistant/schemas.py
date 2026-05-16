@@ -35,7 +35,11 @@ class AIDetected(BaseModel):
     """
     # Core identification
     category_slug: str | None = None
+    raw_category_slug: str | None = None       # original LLM slug before backend normalization
+    category_resolution: str | None = None     # canonical | alias | fallback_others | unresolved
     category_confidence: float = 0.0
+    category_rationale: str | None = None      # short LLM/backend reason for category choice
+    detected_item_type: str | None = None      # "wireless headphones", "office chair", etc.
     brand: str | None = None
     model: str | None = None
 
@@ -98,6 +102,7 @@ class AIDetected(BaseModel):
     # Short user-facing requests for better photos. UI renders these as
     # bullets above the camera button.
     seller_photo_feedback: list[str] = Field(default_factory=list)
+    seller_edit_fields: list[str] = Field(default_factory=list)
 
     # Per-field confidence (0.0-1.0) — keys mirror the field names above.
     # Used by the post-processor and downstream UI to flag low-confidence

@@ -41,6 +41,7 @@ CATEGORY_PRICE_BOUNDS: dict[str, tuple[int, int]] = {
     "tablets":          (1_000, 200_000),
     "small-appliances": (200,  50_000),
     "kids-utility":     (100,  20_000),
+    "others":           (50,   1_000_000),
 }
 
 

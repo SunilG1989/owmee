@@ -142,9 +142,11 @@ class _GeminiVisionOut(BaseModel):
     """
     # Identification
     category_slug: str | None = None  # smartphones | laptops | tablets |
-                                      # small-appliances | kids-toys |
-                                      # kids-education | kids-utility | None
+                                      # small-appliances | kids-utility |
+                                      # others | None
     category_confidence: float = 0.0
+    category_rationale: str | None = None
+    detected_item_type: str | None = None
     brand: str | None = None
     model: str | None = None
     # Specs
@@ -180,6 +182,7 @@ class _GeminiVisionOut(BaseModel):
     blocking_reasons: list[str] = []
     extraction_notes: str | None = None
     seller_photo_feedback: list[str] = []
+    seller_edit_fields: list[str] = []
     field_confidence: _FieldConfidence = _FieldConfidence()
     field_evidence: _FieldEvidence = _FieldEvidence()
 
@@ -405,6 +408,8 @@ def _translate_vision_response(parsed: "_GeminiVisionOut") -> AIDetected:
     return AIDetected(
         category_slug=parsed.category_slug,
         category_confidence=float(parsed.category_confidence or 0.0),
+        category_rationale=parsed.category_rationale,
+        detected_item_type=parsed.detected_item_type,
         brand=parsed.brand,
         model=parsed.model,
         storage=parsed.storage,
@@ -433,6 +438,7 @@ def _translate_vision_response(parsed: "_GeminiVisionOut") -> AIDetected:
         blocking_reasons=[str(b)[:200] for b in (parsed.blocking_reasons or [])][:8],
         extraction_notes=parsed.extraction_notes,
         seller_photo_feedback=[str(s)[:200] for s in (parsed.seller_photo_feedback or [])][:5],
+        seller_edit_fields=[str(s)[:60] for s in (parsed.seller_edit_fields or [])][:12],
         field_confidence=fc_dict,
         field_evidence=fe_dict,
     )
@@ -485,7 +491,7 @@ def _apply_post_processing_guardrails(detected: AIDetected) -> AIDetected:
       3. spec fields without direct_visible field_evidence → null.
       4. price_confidence < 0.5 → suggested_price_inr null.
       5. manual_review_required True → auto_publish_candidate False.
-      6. kids-toys / kids-education with completeness-unclear feedback
+      6. kids-utility with completeness-unclear feedback
          → null pricing + force manual review.
     """
     flags = set(detected.flags or [])
@@ -498,7 +504,11 @@ def _apply_post_processing_guardrails(detected: AIDetected) -> AIDetected:
             blocking_reasons.append(reason)
         return AIDetected(
             category_slug=None,
+            raw_category_slug=detected.raw_category_slug,
+            category_resolution=detected.category_resolution,
             category_confidence=0.0,
+            category_rationale=detected.category_rationale,
+            detected_item_type=None,
             brand=None,
             model=None,
             storage=None,
@@ -527,6 +537,7 @@ def _apply_post_processing_guardrails(detected: AIDetected) -> AIDetected:
             extraction_notes=detected.extraction_notes
             or "Photo flagged as personal_info/nsfw — listing fields cleared by post-processor.",
             seller_photo_feedback=detected.seller_photo_feedback,
+            seller_edit_fields=[],
             field_confidence={},
             field_evidence={},
         )
@@ -565,7 +576,7 @@ def _apply_post_processing_guardrails(detected: AIDetected) -> AIDetected:
     auto_publish_candidate = bool(detected.auto_publish_candidate)
 
     # Rule 6: kids-set completeness unclear → block price + force review.
-    if detected.category_slug in ("kids-toys", "kids-education"):
+    if detected.category_slug == "kids-utility":
         notes = " ".join(detected.seller_photo_feedback or []).lower()
         if any(hint in notes for hint in _KIDS_COMPLETENESS_HINTS):
             if suggested_price_inr is not None:

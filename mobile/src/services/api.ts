@@ -215,6 +215,7 @@ export interface Listing {
   is_negotiable?: boolean; is_kids_item?: boolean;
   accessories?: string; warranty_info?: string; warranty_status?: string; battery_health?: string | number;
   imei?: string; view_count?: number; status: string;
+  listing_state?: string | null; verification_status?: string | null; video_url?: string | null;
   brand?: string; model?: string; storage?: string; ram?: string; color?: string;
   processor?: string; screen_size?: string; purchase_year?: number;
   screen_condition?: string; body_condition?: string; defects?: string[];
@@ -1010,7 +1011,11 @@ export const Community = {
 
 export interface AIDetectedFields {
   category_slug: string | null;
+  raw_category_slug?: string | null;
+  category_resolution?: string | null;
   category_confidence: number;
+  category_rationale?: string | null;
+  detected_item_type?: string | null;
   brand: string | null;
   model: string | null;
   storage: string | null;
@@ -1029,6 +1034,12 @@ export interface AIDetectedFields {
   title_suggestion: string | null;
   description_suggestion: string | null;
   flags: string[];
+  manual_review_required?: boolean;
+  blocking_reasons?: string[];
+  seller_photo_feedback?: string[];
+  seller_edit_fields?: string[];
+  field_confidence?: Record<string, number>;
+  field_evidence?: Record<string, string>;
 }
 
 export interface AIComparable {

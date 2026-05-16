@@ -62,12 +62,161 @@ router = APIRouter(prefix="/v1/listings", tags=["ai-assistant"])
 # Categories that need an identifier (smartphones, laptops/tablets).
 IDENTIFIER_CATEGORIES = {"smartphones", "laptops", "tablets"}
 
+_CATEGORY_ALIASES = {
+    "smartphone": "smartphones",
+    "smartphones": "smartphones",
+    "phone": "smartphones",
+    "phones": "smartphones",
+    "mobile": "smartphones",
+    "mobiles": "smartphones",
+    "mobilephone": "smartphones",
+    "mobilephones": "smartphones",
+    "cellphone": "smartphones",
+    "cellphones": "smartphones",
+    "handset": "smartphones",
+    "iphone": "smartphones",
+    "android": "smartphones",
+    "androidphone": "smartphones",
+    "laptop": "laptops",
+    "laptops": "laptops",
+    "notebook": "laptops",
+    "notebooks": "laptops",
+    "macbook": "laptops",
+    "computer": "laptops",
+    "computers": "laptops",
+    "ultrabook": "laptops",
+    "pc": "laptops",
+    "tablet": "tablets",
+    "tablets": "tablets",
+    "ipad": "tablets",
+    "ipads": "tablets",
+    "tab": "tablets",
+    "tabs": "tablets",
+    "appliance": "small-appliances",
+    "appliances": "small-appliances",
+    "smallappliance": "small-appliances",
+    "smallappliances": "small-appliances",
+    "homeappliance": "small-appliances",
+    "homeappliances": "small-appliances",
+    "kid": "kids-utility",
+    "kids": "kids-utility",
+    "toy": "kids-utility",
+    "toys": "kids-utility",
+    "kidstoys": "kids-utility",
+    "kidseducation": "kids-utility",
+    "kidslearning": "kids-utility",
+    "kidsutility": "kids-utility",
+    "baby": "kids-utility",
+    "other": "others",
+    "others": "others",
+    "misc": "others",
+    "miscellaneous": "others",
+    "general": "others",
+    "accessory": "others",
+    "accessories": "others",
+    "electronics": "others",
+    "camera": "others",
+    "cameras": "others",
+    "headphone": "others",
+    "headphones": "others",
+    "speaker": "others",
+    "speakers": "others",
+    "furniture": "others",
+    "book": "others",
+    "books": "others",
+    "fashion": "others",
+    "clothes": "others",
+    "clothing": "others",
+    "shoes": "others",
+    "sports": "others",
+}
 
-def _canonical_category_slug(slug: str) -> str:
-    normalized = (slug or "").strip().lower()
-    if normalized in {"kids-toys", "kids-education"}:
-        return "kids-utility"
-    return normalized
+_SUPPORTED_CATEGORY_SLUGS = {
+    "smartphones",
+    "laptops",
+    "tablets",
+    "small-appliances",
+    "kids-utility",
+    "others",
+}
+
+_DRAFT_REJECT_FLAGS = {
+    "no_product",
+    "blurry",
+    "multiple_items",
+    "screenshot_only",
+    "stock_or_catalog_suspected",
+}
+
+
+def _canonical_category_slug(slug: str | None, *, fallback_empty_to_others: bool = True) -> str | None:
+    token = "".join(ch for ch in (slug or "").strip().lower() if ch.isalnum())
+    if not token:
+        return "others" if fallback_empty_to_others else None
+    aliased = _CATEGORY_ALIASES.get(token)
+    if aliased:
+        return aliased
+    normalized = (slug or "").strip().lower().replace("_", "-")
+    return normalized if normalized in _SUPPORTED_CATEGORY_SLUGS else "others"
+
+
+def _with_canonical_category(detected):
+    raw = detected.category_slug
+    canonical = _canonical_category_slug(raw, fallback_empty_to_others=False)
+
+    if not canonical:
+        return detected.model_copy(update={
+            "raw_category_slug": raw,
+            "category_resolution": "unresolved",
+        })
+
+    normalized = (raw or "").strip().lower().replace("_", "-")
+    token = "".join(ch for ch in (raw or "").strip().lower() if ch.isalnum())
+    if canonical == normalized:
+        resolution = "canonical"
+    elif token in _CATEGORY_ALIASES:
+        resolution = "alias"
+    else:
+        resolution = "fallback_others"
+
+    seller_edit_fields = list(detected.seller_edit_fields or [])
+    rationale = detected.category_rationale
+    if canonical == "others":
+        for field in ("title", "brand", "model"):
+            if field not in seller_edit_fields:
+                seller_edit_fields.append(field)
+        if not rationale:
+            rationale = "Product is sellable but outside Owmee's structured launch categories."
+
+    return detected.model_copy(update={
+        "category_slug": canonical,
+        "raw_category_slug": raw if raw != canonical else None,
+        "category_resolution": resolution,
+        "category_rationale": rationale,
+        "seller_edit_fields": seller_edit_fields,
+    })
+
+
+def _photo_rejection_detail(detected) -> dict | None:
+    flags = set(detected.flags or [])
+    safety_flags = flags.intersection({"nsfw", "personal_info"})
+    unusable_flags = flags.intersection(_DRAFT_REJECT_FLAGS)
+    reject_flags = sorted(safety_flags or unusable_flags)
+    if not reject_flags:
+        return None
+
+    if safety_flags:
+        message = "This photo contains private or unsafe content. Please upload a clean product photo."
+    elif "multiple_items" in unusable_flags:
+        message = "Please list one product at a time with photos of only that item."
+    elif "no_product" in unusable_flags:
+        message = "We could not find a sellable product in these photos."
+    elif "blurry" in unusable_flags:
+        message = "The photos are too blurry or dark to create a reliable listing."
+    else:
+        message = "Please upload original photos of the actual item, not screenshots or catalogue images."
+
+    return {"error": "PHOTO_REJECTED", "flags": reject_flags, "message": message}
 
 # Listing states that allow seller edits.
 EDITABLE_STATES = {"draft_ai", "pending_buyer"}
@@ -118,9 +267,8 @@ async def _store_photo(image_bytes: bytes, content_type: str, user_id: UUID, dra
 
 
 def _category_needs_identifier(slug: str | None) -> bool:
-    if not slug:
-        return False
-    return slug.lower() in IDENTIFIER_CATEGORIES
+    canonical = _canonical_category_slug(slug)
+    return bool(canonical and canonical in IDENTIFIER_CATEGORIES)
 
 
 # ── 1. POST /v1/listings/draft/from-image ─────────────────────────────────
@@ -152,12 +300,15 @@ async def draft_from_image(
 
     # Vision detection
     detected = await claude_client.detect_from_image(image_bytes, content_type)
+    detected = _with_canonical_category(detected)
 
-    # Hard reject NSFW / personal info — don't even create the draft
-    if "nsfw" in detected.flags or "personal_info" in detected.flags:
+    # Hard reject unsafe or unusable photos — "Other" is only for visible
+    # sellable products outside the launch taxonomy.
+    rejection = _photo_rejection_detail(detected)
+    if rejection:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"error": "PHOTO_REJECTED", "flags": detected.flags},
+            detail=rejection,
         )
 
     # Lookup user's state for region-aware comparables. Prefer
@@ -328,6 +479,15 @@ async def create_from_draft(
         raise HTTPException(status_code=400, detail="DRAFT_ALREADY_CONSUMED")
 
     category_slug = _canonical_category_slug(payload.category_slug)
+    if not category_slug:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "UNKNOWN_CATEGORY",
+                "slug": payload.category_slug,
+                "message": "We couldn't match this category. Please pick Smartphone, Laptop, Tablet, Appliance, Kids utility, or Other.",
+            },
+        )
 
     # IMEI requirement check for smartphones
     if category_slug == "smartphones" and not payload.imei_1:
@@ -373,7 +533,15 @@ async def create_from_draft(
     )
     category_id = cat_row.scalar()
     if not category_id:
-        raise HTTPException(status_code=400, detail={"error": "UNKNOWN_CATEGORY", "slug": payload.category_slug})
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "UNKNOWN_CATEGORY",
+                "slug": payload.category_slug,
+                "canonical_slug": category_slug,
+                "message": "We couldn't match this category. Please pick Smartphone, Laptop, Tablet, Appliance, Kids utility, or Other.",
+            },
+        )
 
     # CEIR check (mock) for smartphone IMEIs
     verification_status = "pending"
@@ -787,12 +955,15 @@ async def draft_from_images(
 
     # ONE multi-image vision call — see all angles at once
     detected = await claude_client.detect_from_images(image_pairs)
+    detected = _with_canonical_category(detected)
 
-    # Hard reject NSFW / personal info
-    if "nsfw" in detected.flags or "personal_info" in detected.flags:
+    # Hard reject unsafe or unusable photos — "Other" is only for visible
+    # sellable products outside the launch taxonomy.
+    rejection = _photo_rejection_detail(detected)
+    if rejection:
         raise HTTPException(
             status_code=400,
-            detail={"error": "PHOTO_REJECTED", "flags": detected.flags},
+            detail=rejection,
         )
 
     # Note: ai_failed:* flags are NOT a hard reject. The seller can still

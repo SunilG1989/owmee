@@ -38,6 +38,14 @@ class Listing(Base, TimestampMixin):
     image_urls = Column(ARRAY(String), nullable=False, default=list)
     thumbnail_url = Column(String(500))
     imei_hash = Column(String(128))
+    # Sprint 8 AI-assisted flow. Raw IMEIs are captured for CEIR checks and
+    # seller ops, but public serializers expose only verification state.
+    imei_1 = Column(String(20))
+    imei_2 = Column(String(20))
+    verification_status = Column(String(20))
+    listing_state = Column(String(32))
+    video_url = Column(String(500))
+    ai_draft_id = Column(UUID(as_uuid=True), nullable=True)
     ml_price_suggestion = Column(Numeric(10, 2))
     ml_price_range_low = Column(Numeric(10, 2))
     ml_price_range_high = Column(Numeric(10, 2))

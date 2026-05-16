@@ -27,6 +27,7 @@ const FALLBACK_IMAGES: Record<string, ImageSourcePropType> = {
   'kids-utility': require('../../../assets/owmee/home/cat-kids-photo-v2.png'),
   kids: require('../../../assets/owmee/home/cat-kids-photo-v2.png'),
   books: require('../../../assets/owmee/home/cat-books-photo-v2.png'),
+  others: require('../../../assets/owmee/home/cat-books-photo-v2.png'),
 };
 
 function fallbackImageForCategory(slug?: string | null): ImageSourcePropType {

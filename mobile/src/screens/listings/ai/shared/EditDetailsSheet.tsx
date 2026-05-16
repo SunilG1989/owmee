@@ -4,7 +4,7 @@
  * Sprint 8 Phase 2 — uses RN's Modal slide animation as a faux bottom sheet
  * to avoid pulling in @gorhom/bottom-sheet (which would require reanimated v3).
  */
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -23,15 +23,18 @@ import {
   CATEGORY_PICKS,
   COLOR_OPTIONS,
   PROCESSOR_OPTIONS,
-  RAM_OPTIONS,
   SCREEN_SIZE_OPTIONS,
-  STORAGE_OPTIONS,
+  canonicalCategorySlug,
+  findCatalogOption,
   getBrandsForCategory,
   getCategoryKind,
   getModelSuggestions,
+  getRamOptionsForCategory,
+  getStorageOptionsForCategory,
 } from '../../../../utils/listingCatalog';
 
 type EditableDetails = {
+  title?: string;
   brand?: string;
   model?: string;
   storage?: string;
@@ -52,11 +55,20 @@ interface Props {
 }
 
 export default function EditDetailsSheet({ initial, onSave, onClose }: Props) {
-  const [category_slug, setCategorySlug] = useState(initial.category_slug || '');
-  const [brand, setBrand] = useState(initial.brand || '');
-  const [model, setModel] = useState(initial.model || '');
-  const [storage, setStorage] = useState(initial.storage || '');
-  const [ram, setRam] = useState(initial.ram || '');
+  const initialCategory = canonicalCategorySlug(initial.category_slug);
+  const [title, setTitle] = useState(initial.title || '');
+  const initialBrand = findCatalogOption(initial.brand, getBrandsForCategory(initialCategory)) || (initial.brand || '');
+  const [category_slug, setCategorySlug] = useState(initialCategory);
+  const [brand, setBrand] = useState(initialBrand);
+  const [model, setModel] = useState(
+    findCatalogOption(initial.model, getModelSuggestions(initialCategory, initialBrand)) || (initial.model || ''),
+  );
+  const [storage, setStorage] = useState(
+    findCatalogOption(initial.storage, getStorageOptionsForCategory(initialCategory)) || (initial.storage || ''),
+  );
+  const [ram, setRam] = useState(
+    findCatalogOption(initial.ram, getRamOptionsForCategory(initialCategory)) || (initial.ram || ''),
+  );
   const [processor, setProcessor] = useState(initial.processor || '');
   const [screenSize, setScreenSize] = useState(initial.screen_size || '');
   const [color, setColor] = useState(initial.color || '');
@@ -66,6 +78,40 @@ export default function EditDetailsSheet({ initial, onSave, onClose }: Props) {
   const [moreOpen, setMoreOpen] = useState(false);
   const categoryKind = getCategoryKind(category_slug);
   const isElectronic = categoryKind === 'phone' || categoryKind === 'laptop' || categoryKind === 'tablet';
+  const isOther = categoryKind === 'other';
+  const brandOptions = useMemo(() => getBrandsForCategory(category_slug), [category_slug]);
+  const modelOptions = useMemo(() => getModelSuggestions(category_slug, brand), [category_slug, brand]);
+  const storageOptions = useMemo(() => getStorageOptionsForCategory(category_slug), [category_slug]);
+  const ramOptions = useMemo(() => getRamOptionsForCategory(category_slug), [category_slug]);
+  const ramRequired = categoryKind === 'laptop';
+  const requiredMissing = useMemo(() => {
+    const missing: string[] = [];
+    if (!category_slug) missing.push('category');
+    if (isOther && (title.trim().length < 4 || /^used item$/i.test(title.trim()))) missing.push('title');
+    if (isElectronic) {
+      if (!findCatalogOption(brand, brandOptions)) missing.push('brand');
+      if (modelOptions.length > 0 && !findCatalogOption(model, modelOptions)) missing.push('model');
+      if (!findCatalogOption(storage, storageOptions)) missing.push('storage');
+      if (ramRequired && !findCatalogOption(ram, ramOptions)) missing.push('RAM');
+    }
+    return missing;
+  }, [brand, brandOptions, category_slug, isElectronic, isOther, model, modelOptions, ram, ramOptions, ramRequired, storage, storageOptions, title]);
+
+  const selectCategory = (nextSlug: string) => {
+    const next = canonicalCategorySlug(nextSlug);
+    if (!next || next === category_slug) return;
+    setCategorySlug(next);
+    const nextBrand = findCatalogOption(brand, getBrandsForCategory(next));
+    setBrand(nextBrand);
+    setModel('');
+    setStorage(findCatalogOption(storage, getStorageOptionsForCategory(next)));
+    setRam(findCatalogOption(ram, getRamOptionsForCategory(next)));
+  };
+
+  const selectBrand = (next: string) => {
+    if (brand !== next) setModel('');
+    setBrand(next);
+  };
 
   return (
     <Modal transparent visible animationType="slide" onRequestClose={onClose}>
@@ -84,7 +130,7 @@ export default function EditDetailsSheet({ initial, onSave, onClose }: Props) {
               {CATEGORY_PICKS.map((c) => (
                 <TouchableOpacity
                   key={c.slug}
-                  onPress={() => setCategorySlug(c.slug)}
+                  onPress={() => selectCategory(c.slug)}
                   style={[st.chip, category_slug === c.slug && st.chipActive]}>
                   <Text style={[st.chipText, category_slug === c.slug && st.chipTextActive]}>
                     {c.label}
@@ -93,31 +139,77 @@ export default function EditDetailsSheet({ initial, onSave, onClose }: Props) {
               ))}
             </View>
 
-            <SuggestionField
-              label="Brand"
-              value={brand}
-              onChangeText={setBrand}
-              placeholder="Apple, Samsung, HP..."
-              suggestions={getBrandsForCategory(category_slug)}
-            />
-
-            <SuggestionField
-              label="Model"
-              value={model}
-              onChangeText={setModel}
-              placeholder="Exact model or product name"
-              suggestions={getModelSuggestions(category_slug, brand)}
-            />
-
             {isElectronic ? (
               <>
-                <Text style={st.label}>Storage</Text>
-                <ChipSet options={STORAGE_OPTIONS} selected={storage} onSelect={setStorage} />
+                <View style={st.confirmBox}>
+                  <Text style={st.confirmTitle}>Confirm exact product details</Text>
+                  <Text style={st.confirmText}>
+                    Choose from the chips so buyers see searchable, consistent specs.
+                  </Text>
+                </View>
 
-                <Text style={st.label}>RAM</Text>
-                <ChipSet options={RAM_OPTIONS} selected={ram} onSelect={setRam} />
+                <OptionChips
+                  label="Brand"
+                  required
+                  options={brandOptions}
+                  selected={brand}
+                  onSelect={selectBrand}
+                />
+
+                <OptionChips
+                  label="Model"
+                  required={modelOptions.length > 0}
+                  options={modelOptions}
+                  selected={model}
+                  onSelect={setModel}
+                  emptyText={brand ? 'Model catalogue is not loaded for this brand yet.' : 'Select brand first.'}
+                />
+
+                <Text style={st.label}>Storage</Text>
+                <ChipSet options={storageOptions} selected={storage} onSelect={setStorage} />
+
+                <Text style={st.label}>RAM{ramRequired ? ' *' : ''}</Text>
+                <ChipSet options={ramOptions} selected={ram} onSelect={setRam} />
               </>
-            ) : null}
+            ) : (
+              <>
+                {isOther ? (
+                  <View style={st.confirmBox}>
+                    <Text style={st.confirmTitle}>Unsupported category fallback</Text>
+                    <Text style={st.confirmText}>
+                      Owmee will list this as Other. Keep the AI-filled details or edit them before publishing.
+                    </Text>
+                  </View>
+                ) : null}
+
+                <Text style={st.label}>Listing title{isOther ? ' *' : ''}</Text>
+                <TextInput
+                  style={st.input}
+                  value={title}
+                  onChangeText={setTitle}
+                  placeholder="What are you selling?"
+                  placeholderTextColor={C.text4}
+                  autoCapitalize="words"
+                  maxLength={80}
+                />
+
+                <SuggestionField
+                  label="Brand"
+                  value={brand}
+                  onChangeText={setBrand}
+                  placeholder="Apple, Samsung, HP..."
+                  suggestions={brandOptions}
+                />
+
+                <SuggestionField
+                  label="Model"
+                  value={model}
+                  onChangeText={setModel}
+                  placeholder="Exact model or product name"
+                  suggestions={modelOptions}
+                />
+              </>
+            )}
 
             <Text style={st.label}>Colour</Text>
             <ChipSet options={COLOR_OPTIONS} selected={color} onSelect={setColor} />
@@ -177,6 +269,11 @@ export default function EditDetailsSheet({ initial, onSave, onClose }: Props) {
             ) : null}
           </ScrollView>
 
+          {requiredMissing.length > 0 ? (
+            <Text style={st.requiredHint}>
+              Select {requiredMissing.join(', ')} to save.
+            </Text>
+          ) : null}
           <View style={st.ctaRow}>
             <Button
               label="Cancel"
@@ -187,18 +284,20 @@ export default function EditDetailsSheet({ initial, onSave, onClose }: Props) {
             <Button
               label="Save"
               variant="primary"
+              disabled={requiredMissing.length > 0}
               onPress={() => onSave({
+                title: title.trim(),
                 brand,
                 model,
-                storage,
-                ram,
+                storage: findCatalogOption(storage, storageOptions) || storage,
+                ram: findCatalogOption(ram, ramOptions) || ram,
                 processor,
                 screen_size: screenSize,
                 color,
                 purchase_year: /^\d{4}$/.test(purchaseYear) ? parseInt(purchaseYear, 10) : null,
                 accessories,
                 warranty_status: warrantyStatus,
-                category_slug,
+                category_slug: canonicalCategorySlug(category_slug),
               })}
               style={st.saveBtn}
             />
@@ -206,6 +305,33 @@ export default function EditDetailsSheet({ initial, onSave, onClose }: Props) {
         </KeyboardAvoidingView>
       </View>
     </Modal>
+  );
+}
+
+function OptionChips({
+  label,
+  required = false,
+  options,
+  selected,
+  onSelect,
+  emptyText,
+}: {
+  label: string;
+  required?: boolean;
+  options: string[];
+  selected: string;
+  onSelect: (next: string) => void;
+  emptyText?: string;
+}) {
+  return (
+    <View>
+      <Text style={st.label}>{label}{required ? ' *' : ''}</Text>
+      {options.length > 0 ? (
+        <ChipSet options={options} selected={selected} onSelect={onSelect} />
+      ) : (
+        <Text style={st.emptyHint}>{emptyText || 'Select another option first.'}</Text>
+      )}
+    </View>
   );
 }
 
@@ -327,6 +453,25 @@ const st = StyleSheet.create({
     color: C.text,
     marginBottom: S.lg,
   },
+  confirmBox: {
+    marginTop: S.lg,
+    padding: S.md,
+    borderRadius: R.md,
+    backgroundColor: C.petrolLight,
+    borderWidth: 1,
+    borderColor: C.blueBorder,
+  },
+  confirmTitle: {
+    fontSize: T.size.base,
+    fontWeight: T.weight.bold,
+    color: C.petrolDeep,
+  },
+  confirmText: {
+    marginTop: 2,
+    fontSize: T.size.sm,
+    color: C.petrolText,
+    lineHeight: T.size.sm + 4,
+  },
   sectionTitle: {
     fontSize: T.size.base,
     fontWeight: T.weight.bold,
@@ -363,6 +508,17 @@ const st = StyleSheet.create({
   chipMoreText: {
     color: C.text2,
     fontSize: T.size.base,
+    fontWeight: T.weight.semi,
+  },
+  emptyHint: {
+    color: C.text3,
+    fontSize: T.size.base,
+    lineHeight: T.size.base + 4,
+  },
+  requiredHint: {
+    marginTop: S.md,
+    color: C.red,
+    fontSize: T.size.sm,
     fontWeight: T.weight.semi,
   },
   input: {

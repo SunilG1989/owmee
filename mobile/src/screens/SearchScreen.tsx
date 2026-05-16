@@ -35,6 +35,7 @@ const CATEGORIES = [
   { slug: 'tablets',          label: 'Tablets' },
   { slug: 'small-appliances', label: 'Appliances' },
   { slug: 'kids-utility',     label: 'Kids' },
+  { slug: 'others',           label: 'Other' },
 ];
 
 export default function SearchScreen({ navigation, route }: TabScreen<'Search'>) {
