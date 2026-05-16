@@ -88,7 +88,7 @@ const FeStack = createNativeStackNavigator<RootStackParams>();
 const AuthStack = createNativeStackNavigator<AuthStackParams>();
 const Tab = createBottomTabNavigator<TabParams>();
 const SPLASH_STATUS_BG = '#003F4B';
-const APP_STATUS_BG = '#FEFBF4';
+const APP_STATUS_BG = C.bone;
 const SPLASH_MIN_MS = 450;
 
 enableFreeze(true);
@@ -116,6 +116,7 @@ function TabCell({
   Icon: LucideIcon;
   active: boolean;
   badge?: number;
+  tabKey: keyof TabParams;
 }) {
   return (
     <View style={st.cell}>
@@ -123,7 +124,7 @@ function TabCell({
         <Icon
           size={21}
           strokeWidth={active ? 2.25 : 2}
-          color={active ? C.petrolDeep : C.text2}
+          color={active ? C.white : C.text2}
         />
         {badge && badge > 0 ? (
           <View style={st.badge}>
@@ -137,24 +138,15 @@ function TabCell({
 }
 
 /**
- * Sell-tab FAB — raised circular button +14px above the bar
- * baseline, pastel apricot fill + coral-tinted halo. Anchors the primary
- * marketplace action ("Sell my stuff") with a camera glyph that
- * primes the AI-from-photo flow that's already step 1 of every
- * listing. Pattern lifted from Mercari/Poshmark/Depop/OfferUp —
- * the four photo-first C2C marketplaces — where the camera icon
- * does the affordance work and the label confirms the verb.
- *
- * Apricot (vs petrol) is deliberate: tokens.ts:38-41 reserves coral
- * for "act now / once per screen" moments, which is exactly what
- * this FAB is. Mercari Japan does the same with brand red — the
- * primary action shouldn't blend into the rest of the chrome.
+ * Sell-tab FAB — raised circular button +14px above the bar baseline.
+ * Uses the same logo teal as Home and primary CTAs so the core marketplace
+ * action feels native to the Owmee brand system.
  */
 function SellFab({ active }: { active: boolean }) {
   return (
     <View style={st.fabSlot}>
       <View style={[st.fab, active && st.fabActive]}>
-        <CameraIcon size={18} strokeWidth={2.25} color={C.coralDeep} />
+        <CameraIcon size={18} strokeWidth={2.25} color={active ? C.white : C.ctaPrimary} />
       </View>
       <Text style={[st.fabLabel, active && st.fabLabelActive]}>Sell</Text>
     </View>
@@ -283,6 +275,7 @@ function MainTabs() {
                   <SellFab active={active} />
                 ) : (
                   <TabCell
+                    tabKey={tab.key}
                     label={tab.label}
                     Icon={tab.Icon}
                     active={active}
@@ -483,9 +476,9 @@ export default function RootNavigator() {
 const st = StyleSheet.create({
   tabBar: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(255,253,248,0.94)',
+    backgroundColor: C.surface,
     borderWidth: 1,
-    borderColor: 'rgba(224, 203, 188, 0.74)',
+    borderColor: C.border2,
     borderRadius: R.xl + 2,
     marginHorizontal: S.lg,
     marginBottom: S.xs + 2,
@@ -504,15 +497,20 @@ const st = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
-  iconPillActive: { backgroundColor: 'transparent' },
+  iconPillActive: {
+    backgroundColor: C.ctaPrimary,
+    borderColor: C.ctaPrimary,
+  },
   cellLabel: {
     fontSize: T.size.xs,
     fontWeight: T.weight.medium,
     color: C.text2,
     marginTop: 2,
   },
-  cellLabelActive: { color: C.petrolDeep, fontWeight: T.weight.semi },
+  cellLabelActive: { color: C.ctaPrimary, fontWeight: T.weight.semi },
 
   // ── Notification badge (unread count) ───────────────────────────────────
   badge: {
@@ -536,29 +534,31 @@ const st = StyleSheet.create({
     lineHeight: 12,
   },
 
-  // ── Sell tab: raised pastel FAB (primary "act now" surface) ────────────
-  // Pastel fill + warm outline keeps Sell visible without making the bar
-  // feel heavy.
+  // ── Sell tab: raised logo-color FAB ────────────────────────────────────
+  // Soft teal at rest, filled logo teal when active.
   fabSlot: { alignItems: 'center', justifyContent: 'flex-start' },
   fab: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: 'rgba(251, 233, 226, 0.92)',
+    backgroundColor: C.ctaPrimarySoft,
     borderWidth: 1,
-    borderColor: 'rgba(215, 168, 158, 0.46)',
+    borderColor: C.ctaPrimaryBorder,
     alignItems: 'center',
     justifyContent: 'center',
     ...Shadow.subtle,
   },
   // Press-state uses inline opacity via activeOpacity on the wrapping
   // TouchableOpacity.
-  fabActive: {},
+  fabActive: {
+    backgroundColor: C.ctaPrimary,
+    borderColor: C.ctaPrimary,
+  },
   fabLabel: {
     fontSize: T.size.xs,
     fontWeight: T.weight.medium,
     color: C.text2,
     marginTop: 2,
   },
-  fabLabelActive: { color: C.coralDeep, fontWeight: T.weight.semi },
+  fabLabelActive: { color: C.ctaPrimary, fontWeight: T.weight.semi },
 });

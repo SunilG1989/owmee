@@ -1050,11 +1050,11 @@ const st = StyleSheet.create({
   peLabel: { fontSize: T.size.xs, color: C.text4 },
 
   // Step 1 — Category
-  catNameActive: { color: C.petrolDeep },
+  catNameActive: { color: C.ctaPrimary },
 
   // Step 3 — Condition
   condEmoji: { fontSize: T.size.xxl },
-  condLabelActive: { color: C.petrolDeep },
+  condLabelActive: { color: C.ctaPrimary },
   checkboxTick: { color: C.white, fontSize: T.size.sm },
 
   // Step 4 — Price + Review
@@ -1062,7 +1062,7 @@ const st = StyleSheet.create({
   priceCurrencyBig: { fontSize: T.size.xxl - 2, fontWeight: T.weight.bold, color: C.text },
   priceCurrencySmall: { fontSize: T.size.sm + 1, color: C.text3 },
   priceInputBig: { flex: 1, fontSize: T.size.xxl - 2, fontWeight: T.weight.bold },
-  discountHint: { color: C.petrol, fontSize: T.size.base, marginTop: S.xs },
+  discountHint: { color: C.ctaPrimary, fontSize: T.size.base, marginTop: S.xs },
   negoRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1107,9 +1107,9 @@ const st = StyleSheet.create({
   dots: { flex: 1, flexDirection: 'row', justifyContent: 'center', gap: S.md },
   dw: { alignItems: 'center', gap: 3 },
   d: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.border },
-  dActive: { backgroundColor: C.petrol },
+  dActive: { backgroundColor: C.ctaPrimary },
   dl: { fontSize: T.size.xs - 1, color: C.text4 },                  // 9
-  dlActive: { color: C.petrol },
+  dlActive: { color: C.ctaPrimary },
 
   body: { flex: 1, paddingHorizontal: S.lg, paddingTop: S.lg },
   h: { fontSize: T.size.xl, fontWeight: T.weight.bold, color: C.text, marginBottom: S.xs },
@@ -1118,7 +1118,7 @@ const st = StyleSheet.create({
     fontSize: T.size.sm, fontWeight: T.weight.semi,
     color: C.text2, marginTop: S.lg, marginBottom: S.xs + 2,
   },
-  req: { color: C.petrolDeep },
+  req: { color: C.ctaPrimary },
   inp: {
     borderWidth: 0.5, borderColor: C.border, borderRadius: R.sm,
     paddingHorizontal: S.md, paddingVertical: S.sm + 2,
@@ -1149,8 +1149,8 @@ const st = StyleSheet.create({
     gap: S.md,
   },
   attestRowOn: {
-    borderColor: C.petrol,
-    backgroundColor: C.petrolLight,
+    borderColor: C.ctaPrimary,
+    backgroundColor: C.ctaPrimarySoft,
     borderWidth: 1.5,
   },
   attestText: {
@@ -1180,8 +1180,8 @@ const st = StyleSheet.create({
     gap: S.sm,
   },
   includesPillOn: {
-    borderColor: C.petrol,
-    backgroundColor: C.petrolLight,
+    borderColor: C.ctaPrimary,
+    backgroundColor: C.ctaPrimarySoft,
   },
   includesBox: {
     width: 18,
@@ -1193,8 +1193,8 @@ const st = StyleSheet.create({
     justifyContent: 'center',
   },
   includesBoxOn: {
-    borderColor: C.petrol,
-    backgroundColor: C.petrol,
+    borderColor: C.ctaPrimary,
+    backgroundColor: C.ctaPrimary,
   },
   includesTick: {
     color: C.surface,
@@ -1208,7 +1208,7 @@ const st = StyleSheet.create({
     fontWeight: T.weight.semi,
   },
   includesLblOn: {
-    color: C.petrolDeep,
+    color: C.ctaPrimary,
   },
 
   // Chips (local helper — TODO migrate to components/ui/Chip)
@@ -1218,9 +1218,9 @@ const st = StyleSheet.create({
     borderRadius: R.pill, borderWidth: 1,
     borderColor: C.border, backgroundColor: C.surface,
   },
-  chipActive: { backgroundColor: C.petrolLight, borderColor: C.petrol },
+  chipActive: { backgroundColor: C.ctaPrimarySoft, borderColor: C.ctaPrimary },
   chipText: { fontSize: T.size.base, color: C.text2 },
-  chipTextActive: { color: C.petrolDeep, fontWeight: T.weight.semi },
+  chipTextActive: { color: C.ctaPrimary, fontWeight: T.weight.semi },
   suggestionWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1236,8 +1236,8 @@ const st = StyleSheet.create({
     backgroundColor: C.surface,
   },
   suggestionChipOn: {
-    borderColor: C.petrol,
-    backgroundColor: C.petrolLight,
+    borderColor: C.ctaPrimary,
+    backgroundColor: C.ctaPrimarySoft,
   },
   suggestionText: {
     fontSize: T.size.sm,
@@ -1245,7 +1245,7 @@ const st = StyleSheet.create({
     fontWeight: T.weight.medium,
   },
   suggestionTextOn: {
-    color: C.petrolDeep,
+    color: C.ctaPrimary,
     fontWeight: T.weight.semi,
   },
   suggestionMore: {
@@ -1267,11 +1267,11 @@ const st = StyleSheet.create({
     borderRadius: R.md, borderWidth: 1,
     borderColor: C.border, backgroundColor: C.surface,
   },
-  catCardActive: { borderColor: C.petrol, backgroundColor: C.petrolLight },
+  catCardActive: { borderColor: C.ctaPrimary, backgroundColor: C.ctaPrimarySoft },
   catName: { fontSize: T.size.lg - 1, fontWeight: T.weight.semi, color: C.text },
   catTag: {
-    fontSize: T.size.xs, color: C.petrol, fontWeight: T.weight.semi,
-    backgroundColor: C.petrolLight,
+    fontSize: T.size.xs, color: C.ctaPrimary, fontWeight: T.weight.semi,
+    backgroundColor: C.ctaPrimarySoft,
     paddingHorizontal: S.sm, paddingVertical: 2,
     borderRadius: R.xs - 2,
   },
@@ -1283,7 +1283,7 @@ const st = StyleSheet.create({
     borderRadius: R.md, borderWidth: 1,
     borderColor: C.border, backgroundColor: C.surface,
   },
-  condCardActive: { borderColor: C.petrol, backgroundColor: C.petrolLight },
+  condCardActive: { borderColor: C.ctaPrimary, backgroundColor: C.ctaPrimarySoft },
   condLabel: { fontSize: T.size.md, fontWeight: T.weight.semi, color: C.text },
   condDesc: { fontSize: T.size.sm, color: C.text3, marginTop: 2 },
   radio: {
@@ -1291,8 +1291,8 @@ const st = StyleSheet.create({
     borderWidth: 2, borderColor: C.border,
     alignItems: 'center', justifyContent: 'center',
   },
-  radioActive: { borderColor: C.petrol },
-  radioDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: C.petrol },
+  radioActive: { borderColor: C.ctaPrimary },
+  radioDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: C.ctaPrimary },
 
   // Mini cards (screen/body condition)
   miniCard: {
@@ -1300,7 +1300,7 @@ const st = StyleSheet.create({
     borderRadius: R.sm, borderWidth: 1,
     borderColor: C.border, backgroundColor: C.surface,
   },
-  miniCardActive: { borderColor: C.petrol, backgroundColor: C.petrolLight },
+  miniCardActive: { borderColor: C.ctaPrimary, backgroundColor: C.ctaPrimarySoft },
   miniLabel: { fontSize: T.size.base, fontWeight: T.weight.semi, color: C.text },
   miniDesc: { fontSize: T.size.sm, color: C.text3, marginTop: 2 },
 
@@ -1310,14 +1310,14 @@ const st = StyleSheet.create({
     padding: S.sm + 2, marginBottom: S.xs,
     borderRadius: R.sm,
   },
-  defectActive: { backgroundColor: C.petrolLight },
+  defectActive: { backgroundColor: C.ctaPrimarySoft },
   defectLabel: { fontSize: T.size.base, color: C.text },
   checkbox: {
     width: 20, height: 20, borderRadius: R.xs - 2,
     borderWidth: 1.5, borderColor: C.border,
     alignItems: 'center', justifyContent: 'center',
   },
-  checkboxActive: { backgroundColor: C.petrol, borderColor: C.petrol },
+  checkboxActive: { backgroundColor: C.ctaPrimary, borderColor: C.ctaPrimary },
 
   // Photos
   pg: { flexDirection: 'row', flexWrap: 'wrap', gap: S.sm },
@@ -1339,13 +1339,13 @@ const st = StyleSheet.create({
     width: 44, height: 24, borderRadius: 12,
     backgroundColor: C.border, justifyContent: 'center', padding: 2,
   },
-  toggleActive: { backgroundColor: C.petrol },
+  toggleActive: { backgroundColor: C.ctaPrimary },
   toggleThumb: { width: 20, height: 20, borderRadius: 10, backgroundColor: C.white },
   toggleThumbOn: { alignSelf: 'flex-end' },
   reviewPrice: {
     fontSize: T.size.xxl - 2,
     fontWeight: T.weight.bold,
-    color: C.petrol,
+    color: C.ctaPrimary,
     marginTop: S.sm,
   },
 
@@ -1355,7 +1355,7 @@ const st = StyleSheet.create({
     backgroundColor: C.surface,
     borderTopWidth: 0.5, borderTopColor: C.border,
   },
-  publishBtn: { backgroundColor: C.ink },
+  publishBtn: { backgroundColor: C.ctaPrimary },
 
   // Gate
   gate: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: S.xxxl },

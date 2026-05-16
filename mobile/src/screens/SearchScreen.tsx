@@ -44,10 +44,12 @@ export default function SearchScreen({ navigation, route }: TabScreen<'Search'>)
   const { width: sw } = useWindowDimensions();
   const cardWidth = useMemo(() => calcCardWidth(sw), [sw]);
   const initCat = route?.params?.category_slug || null;
-  const [query, setQuery] = useState('');
+  const initQuery = route?.params?.query || '';
+  const hasInitialSearch = !!initCat || initQuery.trim().length >= 2;
+  const [query, setQuery] = useState(initQuery);
   const [results, setResults] = useState<Listing[]>([]);
-  const [loading, setLoading] = useState(!!initCat);
-  const [searched, setSearched] = useState(!!initCat);
+  const [loading, setLoading] = useState(hasInitialSearch);
+  const [searched, setSearched] = useState(hasInitialSearch);
   const [category, setCategory] = useState<string | null>(initCat);
   const [condition, setCondition] = useState('');
   const [sort, setSort] = useState('ranking');
@@ -56,7 +58,7 @@ export default function SearchScreen({ navigation, route }: TabScreen<'Search'>)
   const [showFilters, setShowFilters] = useState(false);
   const debounce = useRef<NodeJS.Timeout | null>(null);
   const activeRequest = useRef(0);
-  const lastRouteCategory = useRef<string | null | undefined>(undefined);
+  const lastRouteSearchKey = useRef<string>('');
   const skeletonItems = useMemo(() => Array.from({ length: 6 }, (_, i) => `skel-${i}`), []);
 
   useEffect(() => {
@@ -103,10 +105,13 @@ export default function SearchScreen({ navigation, route }: TabScreen<'Search'>)
 
   useEffect(() => {
     const routeCategory = route?.params?.category_slug || null;
-    if (lastRouteCategory.current === routeCategory) return undefined;
-    lastRouteCategory.current = routeCategory;
-    if (!routeCategory) {
+    const routeQuery = route?.params?.query || '';
+    const routeKey = `${routeCategory || ''}|${routeQuery}`;
+    if (lastRouteSearchKey.current === routeKey) return undefined;
+    lastRouteSearchKey.current = routeKey;
+    if (!routeCategory && routeQuery.trim().length < 2) {
       setCategory(null);
+      setQuery('');
       setLoading(false);
       setSearched(false);
       setResults([]);
@@ -114,10 +119,11 @@ export default function SearchScreen({ navigation, route }: TabScreen<'Search'>)
     }
 
     setCategory(routeCategory);
+    setQuery(routeQuery);
     setLoading(true);
     setSearched(true);
-    return afterInteractions(() => doSearch('', condition, routeCategory, sort));
-  }, [condition, doSearch, route?.params?.category_slug, sort]);
+    return afterInteractions(() => doSearch(routeQuery, condition, routeCategory, sort));
+  }, [condition, doSearch, route?.params?.category_slug, route?.params?.query, sort]);
 
   const onText = (t: string) => {
     setQuery(t);
@@ -403,7 +409,7 @@ function SearchStarter() {
       <View style={s.emptyPills}>
         <Text style={s.emptyPill}>Seller checked</Text>
         <Text style={s.emptyPill}>Safe payment</Text>
-        <Text style={s.emptyPill}>Home handover</Text>
+        <Text style={s.emptyPill}>Managed delivery</Text>
       </View>
     </View>
   );
@@ -415,9 +421,9 @@ const s = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
   top: {
-    backgroundColor: 'rgba(255, 253, 248, 0.94)',
+    backgroundColor: 'rgba(255, 253, 248, 0.96)',
     borderBottomWidth: 0.5,
-    borderBottomColor: 'rgba(224, 203, 188, 0.82)',
+    borderBottomColor: C.border2,
   },
   searchRow: {
     flexDirection: 'row',
@@ -433,6 +439,9 @@ const s = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border2,
   },
 
   // Filter anchor positions the badge over the IconButton.
@@ -442,7 +451,7 @@ const s = StyleSheet.create({
     top: -4, right: -4,
     width: 16, height: 16,
     borderRadius: 8,
-    backgroundColor: C.petrol,
+    backgroundColor: C.ctaPrimary,
     alignItems: 'center', justifyContent: 'center',
   },
   filterBadgeText: { fontSize: T.size.xs, color: C.white, fontWeight: T.weight.bold },
@@ -468,7 +477,7 @@ const s = StyleSheet.create({
     minWidth: 0,
   },
   statusText: { fontSize: T.size.sm, color: C.text3 },
-  sortLabel: { fontSize: T.size.sm, color: C.petrolDeep, fontWeight: T.weight.semi },
+  sortLabel: { fontSize: T.size.sm, color: C.ctaPrimary, fontWeight: T.weight.semi },
 
   resultsFrame: {
     flex: 1,
@@ -495,7 +504,7 @@ const s = StyleSheet.create({
   updatingText: {
     fontSize: T.size.xs,
     fontWeight: T.weight.semi,
-    color: C.petrolDeep,
+    color: C.ctaPrimary,
   },
 
   empty: {
@@ -505,8 +514,8 @@ const s = StyleSheet.create({
     paddingHorizontal: S.lg,
     borderRadius: R.xl,
     borderWidth: 1,
-    borderColor: 'rgba(224, 203, 188, 0.86)',
-    backgroundColor: 'rgba(255,253,248,0.86)',
+    borderColor: C.border2,
+    backgroundColor: C.surface,
     alignItems: 'center',
   },
   emptyIcon: {
@@ -536,7 +545,7 @@ const s = StyleSheet.create({
   emptyPill: {
     overflow: 'hidden',
     borderRadius: R.pill,
-    backgroundColor: '#EEF8F5',
+    backgroundColor: C.petrolLight,
     color: C.petrolText,
     fontSize: T.size.xs,
     fontWeight: T.weight.semi,
@@ -569,8 +578,8 @@ const s = StyleSheet.create({
     borderWidth: 1.5, borderColor: C.border,
     alignItems: 'center', justifyContent: 'center',
   },
-  radioOn: { borderColor: C.petrol },
-  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: C.petrol },
+  radioOn: { borderColor: C.ctaPrimary },
+  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: C.ctaPrimary },
   radioLabel: { fontSize: T.size.md, color: C.text },
 
   priceRow: { flexDirection: 'row', alignItems: 'center', gap: S.sm },

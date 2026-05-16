@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { BackButton, Chip } from '../../components/ui';
+import { BackButton, Button, Chip } from '../../components/ui';
 import { useFocusEffect } from '@react-navigation/native';
 import { C, T, S, R, Shadow, formatPrice, timeAgo } from '../../utils/tokens';
 import { Transactions, type Transaction } from '../../services/api';
@@ -104,9 +104,7 @@ export default function TransactionListScreen({ navigation }: any) {
             <Text style={s.emptyTitle}>{error ? 'Could not load orders' : 'No orders yet'}</Text>
             <Text style={s.emptySub}>{error || 'Your buying and selling orders will appear here.'}</Text>
             {error ? (
-              <TouchableOpacity style={s.retryBtn} onPress={load} activeOpacity={0.8}>
-                <Text style={s.retryText}>Retry</Text>
-              </TouchableOpacity>
+              <Button label="Retry" variant="primary" size="sm" onPress={load} style={s.retryBtn} />
             ) : null}
           </View>
         }
@@ -164,12 +162,5 @@ const s = StyleSheet.create({
   retryBtn: {
     marginTop: S.lg,
     minWidth: 108,
-    height: 40,
-    borderRadius: R.pill,
-    backgroundColor: C.petrol,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: S.xl,
   },
-  retryText: { color: C.white, fontSize: T.size.sm + 1, fontWeight: T.weight.semi },
 });

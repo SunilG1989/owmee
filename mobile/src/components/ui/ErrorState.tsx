@@ -7,7 +7,7 @@
  * Voice rules:
  *   - Don't say "Oops" or "Something went wrong" — too generic
  *   - Name the failure as plainly as you can: "Couldn't load offers"
- *     "Pickup couldn't be scheduled" "We lost the connection"
+ *     "Delivery couldn't be scheduled" "We lost the connection"
  *   - One sentence of what to do next
  *   - "Try again" is the standard CTA label
  *

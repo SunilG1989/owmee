@@ -9,9 +9,9 @@ import { C, T, S, R, formatPrice } from '../../utils/tokens';
 import { Button } from '../../components/ui';
 
 const TIMELINE = [
-  { step: '1', label: 'Seller prepares item', desc: 'Seller will pack and hand over for pickup' },
-  { step: '2', label: 'Item picked up', desc: 'Our logistics partner collects the item' },
-  { step: '3', label: 'Quality check', desc: 'Item verified against listing description' },
+  { step: '1', label: 'Seller prepares item', desc: 'Seller packs the item for Owmee delivery' },
+  { step: '2', label: 'Owmee logistics', desc: 'Owmee prepares the item for delivery' },
+  { step: '3', label: 'Quality check', desc: 'Item is verified against the listing description' },
   { step: '4', label: 'Delivered to you', desc: 'You receive and inspect the item' },
   { step: '5', label: 'Confirm receipt', desc: 'Money released to seller after your confirmation' },
 ];

@@ -22,13 +22,13 @@
  */
 
 export const C = {
-  // ── PRIMARY · WARM TRUST BLUE ────────────────────────────────────────
-  petrol:        '#4F7F86',  // trust actions and verified states
-  petrolLight:   '#F1F8F6',  // selected state / light trust surface
-  petrolMid:     '#91B6B0',  // trust icon / small emphasis
-  petrolGlow:    '#C9DDD7',  // highlights and focus halo
-  petrolDeep:    '#355F63',  // pressed / readable brand surface
-  petrolText:    '#4B7280',  // readable trust text on light surfaces
+  // ── PRIMARY · LOGO TRUST TEAL ────────────────────────────────────────
+  petrol:        '#245E56',  // trust actions and verified states
+  petrolLight:   '#EAF4F1',  // selected state / light trust surface
+  petrolMid:     '#6A9D94',  // trust icon / small emphasis
+  petrolGlow:    '#CFE3DE',  // highlights and focus halo
+  petrolDeep:    '#1E4F49',  // pressed / readable brand surface
+  petrolText:    '#245E56',  // readable trust text on light surfaces
   petrolNight:   '#172033',  // inverse/navy text
   splashBg:      '#003F4B',  // logo-matched native/JS splash background
 
@@ -42,8 +42,20 @@ export const C = {
   coralLight:    '#FBE9E2',
   coralDeep:     '#6E4C45',
   coralBright:   '#D7A89E',
-  wordmarkCoral: '#C97861',
-  wordmarkTeal:  '#2F766B',
+  wordmarkCoral: '#B85E42',
+  wordmarkTeal:  '#245E56',
+
+  // ── ACTIONS · LOGO/HOME CTA SYSTEM ──────────────────────────────────
+  ctaPrimary:        '#245E56',
+  ctaPrimaryPressed: '#1E4F49',
+  ctaPrimarySoft:    '#EAF4F1',
+  ctaPrimaryBorder:  '#CFE3DE',
+  ctaSecondary:      '#C97861',
+  ctaSecondaryDeep:  '#8F5749',
+  ctaSecondarySoft:  '#FFF0E8',
+  ctaDisabledBg:     '#F7EFE7',
+  ctaDisabledBorder: '#EBDCCD',
+  ctaDisabledText:   '#8A949E',
 
   // ── TRUST CHIP PALETTE ──────────────────────────────────────────────
   mintSoft:      '#EDF8EF',
@@ -106,18 +118,18 @@ export const C = {
   cardBgPastel:  '#EAF2FF',
 
   // ── LEGACY ALIASES — old names → v21 values ─────────────────────────
-  honey:         '#4F7F86',
-  honeyLight:    '#F1F8F6',
-  honeyGlow:     '#C9DDD7',
-  honeyDeep:     '#355F63',
-  honeyText:     '#4B7280',
+  honey:         '#245E56',
+  honeyLight:    '#EAF4F1',
+  honeyGlow:     '#CFE3DE',
+  honeyDeep:     '#1E4F49',
+  honeyText:     '#245E56',
 
-  forest:        '#4F7F86',
-  forestLight:   '#F1F8F6',
-  forestVivid:   '#91B6B0',
-  forestText:    '#4B7280',
+  forest:        '#245E56',
+  forestLight:   '#EAF4F1',
+  forestVivid:   '#6A9D94',
+  forestText:    '#245E56',
 
-  primary:       '#4F7F86',
+  primary:       '#245E56',
   muted:         '#67727E',
   danger:        '#B33A2F',
   success:       '#2F7D4C',
@@ -178,8 +190,8 @@ export const Shadow = {
   sm:     _SUBTLE_SHADOW,
   card:   { shadowColor: '#172033', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 2 },
   lifted: { shadowColor: '#172033', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.10, shadowRadius: 18, elevation: 4 },
-  glow:      { shadowColor: '#4F7F86', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.10, shadowRadius: 14, elevation: 4 },
-  coralGlow: { shadowColor: '#D7A89E', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.07, shadowRadius: 10, elevation: 1 },
+  glow:      { shadowColor: '#245E56', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 14, elevation: 4 },
+  coralGlow: { shadowColor: '#C97861', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.09, shadowRadius: 10, elevation: 1 },
 };
 
 export const I = { xs: 12, sm: 16, md: 24, lg: 32, xl: 48, display: 56 } as const;

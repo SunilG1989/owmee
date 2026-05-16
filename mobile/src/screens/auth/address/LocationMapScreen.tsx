@@ -732,7 +732,7 @@ const s = StyleSheet.create({
   },
   nudgeButtonText: {
     fontSize: T.size.sm,
-    color: C.petrolDeep,
+    color: C.ctaPrimary,
     fontWeight: T.weight.semi,
   },
 });

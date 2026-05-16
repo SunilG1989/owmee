@@ -12,6 +12,10 @@ from app.core.jwt import create_access_token, create_refresh_token
 from app.core.rate_limit import OTP_PER_IP, limit_by_ip
 from app.core.redis import get_redis
 from app.core.settings import settings
+from app.modules.identity_auth.sms_adapter import (
+    get_sms_adapter,
+    sms_provider_is_mock,
+)
 
 router = APIRouter()
 logger = structlog.get_logger()
@@ -164,7 +168,7 @@ async def _verify_otp(phone: str, submitted_otp: str) -> None:
 
 # ── Sprint 5b: OTP whitelist for test users (pre-real-SMS) ──────────────────
 def _sms_provider_is_mock() -> bool:
-    return (getattr(settings, "sms_provider", "") or "").strip().lower() == "mock"
+    return sms_provider_is_mock()
 
 
 def _uses_fixed_otp(phone: str) -> bool:
@@ -205,11 +209,27 @@ def _generate_otp() -> str:
 
 
 async def _send_sms(phone: str, otp: str) -> None:
-    if settings.env == "development":
-        logger.info("otp.dev_mode", phone=phone, otp=otp)
+    try:
+        result = await get_sms_adapter().send_otp(phone, otp)
+    except RuntimeError as exc:
+        logger.error("otp.provider_unsupported", error=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"error": "SMS_PROVIDER_UNAVAILABLE", "message": "OTP delivery is temporarily unavailable."},
+        )
+    if result.success:
+        logger.info("otp.sent", phone_suffix=phone[-4:], provider=result.provider)
         return
-    # In production, wire to your SMS provider here (DLT-registered Transactional)
-    logger.info("otp.sent", phone_suffix=phone[-4:])
+    logger.error(
+        "otp.delivery_failed",
+        phone_suffix=phone[-4:],
+        provider=result.provider,
+        error=result.error,
+    )
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail={"error": "OTP_DELIVERY_FAILED", "message": "Could not send OTP. Please try again."},
+    )
 
 
 async def _get_or_create_user(db, phone: str):
@@ -326,7 +346,12 @@ async def send_otp(body: SendOTPRequest, request: Request):
     else:
         otp = _generate_otp()
     await _store_otp(phone, otp, count_rate=not fixed_otp_enabled)
-    await _send_sms(phone, otp)
+    try:
+        await _send_sms(phone, otp)
+    except HTTPException:
+        redis = await get_redis()
+        await redis.delete(_otp_value_key(phone), _otp_attempts_key(phone), _otp_lock_key(phone))
+        raise
     logger.info("otp.sent", phone_suffix=phone[-4:])
 
 

@@ -1,4 +1,5 @@
 import io
+from dataclasses import dataclass
 from typing import BinaryIO
 from uuid import uuid4
 
@@ -10,6 +11,13 @@ from botocore.exceptions import ClientError
 from app.core.settings import settings
 
 logger = structlog.get_logger()
+
+
+@dataclass(frozen=True)
+class ProcessedListingImage:
+    original_key: str
+    display_key: str | None
+    thumbnail_key: str | None
 
 
 def _r2_client():
@@ -119,62 +127,193 @@ def download_bytes(object_key: str, bucket: str | None = None) -> bytes:
     return obj["Body"].read()
 
 
+def _normalise_catalog_image(raw: bytes):
+    """Open, orient, and lightly polish a seller photo for marketplace display.
+
+    This intentionally does not remove or invent product details. It cleans the
+    camera output: EXIF rotation, low-light noise, flat contrast, and phone-photo
+    softness. The original upload remains untouched in R2.
+    """
+    from io import BytesIO
+    from PIL import Image, ImageChops, ImageEnhance, ImageFilter, ImageOps, ImageStat  # type: ignore
+
+    img = Image.open(BytesIO(raw))
+    img = ImageOps.exif_transpose(img)
+
+    if img.mode == "RGBA":
+        bg = Image.new("RGB", img.size, (255, 253, 248))
+        bg.paste(img, mask=img.getchannel("A"))
+        img = bg
+    elif img.mode != "RGB":
+        img = img.convert("RGB")
+
+    # Subtle denoise while keeping wear/scratches visible for buyer trust.
+    denoised = img.filter(ImageFilter.MedianFilter(size=3))
+    img = Image.blend(img, denoised, 0.22)
+
+    gray = img.convert("L")
+    mean_luma = ImageStat.Stat(gray).mean[0]
+    img = ImageOps.autocontrast(img, cutoff=0.8)
+    if mean_luma < 95:
+        img = ImageEnhance.Brightness(img).enhance(1.08)
+    elif mean_luma > 205:
+        img = ImageEnhance.Brightness(img).enhance(0.97)
+
+    img = ImageEnhance.Contrast(img).enhance(1.06)
+    img = ImageEnhance.Color(img).enhance(1.035)
+    img = img.filter(ImageFilter.UnsharpMask(radius=1.05, percent=118, threshold=3))
+
+    # Extremely cheap banding guard: if the image became perfectly flat in any
+    # large area, restore a whisper of the original texture.
+    diff = ImageChops.difference(img, denoised).convert("L")
+    if ImageStat.Stat(diff).mean[0] < 1.5:
+        img = Image.blend(img, denoised, 0.12)
+
+    return img
+
+
+def _webp_bytes(img, *, quality: int) -> bytes:
+    from io import BytesIO
+
+    out = BytesIO()
+    img.save(out, format="WEBP", quality=quality, method=6)
+    return out.getvalue()
+
+
+def thumbnail_key_for_display_key(display_key: str | None) -> str | None:
+    if not display_key:
+        return None
+    if display_key.endswith(".display.webp"):
+        return display_key[: -len(".display.webp")] + ".thumb.webp"
+    return None
+
+
+def process_listing_image(
+    original_key: str,
+    *,
+    max_display_dimension: int = 1800,
+    max_thumbnail_dimension: int = 1200,
+    display_quality: int = 92,
+    thumbnail_quality: int = 86,
+    bucket: str | None = None,
+) -> ProcessedListingImage:
+    """Create catalog-grade display and thumbnail variants for a listing photo.
+
+    Stored alongside the original as:
+      - `<original-key>.display.webp` for detail/gallery display
+      - `<original-key>.thumb.webp` for cards/feed
+
+    Returns keys on success; failures are logged and leave the original usable.
+
+    Why this shape
+    -----------------------
+    - The display image is high enough for modern phone zoom without forcing
+      every buyer to download raw camera files.
+    - The thumbnail is smaller and denoised for fast feeds.
+    - The original stays untouched for moderation, disputes, and trust.
+    """
+    try:
+        raw = download_bytes(original_key, bucket=bucket)
+        return process_listing_image_bytes(
+            raw,
+            original_key=original_key,
+            upload_original=False,
+            content_type="application/octet-stream",
+            max_display_dimension=max_display_dimension,
+            max_thumbnail_dimension=max_thumbnail_dimension,
+            display_quality=display_quality,
+            thumbnail_quality=thumbnail_quality,
+            bucket=bucket,
+        )
+    except Exception as e:
+        logger.warning("listing_image.process_failed", original_key=original_key, error=str(e))
+        return ProcessedListingImage(original_key=original_key, display_key=None, thumbnail_key=None)
+
+
+def process_listing_image_bytes(
+    raw: bytes,
+    *,
+    original_key: str,
+    content_type: str = "image/jpeg",
+    upload_original: bool = True,
+    max_display_dimension: int = 1800,
+    max_thumbnail_dimension: int = 1200,
+    display_quality: int = 92,
+    thumbnail_quality: int = 86,
+    bucket: str | None = None,
+) -> ProcessedListingImage:
+    """Upload the original bytes and create polished listing variants.
+
+    Used by the AI multipart flow, where the backend receives image bytes
+    directly instead of waiting for a mobile presigned PUT.
+    """
+    try:
+        from PIL import Image  # type: ignore
+    except Exception:
+        logger.warning("listing_image.pillow_missing", original_key=original_key)
+        if upload_original:
+            upload_bytes(raw, original_key, content_type=content_type, bucket=bucket)
+        return ProcessedListingImage(original_key=original_key, display_key=None, thumbnail_key=None)
+
+    try:
+        if upload_original:
+            upload_bytes(raw, original_key, content_type=content_type, bucket=bucket)
+
+        img = _normalise_catalog_image(raw)
+        display = img.copy()
+        display.thumbnail((max_display_dimension, max_display_dimension), Image.Resampling.LANCZOS)
+        thumb = img.copy()
+        thumb.thumbnail((max_thumbnail_dimension, max_thumbnail_dimension), Image.Resampling.LANCZOS)
+
+        display_key = f"{original_key}.display.webp"
+        thumb_key = f"{original_key}.thumb.webp"
+        upload_bytes(
+            _webp_bytes(display, quality=display_quality),
+            display_key,
+            content_type="image/webp",
+            bucket=bucket,
+        )
+        upload_bytes(
+            _webp_bytes(thumb, quality=thumbnail_quality),
+            thumb_key,
+            content_type="image/webp",
+            bucket=bucket,
+        )
+        return ProcessedListingImage(
+            original_key=original_key,
+            display_key=display_key,
+            thumbnail_key=thumb_key,
+        )
+    except Exception as e:
+        logger.warning("listing_image.process_failed", original_key=original_key, error=str(e))
+        if upload_original:
+            try:
+                upload_bytes(raw, original_key, content_type=content_type, bucket=bucket)
+            except Exception as upload_error:
+                logger.warning(
+                    "listing_image.original_upload_failed",
+                    original_key=original_key,
+                    error=str(upload_error),
+                )
+        return ProcessedListingImage(original_key=original_key, display_key=None, thumbnail_key=None)
+
+
 def resize_listing_image(
     original_key: str,
     *,
     max_dimension: int = 1200,
-    webp_quality: int = 80,
+    webp_quality: int = 86,
     bucket: str | None = None,
 ) -> str | None:
-    """Resize an uploaded listing image into a 1200px-max webp thumbnail.
-    Stored alongside the original at `<original-key>.thumb.webp`.
-
-    Returns the thumbnail key on success, None on failure (logged but
-    silent — we don't want a Pillow hiccup to block the upload-confirm
-    flow; the original is still serveable via presigned URL).
-
-    Why 1200px webp at q=80
-    -----------------------
-    - 800px is too small for zoom on phone listings; 1200 is a safe
-      ceiling for the 6.7"-screen long-edge.
-    - WebP at quality 80 is ~50% smaller than JPEG at the same perceived
-      quality. India mobile networks really notice this.
-
-    The original is preserved untouched. Once we have a CDN we can
-    serve the webp from edge cache and let originals live cold.
-    """
-    try:
-        from io import BytesIO
-        from PIL import Image, ImageEnhance, ImageOps  # type: ignore
-    except Exception:
-        logger.warning("resize.pillow_missing", original_key=original_key)
-        return None
-
-    try:
-        raw = download_bytes(original_key, bucket=bucket)
-        img = Image.open(BytesIO(raw))
-        img = ImageOps.exif_transpose(img)
-        # Strip EXIF + alpha mode handling so webp encode is deterministic.
-        if img.mode in ("RGBA", "P"):
-            img = img.convert("RGB")
-        img.thumbnail((max_dimension, max_dimension), Image.Resampling.LANCZOS)
-        # Gentle catalog cleanup: better phone-photo contrast and crispness
-        # without making used-item photos look artificially edited.
-        img = ImageOps.autocontrast(img, cutoff=1)
-        img = ImageEnhance.Contrast(img).enhance(1.03)
-        img = ImageEnhance.Color(img).enhance(1.04)
-        img = ImageEnhance.Sharpness(img).enhance(1.08)
-        out = BytesIO()
-        img.save(out, format="WEBP", quality=webp_quality, method=4)
-        out.seek(0)
-        thumb_key = f"{original_key}.thumb.webp"
-        upload_bytes(out.getvalue(), thumb_key, content_type="image/webp", bucket=bucket)
-        return thumb_key
-    except Exception as e:
-        # Don't crash the upload flow on a resize hiccup — log + serve
-        # the original via the unchanged image_urls fallback.
-        logger.warning("resize.failed", original_key=original_key, error=str(e))
-        return None
+    """Backward-compatible thumbnail helper for older call sites."""
+    processed = process_listing_image(
+        original_key,
+        max_display_dimension=max(1800, max_dimension),
+        max_thumbnail_dimension=max_dimension,
+        thumbnail_quality=webp_quality,
+        bucket=bucket,
+    )
+    return processed.thumbnail_key
 
 
 def object_key_for_listing_image(listing_id: str, size: str = "original") -> str:

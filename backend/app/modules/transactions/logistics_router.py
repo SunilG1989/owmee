@@ -718,7 +718,7 @@ async def buyer_tracking(transaction_id: UUID, current_user: BasicUser, db: DBSe
         {"step": "payment_captured",      "at": txn.created_at.isoformat() if txn.created_at else None,
          "label": "Payment received", "done": True},
         {"step": "fe_pickup",             "at": txn.at_hub_at.isoformat() if txn.at_hub_at else None,
-         "label": "Picked up + inspected", "done": txn.at_hub_at is not None},
+         "label": "Inspected by Owmee", "done": txn.at_hub_at is not None},
         {"step": "at_hub",                "at": txn.at_hub_at.isoformat() if txn.at_hub_at else None,
          "label": "At Owmee hub", "done": txn.at_hub_at is not None},
         {"step": "routed_for_delivery",   "at": txn.routed_at.isoformat() if txn.routed_at else None,

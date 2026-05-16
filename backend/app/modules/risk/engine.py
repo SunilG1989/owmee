@@ -234,7 +234,7 @@ def scan_message(text: str) -> dict:
             "blocked": True,
             "reason": "PHONE_NUMBER_SHARED",
             "severity": "medium",
-            "message": "Sharing phone numbers outside the app is not allowed. Use in-app chat.",
+            "message": "Sharing phone numbers outside the app is not allowed. Owmee manages payment and delivery support in-app.",
         }
 
     if UPI_PATTERN.search(text):

@@ -75,8 +75,13 @@ const styles = StyleSheet.create({
 
 const variantStyles: Record<BackButtonVariant, { container: ViewStyle; fg: string }> = {
   default: {
-    container: { backgroundColor: 'transparent' },
-    fg: C.ink,
+    container: {
+      backgroundColor: C.surface,
+      borderWidth: 1,
+      borderColor: C.ctaPrimaryBorder,
+      ...Shadow.subtle,
+    },
+    fg: C.ctaPrimary,
   },
   floating: {
     container: {

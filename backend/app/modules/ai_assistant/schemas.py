@@ -77,7 +77,7 @@ class AIDetected(BaseModel):
     #   nsfw, personal_info, multiple_items, no_product, blurry,
     #   packaging_only, screenshot_only, stock_or_catalog_suspected,
     #   plus ai_failed:<reason> for client/SDK failures.
-    # The post-processor in claude_client._apply_post_processing_guardrails
+    # The provider post-processor reads from this list
     # reads from this list (NOT from image_set_quality).
     flags: list[str] = Field(default_factory=list)
     # Descriptive metadata about the photo set. Filled keys per the
@@ -90,7 +90,7 @@ class AIDetected(BaseModel):
     image_set_quality: dict = Field(default_factory=dict)
 
     # Review routing — populated by Gemini per PROMPT v2 + reinforced
-    # by the post-processing guardrails in claude_client.py.
+    # by the post-processing guardrails in the configured provider adapter.
     manual_review_required: bool = False
     auto_publish_candidate: bool = False
     blocking_reasons: list[str] = Field(default_factory=list)

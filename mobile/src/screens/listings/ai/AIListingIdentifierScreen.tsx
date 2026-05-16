@@ -180,8 +180,8 @@ export default function AIListingIdentifierScreen({
           <View style={st.successDivider} />
           <Text style={st.successSection}>WHAT HAPPENS NEXT</Text>
           <Text style={st.successStep}>• A verified buyer commits (usually within 72 hours)</Text>
-          <Text style={st.successStep}>• Owmee manages payment and handover support</Text>
-          <Text style={st.successStep}>• Payout is released after handover as per Owmee policy</Text>
+          <Text style={st.successStep}>• Owmee manages protected payment and delivery support</Text>
+          <Text style={st.successStep}>• Payout is released after delivery as per Owmee policy</Text>
 
           <View style={st.flex} />
           <Button

@@ -68,7 +68,7 @@ If any photo clearly shows:
 - bank details
 - UPI QR / UPI ID
 - phone number, address, or email
-- private chat/message screen
+- private conversation screen
 - private gallery/personal content
 - NSFW/inappropriate content
 

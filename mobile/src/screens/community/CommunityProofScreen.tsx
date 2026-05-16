@@ -27,8 +27,8 @@ import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Community } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
-import { BackButton } from '../../components/ui';
-import { C, T, S, R, Shadow } from '../../utils/tokens';
+import { BackButton, Button } from '../../components/ui';
+import { C, T, S, R } from '../../utils/tokens';
 import { parseApiError } from '../../utils/errors';
 
 type Tab = 'referral' | 'manual';
@@ -310,20 +310,15 @@ export default function CommunityProofScreen() {
               </Text>
             )}
 
-            <TouchableOpacity
+            <Button
+              label="Join community"
+              variant="primary"
+              size="lg"
+              fullWidth
               disabled={!validated?.valid}
-              style={[styles.primaryBtn, !validated?.valid && styles.primaryBtnDisabled]}
               onPress={joinByReferral}
-            >
-              <Text
-                style={[
-                  styles.primaryBtnLabel,
-                  !validated?.valid && styles.primaryBtnLabelDisabled,
-                ]}
-              >
-                Join community
-              </Text>
-            </TouchableOpacity>
+              style={styles.primaryAction}
+            />
           </KeyboardAvoidingView>
         ) : (
           <View style={styles.tabBody}>
@@ -384,7 +379,7 @@ export default function CommunityProofScreen() {
             </Text>
 
             <TouchableOpacity
-              style={styles.uploadBtn}
+              style={[styles.uploadBtn, uploadingProof && styles.uploadBtnDisabled]}
               onPress={pickAndUploadProof}
               disabled={uploadingProof}
             >
@@ -397,27 +392,21 @@ export default function CommunityProofScreen() {
               )}
             </TouchableOpacity>
 
-            <TouchableOpacity
+            <Button
+              label={submittingManual ? 'Submitting…' : 'Submit for review'}
+              variant="primary"
+              size="lg"
+              fullWidth
               disabled={
                 submittingManual ||
                 uploadingProof ||
                 !proofR2Key ||
                 (!selectedCommunityId && !requestedName.trim())
               }
-              style={[
-                styles.primaryBtn,
-                (submittingManual ||
-                  uploadingProof ||
-                  !proofR2Key ||
-                  (!selectedCommunityId && !requestedName.trim())) &&
-                  styles.primaryBtnDisabled,
-              ]}
+              loading={submittingManual}
               onPress={submitManualVerification}
-            >
-              <Text style={styles.primaryBtnLabel}>
-                {submittingManual ? 'Submitting…' : 'Submit for review'}
-              </Text>
-            </TouchableOpacity>
+              style={styles.primaryAction}
+            />
           </View>
         )}
 
@@ -470,7 +459,7 @@ const styles = StyleSheet.create({
     borderBottomColor: C.border,
   },
   tabActive: {
-    borderBottomColor: C.primary,
+    borderBottomColor: C.ctaPrimary,
   },
   tabLabel: {
     fontSize: T.body,
@@ -478,7 +467,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   tabLabelActive: {
-    color: C.primary,
+    color: C.ctaPrimary,
   },
   tabBody: {
     paddingHorizontal: S.lg,
@@ -547,25 +536,7 @@ const styles = StyleSheet.create({
     fontSize: T.body,
     color: C.muted,
   },
-  primaryBtn: {
-    backgroundColor: C.primary,
-    borderRadius: R.md,
-    paddingVertical: S.lg,
-    alignItems: 'center',
-    marginTop: S.lg,
-    ...Shadow.sm,
-  },
-  primaryBtnDisabled: {
-    backgroundColor: C.border,
-  },
-  primaryBtnLabel: {
-    fontSize: T.size.lg - 1,
-    color: C.white,
-    fontWeight: T.weight.bold,
-  },
-  primaryBtnLabelDisabled: {
-    color: C.muted,
-  },
+  primaryAction: { marginTop: S.lg },
   communityRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -577,8 +548,8 @@ const styles = StyleSheet.create({
     borderColor: C.border,
   },
   communityRowActive: {
-    borderColor: C.primary,
-    backgroundColor: C.bone2,
+    borderColor: C.ctaPrimary,
+    backgroundColor: C.ctaPrimarySoft,
   },
   communityName: {
     fontSize: T.body,
@@ -592,7 +563,7 @@ const styles = StyleSheet.create({
   },
   communityCheck: {
     fontSize: T.size.lg + 1,
-    color: C.primary,
+    color: C.ctaPrimary,
     marginLeft: S.md,
   },
   uploadBtn: {
@@ -606,6 +577,10 @@ const styles = StyleSheet.create({
     backgroundColor: C.surface,
     marginVertical: S.sm,
     overflow: 'hidden',
+  },
+  uploadBtnDisabled: {
+    borderColor: C.border,
+    backgroundColor: C.sand,
   },
   uploadLabel: {
     fontSize: T.body,

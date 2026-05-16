@@ -11,7 +11,7 @@
  *   6. "See similar sales →"
  *   7. "Set my own price" link
  *   8. Condition radio (re-prices live)
- *   9-13. HOW IT WORKS: pay → pickup → check → ship → money
+ *   9-13. HOW IT WORKS: pay → verify → deliver → money
  *   14-16. ✓ No buyer comes home / No bargaining / No scam calls
  *
  * Plus: Owmee Terms link.
@@ -604,9 +604,9 @@ export default function AIListingSuggestScreen({
 
           <Text style={st.successSection}>What happens next</Text>
           <SuccessStep num={1} text="A verified buyer commits — usually within 72 hours" />
-          <SuccessStep num={2} text="Owmee manages payment and handover support" />
+          <SuccessStep num={2} text="Owmee manages protected payment and delivery support" />
           <SuccessStep num={3} text="Keep the item ready and update details if anything changes" />
-          <SuccessStep num={4} text="Payout is released after handover as per Owmee policy" />
+          <SuccessStep num={4} text="Payout is released after delivery as per Owmee policy" />
         </ScrollView>
 
         <View style={st.successCtaBar}>
@@ -816,8 +816,8 @@ export default function AIListingSuggestScreen({
         <View style={st.trustBlock}>
           <Text style={st.trustHeading}>How Owmee protects your sale</Text>
           <TrustRow text="KYC verification stays visible as your seller trust badge" />
-          <TrustRow text="Owmee manages protected payment and handover support" />
-          <TrustRow text="Verified buyers use safe payment — no seller chat needed" />
+          <TrustRow text="Owmee manages protected payment and delivery support" />
+          <TrustRow text="Verified buyers use safe payment through Owmee" />
           <TrustRow text="You can edit details until a buyer commits" />
           <TrustRow text="Clear photos and honest condition help prevent returns" />
         </View>
@@ -1097,7 +1097,7 @@ const st = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  itemEditGlyph: { fontSize: T.size.md, color: C.petrol, fontWeight: T.weight.semi },
+  itemEditGlyph: { fontSize: T.size.md, color: C.ctaPrimary, fontWeight: T.weight.semi },
 
   detailCard: {
     backgroundColor: C.surface,
@@ -1135,15 +1135,15 @@ const st = StyleSheet.create({
     borderColor: C.amberBorder,
   },
   detailBadgeOk: {
-    backgroundColor: C.petrolLight,
-    borderColor: C.blueBorder,
+    backgroundColor: C.ctaPrimarySoft,
+    borderColor: C.ctaPrimaryBorder,
   },
   detailBadgeText: {
     fontSize: T.size.sm,
     fontWeight: T.weight.bold,
   },
   detailBadgeWarnText: { color: C.amberDeep },
-  detailBadgeOkText: { color: C.petrolDeep },
+  detailBadgeOkText: { color: C.ctaPrimary },
   specRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1189,8 +1189,8 @@ const st = StyleSheet.create({
     padding: S.md,
     borderRadius: R.md,
     borderWidth: 1,
-    borderColor: C.petrol,
-    backgroundColor: C.petrolLight,
+    borderColor: C.ctaPrimary,
+    backgroundColor: C.ctaPrimarySoft,
   },
   inlineHeader: {
     flexDirection: 'row',
@@ -1202,7 +1202,7 @@ const st = StyleSheet.create({
   inlineTitle: {
     fontSize: T.size.base,
     fontWeight: T.weight.bold,
-    color: C.petrolText,
+    color: C.ctaPrimary,
   },
   inlineHelper: {
     marginTop: 2,
@@ -1221,7 +1221,7 @@ const st = StyleSheet.create({
   inlineCloseText: {
     fontSize: T.size.xs,
     fontWeight: T.weight.bold,
-    color: C.petrolDeep,
+    color: C.ctaPrimary,
   },
   inlineChoiceRow: {
     flexDirection: 'row',
@@ -1238,13 +1238,13 @@ const st = StyleSheet.create({
     backgroundColor: C.surface,
   },
   inlineChoiceActive: {
-    backgroundColor: C.petrol,
-    borderColor: C.petrol,
+    backgroundColor: C.ctaPrimary,
+    borderColor: C.ctaPrimary,
   },
   inlineChoiceText: {
     fontSize: T.size.sm,
     fontWeight: T.weight.semi,
-    color: C.petrolText,
+    color: C.ctaPrimary,
   },
   inlineChoiceTextActive: {
     color: C.surface,
@@ -1355,12 +1355,12 @@ const st = StyleSheet.create({
     backgroundColor: C.bone,
   },
   condPillActive: {
-    borderColor: C.petrol,
-    backgroundColor: C.petrolLight,
+    borderColor: C.ctaPrimary,
+    backgroundColor: C.ctaPrimarySoft,
     borderWidth: 1.5,
   },
   condPillTick: {
-    color: C.petrol,
+    color: C.ctaPrimary,
     fontSize: T.size.sm,
     fontWeight: T.weight.heavy,
     marginRight: 4,
@@ -1370,11 +1370,11 @@ const st = StyleSheet.create({
     fontWeight: T.weight.semi,
     color: C.text2,
   },
-  condPillLabelActive: { color: C.petrolText },
+  condPillLabelActive: { color: C.ctaPrimary },
 
   // Trust — floating card, mint background, refund-guarantee aligned
   trustBlock: {
-    backgroundColor: C.petrolLight,
+    backgroundColor: C.ctaPrimarySoft,
     marginHorizontal: S.lg,
     marginTop: S.md,
     padding: S.lg,
@@ -1383,18 +1383,18 @@ const st = StyleSheet.create({
   trustHeading: {
     fontSize: T.size.md,
     fontWeight: T.weight.bold,
-    color: C.petrolText,
+    color: C.ctaPrimary,
     marginBottom: S.md,
   },
   trustRow: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 6 },
   trustCheck: {
     fontSize: T.size.md,
-    color: C.petrol,
+    color: C.ctaPrimary,
     fontWeight: T.weight.heavy,
     marginRight: S.md,
     marginTop: 2,
   },
-  trustText: { fontSize: T.size.base, color: C.petrolText, fontWeight: T.weight.medium, flex: 1, lineHeight: T.size.base + 4 },
+  trustText: { fontSize: T.size.base, color: C.ctaPrimary, fontWeight: T.weight.medium, flex: 1, lineHeight: T.size.base + 4 },
 
   // TDS info card — soft amber "heads-up" so it reads informational, not warning
   tdsCard: {
@@ -1404,7 +1404,7 @@ const st = StyleSheet.create({
     backgroundColor: C.bone2,
     borderRadius: R.lg,
     borderLeftWidth: 4,
-    borderLeftColor: C.petrol,
+    borderLeftColor: C.ctaPrimary,
   },
   tdsHeading: {
     fontSize: T.size.md,
@@ -1429,7 +1429,7 @@ const st = StyleSheet.create({
     color: C.text3,
     textAlign: 'center',
   },
-  legalLink: { color: C.petrol, textDecorationLine: 'underline' },
+  legalLink: { color: C.ctaPrimary, textDecorationLine: 'underline' },
 
   // CTA
   ctaBar: {
@@ -1459,9 +1459,9 @@ const st = StyleSheet.create({
     width: 84,
     height: 84,
     borderRadius: 42,
-    backgroundColor: C.petrolLight,
+    backgroundColor: C.ctaPrimarySoft,
     borderWidth: 2,
-    borderColor: C.petrol,
+    borderColor: C.ctaPrimary,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: S.lg,
@@ -1469,7 +1469,7 @@ const st = StyleSheet.create({
   },
   successCheck: {
     fontSize: T.size.display + 8,
-    color: C.petrol,
+    color: C.ctaPrimary,
     fontWeight: T.weight.heavy,
     lineHeight: T.size.display + 12,
   },
@@ -1505,7 +1505,7 @@ const st = StyleSheet.create({
   successCardPrice: {
     fontSize: T.size.xl,
     fontWeight: T.weight.bold,
-    color: C.petrol,
+    color: C.ctaPrimary,
   },
   successSection: {
     fontSize: T.size.md,
@@ -1522,7 +1522,7 @@ const st = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 13,
-    backgroundColor: C.petrol,
+    backgroundColor: C.ctaPrimary,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: S.md,

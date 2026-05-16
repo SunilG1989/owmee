@@ -3,12 +3,11 @@
  *
  * Layout (top → bottom):
  *   1. Header: logo · centered location chip · notifications bell
- *   2. Hero carousel — SafeTrade · Assist · Payment protected
- *   3. Search bar (taps into Search tab)
- *   4. Trust chips (mint / blue / amber)
- *   5. Category rail — Phones · Laptops · Kids & Toys · Appliances
- *   6. "Trusted deals near you" + Filter
- *   7. Horizontal catalog rows (single column, infinite scroll)
+ *   2. Search bar (taps into Search tab)
+ *   3. Hero carousel — SafeTrade · Assist · Payment protected
+ *   4. Category rail — Phones · Laptops · Books · Kids & Toys · Appliances
+ *   5. "Trusted listings nearby" + Filter
+ *   6. Horizontal catalog rows (single column, infinite scroll)
  *
  * Auth & gating:
  *   - Bell: AuthFlow if guest, else Notifications
@@ -22,11 +21,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, {
-  Circle, Defs, LinearGradient, RadialGradient, Rect, Stop,
+  Circle, Defs, LinearGradient, Path, RadialGradient, Rect, Stop,
 } from 'react-native-svg';
 import {
   Bell, ChevronDown, ChevronRight, MapPin, Search,
-  ShieldCheck, SlidersHorizontal,
+  SlidersHorizontal,
 } from 'lucide-react-native';
 import { C, T, S, R, Shadow } from '../utils/tokens';
 import type { TabScreen } from '../navigation/types';
@@ -37,6 +36,7 @@ import HeroCard from '../components/HeroCard';
 import CategoryRail, { type CategoryDef } from '../components/CategoryRail';
 import { FeedCard } from '../components/OwmeeListingCard';
 import OwmeeLogo from '../components/OwmeeLogo';
+import { Button } from '../components/ui';
 import { parseApiError } from '../utils/errors';
 import { locationDisplayLabel } from '../utils/addressLocation';
 import { afterInteractions } from '../utils/schedule';
@@ -52,6 +52,8 @@ const RECENT_FALLBACK_IMAGES: Record<string, ImageSourcePropType> = {
   kids: require('../../assets/owmee/home/cat-kids-photo-v2.png'),
   'small-appliances': require('../../assets/owmee/home/cat-appliances-photo-v2.png'),
   appliances: require('../../assets/owmee/home/cat-appliances-photo-v2.png'),
+  books: require('../../assets/owmee/home/cat-books-photo-v2.png'),
+  others: require('../../assets/owmee/home/cat-books-photo-v2.png'),
 };
 
 function recentImageSource(item: FeedListing): ImageSourcePropType {
@@ -85,8 +87,6 @@ function recentDealSignal(item: FeedListing): string | null {
   );
   if (discountPct != null && discountPct >= 20) return 'Great deal';
   if (discountPct != null && discountPct >= 8) return 'Price dropped';
-  if (item.is_negotiable) return 'Negotiable';
-  if (item.distance_km != null && item.distance_km <= 15) return 'Popular nearby';
   return null;
 }
 
@@ -300,6 +300,10 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
   const handleFilterPress = () => navigation.navigate('Search', { category_slug: undefined, openFilters: true });
 
   const handleCategoryPress = (cat: CategoryDef) => {
+    if (cat.query) {
+      navigation.navigate('Search', { query: cat.query });
+      return;
+    }
     if (!cat.slug) {
       navigation.navigate('Search');
       return;
@@ -327,7 +331,7 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
     <View>
       {/* Top bar — full wordmark + location + notifications. */}
       <View style={s.hdr}>
-        <OwmeeLogo textSize={28} />
+        <OwmeeLogo textSize={29} variant="home" />
 
         <TouchableOpacity
           onPress={handleLocationPress}
@@ -385,8 +389,6 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
           <SlidersHorizontal size={20} strokeWidth={2} color={C.text} />
         </TouchableOpacity>
       </View>
-
-      <TrustBanner />
 
       <HeroCard onBrowse={handleBrowsePress} onSell={handleSellPress} />
 
@@ -451,9 +453,13 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
           <Text style={s.emptyEmoji}>⚠️</Text>
           <Text style={s.emptyTitle}>Could not load listings</Text>
           <Text style={s.emptySub}>{feedError}</Text>
-          <TouchableOpacity style={s.emptyBtn} onPress={() => loadFeed(true)} activeOpacity={0.8}>
-            <Text style={s.emptyBtnText}>Retry</Text>
-          </TouchableOpacity>
+          <Button
+            label="Retry"
+            variant="primary"
+            size="sm"
+            onPress={() => loadFeed(true)}
+            style={s.emptyBtn}
+          />
         </View>
       );
     }
@@ -471,22 +477,41 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
       <Svg pointerEvents="none" style={s.screenBg} viewBox="0 0 100 100" preserveAspectRatio="none">
         <Defs>
           <LinearGradient id="homeCanvas" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor="#F3E4D4" stopOpacity="1" />
-            <Stop offset="0.42" stopColor="#FFF8EE" stopOpacity="1" />
-            <Stop offset="1" stopColor="#EAF4F1" stopOpacity="1" />
+            <Stop offset="0" stopColor="#F0D6C5" stopOpacity="1" />
+            <Stop offset="0.34" stopColor="#FFF8EE" stopOpacity="1" />
+            <Stop offset="0.68" stopColor="#FFFDF8" stopOpacity="1" />
+            <Stop offset="1" stopColor="#DCEDE8" stopOpacity="1" />
           </LinearGradient>
-          <RadialGradient id="tealGlow" cx="88%" cy="15%" r="58%">
-            <Stop offset="0" stopColor="#2F766B" stopOpacity="0.16" />
-            <Stop offset="1" stopColor="#2F766B" stopOpacity="0" />
+          <LinearGradient id="warmRibbon" x1="0" y1="0" x2="1" y2="0">
+            <Stop offset="0" stopColor="#C97861" stopOpacity="0.16" />
+            <Stop offset="0.58" stopColor="#F2D6C7" stopOpacity="0.08" />
+            <Stop offset="1" stopColor="#F2D6C7" stopOpacity="0" />
+          </LinearGradient>
+          <LinearGradient id="greenRibbon" x1="1" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor="#245E56" stopOpacity="0.12" />
+            <Stop offset="0.72" stopColor="#91B6B0" stopOpacity="0.06" />
+            <Stop offset="1" stopColor="#91B6B0" stopOpacity="0" />
+          </LinearGradient>
+          <RadialGradient id="tealGlow" cx="86%" cy="10%" r="58%">
+            <Stop offset="0" stopColor="#245E56" stopOpacity="0.13" />
+            <Stop offset="1" stopColor="#245E56" stopOpacity="0" />
           </RadialGradient>
-          <RadialGradient id="clayGlow" cx="5%" cy="42%" r="48%">
-            <Stop offset="0" stopColor="#D29472" stopOpacity="0.16" />
-            <Stop offset="1" stopColor="#D29472" stopOpacity="0" />
+          <RadialGradient id="clayGlow" cx="4%" cy="28%" r="50%">
+            <Stop offset="0" stopColor="#C97861" stopOpacity="0.13" />
+            <Stop offset="1" stopColor="#C97861" stopOpacity="0" />
           </RadialGradient>
         </Defs>
         <Rect x="0" y="0" width="100" height="100" fill="url(#homeCanvas)" />
-        <Circle cx="90" cy="12" r="48" fill="url(#tealGlow)" />
-        <Circle cx="2" cy="42" r="42" fill="url(#clayGlow)" />
+        <Path
+          d="M-14 8 C16 -2 36 4 58 13 C76 20 91 22 114 14 L114 0 L-14 0 Z"
+          fill="url(#warmRibbon)"
+        />
+        <Path
+          d="M106 52 C82 58 67 73 49 85 C29 98 12 102 -10 94 L-10 100 L106 100 Z"
+          fill="url(#greenRibbon)"
+        />
+        <Circle cx="88" cy="10" r="47" fill="url(#tealGlow)" />
+        <Circle cx="0" cy="31" r="38" fill="url(#clayGlow)" />
       </Svg>
       <FlatList
         ref={listRef}
@@ -540,7 +565,7 @@ function RecentListingsSection({
       <View style={s.recentHead}>
         <View style={s.recentTitleBlock}>
           <Text style={s.recentTitle}>Fresh listings near you</Text>
-          <Text style={s.recentSub}>Recently added items with safer pickup.</Text>
+          <Text style={s.recentSub}>Recently added items with safer delivery.</Text>
         </View>
         <TouchableOpacity activeOpacity={0.75} style={s.recentSeeAll} onPress={onSeeAll}>
           <Text style={s.recentSeeAllText}>See all</Text>
@@ -581,26 +606,6 @@ function RecentListingsSection({
           );
         })}
       </ScrollView>
-    </View>
-  );
-}
-
-function TrustBanner() {
-  return (
-    <View style={s.trustBanner}>
-      <View style={s.trustBannerIcon}>
-        <ShieldCheck size={14} strokeWidth={2.35} color={C.petrolDeep} />
-      </View>
-      <View style={s.trustBannerCopy}>
-        <Text
-          style={s.trustBannerTitle}
-          numberOfLines={1}
-          adjustsFontSizeToFit
-          minimumFontScale={0.84}
-        >
-          Verified listings • Protected payment • Pickup support
-        </Text>
-      </View>
     </View>
   );
 }
@@ -708,40 +713,6 @@ const s = StyleSheet.create({
     borderTopRightRadius: R.md,
     borderBottomRightRadius: R.md,
   },
-  trustBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: 32,
-    marginHorizontal: S.lg,
-    marginTop: HOME_SECTION_GAP,
-    paddingHorizontal: S.sm + 2,
-    borderRadius: R.md,
-    backgroundColor: 'rgba(241, 248, 246, 0.68)',
-    borderWidth: 1,
-    borderColor: 'rgba(79, 127, 134, 0.14)',
-    gap: S.xs + 2,
-  },
-  trustBannerIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 253, 248, 0.72)',
-    borderWidth: 1,
-    borderColor: 'rgba(79, 127, 134, 0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  trustBannerCopy: {
-    flex: 1,
-    minWidth: 0,
-  },
-  trustBannerTitle: {
-    color: C.petrolDeep,
-    fontSize: T.size.xs + 1,
-    lineHeight: T.size.xs + 3,
-    fontWeight: T.weight.heavy,
-  },
-
   // ── Listings header ─────────────────────────────────────────────────
   listingsHdr: {
     marginTop: HOME_SECTION_GAP,
@@ -908,12 +879,5 @@ const s = StyleSheet.create({
   emptyBtn: {
     marginTop: S.lg,
     minWidth: 108,
-    height: 40,
-    borderRadius: R.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: C.petrol,
-    paddingHorizontal: S.xl,
   },
-  emptyBtnText: { color: C.white, fontSize: T.size.sm + 1, fontWeight: T.weight.semi },
 });

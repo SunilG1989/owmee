@@ -28,6 +28,94 @@ const KIDS_SAFETY_PANEL_KEYS: { key: string; label: string }[] = [
   { key: 'age_label_correct',  label: 'Age suitability confirmed' },
 ];
 
+type ProductFact = {
+  label: string;
+  value: string;
+};
+
+function textValue(value: unknown): string | null {
+  if (value == null) return null;
+  const text = String(value)
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\bgb\b/gi, 'GB')
+    .replace(/\btb\b/gi, 'TB')
+    .replace(/\bmah\b/gi, 'mAh');
+  if (/^(n\/a|na|none|null|unknown|not sure)$/i.test(text)) return null;
+  return text.length ? text : null;
+}
+
+function capacityValue(value: unknown): string | null {
+  const text = textValue(value);
+  if (!text) return null;
+  return /^\d+$/.test(text) ? `${text}GB` : text;
+}
+
+function batteryValue(value: unknown): string | null {
+  const text = textValue(value);
+  if (!text) return null;
+  return /%$/.test(text) ? text : `${text}%`;
+}
+
+function booleanFact(value: boolean | null | undefined, yes: string, no: string): string | null {
+  if (value === true) return yes;
+  if (value === false) return no;
+  return null;
+}
+
+function buildProductFacts(listing: Listing, conditionLabel: string): ProductFact[] {
+  const defects = Array.isArray(listing.defects)
+    ? listing.defects.map(textValue).filter(Boolean).join(', ')
+    : null;
+  const rows: Array<[string, string | null]> = [
+    ['Brand', textValue(listing.brand)],
+    ['Model', textValue(listing.model)],
+    ['Condition', conditionLabel],
+    ['Color', textValue(listing.color)],
+    ['Storage', capacityValue(listing.storage)],
+    ['RAM', capacityValue(listing.ram)],
+    ['Processor', textValue(listing.processor)],
+    ['Screen size', textValue(listing.screen_size)],
+    ['Battery', batteryValue(listing.battery_health)],
+    ['Purchase year', listing.purchase_year ? String(listing.purchase_year) : null],
+    ['Warranty', textValue(listing.warranty_status || listing.warranty_info)],
+    ['Bill', booleanFact(listing.has_bill, 'Available', 'Not available')],
+    ['Box', booleanFact(listing.has_box, 'Available', 'Not available')],
+    ['Charger', booleanFact(listing.has_charger, 'Included', 'Not included')],
+    ['Earphones', booleanFact(listing.has_earphones, 'Included', 'Not included')],
+    ['Screen condition', textValue(listing.screen_condition)],
+    ['Body condition', textValue(listing.body_condition)],
+    ['Water damage', booleanFact(listing.water_damage_history, 'Reported', 'No history declared')],
+    ['Functionality', booleanFact(
+      listing.seller_functional_attestation,
+      'Seller says fully functional',
+      'Needs buyer review',
+    )],
+    ['Known issues', defects],
+  ];
+
+  const seen = new Set<string>();
+  return rows
+    .filter(([, value]) => !!value)
+    .filter(([label]) => {
+      if (seen.has(label)) return false;
+      seen.add(label);
+      return true;
+    })
+    .map(([label, value]) => ({ label, value: value! }));
+}
+
+function PremiumGalleryImage({ uri, width, height }: { uri: string; width: number; height: number }) {
+  return (
+    <View style={[s.galleryFrame, { width, height }]}>
+      <Image source={{ uri }} style={s.galleryBackdrop} resizeMode="cover" blurRadius={18} />
+      <View style={s.galleryWash} />
+      <Image source={{ uri }} style={{ width, height }} resizeMode="contain" />
+    </View>
+  );
+}
+
 export default function ListingDetailScreen({ navigation, route }: RootScreen<'ListingDetail'>) {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -133,6 +221,7 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
   const isOwn = listing.seller_id === userId;
   const off = percentOff(listing.price, listing.original_price);
   const cs = condStyle(listing.condition);
+  const productFacts = buildProductFacts(listing, cs.label);
 
   const toggleWish = async () => {
     if (!isAuthenticated) { navigation.navigate('AuthFlow'); return; }
@@ -229,23 +318,13 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
   const fairPriceOff = listing.original_price && listing.price < listing.original_price
     ? Math.round((1 - listing.price / listing.original_price) * 100)
     : null;
-  const postedAt = listing.published_at || listing.created_at;
-  const isRecentlyListed = postedAt
-    ? Date.now() - new Date(postedAt).getTime() < 86400 * 1000 * 3
-    : false;
   const detailDealSignal = fairPriceOff != null
     ? fairPriceOff >= 20
       ? 'Great deal'
       : fairPriceOff >= 8
         ? 'Price dropped'
         : 'Fair price'
-    : isRecentlyListed
-      ? 'Recently listed'
-      : listing.is_negotiable
-      ? 'Negotiable'
-      : listing.distance_km != null && listing.distance_km <= 15
-        ? 'Popular nearby'
-      : null;
+    : null;
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
@@ -263,7 +342,7 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
                 setImgIdx(Math.round(e.nativeEvent.contentOffset.x / width))
               }
               renderItem={({ item: uri }) => (
-                <Image source={{ uri }} style={{ width, height: imgH }} resizeMode="cover" />
+                <PremiumGalleryImage uri={uri} width={width} height={imgH} />
               )}
               removeClippedSubviews
               initialNumToRender={1}
@@ -306,21 +385,6 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
           )}
         </View>
 
-        {/* Trust strip */}
-        {listing.seller_verified && (
-          <View style={s.trustStrip}>
-            <Text style={s.trustStripIcon}>🛡️</Text>
-            <Text style={s.trustStripText}>
-              Aadhaar verified seller{listing.imei ? ' · IMEI checked' : ''}
-            </Text>
-            {listing.seller?.avg_rating && (
-              <View style={s.trustScore}>
-                <Text style={s.trustScoreText}>{listing.seller.avg_rating.toFixed(1)}★</Text>
-              </View>
-            )}
-          </View>
-        )}
-
         {/* Info */}
         <View style={s.info}>
           <Text style={s.title}>{listing.title}</Text>
@@ -331,11 +395,6 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
               <Text style={s.mrp}>{formatPrice(listing.original_price)}</Text>
             ) : null}
             {off ? <Text style={s.off}>{off}% off</Text> : null}
-            {listing.is_negotiable && (
-              <View style={s.negoTag}>
-                <Text style={s.negoText}>Negotiable</Text>
-              </View>
-            )}
           </View>
 
           {listing.imei_verified && (
@@ -370,45 +429,14 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
           </View>
         </View>
 
-        {/* Detail chips */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>
-          {listing.battery_health && (
-            <View style={s.chip}>
-              <Text style={s.chipIcon}>🔋</Text>
-              <View>
-                <Text style={s.chipLabel}>Battery</Text>
-                <Text style={s.chipVal}>{listing.battery_health}%</Text>
-              </View>
-            </View>
-          )}
-          {listing.accessories && (
-            <View style={s.chip}>
-              <Text style={s.chipIcon}>📦</Text>
-              <View>
-                <Text style={s.chipLabel}>Accessories</Text>
-                <Text style={s.chipVal}>{listing.accessories}</Text>
-              </View>
-            </View>
-          )}
-          {listing.warranty_status && (
-            <View style={s.chip}>
-              <Text style={s.chipIcon}>🔐</Text>
-              <View>
-                <Text style={s.chipLabel}>Warranty</Text>
-                <Text style={s.chipVal}>{listing.warranty_status}</Text>
-              </View>
-            </View>
-          )}
-          {listing.view_count != null && (
-            <View style={s.chip}>
-              <Text style={s.chipIcon}>👁</Text>
-              <View>
-                <Text style={s.chipLabel}>Views</Text>
-                <Text style={s.chipVal}>{listing.view_count}</Text>
-              </View>
-            </View>
-          )}
-        </ScrollView>
+        <ProductDetailsSection facts={productFacts} />
+
+        {listing.description && (
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>Description</Text>
+            <Text style={s.desc}>{listing.description}</Text>
+          </View>
+        )}
 
         {/* Seller card */}
         {listing.seller && (
@@ -446,36 +474,6 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
           </View>
         )}
 
-        <View style={s.trustHelpCard}>
-          <View style={s.trustHelpCopy}>
-            <Text style={s.trustHelpTitle}>Need extra confidence?</Text>
-            <Text style={s.trustHelpText}>
-              Ask Owmee to run an extra listing check before you buy.
-            </Text>
-          </View>
-          <Button
-            label="Ask Owmee to verify"
-            variant="secondary"
-            size="sm"
-            onPress={askOwmeeToVerify}
-            style={s.verifyBtn}
-          />
-        </View>
-
-        <View style={s.paymentInfoCard}>
-          <Text style={s.paymentInfoTitle}>How protected payment works</Text>
-          <Text style={s.paymentInfoText}>
-            Pay through Owmee. The seller is paid only after the handover is completed as per Owmee's policy.
-          </Text>
-        </View>
-
-        {listing.description && (
-          <View style={s.section}>
-            <Text style={s.sectionTitle}>Description</Text>
-            <Text style={s.desc}>{listing.description}</Text>
-          </View>
-        )}
-
         {/* Sprint 4 / Pass 3: Kids safety checklist panel */}
         {listing.is_kids_item && listing.kids_safety_checklist && (
           <View style={s.section}>
@@ -507,12 +505,31 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
               <Text style={s.feAssistedTitle}>Listed by an Owmee Field Executive</Text>
               <Text style={s.feAssistedSub}>
                 {listing.reviewed_by === 'fe_and_ops'
-                  ? 'FE captured on-site · Ops reviewed'
-                  : 'FE captured on-site'}
+                  ? 'Specialist captured on-site · Ops reviewed'
+                  : 'Specialist captured on-site'}
               </Text>
             </View>
           </View>
         )}
+
+        <View style={s.buyerProtectionCard}>
+          <Text style={s.buyerProtectionTitle}>Buyer protection</Text>
+          <View style={s.protectionRow}>
+            <Text style={s.protectionBullet}>✓</Text>
+            <Text style={s.protectionText}>Protected payment through Owmee</Text>
+          </View>
+          <View style={s.protectionRow}>
+            <Text style={s.protectionBullet}>✓</Text>
+            <Text style={s.protectionText}>Payment and delivery support included</Text>
+          </View>
+          <TouchableOpacity
+            activeOpacity={0.78}
+            onPress={askOwmeeToVerify}
+            style={s.verifyInline}
+          >
+            <Text style={s.verifyInlineText}>Ask Owmee to verify this listing</Text>
+          </TouchableOpacity>
+        </View>
 
         <View style={s.bottomSpacer} />
 
@@ -547,7 +564,7 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
             )}
           </View>
           <Text style={s.bottomHelper}>
-            No seller chat needed. Owmee manages payment and handover support.
+            Owmee manages payment and delivery support.
           </Text>
         </View>
       )}
@@ -601,6 +618,25 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
   );
 }
 
+function ProductDetailsSection({ facts }: { facts: ProductFact[] }) {
+  if (!facts.length) return null;
+  return (
+    <View style={s.productDetails}>
+      <Text style={s.productDetailsTitle}>Product details</Text>
+      <View style={s.productFactGrid}>
+        {facts.map((fact) => (
+          <View key={fact.label} style={s.productFact}>
+            <Text style={s.productFactLabel}>{fact.label}</Text>
+            <Text style={s.productFactValue} numberOfLines={2}>
+              {fact.value}
+            </Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bone },
   loadingSpinner: { marginTop: S.xxxl + S.xxxl },
@@ -608,6 +644,21 @@ const s = StyleSheet.create({
   notFoundBtn: { marginTop: S.lg, marginHorizontal: S.xl },
 
   imgWrap: { position: 'relative' },
+  galleryFrame: {
+    overflow: 'hidden',
+    backgroundColor: C.bone2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  galleryBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.78,
+    transform: [{ scale: 1.08 }],
+  },
+  galleryWash: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(254, 251, 244, 0.18)',
+  },
   imgPlaceholder: {
     backgroundColor: C.bone2,
     alignItems: 'center',
@@ -630,26 +681,6 @@ const s = StyleSheet.create({
   wishBtnWrap:  { position: 'absolute', top: S.md, right: S.lg },
   wishActiveBg: { backgroundColor: 'rgba(255,255,255,0.95)' },
 
-  trustStrip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: S.sm,
-    paddingHorizontal: S.xl,
-    paddingVertical: S.sm + 2,
-    backgroundColor: C.petrolLight,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
-  },
-  trustStripIcon: { fontSize: T.size.sm + 1 },
-  trustStripText: { fontSize: T.size.sm, fontWeight: T.weight.bold, color: C.petrolText, flex: 1 },
-  trustScore: {
-    backgroundColor: C.white,
-    paddingHorizontal: S.sm,
-    paddingVertical: 3,
-    borderRadius: R.xs,
-  },
-  trustScoreText: { fontSize: T.size.sm, fontWeight: T.weight.bold, color: C.petrol },
-
   info: { paddingHorizontal: S.xl, paddingTop: S.lg },
   title: {
     fontSize: T.size.xl - 1,                                      // 19
@@ -667,13 +698,6 @@ const s = StyleSheet.create({
   },
   mrp: { fontSize: T.size.base, color: C.text4, textDecorationLine: 'line-through' },
   off: { fontSize: T.size.sm, fontWeight: T.weight.heavy, color: C.petrolMid },
-  negoTag: {
-    backgroundColor: C.petrolLight,
-    paddingHorizontal: S.sm + 2,
-    paddingVertical: S.xs,
-    borderRadius: R.xs,
-  },
-  negoText: { fontSize: T.size.sm, fontWeight: T.weight.bold, color: C.petrolDeep },
 
   imeiVerified: {
     fontSize: T.size.sm,
@@ -692,15 +716,44 @@ const s = StyleSheet.create({
   meta: { fontSize: T.size.base - 1, color: C.text3 },
   metaDot: { color: C.text4 },
 
-  chips: { paddingHorizontal: S.xl, paddingVertical: S.md + 2, gap: S.sm },
-  chip: {
-    flexDirection: 'row', alignItems: 'center', gap: S.sm,
-    paddingHorizontal: S.md + 2, paddingVertical: S.sm + 2,
-    backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: R.sm,
+  productDetails: {
+    marginHorizontal: S.xl,
+    marginTop: S.lg,
+    padding: S.md + 2,
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: R.lg,
   },
-  chipIcon: { fontSize: T.size.sm + 1 },
-  chipLabel: { fontSize: T.size.xs, color: C.text3 },
-  chipVal: { fontSize: T.size.base - 1, fontWeight: T.weight.bold, color: C.ink },
+  productDetailsTitle: {
+    fontSize: T.size.md,
+    fontWeight: T.weight.bold,
+    color: C.text,
+    marginBottom: S.sm,
+  },
+  productFactGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginHorizontal: -S.xs,
+    rowGap: S.sm,
+  },
+  productFact: {
+    width: '50%',
+    paddingHorizontal: S.xs,
+  },
+  productFactLabel: {
+    fontSize: T.size.xs,
+    color: C.text3,
+    fontWeight: T.weight.semi,
+    textTransform: 'uppercase',
+  },
+  productFactValue: {
+    marginTop: 2,
+    fontSize: T.size.base,
+    lineHeight: T.size.base + 5,
+    color: C.text,
+    fontWeight: T.weight.bold,
+  },
 
   seller: {
     marginHorizontal: S.xl, padding: S.md + 2,
@@ -724,32 +777,30 @@ const s = StyleSheet.create({
   sellerBadgeText: { fontSize: T.size.xs, fontWeight: T.weight.bold, color: C.petrol },
   sellerStat: { fontSize: T.size.sm, color: C.text3 },
 
-  trustHelpCard: {
+  buyerProtectionCard: {
     marginHorizontal: S.xl,
-    marginTop: S.md,
+    marginTop: S.lg,
     padding: S.md + 2,
     backgroundColor: C.petrolLight,
     borderWidth: 1,
     borderColor: C.blueBorder,
     borderRadius: R.lg,
-    gap: S.sm,
   },
-  trustHelpCopy: { gap: 3 },
-  trustHelpTitle: { fontSize: T.size.base, fontWeight: T.weight.bold, color: C.petrolDeep },
-  trustHelpText: { fontSize: T.size.sm + 1, lineHeight: 18, color: C.petrolText },
-  verifyBtn: { alignSelf: 'flex-start', borderColor: C.blueBorder },
-
-  paymentInfoCard: {
-    marginHorizontal: S.xl,
-    marginTop: S.md,
-    padding: S.md + 2,
+  buyerProtectionTitle: { fontSize: T.size.base, fontWeight: T.weight.bold, color: C.petrolDeep },
+  protectionRow: { flexDirection: 'row', alignItems: 'flex-start', gap: S.xs + 2, marginTop: S.xs + 2 },
+  protectionBullet: { fontSize: T.size.sm, color: C.petrolDeep, fontWeight: T.weight.heavy, marginTop: 1 },
+  protectionText: { flex: 1, fontSize: T.size.sm + 1, lineHeight: 18, color: C.petrolText },
+  verifyInline: {
+    marginTop: S.sm,
+    alignSelf: 'flex-start',
+    paddingHorizontal: S.sm + 2,
+    paddingVertical: S.xs + 2,
+    borderRadius: R.pill,
     backgroundColor: C.surface,
     borderWidth: 1,
-    borderColor: C.border,
-    borderRadius: R.lg,
+    borderColor: C.blueBorder,
   },
-  paymentInfoTitle: { fontSize: T.size.base, fontWeight: T.weight.bold, color: C.text },
-  paymentInfoText: { marginTop: 4, fontSize: T.size.sm + 1, lineHeight: 18, color: C.text2 },
+  verifyInlineText: { fontSize: T.size.sm, color: C.petrolDeep, fontWeight: T.weight.bold },
 
   section: { paddingHorizontal: S.xl, marginTop: S.lg },
   sectionTitle: {
@@ -780,7 +831,7 @@ const s = StyleSheet.create({
   bottomBar: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     backgroundColor: C.surface,
-    borderTopWidth: 1, borderTopColor: C.border,
+    borderTopWidth: 1, borderTopColor: C.border2,
     paddingHorizontal: S.xl, paddingTop: S.md,
     gap: S.sm,
   },
@@ -791,7 +842,7 @@ const s = StyleSheet.create({
     textAlign: 'center',
   },
   bottomActionRow: { flexDirection: 'row', gap: S.sm + 2 },
-  offerOutlineBtn:{ flex: 1, borderWidth: 1.5, borderColor: C.petrol },
+  offerOutlineBtn:{ flex: 1, borderWidth: 1.25, borderColor: C.blueBorder },
   buyBtn:         { flex: 2, ...Shadow.glow },
 
   modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },

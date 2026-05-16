@@ -163,9 +163,9 @@ async def notify_visit_cancelled_to_fe(
         "other":             "",
     }.get(reason or "", "")
     body = (
-        f"Stop heading to this pickup. {reason_phrase}".strip()
+        f"Stop heading to this visit. {reason_phrase}".strip()
         if reason_phrase
-        else "Stop heading to this pickup."
+        else "Stop heading to this visit."
     )
     await push(
         user_id=fe_user_id,

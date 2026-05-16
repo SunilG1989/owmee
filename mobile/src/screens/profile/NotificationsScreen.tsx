@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { BackButton } from '../../components/ui';
+import { BackButton, Button } from '../../components/ui';
 import { useFocusEffect } from '@react-navigation/native';
 import { C, T, S, R, timeAgo } from '../../utils/tokens';
 import { Notifications } from '../../services/api';
@@ -95,9 +95,7 @@ export default function NotificationsScreen({ navigation }: any) {
               {error || "You'll see offers, order updates, and safety alerts here."}
             </Text>
             {error ? (
-              <TouchableOpacity style={s.retryBtn} onPress={load} activeOpacity={0.8}>
-                <Text style={s.retryText}>Retry</Text>
-              </TouchableOpacity>
+              <Button label="Retry" variant="primary" size="sm" onPress={load} style={s.retryBtn} />
             ) : null}
           </View>
         }
@@ -146,12 +144,5 @@ const s = StyleSheet.create({
   retryBtn: {
     marginTop: S.lg,
     minWidth: 108,
-    height: 40,
-    borderRadius: R.pill,
-    backgroundColor: C.petrol,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: S.xl,
   },
-  retryText: { color: C.white, fontSize: T.size.sm + 1, fontWeight: T.weight.semi },
 });

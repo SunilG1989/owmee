@@ -1,16 +1,12 @@
 /**
  * Owmee Button — single source of truth.
  *
- * Three variants × three sizes covers ~95% of buttons in the app.
- * If you find yourself reaching for a fourth variant, push back: it's
- * usually a sign that two patterns should be the same.
- *
  *   variants
- *     primary    petrol CTA, the user's main action ("Send offer")
- *     secondary  bordered, neutral action ("Cancel" / "Withdraw")
+ *     primary    filled trust CTA, the user's main action ("Buy safely")
+ *     secondary  outlined trust action ("Make offer" / "Cancel")
  *     ghost      borderless, low-emphasis ("Skip" / inline links)
  *     destructive  red CTA, irreversible ("Delete listing")
- *     accent     pastel apricot "act now" CTA — used SPARINGLY (Sell from home)
+ *     accent     warm supporting CTA — never for the core Sell action
  *     inverse    white surface, deep ink text — for buttons sitting on
  *                a dark hero / brand surface where primary would vanish
  *
@@ -54,14 +50,15 @@ export default function Button({
   leftIcon, style, a11y,
 }: Props) {
   const isInactive = disabled || loading;
+  const isDisabled = disabled && !loading;
   const variantStyle = variantStyles[variant];
   const sizeStyle = sizeStyles[size];
 
   return (
     <TouchableOpacity
-      onPress={loading ? undefined : onPress}
+      onPress={isInactive ? undefined : onPress}
       disabled={isInactive}
-      activeOpacity={0.85}
+      activeOpacity={0.78}
       accessibilityRole="button"
       accessibilityLabel={a11y || label}
       accessibilityState={{ disabled: isInactive, busy: loading }}
@@ -70,16 +67,31 @@ export default function Button({
         sizeStyle.container,
         variantStyle.container,
         fullWidth && { alignSelf: 'stretch' },
-        isInactive && { opacity: 0.55 },
         style,
+        isDisabled && disabledStyles.container,
       ]}
     >
       {loading ? (
         <ActivityIndicator size="small" color={variantStyle.text.color as string} />
       ) : (
         <View style={styles.row}>
-          {leftIcon && <Text style={[styles.icon, { color: variantStyle.text.color }]}>{leftIcon}</Text>}
-          <Text style={[styles.label, sizeStyle.label, variantStyle.text]}>{label}</Text>
+          {leftIcon && (
+            <Text style={[
+              styles.icon,
+              { color: variantStyle.text.color },
+              isDisabled && disabledStyles.text,
+            ]}>
+              {leftIcon}
+            </Text>
+          )}
+          <Text style={[
+            styles.label,
+            sizeStyle.label,
+            variantStyle.text,
+            isDisabled && disabledStyles.text,
+          ]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82}>
+            {label}
+          </Text>
         </View>
       )}
     </TouchableOpacity>
@@ -88,7 +100,7 @@ export default function Button({
 
 const styles = StyleSheet.create({
   base: {
-    borderRadius: R.md,
+    borderRadius: R.pill,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: MIN_TAP,
@@ -116,20 +128,20 @@ const sizeStyles: Record<ButtonSize, { container: ViewStyle; label: TextStyle }>
 const variantStyles: Record<ButtonVariant, { container: ViewStyle; text: TextStyle }> = {
   primary: {
     container: {
-      backgroundColor: C.petrolLight,
+      backgroundColor: C.ctaPrimary,
       borderWidth: 1,
-      borderColor: C.blueBorder,
-      ...Shadow.subtle,
+      borderColor: C.ctaPrimary,
+      ...Shadow.glow,
     },
-    text: { color: C.petrolDeep },
+    text: { color: C.white },
   },
   secondary: {
-    container: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border2 },
-    text: { color: C.text },
+    container: { backgroundColor: C.surface, borderWidth: 1.25, borderColor: C.ctaPrimaryBorder },
+    text: { color: C.ctaPrimary },
   },
   ghost: {
     container: { backgroundColor: 'transparent' },
-    text: { color: C.text2 },
+    text: { color: C.ctaPrimary },
   },
   destructive: {
     container: { backgroundColor: C.red },
@@ -137,15 +149,28 @@ const variantStyles: Record<ButtonVariant, { container: ViewStyle; text: TextSty
   },
   accent: {
     container: {
-      backgroundColor: C.coralLight,
+      backgroundColor: C.ctaSecondary,
       borderWidth: 1,
-      borderColor: '#EBCFC5',
-      ...Shadow.subtle,
+      borderColor: C.ctaSecondary,
+      ...Shadow.coralGlow,
     },
-    text: { color: C.coralDeep },
+    text: { color: C.white },
   },
   inverse: {
     container: { backgroundColor: C.white },
     text: { color: C.petrolNight },
   },
+};
+
+const disabledStyles = {
+  container: {
+    backgroundColor: C.ctaDisabledBg,
+    borderWidth: 1,
+    borderColor: C.ctaDisabledBorder,
+    shadowOpacity: 0,
+    elevation: 0,
+  } satisfies ViewStyle,
+  text: {
+    color: C.ctaDisabledText,
+  } satisfies TextStyle,
 };

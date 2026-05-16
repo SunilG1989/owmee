@@ -90,8 +90,8 @@ export default function LocationDetectScreen({
         </View>
         <Text style={s.title}>Where are you located?</Text>
         <Text style={s.subtitle}>
-          Owmee uses your location to show items near you and let our
-          specialists find your home for pickups.
+          Owmee uses your location to show items near you and help our
+          specialists plan visits and delivery support.
         </Text>
 
         {locationError ? (

@@ -45,10 +45,9 @@ export default function Chip({
 }: Props) {
   const sz = SIZES[size];
   const v = VARIANTS[variant];
-  const containerStyle = selected ? v.selectedContainer : v.container;
-  const labelStyle = selected ? v.selectedLabel : v.label;
-  const fade = disabled ? { opacity: 0.5 } : null;
-  const containerProps = [styles.base, sz.container, containerStyle, fade, style];
+  const containerStyle = disabled ? styles.disabled : selected ? v.selectedContainer : v.container;
+  const labelStyle = disabled ? styles.disabledLabel : selected ? v.selectedLabel : v.label;
+  const containerProps = [styles.base, sz.container, containerStyle, style];
 
   const inner = (
     <>
@@ -99,25 +98,27 @@ const VARIANTS: Record<
 > = {
   filter: {
     container:         { borderWidth: 1, borderColor: C.border, backgroundColor: C.surface },
-    selectedContainer: { borderWidth: 1, borderColor: C.petrol, backgroundColor: C.petrolLight },
+    selectedContainer: { borderWidth: 1, borderColor: C.ctaPrimary, backgroundColor: C.ctaPrimarySoft },
     label:             { color: C.text2, fontWeight: T.weight.medium },
-    selectedLabel:     { color: C.petrolDeep, fontWeight: T.weight.semi },
+    selectedLabel:     { color: C.ctaPrimary, fontWeight: T.weight.semi },
   },
   solid: {
-    container:         { backgroundColor: C.petrol },
-    selectedContainer: { backgroundColor: C.petrolDeep },
+    container:         { backgroundColor: C.ctaPrimary },
+    selectedContainer: { backgroundColor: C.ctaPrimaryPressed },
     label:             { color: C.white, fontWeight: T.weight.semi },
     selectedLabel:     { color: C.white, fontWeight: T.weight.bold },
   },
   soft: {
-    container:         { backgroundColor: C.petrolLight },
-    selectedContainer: { backgroundColor: C.petrolLight },
-    label:             { color: C.petrolDeep, fontWeight: T.weight.medium },
-    selectedLabel:     { color: C.petrolDeep, fontWeight: T.weight.semi },
+    container:         { backgroundColor: C.ctaPrimarySoft },
+    selectedContainer: { backgroundColor: C.ctaPrimarySoft },
+    label:             { color: C.ctaPrimary, fontWeight: T.weight.medium },
+    selectedLabel:     { color: C.ctaPrimary, fontWeight: T.weight.semi },
   },
 };
 
 const styles = StyleSheet.create({
   base: { borderRadius: R.pill, alignItems: 'center', justifyContent: 'center', flexDirection: 'row' },
   leftIcon: { marginRight: 4 },
+  disabled: { borderWidth: 1, borderColor: C.ctaDisabledBorder, backgroundColor: C.ctaDisabledBg },
+  disabledLabel: { color: C.ctaDisabledText, fontWeight: T.weight.medium },
 });

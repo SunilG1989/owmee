@@ -32,7 +32,7 @@ from app.core.dependencies import BasicUser, DBSession, OptionalUser, VerifiedUs
 from app.core.rate_limit import LISTING_CREATE_PER_USER, limit_by_user
 from app.core.storage import (
     generate_presigned_download_url, generate_presigned_upload_url,
-    object_key_for_listing_image, public_url, resize_listing_image,
+    object_key_for_listing_image, process_listing_image, public_url,
 )
 from fastapi import Depends
 
@@ -578,26 +578,26 @@ async def confirm_image_upload(listing_id: UUID, body: ImageConfirmRequest,
     if not listing:
         raise HTTPException(status_code=404, detail={"error": "LISTING_NOT_FOUND"})
     image = await add_image_record(db, listing_id, body.r2_key, body.sort_order, body.is_primary)
-    current_urls = listing.image_urls or []
-    if body.r2_key not in current_urls:
-        listing.image_urls = current_urls + [body.r2_key]
+    processed = process_listing_image(body.r2_key)
+    display_key = processed.display_key or body.r2_key
+    image.r2_key_medium = processed.display_key
+    image.r2_key_thumb = processed.thumbnail_key
 
-    # Resize to 1200px webp synchronously. ~500ms-1s of latency at upload
-    # time, but saves ~50% bandwidth on every subsequent feed/detail view
-    # — easy trade for an Indian-mobile-network-heavy app. Resize failures
-    # are logged but don't block the upload (presigned URL on the original
-    # still works as a fallback).
-    thumb_key = resize_listing_image(body.r2_key)
-    if thumb_key and (body.is_primary or not listing.thumbnail_url):
-        listing.thumbnail_url = thumb_key
+    current_urls = listing.image_urls or []
+    if display_key not in current_urls:
+        listing.image_urls = current_urls + [display_key]
+
+    # Synchronous catalog polish at upload-confirm time. It adds a little
+    # latency once, but every feed/detail view gets denoised WebP variants.
+    if processed.thumbnail_key and (body.is_primary or not listing.thumbnail_url):
+        listing.thumbnail_url = processed.thumbnail_key
     elif body.is_primary:
-        # Resize failed and this is the primary — point thumbnail at the
-        # original so something renders.
-        listing.thumbnail_url = body.r2_key
+        listing.thumbnail_url = display_key
 
     await db.commit()
     return {"image_id": str(image.id), "r2_key": body.r2_key,
-            "thumbnail_key": thumb_key,
+            "display_key": processed.display_key,
+            "thumbnail_key": processed.thumbnail_key,
             "public_url": public_url(body.r2_key), "moderation_status": "pending"}
 
 

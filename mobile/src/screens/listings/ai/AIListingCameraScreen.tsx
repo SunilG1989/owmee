@@ -109,9 +109,9 @@ export default function AIListingCameraScreen({ navigation }: RootScreen<'AIList
     launchCamera(
       {
         mediaType: 'photo',
-        quality: 0.85 as any,
-        maxWidth: 1600,
-        maxHeight: 1600,
+        quality: 0.94 as any,
+        maxWidth: 2200,
+        maxHeight: 2200,
         saveToPhotos: false,
         cameraType: 'back',
       },
@@ -134,9 +134,9 @@ export default function AIListingCameraScreen({ navigation }: RootScreen<'AIList
     launchImageLibrary(
       {
         mediaType: 'photo',
-        quality: 0.85 as any,
-        maxWidth: 1600,
-        maxHeight: 1600,
+        quality: 0.94 as any,
+        maxWidth: 2200,
+        maxHeight: 2200,
         selectionLimit: remaining,
       },
       (r) => {
@@ -237,7 +237,11 @@ export default function AIListingCameraScreen({ navigation }: RootScreen<'AIList
             <Text style={st.tipsHeading}>Tips for a great listing</Text>
             <View style={st.tipRow}>
               <Text style={st.tipBullet}>•</Text>
-              <Text style={st.tipText}>Use natural light — no flash</Text>
+              <Text style={st.tipText}>Use natural light, no flash</Text>
+            </View>
+            <View style={st.tipRow}>
+              <Text style={st.tipBullet}>•</Text>
+              <Text style={st.tipText}>Place it on a plain, clean background</Text>
             </View>
             <View style={st.tipRow}>
               <Text style={st.tipBullet}>•</Text>
@@ -245,11 +249,7 @@ export default function AIListingCameraScreen({ navigation }: RootScreen<'AIList
             </View>
             <View style={st.tipRow}>
               <Text style={st.tipBullet}>•</Text>
-              <Text style={st.tipText}>Capture any damage or wear honestly</Text>
-            </View>
-            <View style={st.tipRow}>
-              <Text style={st.tipBullet}>•</Text>
-              <Text style={st.tipText}>Keep the item in focus, not blurry</Text>
+              <Text style={st.tipText}>Capture wear honestly, but keep the item sharp</Text>
             </View>
           </View>
         </ScrollView>
@@ -267,7 +267,7 @@ export default function AIListingCameraScreen({ navigation }: RootScreen<'AIList
             <PhotoGuideItem
               Icon={Camera}
               title="Start with the front"
-              text="Keep the item centered, clean, and in bright light."
+              text="Keep the item centered on a simple background."
             />
             <PhotoGuideItem
               Icon={Images}

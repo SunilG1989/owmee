@@ -56,7 +56,7 @@ interface Category {
 
 // Canonical kids safety checklist keys — keep in sync with docs/QA_CHECKLIST.md
 const KIDS_SAFETY_KEYS: { key: string; label: string }[] = [
-  { key: 'cleaned', label: 'Cleaned / sanitised before handover' },
+  { key: 'cleaned', label: 'Cleaned / sanitised before delivery' },
   { key: 'no_small_parts', label: 'No small parts that can be swallowed' },
   { key: 'no_loose_batteries', label: 'No loose or accessible batteries' },
   { key: 'no_sharp_edges', label: 'No sharp edges or broken pieces' },
@@ -565,8 +565,8 @@ export default function FeCaptureScreen({ route, navigation }: RootScreen<'FeCap
               onPress={() => submitNonListedOutcome('seller_missing_verification', 'seller not verified')}
             />
             <OutcomeBtn
-              label="Seller / item not available at pickup"
-              onPress={() => submitNonListedOutcome('pickup_not_ready', 'pickup not ready')}
+              label="Seller / item not ready"
+              onPress={() => submitNonListedOutcome('pickup_not_ready', 'item not ready')}
             />
           </View>
         </ScrollView>

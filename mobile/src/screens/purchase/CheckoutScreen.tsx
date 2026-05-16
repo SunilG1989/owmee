@@ -209,7 +209,7 @@ export default function CheckoutScreen({ navigation, route }: any) {
           <View style={s.flex1}>
             <Text style={s.guaranteeTitle}>Owmee Guarantee</Text>
             <Text style={s.guaranteeSub}>
-              Every item is inspected by an Owmee expert before pickup.
+              Every item is inspected by an Owmee expert before delivery.
               ✓ 100% refund if it's not as promised — refund processed in 5-7 working days.
             </Text>
           </View>

@@ -11,21 +11,15 @@ Usage:
 from __future__ import annotations
 
 import asyncio
-import json
-from datetime import datetime, timezone
 from uuid import UUID
 
-import httpx
 import structlog
 
 from app.core.settings import settings
+from app.modules.notifications.push_adapter import get_push_adapter
 
 logger = structlog.get_logger()
 
-
-# ── FCM v1 HTTP API ───────────────────────────────────────────────────────────
-
-FCM_ENDPOINT = "https://fcm.googleapis.com/v1/projects/{project_id}/messages:send"
 
 # Notification event types → bucket mapping
 BUCKET_MAP = {
@@ -105,21 +99,22 @@ async def push(
             await db.commit()
             logger.info("notification.created", user_id=str(user_id), event_type=event_type)
 
-    # Attempt FCM push in production
-    if not settings.is_production or not settings.fcm_server_key:
+    # Attempt push in production. In-app notification is already persisted, so
+    # provider failures never block core transaction state changes.
+    if not settings.is_production:
         return False
 
-    return await _send_fcm(user_id, title, body, event_type, data or {})
+    return await _send_push(user_id, title, body, event_type, data or {})
 
 
-async def _send_fcm(
+async def _send_push(
     user_id: UUID,
     title: str,
     body: str,
     event_type: str,
     data: dict,
 ) -> bool:
-    """Send FCM notification via legacy HTTP API (server key)."""
+    """Send push through the configured provider adapter."""
     from app.db.session import AsyncSessionLocal
     from app.modules.identity_auth.models import User
     from sqlalchemy import select
@@ -129,52 +124,21 @@ async def _send_fcm(
         user = result.scalar_one_or_none()
         if not user or not user.fcm_token:
             return False
-        fcm_token = user.fcm_token
+        push_token = user.fcm_token
 
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            res = await client.post(
-                "https://fcm.googleapis.com/fcm/send",
-                headers={
-                    "Authorization": f"key={settings.fcm_server_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "to": fcm_token,
-                    "notification": {
-                        "title": title,
-                        "body": body,
-                        "sound": "default",
-                        "badge": "1",
-                    },
-                    "data": {
-                        "event_type": event_type,
-                        **{k: str(v) for k, v in data.items()},
-                    },
-                    "priority": "high",
-                    "android": {
-                        "notification": {
-                            "channel_id": "owmee_transactions",
-                            "priority": "high",
-                        }
-                    },
-                },
-            )
-            if res.status_code == 200:
-                resp_data = res.json()
-                if resp_data.get("failure", 0) == 0:
-                    logger.info("fcm.sent", user_id=str(user_id), event_type=event_type)
-                    return True
-                else:
-                    # Token invalid — clear it
-                    logger.warning("fcm.token_invalid", user_id=str(user_id))
-                    await _clear_fcm_token(user_id)
-                    return False
-            else:
-                logger.error("fcm.error", status=res.status_code, body=res.text[:200])
-                return False
+        result = await get_push_adapter().send(push_token, title, body, event_type, data)
+        if result.success:
+            logger.info("push.sent", user_id=str(user_id), event_type=event_type, provider=result.provider)
+            return True
+        if result.invalid_token:
+            logger.warning("push.token_invalid", user_id=str(user_id), provider=result.provider)
+            await _clear_fcm_token(user_id)
+            return False
+        logger.error("push.error", provider=result.provider, error=result.error)
+        return False
     except Exception as e:
-        logger.error("fcm.exception", error=str(e), user_id=str(user_id))
+        logger.error("push.exception", error=str(e), user_id=str(user_id))
         return False
 
 
@@ -228,13 +192,13 @@ async def notify_payment_confirmed(seller_id: UUID, buyer_id: UUID, price: str, 
     await push(
         seller_id, "payment_confirmed",
         title="Payment received",
-        body=f"₹{int(float(price)):,} payment confirmed. Owmee pickup is next.",
+        body=f"₹{int(float(price)):,} payment confirmed. Owmee delivery prep is next.",
         entity_type="transaction", entity_id=transaction_id,
     )
     await push(
         buyer_id, "payment_confirmed",
         title="Payment sent",
-        body="Payment confirmed. Track pickup and delivery in Owmee.",
+        body="Payment confirmed. Track delivery in Owmee.",
         entity_type="transaction", entity_id=transaction_id,
     )
 

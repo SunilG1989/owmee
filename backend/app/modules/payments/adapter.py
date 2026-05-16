@@ -1,12 +1,12 @@
 """
-Razorpay Payment Link adapter.
+Payment provider adapters.
 
 In dev mode (ENV=development): returns a fake payment link and simulates
 the webhook payload so we can test the full flow without Razorpay credentials.
 
-In production: calls Razorpay API to create a real payment link.
+In production: calls the selected payment provider adapter.
 
-The adapter NEVER stores the raw Razorpay API secret — it only reads it from settings.
+The adapter NEVER stores raw provider secrets — it only reads them from settings.
 """
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ import hashlib
 import hmac
 import time
 from datetime import datetime, timedelta, timezone
+from typing import Protocol
 from uuid import uuid4
 
 import httpx
@@ -31,12 +32,18 @@ class PaymentLinkResult:
         self,
         success: bool,
         razorpay_link_id: str = "",
+        provider_link_id: str | None = None,
+        provider: str = "",
         short_url: str = "",
         expires_at: datetime | None = None,
         error: str | None = None,
     ):
         self.success = success
-        self.razorpay_link_id = razorpay_link_id
+        self.provider = provider
+        self.provider_link_id = provider_link_id or razorpay_link_id
+        # Legacy DB column compatibility. New code should prefer
+        # provider_link_id, but existing migrations still store this field.
+        self.razorpay_link_id = razorpay_link_id or self.provider_link_id
         self.short_url = short_url
         self.expires_at = expires_at
         self.error = error
@@ -50,11 +57,16 @@ class RefundResult:
         self,
         success: bool,
         razorpay_refund_id: str = "",
+        provider_refund_id: str | None = None,
+        provider: str = "",
         status: str = "",
         error: str | None = None,
     ):
         self.success = success
-        self.razorpay_refund_id = razorpay_refund_id
+        self.provider = provider
+        self.provider_refund_id = provider_refund_id or razorpay_refund_id
+        # Legacy DB column compatibility.
+        self.razorpay_refund_id = razorpay_refund_id or self.provider_refund_id
         self.status = status  # 'created' | 'processed' | 'failed'
         self.error = error
 
@@ -70,6 +82,28 @@ class WebhookVerifyResult:
         self.payment_link_id = payment_link_id
         self.refund_id = refund_id
         self.payment_id = payment_id
+
+
+class PaymentAdapter(Protocol):
+    async def create_payment_link(
+        self,
+        amount_paise: int,
+        transaction_id: str,
+        buyer_phone: str,
+        description: str,
+        idempotency_key: str,
+        expire_minutes: int = 30,
+    ) -> PaymentLinkResult: ...
+
+    def verify_webhook(self, payload_body: bytes, signature: str) -> WebhookVerifyResult: ...
+
+    async def refund(
+        self,
+        razorpay_payment_id: str,
+        amount_paise: int,
+        idempotency_key: str,
+        notes: dict | None = None,
+    ) -> RefundResult: ...
 
 
 # ── Dev stub ────────────────────────────────────────────────────────────────────
@@ -100,6 +134,7 @@ class _DevPaymentAdapter:
         )
         return PaymentLinkResult(
             success=True,
+            provider="dev",
             razorpay_link_id=fake_id,
             short_url=fake_url,
             expires_at=expires_at,
@@ -149,7 +184,12 @@ class _DevPaymentAdapter:
             razorpay_payment_id=razorpay_payment_id,
             amount_rupees=amount_paise / 100,
         )
-        return RefundResult(success=True, razorpay_refund_id=fake_id, status="processed")
+        return RefundResult(
+            success=True,
+            provider="dev",
+            razorpay_refund_id=fake_id,
+            status="processed",
+        )
 
     def build_dev_paid_webhook(self, razorpay_link_id: str, transaction_id: str) -> dict:
         """Build a realistic-looking webhook payload for dev testing."""
@@ -216,17 +256,19 @@ class _RazorpayAdapter:
                 expires_at = datetime.fromtimestamp(data["expire_by"], tz=timezone.utc)
                 return PaymentLinkResult(
                     success=True,
+                    provider="razorpay",
                     razorpay_link_id=data["id"],
                     short_url=data["short_url"],
                     expires_at=expires_at,
                 )
             return PaymentLinkResult(
                 success=False,
+                provider="razorpay",
                 error=data.get("error", {}).get("description", "Razorpay error"),
             )
         except Exception as e:
             logger.error("razorpay.payment_link.error", error=str(e))
-            return PaymentLinkResult(success=False, error=str(e))
+            return PaymentLinkResult(success=False, provider="razorpay", error=str(e))
 
     async def refund(
         self,
@@ -253,17 +295,19 @@ class _RazorpayAdapter:
             if r.status_code in (200, 201):
                 return RefundResult(
                     success=True,
+                    provider="razorpay",
                     razorpay_refund_id=data.get("id", ""),
                     status=data.get("status", "processed"),
                 )
             logger.error("razorpay.refund.failed", status=r.status_code, body=data)
             return RefundResult(
                 success=False,
+                provider="razorpay",
                 error=data.get("error", {}).get("description", f"HTTP {r.status_code}"),
             )
         except Exception as e:
             logger.error("razorpay.refund.error", error=str(e))
-            return RefundResult(success=False, error=str(e))
+            return RefundResult(success=False, provider="razorpay", error=str(e))
 
     def verify_webhook(self, payload_body: bytes, signature: str) -> WebhookVerifyResult:
         import json
@@ -303,8 +347,16 @@ class _RazorpayAdapter:
 
 # ── Factory ──────────────────────────────────────────────────────────────────────
 
-def get_payment_adapter() -> _DevPaymentAdapter | _RazorpayAdapter:
+def get_payment_adapter() -> PaymentAdapter:
     provider = (settings.pa_provider or "").strip().lower()
-    if settings.env == "development" or provider in {"", "mock", "dev"} or not settings.pa_key_id:
+    if settings.env == "development":
         return _DevPaymentAdapter()
-    return _RazorpayAdapter()
+    if provider in {"mock", "dev"}:
+        return _DevPaymentAdapter()
+    if provider == "":
+        raise RuntimeError("PA_PROVIDER must be set")
+    if provider in {"razorpay", "rzp"}:
+        if not settings.pa_key_id or not settings.pa_key_secret:
+            raise RuntimeError("Razorpay payment adapter requires PA_KEY_ID and PA_KEY_SECRET")
+        return _RazorpayAdapter()
+    raise RuntimeError(f"Unsupported PA_PROVIDER={settings.pa_provider!r}")

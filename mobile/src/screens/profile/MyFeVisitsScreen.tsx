@@ -114,8 +114,8 @@ export default function MyFeVisitsScreen({ navigation }: RootScreen<'MyFeVisits'
         <View style={st.centerFill}>
           <Text style={st.empty}>No FE visits booked yet.</Text>
           <Text style={st.emptyHint}>
-            Book an FE visit when you list an item — our executive will come
-            pick up photos and verify your item for you.
+            Book a Specialist visit when you list an item — our executive will
+            take photos, verify, pack, and list it for you.
           </Text>
         </View>
       ) : (

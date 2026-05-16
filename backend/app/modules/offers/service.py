@@ -445,14 +445,14 @@ async def accept_offer(
         await _notify(
             db, offer.buyer_id, "offer_accepted",
             f"{listing.title[:30]} — offer accepted!",
-            f"Deal confirmed at ₹{agreed_price:,.0f}. Owmee will guide pickup next.",
+            f"Deal confirmed at ₹{agreed_price:,.0f}. Owmee will guide delivery next.",
             "transaction", str(txn.id),
         )
 
     await _notify(
         db, offer.seller_id, "offer_accepted_seller",
         "You accepted the offer",
-        f"Deal at ₹{agreed_price:,.0f}. Owmee will guide pickup and handover.",
+        f"Deal at ₹{agreed_price:,.0f}. Owmee will guide packing and delivery.",
         "transaction", str(txn.id),
     )
     # Sprint 6b: chat removed. All buyer-seller communication is now
@@ -533,11 +533,11 @@ async def process_payment_paid(db, razorpay_link_id, razorpay_payment_id, webhoo
 
     await _notify(db, txn.seller_id, "payment_confirmed",
         "Payment received",
-        f"₹{txn.gross_amount:,.0f} paid. Owmee pickup is next.",
+        f"₹{txn.gross_amount:,.0f} paid. Owmee delivery prep is next.",
         "transaction", str(txn.id))
     await _notify(db, txn.buyer_id, "payment_confirmed",
         "Payment confirmed",
-        f"₹{txn.gross_amount:,.0f} sent. Track pickup and delivery in Owmee.",
+        f"₹{txn.gross_amount:,.0f} sent. Track delivery in Owmee.",
         "transaction", str(txn.id))
     logger.info("payment.confirmed", transaction_id=str(txn.id))
     return txn

@@ -218,6 +218,8 @@ export interface Listing {
   listing_state?: string | null; verification_status?: string | null; video_url?: string | null;
   brand?: string; model?: string; storage?: string; ram?: string; color?: string;
   processor?: string; screen_size?: string; purchase_year?: number;
+  has_box?: boolean | null; has_bill?: boolean | null; has_charger?: boolean | null; has_earphones?: boolean | null;
+  water_damage_history?: boolean | null; seller_functional_attestation?: boolean | null;
   screen_condition?: string; body_condition?: string; defects?: string[];
   serial_number?: string; original_price_str?: string;
   published_at?: string; created_at?: string; distance_km?: number;
@@ -248,6 +250,11 @@ export interface FeedListing {
   city: string | null;
   state: string | null;
   category_slug: string | null;
+  brand?: string | null;
+  model?: string | null;
+  storage?: string | null;
+  ram?: string | null;
+  color?: string | null;
   shipping_eligible: boolean;
   created_at: string | null;
   seller_id: string;

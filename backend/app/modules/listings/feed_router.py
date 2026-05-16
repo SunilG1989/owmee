@@ -129,6 +129,11 @@ def _serialize_row(r, distance_km):
         "city": r.get("city"),
         "state": r.get("state"),
         "category_slug": r.get("category_slug"),
+        "brand": r.get("brand"),
+        "model": r.get("model"),
+        "storage": r.get("storage"),
+        "ram": r.get("ram"),
+        "color": r.get("color"),
         "shipping_eligible": bool(r.get("shipping_eligible")),
         "created_at": created_at.isoformat() if created_at else None,
         "seller_id": str(r["seller_id"]),
@@ -148,7 +153,7 @@ def _serialize_row(r, distance_km):
 async def blockbuster_deals(current_user: OptionalUser, db: DBSession):
     user_id = current_user.user_id if current_user else None
     user_lat, user_lng, user_state = await _get_user_coords(db, user_id)
-    cache_key = f"blockbuster:{user_state}"
+    cache_key = f"blockbuster:v2:{user_state}"
 
     try:
         redis = await get_redis()
@@ -163,6 +168,7 @@ async def blockbuster_deals(current_user: OptionalUser, db: DBSession):
             l.id, l.title, l.description, l.price, l.original_price, l.discount_pct,
             l.condition, l.image_urls, l.thumbnail_url, l.city, l.state, l.created_at,
             l.seller_id, l.seller_kyc_verified_at_listing_time,
+            l.brand, l.model, l.storage, l.ram, l.color,
             l.reviewed_by, l.is_negotiable, l.accessories, l.warranty_info,
             l.has_bill, l.has_box,
             ST_Y(l.geo_point::geometry) AS listing_lat,
@@ -238,6 +244,7 @@ async def explore_feed(
             l.id, l.title, l.description, l.price, l.original_price, l.discount_pct,
             l.condition, l.image_urls, l.thumbnail_url, l.city, l.state, l.created_at,
             l.seller_id, l.seller_kyc_verified_at_listing_time,
+            l.brand, l.model, l.storage, l.ram, l.color,
             l.reviewed_by, l.is_negotiable, l.accessories, l.warranty_info,
             l.has_bill, l.has_box,
             ST_Y(l.geo_point::geometry) AS listing_lat,

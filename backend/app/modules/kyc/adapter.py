@@ -311,6 +311,14 @@ class _DigioKYCAdapter:
 
 def get_kyc_adapter() -> _DevKYCAdapter | _DigioKYCAdapter:
     partner = (settings.kyc_partner or "").strip().lower()
-    if settings.env == "development" or partner in {"", "mock", "dev"} or not settings.kyc_partner_api_key:
+    if settings.env == "development":
         return _DevKYCAdapter()
-    return _DigioKYCAdapter()
+    if partner in {"mock", "dev"}:
+        return _DevKYCAdapter()
+    if partner == "":
+        raise RuntimeError("KYC_PARTNER must be set")
+    if partner == "digio":
+        if not settings.kyc_partner_api_key or not settings.kyc_partner_base_url:
+            raise RuntimeError("Digio KYC adapter requires KYC_PARTNER_API_KEY and KYC_PARTNER_BASE_URL")
+        return _DigioKYCAdapter()
+    raise RuntimeError(f"Unsupported KYC_PARTNER={settings.kyc_partner!r}")

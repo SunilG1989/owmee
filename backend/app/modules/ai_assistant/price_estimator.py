@@ -3,7 +3,7 @@
 Phase 1: Query the DB for completed listings of the same brand/model in
          the same state from the last 90 days. If ≥3, return the median.
 
-Phase 2: If insufficient comparables, ask Claude (claude_client.estimate_price).
+Phase 2: If insufficient comparables, ask the configured AI provider.
 
 Sanity check: if AI returns a price >10x or <0.1x of category baseline,
               reject and let the seller set their own price.
@@ -27,7 +27,7 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.ai_assistant import claude_client
+from app.modules.ai_assistant import provider as ai_provider
 from app.modules.ai_assistant.schemas import Comparable
 
 log = logging.getLogger(__name__)
@@ -152,7 +152,7 @@ async def estimate_price(
                 }
 
     # ── Phase 2: AI fallback ───────────────────────────────────────────────
-    ai = await claude_client.estimate_price(
+    ai = await ai_provider.estimate_price(
         brand=brand,
         model=model,
         storage=storage,

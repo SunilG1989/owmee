@@ -32,11 +32,12 @@ from sqlalchemy.types import String as SAString
 from app.core.dependencies import AuthUser, DBSession
 from app.core.storage import (
     generate_presigned_download_url,
-    upload_bytes,
+    process_listing_image_bytes,
+    thumbnail_key_for_display_key,
 )
 from app.modules.ai_assistant import (
     ceir_client,
-    claude_client,
+    provider as ai_provider,
     price_estimator,
 )
 from app.modules.ai_assistant.schemas import (
@@ -229,6 +230,18 @@ def _photo_object_key(user_id: UUID, draft_id: UUID, ext: str = "jpg") -> str:
     return f"ai-drafts/{user_id}/{draft_id}.{ext}"
 
 
+def _client_photo_url(key: str | None) -> str:
+    """Return a short-lived URL for mobile preview while persisting R2 keys."""
+    if not key:
+        return ""
+    if key.startswith(("http://", "https://", "r2://")):
+        return key
+    try:
+        return generate_presigned_download_url(key, expires_in=60 * 60 * 24 * 7)
+    except Exception:
+        return key
+
+
 async def _store_photo(image_bytes: bytes, content_type: str, user_id: UUID, draft_id: UUID) -> str:
     """Upload photo bytes via the existing storage helpers and return the
     R2 OBJECT KEY (not a URL).
@@ -258,12 +271,16 @@ async def _store_photo(image_bytes: bytes, content_type: str, user_id: UUID, dra
     key = _photo_object_key(user_id, draft_id, ext)
 
     try:
-        upload_bytes(image_bytes, key, content_type=content_type)
+        processed = process_listing_image_bytes(
+            image_bytes,
+            original_key=key,
+            content_type=content_type,
+        )
     except Exception as e:
         log.warning("ai_assistant.photo_upload_failed", extra={"error": str(e), "key": key})
         return f"r2://{key}"
 
-    return key
+    return processed.display_key or processed.original_key
 
 
 def _category_needs_identifier(slug: str | None) -> bool:
@@ -280,7 +297,7 @@ async def draft_from_image(
     db: DBSession,
     image: UploadFile = File(...),
 ):
-    """Multipart upload of a single photo. Runs Claude vision, computes
+    """Multipart upload of a single photo. Runs AI vision, computes
     a price suggestion, and stores a draft for 24 hours.
 
     The mobile client follows up with `POST /v1/listings/from-draft` once
@@ -299,7 +316,7 @@ async def draft_from_image(
     photo_url = await _store_photo(image_bytes, content_type, user.user_id, draft_id)
 
     # Vision detection
-    detected = await claude_client.detect_from_image(image_bytes, content_type)
+    detected = await ai_provider.detect_from_image(image_bytes, content_type)
     detected = _with_canonical_category(detected)
 
     # Hard reject unsafe or unusable photos — "Other" is only for visible
@@ -363,7 +380,7 @@ async def draft_from_image(
             "ai_response": detected.model_dump_json(),
             "price": price_result.get("price"),
             "ccount": price_result.get("comparables_count", 0),
-            "model": claude_client.current_vision_model(),
+            "model": ai_provider.current_vision_model(),
         },
     )
     await db.commit()
@@ -377,7 +394,7 @@ async def draft_from_image(
 
     return DraftFromImageResponse(
         draft_id=draft_id,
-        photo_url=photo_url,
+        photo_url=_client_photo_url(photo_url),
         detected=detected,
         suggested_price=price_result.get("price"),
         price_source=price_result["source"],
@@ -419,7 +436,7 @@ async def extract_imei(
         raise HTTPException(status_code=400, detail="EMPTY_IMAGE")
 
     content_type = image.content_type or "image/jpeg"
-    ocr = await claude_client.extract_imei(image_bytes, content_type)
+    ocr = await ai_provider.extract_imei(image_bytes, content_type)
 
     imei = ocr.get("imei")
     confidence = float(ocr.get("confidence") or 0.0)
@@ -568,7 +585,7 @@ async def create_from_draft(
     if not is_in_service_area(seller_lat, seller_lng):
         raise HTTPException(status_code=400, detail=out_of_service_message())
 
-    # Combine draft photo URLs with any extra image URLs from the mobile client
+    # Combine draft photo keys with any extra image URLs from the mobile client
     photo_urls = list(rec.photo_urls or [])
     if payload.image_urls:
         for u in payload.image_urls:
@@ -617,7 +634,11 @@ async def create_from_draft(
             "price": payload.price,
             "condition": payload.condition,
             "image_urls": photo_urls,
-            "thumb": photo_urls[0] if photo_urls else None,
+            "thumb": (
+                (thumbnail_key_for_display_key(photo_urls[0]) or photo_urls[0])
+                if photo_urls
+                else None
+            ),
             "brand": payload.brand,
             "model": payload.model,
             "storage": payload.storage,
@@ -855,7 +876,7 @@ async def regenerate_description(
     user: AuthUser,
     db: DBSession,
 ):
-    """Re-run Claude haiku on current fields to regenerate the description."""
+    """Re-run the configured AI provider on current fields to regenerate the description."""
     row = await db.execute(
         text("""
             SELECT seller_id, brand, model, storage, ram, processor,
@@ -887,7 +908,7 @@ async def regenerate_description(
         "accessories": rec.accessories,
     }
 
-    description = await claude_client.regenerate_description(fields)
+    description = await ai_provider.regenerate_description(fields)
 
     await db.execute(
         text("UPDATE listings SET description = :d WHERE id = :id"),
@@ -897,14 +918,14 @@ async def regenerate_description(
 
     return RegenerateDescriptionResponse(
         description=description,
-        ai_model=claude_client.current_text_model(),
+        ai_model=ai_provider.current_text_model(),
     )
 
 
 # ── Sprint 8 Phase 2.1: multi-image vision ────────────────────────────────  # SPRINT8_PHASE2_GEMINI_V2
 #
 # /draft/from-images (plural). Min 1, max 6 images per request. Sends all
-# images in ONE Gemini call so the model sees the product from every angle
+# images in ONE AI-provider call so the model sees the product from every angle
 # at once.
 
 from typing import List
@@ -916,7 +937,7 @@ async def draft_from_images(
     db: DBSession,
     images: List[UploadFile] = File(...),
 ):
-    """Multipart upload of 1-6 photos. Runs one Gemini vision call across
+    """Multipart upload of 1-6 photos. Runs one AI vision call across
     all images, computes a price, and stores a draft for 24 hours.
 
     The mobile client should send between 4 and 6 photos for best results,
@@ -954,17 +975,19 @@ async def draft_from_images(
         elif content_type == "image/webp":
             ext = "webp"
         key = f"ai-drafts/{user.user_id}/{draft_id}_{idx}.{ext}"
-        from app.core.storage import upload_bytes, generate_presigned_download_url
         try:
-            upload_bytes(image_bytes, key, content_type=content_type)
-            url = generate_presigned_download_url(key, expires_in=60 * 60 * 24 * 7)
-            photo_urls.append(url)
+            processed = process_listing_image_bytes(
+                image_bytes,
+                original_key=key,
+                content_type=content_type,
+            )
+            photo_urls.append(processed.display_key or processed.original_key)
         except Exception as e:
             log.warning("ai_assistant.photo_upload_failed", extra={"error": str(e), "key": key})
             photo_urls.append(f"r2://{key}")
 
     # ONE multi-image vision call — see all angles at once
-    detected = await claude_client.detect_from_images(image_pairs)
+    detected = await ai_provider.detect_from_images(image_pairs)
     detected = _with_canonical_category(detected)
 
     # Hard reject unsafe or unusable photos — "Other" is only for visible
@@ -1033,7 +1056,7 @@ async def draft_from_images(
             "ai_response": detected.model_dump_json(),
             "price": price_result.get("price"),
             "ccount": price_result.get("comparables_count", 0),
-            "model": claude_client.current_vision_model(),
+            "model": ai_provider.current_vision_model(),
         },
     )
     await db.commit()
@@ -1046,7 +1069,7 @@ async def draft_from_images(
 
     return DraftFromImageResponse(
         draft_id=draft_id,
-        photo_url=photo_urls[0] if photo_urls else "",
+        photo_url=_client_photo_url(photo_urls[0] if photo_urls else None),
         detected=detected,
         suggested_price=price_result.get("price"),
         price_source=price_result["source"],

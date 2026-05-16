@@ -36,6 +36,8 @@ from fastapi import APIRouter, HTTPException, Query
 
 from app.core.redis import get_redis  # adjust import path if redis client lives elsewhere
 from app.core.settings import settings
+from app.modules.geo.provider import GeocodingProviderError
+from app.modules.geo.provider import reverse_geocode as provider_reverse_geocode
 
 router = APIRouter(prefix="/v1/geo", tags=["geo"])
 log = logging.getLogger(__name__)
@@ -185,47 +187,6 @@ _INDIA_LAT_MIN, _INDIA_LAT_MAX = 6.0, 38.0
 _INDIA_LNG_MIN, _INDIA_LNG_MAX = 68.0, 98.0
 
 
-def _normalize_photon(raw: dict[str, Any]) -> dict[str, Any]:
-    """Map Photon's GeoJSON response to the Owmee address shape.
-
-    Indian Photon responses often put the locality in 'district' rather
-    than 'suburb'. Fallback chain handles missing fields gracefully —
-    user can edit on the AddressDetails screen.
-    """
-    features = raw.get("features") or []
-    if not features:
-        return {
-            "approximate_address": "",
-            "address_line_1": None,
-            "locality": None,
-            "city": "",
-            "state": "",
-            "country": "",
-            "pincode": None,
-        }
-    p = (features[0].get("properties") or {})
-
-    address_line_1 = p.get("street") or p.get("name")
-    locality = p.get("district") or p.get("suburb")
-    city = p.get("city") or p.get("county") or ""
-    state = p.get("state") or ""
-    country = p.get("country") or ""
-    pincode = p.get("postcode")
-
-    parts = [x for x in (address_line_1, locality, city) if x]
-    approximate_address = ", ".join(parts)
-
-    return {
-        "approximate_address": approximate_address,
-        "address_line_1": address_line_1,
-        "locality": locality,
-        "city": city,
-        "state": state,
-        "country": country,
-        "pincode": pincode,
-    }
-
-
 @router.get("/reverse-geocode")
 async def reverse_geocode_photon(
     lat: float = Query(..., ge=-90, le=90),
@@ -256,17 +217,19 @@ async def reverse_geocode_photon(
     except Exception as e:
         log.warning("Photon cache read failed for %s: %s", cache_key, e)
 
-    url = f"{settings.photon_url.rstrip('/')}/reverse"
-    params = {"lat": lat, "lon": lng, "lang": "en"}
-    headers = {"User-Agent": USER_AGENT}
-
     try:
-        async with httpx.AsyncClient(timeout=settings.photon_timeout_seconds) as client:
-            resp = await client.get(url, params=params, headers=headers)
-            resp.raise_for_status()
-            raw = resp.json()
-    except httpx.HTTPError as e:
-        log.error("Photon reverse failed: %s", e)
+        normalized = await provider_reverse_geocode(lat, lng)
+    except RuntimeError as e:
+        log.error("Configured reverse geocoder unavailable: %s", e)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "REVERSE_GEOCODER_NOT_CONFIGURED",
+                "message": "Reverse geocoding temporarily unavailable",
+            },
+        )
+    except GeocodingProviderError as e:
+        log.error("Reverse geocoder failed: %s", e)
         raise HTTPException(
             status_code=503,
             detail={
@@ -274,12 +237,6 @@ async def reverse_geocode_photon(
                 "message": "Reverse geocoding temporarily unavailable",
             },
         )
-
-    normalized = _normalize_photon(raw)
-
-    # Surface the raw provider response in dev for debugging — never in prod.
-    if not settings.is_production:
-        normalized["raw_provider_response"] = raw
 
     try:
         redis = await get_redis()

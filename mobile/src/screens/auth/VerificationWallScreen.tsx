@@ -102,9 +102,9 @@ export default function VerificationWallScreen({
             </View>
 
             <TouchableOpacity style={st.secondaryBtn} onPress={bookFeVisit}>
-              <Text style={st.secondaryBtnText}>Book an Owmee FE visit</Text>
+              <Text style={st.secondaryBtnText}>Book an Owmee Specialist visit</Text>
               <Text style={st.secondaryBtnSub}>
-                An Owmee Field Executive visits your home, verifies your ID, and lists the item for you.
+                An Owmee Specialist visits your home, verifies your ID, packs the item, and lists it for you.
               </Text>
             </TouchableOpacity>
           </>
@@ -179,13 +179,13 @@ const st = StyleSheet.create({
 
   secondaryBtn: {
     backgroundColor: C.surface,
-    borderWidth: 1.5,
-    borderColor: C.petrol,
+    borderWidth: 1.25,
+    borderColor: C.blueBorder,
     borderRadius: R.md,
     padding: S.lg,
     alignItems: 'center',
   },
-  secondaryBtnText: { color: C.petrolText, fontSize: T.body, fontWeight: T.weight.bold },
+  secondaryBtnText: { color: C.ctaPrimary, fontSize: T.body, fontWeight: T.weight.bold },
   secondaryBtnSub: {
     color: C.text3,
     fontSize: T.small,

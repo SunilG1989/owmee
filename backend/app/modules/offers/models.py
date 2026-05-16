@@ -236,6 +236,6 @@ class NotificationPreference(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True)
     transactions_enabled = Column(Boolean, nullable=False, default=True)   # Payment, deal, dispute — always on
-    messages_enabled = Column(Boolean, nullable=False, default=True)        # Legacy no-op: in-app chat is unsupported
+    messages_enabled = Column(Boolean, nullable=False, default=True)        # Legacy no-op: direct messaging is unsupported
     promotions_enabled = Column(Boolean, nullable=False, default=False)     # Nudges, tips — off by default
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))

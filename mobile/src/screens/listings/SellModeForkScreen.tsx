@@ -191,6 +191,7 @@ const s = StyleSheet.create({
     paddingTop: S.xs,
     paddingBottom: S.xs,
     gap: S.xs,
+    backgroundColor: C.bone,
   },
   headerTitle: {
     fontSize: T.size.xl,
@@ -292,10 +293,10 @@ const s = StyleSheet.create({
     fontWeight: T.weight.semi,
   },
   heroCta: {
-    backgroundColor: C.coralLight,
+    backgroundColor: C.ctaPrimary,
     borderWidth: 1,
-    borderColor: C.coral,
-    borderRadius: R.md,
+    borderColor: C.ctaPrimary,
+    borderRadius: R.pill,
     paddingVertical: S.md,
     paddingHorizontal: S.lg,
     alignItems: 'center',
@@ -303,15 +304,15 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     gap: S.xs + 2,
     minHeight: MIN_TAP,
-    ...Shadow.coralGlow,
+    ...Shadow.glow,
   },
   heroCtaText: {
-    color: C.coralDeep,
+    color: C.white,
     fontSize: T.size.md,
     fontWeight: T.weight.heavy,
   },
   heroCtaArrow: {
-    color: C.coralDeep,
+    color: C.white,
     fontSize: T.size.md + 1,
     fontWeight: T.weight.heavy,
   },
@@ -361,12 +362,12 @@ const s = StyleSheet.create({
   },
   subCardCta: {
     fontSize: T.size.base + 1,
-    color: C.coralDeep,
+    color: C.petrolDeep,
     fontWeight: T.weight.heavy,
   },
   subCardCtaArrow: {
     fontSize: T.size.md,
-    color: C.coralDeep,
+    color: C.petrolDeep,
     fontWeight: T.weight.heavy,
   },
 

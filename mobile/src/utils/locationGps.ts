@@ -72,7 +72,7 @@ export async function requestFineLocationPermission(): Promise<boolean> {
     {
       title: 'Use your location?',
       message:
-        'Owmee uses your location to show nearby listings and help with safer pickups.',
+        'Owmee uses your location to show nearby listings and support safer delivery.',
       buttonPositive: 'Allow',
       buttonNegative: 'Not now',
     },

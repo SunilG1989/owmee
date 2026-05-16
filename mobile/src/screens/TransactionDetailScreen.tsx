@@ -9,7 +9,7 @@
  * Key UI differences from the prior version:
  *   - 5-step timeline driven by /v1/transactions/{id}/tracking
  *   - When delivery_in_progress + FE delivery + buyer: show the
- *     6-digit handover ack code prominently. Sellers don't see it.
+ *     6-digit delivery ack code prominently. Sellers don't see it.
  *   - Courier mode: clickable tracking URL passed straight through
  *   - "Confirm receipt" button only after delivered
  *   - All "meet in a public place" / safety-tip copy removed
@@ -67,7 +67,7 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
   const [returnReason, setReturnReason] = useState<string>('item_not_as_described');
   const [returnDesc, setReturnDesc] = useState('');
   const [returnPhotos, setReturnPhotos] = useState<string[]>([]);
-  // Buyer must visually inspect at the door before reading the handover code
+  // Buyer must visually inspect at the door before reading the delivery code
   // (P0.5). The code release becomes a digital "I have inspected and accept"
   // checkpoint we can later reference if a dispute is raised.
   const [conditionConfirmed, setConditionConfirmed] = useState(false);
@@ -135,7 +135,7 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
     return r2_key;
   };
 
-  // Pick up to (3 - existing) photos from the gallery for return/dispute
+  // Attach up to (3 - existing) photos from the gallery for return/dispute
   // evidence. Camera capture isn't offered here on purpose — buyers usually
   // have the damage already photographed in their gallery and the gallery
   // picker is friendlier on first-time use.
@@ -196,7 +196,7 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
                 <Text style={s.ackLabel}>Inspect before you accept</Text>
                 <Text style={s.ackInspectCopy}>
                   Open the package, check the item against the listing photos and condition.
-                  If it matches, confirm below to reveal your handover code. If not, raise a dispute now —
+                  If it matches, confirm below to reveal your delivery code. If not, raise a dispute now —
                   100% refund if it's not as promised.
                 </Text>
                 <TouchableOpacity
@@ -218,9 +218,9 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
               </>
             ) : (
               <>
-                <Text style={s.ackLabel}>Your handover code</Text>
+                <Text style={s.ackLabel}>Your delivery code</Text>
                 <Text style={s.ackCode}>{tracking.ack_code}</Text>
-                <Text style={s.ackHint}>Read this to the Owmee FE to complete the handover.</Text>
+                <Text style={s.ackHint}>Read this to the Owmee Specialist to complete delivery.</Text>
               </>
             )}
           </View>
@@ -354,10 +354,10 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
               <Text style={s.refundHint}>We're reviewing your request. You'll get a decision within 24 hours.</Text>
             )}
             {tracking.return_status === 'approved' && (
-              <Text style={s.refundHint}>Approved. Owmee FE will pick the item up from you soon.</Text>
+              <Text style={s.refundHint}>Approved. Owmee logistics will arrange the return step soon.</Text>
             )}
             {tracking.return_status === 'pickup_scheduled' && (
-              <Text style={s.refundHint}>FE assigned. Track pickup updates here.</Text>
+              <Text style={s.refundHint}>Owmee logistics assigned. Track return updates here.</Text>
             )}
             {tracking.return_status === 'picked_up' && (
               <Text style={s.refundHint}>Item collected. Refund processing.</Text>
@@ -466,7 +466,7 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
           <View style={s.modal}>
             <Text style={s.modalTitle}>Return this item</Text>
             <Text style={s.disputeHint}>
-              Owmee will review the reason and evidence first. If approved, FE pickup and refund status will appear on this screen.
+              Owmee will review the reason and evidence first. If approved, return and refund status will appear on this screen.
             </Text>
             <Text style={s.rowLabel}>Why are you returning?</Text>
             {RETURN_REASONS.map(opt => (
@@ -656,14 +656,14 @@ function labelForStatus(status: string, isBuyer: boolean): string {
   switch (status) {
     case 'payment_pending': return 'Waiting for payment to clear.';
     case 'payment_captured': return isBuyer
-      ? 'Payment received. An Owmee FE will pick up and inspect the item soon.'
-      : 'Buyer paid. An Owmee FE will collect the item shortly.';
+      ? 'Payment received. Owmee will inspect the item and prepare delivery soon.'
+      : 'Buyer paid. Keep the item packed for Owmee logistics.';
     case 'at_hub': return 'Item is at the Owmee hub. Out for delivery soon.';
     case 'delivery_in_progress': return isBuyer ? 'On the way to you.' : 'On the way to the buyer.';
     case 'delivered': return isBuyer ? 'Delivered. Confirm receipt to release payout.' : 'Delivered to buyer. Awaiting confirmation.';
     case 'completed': return 'Transaction complete. Thanks!';
     case 'disputed': return 'A dispute was raised. Our team will review.';
-    case 'pickup_rejected': return 'Pickup rejected — item didn\'t match listing. Refund processing.';
+    case 'pickup_rejected': return 'Inspection failed — item didn\'t match listing. Refund processing.';
     case 'cancelled': return 'This transaction was cancelled.';
     default: return status;
   }
@@ -674,13 +674,15 @@ function nextStepForStatus(status: string, isBuyer: boolean, deliveryMode?: stri
     case 'payment_pending':
       return isBuyer ? 'Complete payment to reserve the item.' : 'We will update you after the buyer pays.';
     case 'payment_captured':
-      return isBuyer ? 'Owmee will collect and inspect the item before delivery.' : 'Keep the item ready for Owmee pickup.';
+      return isBuyer ? 'Owmee will inspect the item before delivery.' : 'Keep the item packed and ready for Owmee logistics.';
     case 'at_hub':
       return 'Inspection is done. We are preparing delivery.';
     case 'delivery_in_progress':
       return deliveryMode === 'courier'
         ? 'Use the courier tracking link below for live movement.'
-        : 'Keep your handover code private until the FE is at your door.';
+        : isBuyer
+          ? 'Keep your delivery code private until Owmee reaches your door.'
+          : 'Owmee is completing delivery to the buyer.';
     case 'delivered':
       return isBuyer ? 'Check the item and confirm receipt only if everything is fine.' : 'Buyer confirmation releases the payout.';
     case 'completed':
@@ -688,7 +690,7 @@ function nextStepForStatus(status: string, isBuyer: boolean, deliveryMode?: stri
     case 'disputed':
       return 'Evidence is under review. Payout stays paused until a decision is made.';
     case 'pickup_rejected':
-      return 'Refund starts automatically because the pickup inspection failed.';
+      return 'Refund starts automatically because inspection failed.';
     case 'cancelled':
       return 'No further action is needed.';
     default:

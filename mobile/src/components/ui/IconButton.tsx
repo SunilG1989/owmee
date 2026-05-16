@@ -50,6 +50,7 @@ export default function IconButton({
   style, a11y,
 }: Props) {
   const isInactive = disabled || loading;
+  const isDisabled = disabled && !loading;
   const sz = SIZES[size];
   const v = VARIANTS[variant];
   return (
@@ -65,15 +66,19 @@ export default function IconButton({
         styles.base,
         { width: sz.dim, height: sz.dim, borderRadius: sz.dim / 2 },
         v.container,
-        isInactive && { opacity: 0.55 },
         style,
+        isDisabled && styles.disabled,
       ]}
     >
       {loading ? (
         <ActivityIndicator size="small" color={v.iconColor} />
       ) : (
         <Text
-          style={[styles.glyph, { fontSize: sz.glyph, color: v.iconColor }]}
+          style={[
+            styles.glyph,
+            { fontSize: sz.glyph, color: v.iconColor },
+            isDisabled && styles.disabledGlyph,
+          ]}
           allowFontScaling={false}
         >
           {icon}
@@ -90,13 +95,15 @@ const SIZES: Record<IconButtonSize, { dim: number; glyph: number }> = {
 };
 
 const VARIANTS: Record<IconButtonVariant, { container: ViewStyle; iconColor: string }> = {
-  solid:    { container: { backgroundColor: C.petrol }, iconColor: C.white },
+  solid:    { container: { backgroundColor: C.ctaPrimary }, iconColor: C.white },
   ghost:    { container: { backgroundColor: 'transparent' }, iconColor: C.text },
-  outlined: { container: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border }, iconColor: C.text },
+  outlined: { container: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.ctaPrimaryBorder }, iconColor: C.ctaPrimary },
   danger:   { container: { backgroundColor: C.red }, iconColor: C.white },
 };
 
 const styles = StyleSheet.create({
   base: { alignItems: 'center', justifyContent: 'center' },
   glyph: { textAlign: 'center', fontWeight: T.weight.semi },
+  disabled: { backgroundColor: C.ctaDisabledBg, borderWidth: 1, borderColor: C.ctaDisabledBorder },
+  disabledGlyph: { color: C.ctaDisabledText },
 });

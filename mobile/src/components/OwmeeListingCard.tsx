@@ -14,6 +14,7 @@ import {
 import { Heart, MapPin, ShieldCheck, UserCheck } from 'lucide-react-native';
 import { C, T, S, R, Home, pickCardBg } from '../utils/tokens';
 import type { FeedListing } from '../services/api';
+import { Button } from './ui';
 
 interface Props {
   listing: FeedListing;
@@ -124,32 +125,30 @@ function cleanListingTitle(title: string): string {
   return base ? `${base} • ${colorLabel}` : cleaned;
 }
 
-function conditionSummary(condition?: string | null): string {
+function conditionTagLabel(condition?: string | null): string {
   const value = (condition || '').toLowerCase().trim();
-  if (!value) return 'Good condition';
+  if (!value) return 'Good';
+  if (value === 'new') return 'New';
   if (value === 'like_new' || value.includes('like new') || value.includes('flawless')) {
-    return 'Looks well kept';
+    return 'Like new';
   }
   if (value === 'fair' || value.includes('minor') || value.includes('scratch') || value.includes('dent')) {
-    return 'Minor signs of use';
+    return 'Minor wear';
   }
-  if (value.includes('working')) return 'Working condition';
-  return 'Good condition';
+  if (value.includes('working')) return 'Working';
+  return 'Good';
 }
 
-function pickupSummary(listing: FeedListing): string {
+function placeSummary(listing: FeedListing): string | null {
+  const distance = formatDistance(listing.distance_km);
   const area = (listing.city || '').trim();
-  const nearby = listing.distance_km == null || listing.distance_km <= 15;
-  if (nearby) return area ? `Nearby pickup • ${area}` : 'Nearby pickup';
-  if (listing.shipping_eligible) return 'Safer handover supported';
-  return area ? `Pickup available • ${area}` : 'Pickup available';
+  return [distance, area].filter(Boolean).join(' • ') || null;
 }
 
 function sellerTrustSummary(listing: FeedListing): string {
   const completedDeals = Math.max(0, listing.seller_completed_deals || 0);
   if (completedDeals >= 3) return `Verified seller • ${completedDeals} sold`;
-
-  return 'Verified seller • Payment protected';
+  return 'Verified seller';
 }
 
 function dealSignal(listing: FeedListing): string | null {
@@ -167,9 +166,80 @@ function dealSignal(listing: FeedListing): string | null {
       return 'Recently listed';
     }
   }
-  if (listing.is_negotiable) return 'Negotiable';
-  if (listing.distance_km != null && listing.distance_km <= 15) return 'Popular nearby';
   return null;
+}
+
+function cleanFact(value: string | number | null | undefined): string | null {
+  const cleaned = String(value ?? '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned || /^(n\/a|na|none|null|unknown|not sure)$/i.test(cleaned)) return null;
+  return cleaned
+    .replace(/\bgb\b/gi, 'GB')
+    .replace(/\btb\b/gi, 'TB')
+    .replace(/\bmah\b/gi, 'mAh');
+}
+
+function withCapacityUnit(value: string): string {
+  return /^\d+$/.test(value) ? `${value}GB` : value;
+}
+
+function formatStorageFact(value?: string | null): string | null {
+  const cleaned = cleanFact(value);
+  return cleaned ? withCapacityUnit(cleaned) : null;
+}
+
+function formatRamFact(value?: string | null): string | null {
+  const cleaned = cleanFact(value);
+  if (!cleaned) return null;
+  const capacity = withCapacityUnit(cleaned);
+  return /\bram\b/i.test(capacity) ? capacity : `${capacity} RAM`;
+}
+
+function normalizedSearchText(value: string | null | undefined): string {
+  return (value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+function titleAlreadyHas(title: string, value: string | null): boolean {
+  if (!value) return false;
+  const needle = normalizedSearchText(value);
+  return needle.length >= 3 && normalizedSearchText(title).includes(needle);
+}
+
+function addUniqueFact(list: string[], value: string | null | undefined) {
+  if (!value) return;
+  const label = value.trim();
+  if (!label) return;
+  const key = label.toLowerCase();
+  if (!list.some(item => item.toLowerCase() === key)) list.push(label);
+}
+
+function buyerFactChips(
+  listing: FeedListing,
+  displayTitle: string,
+  conditionLabel: string,
+): string[] {
+  const chips: string[] = [];
+  const brand = cleanFact(listing.brand);
+  const model = cleanFact(listing.model);
+  const identity = [brand, model].filter(Boolean).join(' ');
+
+  addUniqueFact(chips, conditionLabel);
+  if (identity && !titleAlreadyHas(displayTitle, identity)) {
+    addUniqueFact(chips, titleCaseWords(identity));
+  }
+  addUniqueFact(chips, formatStorageFact(listing.storage));
+  addUniqueFact(chips, formatRamFact(listing.ram));
+  addUniqueFact(chips, cleanFact(listing.color));
+  if (listing.warranty_active) {
+    const months = listing.warranty_months_left;
+    addUniqueFact(chips, months && months > 0 ? `${Math.round(months)}mo warranty` : 'Warranty');
+  }
+  if (listing.bill_available) addUniqueFact(chips, 'Bill');
+  if (listing.box_available) addUniqueFact(chips, 'Box');
+
+  return chips.slice(0, 4);
 }
 
 // ── DEAL VARIANT ─────────────────────────────────────────────────────────────
@@ -240,10 +310,11 @@ export function FeedCard({
     listing.original_price != null && listing.original_price > listing.price;
 
   const displayTitle = cleanListingTitle(listing.title);
-  const conditionLine = conditionSummary(listing.condition);
+  const conditionLabel = conditionTagLabel(listing.condition);
   const sellerTrustLine = sellerTrustSummary(listing);
-  const pickupLine = pickupSummary(listing);
+  const placeLine = placeSummary(listing);
   const signal = dealSignal(listing);
+  const buyerFacts = buyerFactChips(listing, displayTitle, conditionLabel);
 
   const handleViewDetails = () => onPress();
   const handleMakeOffer = () => {
@@ -319,12 +390,40 @@ export function FeedCard({
           </View>
 
           <View style={s.detailRows}>
-            <Text style={s.conditionText} numberOfLines={1}>{conditionLine}</Text>
+            <View style={s.specRow}>
+              {buyerFacts.map((fact, factIndex) => (
+                <View
+                  key={`${fact}-${factIndex}`}
+                  style={[s.specChip, factIndex === 0 && s.specChipPrimary]}
+                >
+                  <Text
+                    style={[s.specChipText, factIndex === 0 && s.specChipTextPrimary]}
+                    numberOfLines={1}
+                  >
+                    {fact}
+                  </Text>
+                </View>
+              ))}
+            </View>
 
-            <View style={s.metaRow}>
+            <View style={s.contextRow}>
+              {placeLine ? (
+                <>
+                  <MapPin size={11} strokeWidth={2.2} color={C.text3} />
+                  <Text
+                    style={s.contextText}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.84}
+                  >
+                    {placeLine}
+                  </Text>
+                  <View style={s.contextDot} />
+                </>
+              ) : null}
               <UserCheck size={12} strokeWidth={2.25} color={C.petrolText} />
               <Text
-                style={[s.metaText, s.sellerTrustText]}
+                style={[s.contextText, s.sellerTrustText]}
                 numberOfLines={1}
                 adjustsFontSizeToFit
                 minimumFontScale={0.82}
@@ -332,52 +431,27 @@ export function FeedCard({
                 {sellerTrustLine}
               </Text>
             </View>
-
-            <View style={s.metaRow}>
-              <ShieldCheck size={12} strokeWidth={2.25} color={C.petrolText} />
-              <Text style={s.metaText} numberOfLines={1}>Pay safely through Owmee</Text>
-            </View>
-
-            <View style={s.metaRow}>
-              <MapPin size={12} strokeWidth={2.25} color={C.text3} />
-              <Text
-                style={s.metaText}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.84}
-              >
-                {pickupLine}
-              </Text>
-            </View>
           </View>
         </TouchableOpacity>
 
         <View style={s.feedActionWrap}>
           <View style={s.feedActions}>
-            <TouchableOpacity
-              activeOpacity={0.84}
+            <Button
+              label="Buy safely"
+              variant="primary"
+              size="sm"
               onPress={handleViewDetails}
               style={s.buySafeBtn}
-              accessibilityRole="button"
-              accessibilityLabel={`Buy ${listing.title} safely`}
-            >
-              <View style={s.buySafeContent}>
-                <Text style={s.buySafeText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82}>
-                  Buy safely
-                </Text>
-              </View>
-            </TouchableOpacity>
-            <TouchableOpacity
-              activeOpacity={0.84}
+              a11y={`Buy ${listing.title} safely`}
+            />
+            <Button
+              label="Make offer"
+              variant="secondary"
+              size="sm"
               onPress={handleMakeOffer}
               style={s.offerBtn}
-              accessibilityRole="button"
-              accessibilityLabel={`Make an offer for ${listing.title}`}
-            >
-              <Text style={s.offerText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82}>
-                Make offer
-              </Text>
-            </TouchableOpacity>
+              a11y={`Make an offer for ${listing.title}`}
+            />
           </View>
         </View>
       </View>
@@ -487,7 +561,7 @@ const s = StyleSheet.create({
   feedCard: {
     marginHorizontal: S.md,
     flexDirection: 'row',
-    minHeight: 172,
+    minHeight: 184,
     backgroundColor: 'rgba(255,253,248,0.98)',
     borderRadius: R.md,
     overflow: 'hidden',
@@ -613,29 +687,62 @@ const s = StyleSheet.create({
     fontWeight: T.weight.heavy,
   },
   detailRows: {
-    marginTop: 3,
-    gap: 1,
+    marginTop: S.xs + 1,
+    gap: 4,
   },
-  conditionText: {
-    fontSize: T.size.xs + 1,
+  specRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flexWrap: 'wrap',
+    minWidth: 0,
+  },
+  specChip: {
+    maxWidth: 112,
+    paddingHorizontal: S.xs + 2,
+    paddingVertical: 2,
+    borderRadius: R.xs,
+    backgroundColor: 'rgba(247, 244, 237, 0.96)',
+    borderWidth: 1,
+    borderColor: 'rgba(116, 94, 76, 0.12)',
+  },
+  specChipPrimary: {
+    backgroundColor: C.petrolLight,
+    borderColor: 'rgba(79, 127, 134, 0.13)',
+  },
+  specChipText: {
+    fontSize: T.size.xs - 1,
     lineHeight: T.size.xs + 3,
     color: C.text2,
     fontWeight: T.weight.semi,
   },
-  metaRow: {
+  specChipTextPrimary: {
+    color: C.petrolText,
+    fontWeight: T.weight.heavy,
+  },
+  contextRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
+    minWidth: 0,
   },
-  metaText: {
+  contextText: {
+    flexShrink: 1,
+    minWidth: 0,
     fontSize: T.size.xs,
     color: C.text3,
     fontWeight: T.weight.medium,
-    flexShrink: 1,
   },
   sellerTrustText: {
     color: C.petrolText,
     fontWeight: T.weight.semi,
+  },
+  contextDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: 'rgba(79, 127, 134, 0.38)',
+    marginHorizontal: 1,
   },
   feedActions: {
     flexDirection: 'row',
@@ -648,42 +755,13 @@ const s = StyleSheet.create({
   buySafeBtn: {
     flex: 1.38,
     minWidth: 0,
-    minHeight: 30,
-    borderRadius: R.pill,
-    backgroundColor: C.petrolDeep,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: S.xs + 1,
-    borderWidth: 1,
-    borderColor: 'rgba(53, 95, 99, 0.16)',
-  },
-  buySafeContent: {
-    minWidth: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: S.xs + 1,
-  },
-  buySafeText: {
-    color: C.white,
-    fontSize: T.size.sm,
-    fontWeight: T.weight.heavy,
+    minHeight: 36,
+    paddingHorizontal: S.xs,
   },
   offerBtn: {
     flex: 0.82,
     minWidth: 0,
-    minHeight: 30,
-    borderRadius: R.pill,
-    backgroundColor: '#FFF8F3',
-    borderWidth: 1,
-    borderColor: 'rgba(110, 76, 69, 0.18)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    minHeight: 36,
     paddingHorizontal: S.xs,
-  },
-  offerText: {
-    color: C.coralDeep,
-    fontSize: T.size.sm,
-    fontWeight: T.weight.heavy,
   },
 });

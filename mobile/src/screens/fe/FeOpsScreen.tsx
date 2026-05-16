@@ -1,15 +1,15 @@
 /**
  * FeOpsScreen — Sprint 6c FE post-purchase tasks.
  *
- * Two tabs: pickups + deliveries. Each item gets a one-tap detail
+ * Two tabs: collections + deliveries. Each item gets a one-tap detail
  * sheet where the FE captures photos + (for delivery) asks the buyer
- * for the 6-digit handover code. Photos use the existing
+ * for the 6-digit delivery code. Photos use the existing
  * fe-visits image-request/confirm endpoints because they're already
  * scoped to FE auth and write to the right R2 prefix; we don't need
  * a separate transaction-image upload pipeline yet.
  *
  * Where the existing FeHomeScreen handles pre-listing visits, this
- * screen owns the after-payment flow: FE pickup → at hub, then later
+ * screen owns the after-payment flow: FE collection → at hub, then later
  * FE delivery → delivered.
  */
 import React, { useCallback, useState } from 'react';
@@ -56,10 +56,10 @@ export default function FeOpsScreen({ navigation }: RootScreen<'FeOps'>) {
 
   const list = tab === 'pickups' ? pickups : tab === 'deliveries' ? deliveries : returns;
   const empty = tab === 'pickups'
-    ? 'No pickups assigned to you right now.'
+    ? 'No collections assigned to you right now.'
     : tab === 'deliveries'
       ? 'No deliveries assigned to you right now.'
-      : 'No return pickups assigned to you right now.';
+      : 'No return collections assigned to you right now.';
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
@@ -70,7 +70,7 @@ export default function FeOpsScreen({ navigation }: RootScreen<'FeOps'>) {
 
       <View style={s.tabs}>
         <Chip
-          label={`Pickups (${pickups.length})`}
+          label={`Collections (${pickups.length})`}
           selected={tab === 'pickups'}
           variant="filter"
           onPress={() => setTab('pickups')}
@@ -129,9 +129,9 @@ export default function FeOpsScreen({ navigation }: RootScreen<'FeOps'>) {
   );
 }
 
-// ── Return pickup detail + complete ──────────────────────────────────────────
-// Simpler than the original pickup: no inspection (item is being returned,
-// inspection already happened at original pickup), no buyer ack code (the
+// ── Return collection detail + complete ──────────────────────────────────────
+// Simpler than the original collection: no inspection (item is being returned,
+// inspection already happened during the original logistics step), no buyer ack code (the
 // buyer is just handing the item back). FE confirms collection → refund auto-fires.
 
 function ReturnPickupSheet({ item, onClose, onDone }: { item: FePickup; onClose: () => void; onDone: () => void }) {
@@ -153,7 +153,7 @@ function ReturnPickupSheet({ item, onClose, onDone }: { item: FePickup; onClose:
     <Modal animationType="slide" transparent onRequestClose={onClose}>
       <View style={s.sheetBg}>
         <View style={s.sheet}>
-          <Text style={s.sheetTitle}>{item.listing_title || 'Return pickup'}</Text>
+          <Text style={s.sheetTitle}>{item.listing_title || 'Return collection'}</Text>
           <Text style={s.sheetSub}>₹{item.gross_amount} · returning to Owmee</Text>
 
           <Text style={s.rowLabel}>Confirm collection from buyer</Text>
@@ -183,7 +183,7 @@ function ReturnPickupSheet({ item, onClose, onDone }: { item: FePickup; onClose:
   );
 }
 
-// ── Pickup detail + complete ─────────────────────────────────────────────────
+// ── Collection detail + complete ─────────────────────────────────────────────
 
 function PickupSheet({ item, onClose, onDone }: { item: FePickup; onClose: () => void; onDone: () => void }) {
   const [passed, setPassed] = useState(true);
@@ -193,7 +193,7 @@ function PickupSheet({ item, onClose, onDone }: { item: FePickup; onClose: () =>
 
   const addPhoto = async () => {
     try {
-      // Reuse the fe-visits image upload pipeline. We treat each pickup as
+      // Reuse the fe-visits image upload pipeline. We treat each collection as
       // a virtual "visit" only for image storage — backend doesn't care.
       const result = await launchCamera({ mediaType: 'photo', quality: 0.8, saveToPhotos: false });
       const uri = result.assets?.[0]?.uri;
@@ -234,7 +234,7 @@ function PickupSheet({ item, onClose, onDone }: { item: FePickup; onClose: () =>
     <Modal animationType="slide" transparent onRequestClose={onClose}>
       <View style={s.sheetBg}>
         <View style={s.sheet}>
-          <Text style={s.sheetTitle}>{item.listing_title || 'Pickup'}</Text>
+          <Text style={s.sheetTitle}>{item.listing_title || 'Collection'}</Text>
           <Text style={s.sheetSub}>₹{item.gross_amount}</Text>
 
           <View style={s.row}>
@@ -247,7 +247,7 @@ function PickupSheet({ item, onClose, onDone }: { item: FePickup; onClose: () =>
             style={s.input}
             value={notes}
             onChangeText={setNotes}
-            placeholder={passed ? 'Item matches listing, condition matches' : 'Why pickup is being rejected'}
+            placeholder={passed ? 'Item matches listing, condition matches' : 'Why collection is being rejected'}
             placeholderTextColor={C.text4}
             multiline
           />
@@ -267,7 +267,7 @@ function PickupSheet({ item, onClose, onDone }: { item: FePickup; onClose: () =>
               style={s.actionGhost}
             />
             <Button
-              label={passed ? 'Mark passed → at hub' : 'Reject pickup'}
+              label={passed ? 'Mark passed → at hub' : 'Reject collection'}
               variant="primary"
               loading={busy}
               disabled={busy}
@@ -306,11 +306,11 @@ function DeliverySheet({ item, onClose, onDone }: { item: FePickup; onClose: () 
 
   const submit = async () => {
     if (!photoKey) {
-      Alert.alert('Handover photo required', 'Take a photo of the item being handed over.');
+      Alert.alert('Delivery photo required', 'Take a photo of the item being delivered.');
       return;
     }
     if (ackCode.length < 6) {
-      Alert.alert('Ack code', 'Ask the buyer for their 6-digit handover code.');
+      Alert.alert('Ack code', 'Ask the buyer for their 6-digit delivery code.');
       return;
     }
     setBusy(true);
@@ -353,9 +353,9 @@ function DeliverySheet({ item, onClose, onDone }: { item: FePickup; onClose: () 
             </View>
           ) : null}
 
-          <Text style={s.rowLabel}>Handover photo</Text>
+          <Text style={s.rowLabel}>Delivery photo</Text>
           <Button
-            label={photoKey ? '✓ Photo captured' : '+ Take handover photo'}
+            label={photoKey ? '✓ Photo captured' : '+ Take delivery photo'}
             variant="secondary"
             onPress={addPhoto}
           />

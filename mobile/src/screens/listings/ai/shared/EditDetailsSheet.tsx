@@ -625,15 +625,15 @@ const st = StyleSheet.create({
     paddingHorizontal: S.sm,
   },
   choicePillActive: {
-    backgroundColor: C.petrolLight,
-    borderColor: C.petrol,
+    backgroundColor: C.ctaPrimarySoft,
+    borderColor: C.ctaPrimary,
   },
   choiceText: {
     color: C.text2,
     fontSize: T.size.base,
     fontWeight: T.weight.semi,
   },
-  choiceTextActive: { color: C.petrolDeep, fontWeight: T.weight.bold },
+  choiceTextActive: { color: C.ctaPrimary, fontWeight: T.weight.bold },
   blockHint: {
     marginTop: S.sm,
     color: C.red,
@@ -664,9 +664,9 @@ const st = StyleSheet.create({
     borderColor: C.border,
     backgroundColor: C.bone,
   },
-  chipActive: { backgroundColor: C.petrolLight, borderColor: C.petrol },
+  chipActive: { backgroundColor: C.ctaPrimarySoft, borderColor: C.ctaPrimary },
   chipText: { color: C.text2, fontSize: T.size.base, fontWeight: T.weight.medium },
-  chipTextActive: { color: C.petrolText, fontWeight: T.weight.bold },
+  chipTextActive: { color: C.ctaPrimary, fontWeight: T.weight.bold },
   chipMore: {
     paddingHorizontal: S.md,
     paddingVertical: S.sm,

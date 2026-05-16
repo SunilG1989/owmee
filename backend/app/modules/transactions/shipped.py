@@ -202,7 +202,7 @@ async def initiate_shipment(
     return {
         "transaction_id": str(transaction_id),
         "status": "shipment_created",
-        "message": "Shipment initiated. Track pickup and delivery in Owmee.",
+        "message": "Shipment initiated. Track delivery in Owmee.",
         "logistics_provider": body.logistics_provider,
     }
 
@@ -266,7 +266,7 @@ async def confirm_pickup(
     return {
         "transaction_id": str(transaction_id),
         "status": "in_transit",
-        "message": "Item picked up and in transit to buyer.",
+        "message": "Item inspected and in transit to buyer.",
     }
 
 

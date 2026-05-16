@@ -73,6 +73,13 @@ class Settings(BaseSettings):
     # ── App secret ─────────────────────────────────────────────────────────
     secret_key: str
 
+    # ── Provider selection ─────────────────────────────────────────────────
+    # These names are the app-level integration switches. Product code should
+    # depend on module adapters, not directly on any third-party SDK shape.
+    ai_provider: str = "gemini"
+    geocoding_provider: str = "photon"
+    push_provider: str = "fcm"
+
     # ── KYC partner ────────────────────────────────────────────────────────
     kyc_partner: str = "digio"
     kyc_partner_api_key: str = ""
@@ -87,11 +94,13 @@ class Settings(BaseSettings):
 
     # ── SMS ────────────────────────────────────────────────────────────────
     sms_provider: str = "msg91"
+    sms_api_base_url: str = "https://control.msg91.com"
     sms_api_key: str = ""
     sms_sender_id: str = "OWMAPP"
     sms_dlt_entity_id: str = ""
+    sms_template_id: str = ""
 
-    # ── Chat (Stream)
+    # ── Legacy Stream keys (unused; buyer-seller chat is not shipped)
     stream_api_key: str = ""
     stream_api_secret: str = ""
 

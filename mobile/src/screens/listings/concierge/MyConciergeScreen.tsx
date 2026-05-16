@@ -3,7 +3,7 @@
  *
  * The seller's home base after the visit. Each visit becomes a card
  * containing the items it produced; each item shows its current status
- * (Live / SOLD / Pending pickup) and tappable navigation to the right
+ * (Live / Sold / Pending logistics) and tappable navigation to the right
  * detail screen (ListingDetail or TransactionDetail).
  *
  * Pending earnings = sum of (transaction.gross_amount -
