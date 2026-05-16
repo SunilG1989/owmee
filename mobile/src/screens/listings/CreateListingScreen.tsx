@@ -34,6 +34,7 @@ import {
   getCategoryKind,
   getModelSuggestions,
 } from '../../utils/listingCatalog';
+import { afterInteractions } from '../../utils/schedule';
 
 // ── Reference data ───────────────────────────────────────────────
 const DEFECT_OPTIONS = [
@@ -140,9 +141,10 @@ export default function CreateListingScreen({ navigation }: any) {
 
   // Fetch categories
   useEffect(() => {
-    Listings.categories().then(res => {
+    const cancelTask = afterInteractions(() => Listings.categories().then(res => {
       setCategories(res.data?.categories || []);
-    }).catch(() => {});
+    }).catch(() => {}));
+    return cancelTask;
   }, []);
 
   const valid = photos.filter(Boolean) as string[];

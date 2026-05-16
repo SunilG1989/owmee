@@ -9,9 +9,9 @@
  * Commerce-app rule: splash is identity, not marketing. Keep it quiet,
  * centered and fast; the home screen does the explaining.
  */
-import React from 'react';
+import React, { useState } from 'react';
 import {
-  Image, StatusBar, StyleSheet, View,
+  Image, Platform, StatusBar, StyleSheet, View,
 } from 'react-native';
 import { C, R } from '../utils/tokens';
 
@@ -20,14 +20,22 @@ const SPLASH_BG = C.splashBg;
 const SPLASH_MARK_SIZE = 132;
 
 export default function SplashScreen() {
+  const [imageReady, setImageReady] = useState(false);
+  const keepNativeSplashVisible = Platform.OS === 'android' && !imageReady;
+
   return (
     <>
       <StatusBar barStyle="light-content" backgroundColor={SPLASH_BG} translucent={false} />
-      <View style={s.root} pointerEvents="none">
+      <View
+        style={[s.root, keepNativeSplashVisible && s.rootNativeHandoff]}
+        pointerEvents="none"
+      >
         <View style={s.brandStage}>
           <Image
             source={SPLASH_MARK}
             resizeMode="contain"
+            fadeDuration={0}
+            onLoad={() => setImageReady(true)}
             style={s.icon}
           />
         </View>
@@ -38,11 +46,14 @@ export default function SplashScreen() {
 
 const s = StyleSheet.create({
   root: {
-    ...StyleSheet.absoluteFillObject,
+    flex: 1,
     backgroundColor: SPLASH_BG,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
+  },
+  rootNativeHandoff: {
+    backgroundColor: 'transparent',
   },
   brandStage: {
     alignItems: 'center',

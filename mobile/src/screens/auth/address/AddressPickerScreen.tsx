@@ -29,6 +29,7 @@ import { BackButton, Button, EmptyState, ErrorState } from '../../../components/
 import { C, R, S, Shadow, T } from '../../../utils/tokens';
 import type { RootScreen } from '../../../navigation/types';
 import { cacheAddressLocation } from '../../../utils/addressLocation';
+import { afterInteractions } from '../../../utils/schedule';
 
 const LABEL_GLYPH: Record<UserAddress['label'], string> = {
   home: '🏠',
@@ -60,9 +61,7 @@ export default function AddressPickerScreen({
   }, []);
 
   useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load]),
+    useCallback(() => afterInteractions(load), [load]),
   );
 
   const onAddNew = () => {

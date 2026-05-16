@@ -34,6 +34,7 @@ import { useAuthStore } from '../store/authStore';
 import { BackButton, Button, Card, Chip, EmptyState, ErrorState, StatusBadge } from '../components/ui';
 import { confirmDestructive } from '../utils/confirm';
 import { parseApiError } from '../utils/errors';
+import { afterInteractions } from '../utils/schedule';
 import { C, I, MIN_TAP, R, S, T, formatPrice, timeAgo } from '../utils/tokens';
 
 type Tab = 'received' | 'sent' | 'inprogress';
@@ -83,7 +84,7 @@ export default function OffersScreen({ navigation }: any) {
     }
   }, [tab, refreshing]);
 
-  useFocusEffect(useCallback(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [tab]));
+  useFocusEffect(useCallback(() => afterInteractions(load), [load]));
 
   const renderHeader = () => (
     <View style={s.headerRow}>
@@ -396,7 +397,6 @@ export default function OffersScreen({ navigation }: any) {
                 placeholder="Enter amount"
                 placeholderTextColor={C.text4}
                 style={s.priceInput}
-                autoFocus
               />
             </View>
             <View style={s.promptActions}>

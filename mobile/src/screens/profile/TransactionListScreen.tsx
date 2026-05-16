@@ -7,6 +7,7 @@ import { C, T, S, R, Shadow, formatPrice, timeAgo } from '../../utils/tokens';
 import { Transactions, type Transaction } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { parseApiError } from '../../utils/errors';
+import { afterInteractions } from '../../utils/schedule';
 
 const STATUS_COLORS: Record<string, string> = {
   payment_pending: C.yellow,
@@ -39,7 +40,7 @@ export default function TransactionListScreen({ navigation }: any) {
     } finally { setLoading(false); setRefreshing(false); }
   }, []);
 
-  useFocusEffect(useCallback(() => { load(); }, []));
+  useFocusEffect(useCallback(() => afterInteractions(load), [load]));
 
   const renderItem = ({ item }: { item: Transaction }) => {
     const isBuyer = item.buyer_id === userId;

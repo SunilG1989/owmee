@@ -1,4 +1,9 @@
-import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
+import axios, {
+  AxiosError,
+  AxiosRequestConfig,
+  AxiosResponse,
+  InternalAxiosRequestConfig,
+} from 'axios';
 import { ensureAuthHydrated, useAuthStore } from '../store/authStore';
 import { decodeJwtSub } from '../utils/jwt';
 
@@ -7,6 +12,104 @@ const BASE = API_URL;
 const api = axios.create({ baseURL: BASE, timeout: REQUEST_TIMEOUT });
 
 type RetriableRequestConfig = InternalAxiosRequestConfig & { _retry?: boolean };
+
+type CacheEntry<T = any> = {
+  expiresAt: number;
+  response: AxiosResponse<T>;
+};
+
+const getCache = new Map<string, CacheEntry>();
+const inFlightGets = new Map<string, Promise<AxiosResponse<any>>>();
+let cacheVersion = 0;
+
+function stableStringify(value: any): string {
+  if (!value) return '';
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  if (typeof value === 'object') {
+    return `{${Object.keys(value)
+      .filter((key) => value[key] !== undefined)
+      .sort()
+      .map((key) => `${key}:${stableStringify(value[key])}`)
+      .join(',')}}`;
+  }
+  return String(value);
+}
+
+function getCacheKey(url: string, config?: AxiosRequestConfig): string {
+  const uid = useAuthStore.getState().userId || 'guest';
+  return `GET ${uid}:${url}|${stableStringify(config?.params)}`;
+}
+
+function cloneResponse<T>(res: AxiosResponse<T>): AxiosResponse<T> {
+  return {
+    ...res,
+    headers: { ...res.headers },
+    data: res.data,
+  };
+}
+
+function cachedGet<T = any>(
+  url: string,
+  config?: AxiosRequestConfig,
+  ttlMs: number = 15_000,
+): Promise<AxiosResponse<T>> {
+  const key = getCacheKey(url, config);
+  const now = Date.now();
+  const cached = getCache.get(key);
+  if (cached && cached.expiresAt > now) {
+    return Promise.resolve(cloneResponse(cached.response as AxiosResponse<T>));
+  }
+
+  const existing = inFlightGets.get(key);
+  if (existing) return existing as Promise<AxiosResponse<T>>;
+
+  const requestVersion = cacheVersion;
+  const req = api.get<T>(url, config).then((res) => {
+    if (requestVersion === cacheVersion) {
+      getCache.set(key, { expiresAt: Date.now() + ttlMs, response: cloneResponse(res) });
+    }
+    return res;
+  }).finally(() => {
+    inFlightGets.delete(key);
+  });
+  inFlightGets.set(key, req);
+  return req;
+}
+
+function peekCachedGet<T = any>(
+  url: string,
+  config?: AxiosRequestConfig,
+  includeExpired: boolean = false,
+): AxiosResponse<T> | null {
+  const cached = getCache.get(getCacheKey(url, config));
+  if (!cached) return null;
+  if (!includeExpired && cached.expiresAt <= Date.now()) return null;
+  return cloneResponse(cached.response as AxiosResponse<T>);
+}
+
+export function clearApiCache(prefix?: string) {
+  cacheVersion += 1;
+  if (!prefix) {
+    getCache.clear();
+    inFlightGets.clear();
+    return;
+  }
+  const keyPrefix = `GET `;
+  for (const key of Array.from(getCache.keys())) {
+    if (key.startsWith(keyPrefix) && key.includes(`:${prefix}`)) getCache.delete(key);
+  }
+  for (const key of Array.from(inFlightGets.keys())) {
+    if (key.startsWith(keyPrefix) && key.includes(`:${prefix}`)) inFlightGets.delete(key);
+  }
+}
+
+function clearApiCaches(prefixes: string[]) {
+  prefixes.forEach(clearApiCache);
+}
+
+function clearListingCaches() {
+  clearApiCaches(['/v1/listings', '/v1/feed']);
+}
 
 // ── Request interceptor: attach token ────────────────────────────────────────
 api.interceptors.request.use(async (cfg) => {
@@ -272,9 +375,14 @@ export const Auth = {
   requestOtp: (phone: string) => api.post('/v1/auth/otp/send', { phone_number: phone }),
   sendOTP: (phone: string) => api.post('/v1/auth/otp/send', { phone_number: phone }),
   verifyOtp: (phone: string, code: string) => api.post('/v1/auth/otp/verify', { phone_number: phone, otp: code }),
-  me: () => api.get('/v1/auth/me'),
-  updateProfile: (data: any) => api.patch('/v1/auth/me/profile', data),
-  publicProfile: (userId: string) => api.get(`/v1/auth/users/${userId}/public`),
+  me: () => cachedGet('/v1/auth/me', undefined, 60_000),
+  peekMe: () => peekCachedGet('/v1/auth/me', undefined, true),
+  updateProfile: (data: any) =>
+    api.patch('/v1/auth/me/profile', data).then((res) => {
+      clearApiCache('/v1/auth/me');
+      return res;
+    }),
+  publicProfile: (userId: string) => cachedGet(`/v1/auth/users/${userId}/public`, undefined, 300_000),
 };
 
 // ── KYC ──────────────────────────────────────────────────────────────────────
@@ -307,12 +415,21 @@ export type ListingDeletionReason =
   | 'other';
 
 export const Listings = {
-  browse: (p: BrowseParams = {}) => api.get('/v1/listings', { params: p }),
-  search: (q: string, p: BrowseParams = {}) => api.get('/v1/listings/search', { params: { q, ...p } }),
-  get: (id: string) => api.get(`/v1/listings/${id}`),
-  create: (d: any) => api.post('/v1/listings', d),
-  publish: (id: string) => api.post(`/v1/listings/${id}/publish`),
-  categories: () => api.get('/v1/listings/categories'),
+  browse: (p: BrowseParams = {}) => cachedGet('/v1/listings', { params: p }, 60_000),
+  search: (q: string, p: BrowseParams = {}) => cachedGet('/v1/listings/search', { params: { q, ...p } }, 30_000),
+  get: (id: string) => cachedGet(`/v1/listings/${id}`, undefined, 20_000),
+  peek: (id: string) => peekCachedGet(`/v1/listings/${id}`, undefined, true),
+  create: (d: any) =>
+    api.post('/v1/listings', d).then((res) => {
+      clearListingCaches();
+      return res;
+    }),
+  publish: (id: string) =>
+    api.post(`/v1/listings/${id}/publish`).then((res) => {
+      clearListingCaches();
+      return res;
+    }),
+  categories: () => cachedGet('/v1/listings/categories', undefined, 600_000),
   /**
    * Soft-delete a listing. The backend cascades:
    *   - open offers → cancelled with reason 'listing_withdrawn'
@@ -323,6 +440,9 @@ export const Listings = {
   delete: (id: string, reason?: ListingDeletionReason, note?: string) =>
     api.delete(`/v1/listings/${id}`, {
       data: reason ? { reason, note: note ?? null } : undefined,
+    }).then((res) => {
+      clearListingCaches();
+      return res;
     }),
   /**
    * Edit a published listing. Backed by PATCH /v1/listings/{id}/ai which
@@ -345,26 +465,40 @@ export const Listings = {
     battery_health: number;
     accessories: string;
     warranty_status: string;
-  }>) => api.patch(`/v1/listings/${id}/ai`, fields),
-  markSold: (id: string, soldWhere: string = 'on_owmee') => api.post(`/v1/listings/${id}/mark-sold`, { sold_where: soldWhere }),
+  }>) =>
+    api.patch(`/v1/listings/${id}/ai`, fields).then((res) => {
+      clearListingCaches();
+      return res;
+    }),
+  markSold: (id: string, soldWhere: string = 'on_owmee') =>
+    api.post(`/v1/listings/${id}/mark-sold`, { sold_where: soldWhere }).then((res) => {
+      clearListingCaches();
+      return res;
+    }),
   requestImageUpload: (listingId: string, contentType: string = 'image/jpeg', sortOrder: number = 0) =>
     api.post(`/v1/listings/${listingId}/images/request`, { content_type: contentType, sort_order: sortOrder }),
   confirmImageUpload: (listingId: string, r2Key: string, isPrimary: boolean = false, sortOrder: number = 0) =>
-    api.post(`/v1/listings/${listingId}/images/confirm`, { r2_key: r2Key, sort_order: sortOrder, is_primary: isPrimary }),
+    api.post(`/v1/listings/${listingId}/images/confirm`, { r2_key: r2Key, sort_order: sortOrder, is_primary: isPrimary })
+      .then((res) => {
+        clearListingCaches();
+        return res;
+      }),
   myListings: (statusFilter?: string) =>
-    api.get('/v1/listings/me/listings', { params: statusFilter ? { status_filter: statusFilter } : {} }),
+    cachedGet('/v1/listings/me/listings', { params: statusFilter ? { status_filter: statusFilter } : {} }, 20_000),
+  peekMyListings: (statusFilter?: string) =>
+    peekCachedGet('/v1/listings/me/listings', { params: statusFilter ? { status_filter: statusFilter } : {} }, true),
 };
 
 // ── Sprint 8: Feed (blockbuster deals + explore) ────────────────────────────
 export const Feed = {
   /** GET /v1/feed/blockbuster-deals — top discounted listings in user's state */
-  blockbusterDeals: () => api.get<BlockbusterResponse>('/v1/feed/blockbuster-deals'),
+  blockbusterDeals: () => cachedGet<BlockbusterResponse>('/v1/feed/blockbuster-deals', undefined, 20_000),
 
   /** GET /v1/feed/explore — infinite explore feed with exponential radius */
   explore: (page: number = 0, cursor?: string | null) => {
     const params: any = { page };
     if (cursor) params.cursor = cursor;
-    return api.get<ExploreFeedResponse>('/v1/feed/explore', { params });
+    return cachedGet<ExploreFeedResponse>('/v1/feed/explore', { params }, 20_000);
   },
 };
 
@@ -457,21 +591,30 @@ export interface CreateAddressRequest {
 
 export const Addresses = {
   /** GET /v1/users/me/addresses — default first, then created_at desc. */
-  list: () => api.get<UserAddress[]>('/v1/users/me/addresses'),
+  list: () => cachedGet<UserAddress[]>('/v1/users/me/addresses', undefined, 60_000),
 
   /** POST /v1/users/me/addresses — auto-defaults if user has none yet. */
   create: (body: CreateAddressRequest) =>
-    api.post<UserAddress>('/v1/users/me/addresses', body),
+    api.post<UserAddress>('/v1/users/me/addresses', body).then((res) => {
+      clearApiCache('/v1/users/me/addresses');
+      return res;
+    }),
 
   /** PATCH /v1/users/me/addresses/{id} — partial update; flipping is_default
    *  to true atomically demotes other defaults. */
   update: (id: string, body: Partial<CreateAddressRequest>) =>
-    api.patch<UserAddress>(`/v1/users/me/addresses/${id}`, body),
+    api.patch<UserAddress>(`/v1/users/me/addresses/${id}`, body).then((res) => {
+      clearApiCache('/v1/users/me/addresses');
+      return res;
+    }),
 
   /** DELETE /v1/users/me/addresses/{id} — promotes most-recent remaining
    *  address to default if the deleted row was default. 204 on success. */
   delete: (id: string) =>
-    api.delete<void>(`/v1/users/me/addresses/${id}`),
+    api.delete<void>(`/v1/users/me/addresses/${id}`).then((res) => {
+      clearApiCache('/v1/users/me/addresses');
+      return res;
+    }),
 };
 
 // ── Sprint 8: Profile location ──────────────────────────────────────────────
@@ -492,25 +635,47 @@ export const Profile = {
 // ── Offers ───────────────────────────────────────────────────────────────────
 export const Offers = {
   create: (lid: string, amt: number, note?: string) =>
-    api.post('/v1/offers', { listing_id: lid, offered_price: amt, offer_note: note || undefined }),
-  accept: (id: string) => api.post(`/v1/offers/${id}/accept`),
-  reject: (id: string, reason?: string) => api.post(`/v1/offers/${id}/reject`, { reason: reason || '' }),
-  counter: (id: string, amt: number) => api.post(`/v1/offers/${id}/counter`, { counter_price: amt }),
-  withdraw: (id: string) => api.post(`/v1/offers/${id}/withdraw`),
-  received: () => api.get('/v1/offers/received'),
-  sent: () => api.get('/v1/offers/sent'),
+    api.post('/v1/offers', { listing_id: lid, offered_price: amt, offer_note: note || undefined }).then((res) => {
+      clearApiCaches(['/v1/offers', '/v1/transactions']);
+      return res;
+    }),
+  accept: (id: string) => api.post(`/v1/offers/${id}/accept`).then((res) => {
+    clearApiCaches(['/v1/offers', '/v1/transactions']);
+    clearListingCaches();
+    return res;
+  }),
+  reject: (id: string, reason?: string) => api.post(`/v1/offers/${id}/reject`, { reason: reason || '' }).then((res) => {
+    clearApiCache('/v1/offers');
+    return res;
+  }),
+  counter: (id: string, amt: number) => api.post(`/v1/offers/${id}/counter`, { counter_price: amt }).then((res) => {
+    clearApiCache('/v1/offers');
+    return res;
+  }),
+  withdraw: (id: string) => api.post(`/v1/offers/${id}/withdraw`).then((res) => {
+    clearApiCache('/v1/offers');
+    return res;
+  }),
+  received: () => cachedGet('/v1/offers/received', undefined, 15_000),
+  sent: () => cachedGet('/v1/offers/sent', undefined, 15_000),
+  peekReceived: () => peekCachedGet('/v1/offers/received', undefined, true),
+  peekSent: () => peekCachedGet('/v1/offers/sent', undefined, true),
   // Sprint 6b — buyer revises their own offer. Capped at 3 updates server-side.
   updatePrice: (id: string, newPrice: number) =>
-    api.post(`/v1/offers/${id}/update-price`, { new_price: newPrice }),
+    api.post(`/v1/offers/${id}/update-price`, { new_price: newPrice }).then((res) => {
+      clearApiCache('/v1/offers');
+      return res;
+    }),
 };
 
 // ── Transactions ─────────────────────────────────────────────────────────────
 // Sprint 6c: direct seller-buyer handoff endpoints removed;
 // logistics is fully managed. Tracking endpoint added for the new flow.
 export const Transactions = {
-  list: () => api.get('/v1/transactions'),
-  get: (id: string) => api.get(`/v1/transactions/${id}`),
-  tracking: (id: string) => api.get<TrackingResponse>(`/v1/transactions/${id}/tracking`),
+  list: () => cachedGet('/v1/transactions', undefined, 15_000),
+  peekList: () => peekCachedGet('/v1/transactions', undefined, true),
+  get: (id: string) => cachedGet(`/v1/transactions/${id}`, undefined, 15_000),
+  tracking: (id: string) => cachedGet<TrackingResponse>(`/v1/transactions/${id}/tracking`, undefined, 15_000),
   confirmDeal: (id: string) => api.post(`/v1/transactions/${id}/confirm`),
   rate: (id: string, stars: number, ok: boolean, note?: string) =>
     api.post(`/v1/transactions/${id}/rate`, { stars, item_as_described: ok ? 'yes' : 'no', comment: note }),
@@ -544,18 +709,31 @@ export interface TrackingResponse {
 
 // ── Wishlist ─────────────────────────────────────────────────────────────────
 export const Wishlist = {
-  list: () => api.get('/v1/wishlist'),
-  add: (lid: string) => api.post(`/v1/wishlist/${lid}`),
-  remove: (lid: string) => api.delete(`/v1/wishlist/${lid}`),
+  list: () => cachedGet('/v1/wishlist', undefined, 30_000),
+  peekList: () => peekCachedGet('/v1/wishlist', undefined, true),
+  add: (lid: string) => api.post(`/v1/wishlist/${lid}`).then((res) => {
+    clearApiCache('/v1/wishlist');
+    return res;
+  }),
+  remove: (lid: string) => api.delete(`/v1/wishlist/${lid}`).then((res) => {
+    clearApiCache('/v1/wishlist');
+    return res;
+  }),
 };
 
 // ── Notifications ────────────────────────────────────────────────────────────
 export const Notifications = {
-  list: (unreadOnly = false) => api.get('/v1/notifications', { params: { unread_only: unreadOnly } }),
-  markRead: (id: string) => api.post(`/v1/notifications/${id}/read`),
-  unreadCount: () => api.get('/v1/notifications/unread-count'),
-  preferences: () => api.get('/v1/notifications/preferences'),
-  updatePreferences: (prefs: any) => api.put('/v1/notifications/preferences', prefs),
+  list: (unreadOnly = false) => cachedGet('/v1/notifications', { params: { unread_only: unreadOnly } }, 15_000),
+  markRead: (id: string) => api.post(`/v1/notifications/${id}/read`).then((res) => {
+    clearApiCache('/v1/notifications');
+    return res;
+  }),
+  unreadCount: () => cachedGet('/v1/notifications/unread-count', undefined, 15_000),
+  preferences: () => cachedGet('/v1/notifications/preferences', undefined, 60_000),
+  updatePreferences: (prefs: any) => api.put('/v1/notifications/preferences', prefs).then((res) => {
+    clearApiCache('/v1/notifications/preferences');
+    return res;
+  }),
 };
 
 // ── Orders (Buy Now) ──────────────────────────────────────────────────
@@ -976,7 +1154,10 @@ export const AIListing = {
 
   /** Convert a draft + final fields into a real listing in pending_buyer state. */
   createFromDraft: (body: AICreateFromDraftRequest) =>
-    api.post<AICreateFromDraftResponse>('/v1/listings/from-draft', body),
+    api.post<AICreateFromDraftResponse>('/v1/listings/from-draft', body).then((res) => {
+      clearListingCaches();
+      return res;
+    }),
 
   /** What info do we still need from the seller for this listing? */
   sellerInfoNeeded: (listingId: string) =>
@@ -988,7 +1169,10 @@ export const AIListing = {
     pickup_pincode?: string;
     accessories?: string;
     available_slots?: string[];
-  }) => api.post(`/v1/listings/${listingId}/seller-info`, info),
+  }) => api.post(`/v1/listings/${listingId}/seller-info`, info).then((res) => {
+    clearListingCaches();
+    return res;
+  }),
 
   /** State-locked field edits. Note path uses /ai suffix to avoid collision
    *  with the existing GET /v1/listings/{id} endpoint. */
@@ -1008,11 +1192,17 @@ export const AIListing = {
     battery_health?: number;
     accessories?: string;
     warranty_status?: string;
-  }) => api.patch(`/v1/listings/${listingId}/ai`, fields),
+  }) => api.patch(`/v1/listings/${listingId}/ai`, fields).then((res) => {
+    clearListingCaches();
+    return res;
+  }),
 
   /** Re-run Claude haiku to regenerate the description from current fields. */
   regenerateDescription: (listingId: string) =>
     api.post<{ description: string; ai_model: string }>(
       `/v1/listings/${listingId}/regenerate-description`,
-    ),
+    ).then((res) => {
+      clearListingCaches();
+      return res;
+    }),
 };

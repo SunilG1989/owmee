@@ -13,6 +13,7 @@ import { C, T, S, R, Shadow, formatPrice } from '../../utils/tokens';
 import { Addresses, Listings, Orders, type Listing, type UserAddress } from '../../services/api';
 import { BackButton, Button } from '../../components/ui';
 import { parseApiError } from '../../utils/errors';
+import { afterInteractions } from '../../utils/schedule';
 
 const PLATFORM_FEE_PERCENT = 0.02; // 2%
 const GST_RATE = 0.18;             // 18% on platform fee
@@ -28,7 +29,7 @@ export default function CheckoutScreen({ navigation, route }: any) {
   // Listing once on mount; address re-reads on focus so address picker /
   // edit flows propagate back here without a manual refresh.
   useEffect(() => {
-    (async () => {
+    const cancelTask = afterInteractions(async () => {
       try {
         const listRes = await Listings.get(listingId);
         setListing(listRes.data);
@@ -36,7 +37,8 @@ export default function CheckoutScreen({ navigation, route }: any) {
         Alert.alert('Error', 'Could not load listing');
         navigation.goBack();
       } finally { setLoading(false); }
-    })();
+    });
+    return cancelTask;
   }, [listingId, navigation]);
 
   const reloadAddress = useCallback(async () => {
@@ -51,7 +53,7 @@ export default function CheckoutScreen({ navigation, route }: any) {
     }
   }, []);
 
-  useFocusEffect(useCallback(() => { reloadAddress(); }, [reloadAddress]));
+  useFocusEffect(useCallback(() => afterInteractions(reloadAddress), [reloadAddress]));
 
   if (loading || !listing) {
     return (

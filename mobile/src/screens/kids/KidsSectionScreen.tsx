@@ -9,6 +9,7 @@ import { ListingCard, calcCardWidth } from '../../components/listing/ListingCard
 import { BackButton } from '../../components/ui';
 import { useLocation } from '../../hooks/useLocation';
 import { useAuthStore } from '../../store/authStore';
+import { afterInteractions } from '../../utils/schedule';
 
 export default function KidsSectionScreen({ navigation }: any) {
   const { width: sw } = useWindowDimensions();
@@ -19,7 +20,8 @@ export default function KidsSectionScreen({ navigation }: any) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    (async () => {
+    let cancelled = false;
+    const cancelTask = afterInteractions(async () => {
       try {
         const r = await Listings.browse({
           kids_only: true,
@@ -27,9 +29,11 @@ export default function KidsSectionScreen({ navigation }: any) {
           lng: location?.lng,
           limit: 30,
         });
+        if (cancelled) return;
         setItems(r.data.listings || []);
-      } catch {} finally { setLoading(false); }
-    })();
+      } catch {} finally { if (!cancelled) setLoading(false); }
+    });
+    return () => { cancelled = true; cancelTask(); };
   }, [location]);
 
   const openBuySafely = (listing: Listing) => {
@@ -45,7 +49,7 @@ export default function KidsSectionScreen({ navigation }: any) {
       navigation.navigate('AuthFlow');
       return;
     }
-    navigation.navigate('ListingDetail', { listingId: listing.id, openOffer: true });
+    navigation.navigate('ListingDetail', { listingId: listing.id, openOffer: true, initialListing: listing });
   };
 
   return (
@@ -69,7 +73,7 @@ export default function KidsSectionScreen({ navigation }: any) {
           renderItem={({ item }) => (
             <ListingCard
               listing={item}
-              onPress={l => navigation.navigate('ListingDetail', { listingId: l.id })}
+              onPress={l => navigation.navigate('ListingDetail', { listingId: l.id, initialListing: l })}
               onBuySafely={openBuySafely}
               onMakeOffer={openMakeOffer}
               showDistance={!!location}

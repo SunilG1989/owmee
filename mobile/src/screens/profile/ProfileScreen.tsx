@@ -1,15 +1,16 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Alert, ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { C, T, S, R } from '../../utils/tokens';
 import { Button } from '../../components/ui';
-import { Auth } from '../../services/api';
+import { Auth, Listings, Offers, Transactions, Wishlist } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { useLocation } from '../../hooks/useLocation';
+import { afterInteractions } from '../../utils/schedule';
 
 interface UserProfile {
   id: string; phone_number: string; name?: string; city?: string;
@@ -28,24 +29,26 @@ export default function ProfileScreen({ navigation }: any) {
   const { isAuthenticated, phone, kycStatus, tier, logout, setTier, setKycStatus } = useAuthStore();
   const { location } = useLocation();
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
 
   useFocusEffect(useCallback(() => {
-    if (!isAuthenticated) { setLoading(false); return; }
+    if (!isAuthenticated) return;
     let cancelled = false;
-    (async () => {
+    const cancelTask = afterInteractions(async () => {
       try {
         const res = await Auth.me();
         if (cancelled) return;
         setProfile(res.data);
         if (res.data.tier && res.data.tier !== tier) setTier(res.data.tier as any);
         if (res.data.kyc_status && res.data.kyc_status !== kycStatus) setKycStatus(res.data.kyc_status as any);
-      } catch {} finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [isAuthenticated]));
+        Listings.myListings().catch(() => {});
+        Offers.received().catch(() => {});
+        Offers.sent().catch(() => {});
+        Transactions.list().catch(() => {});
+        Wishlist.list().catch(() => {});
+      } catch {}
+    });
+    return () => { cancelled = true; cancelTask(); };
+  }, [isAuthenticated, tier, kycStatus, setTier, setKycStatus]));
 
   if (!isAuthenticated) {
     return (
@@ -61,14 +64,6 @@ export default function ProfileScreen({ navigation }: any) {
             style={s.gateBtn}
           />
         </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (loading) {
-    return (
-      <SafeAreaView style={s.safe}>
-        <ActivityIndicator color={C.petrol} style={s.loading} />
       </SafeAreaView>
     );
   }
@@ -196,7 +191,6 @@ export default function ProfileScreen({ navigation }: any) {
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bone },
-  loading: { marginTop: S.xxxl + S.xxxl },
   body: { flex: 1, paddingHorizontal: S.lg },
   flex1: { flex: 1 },
   bottomSpacer: { height: 100 },

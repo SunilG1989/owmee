@@ -14,15 +14,14 @@
         Android 12+ renders a system splash before the activity window, so
         every stage must share the same plain field to avoid a double-splash.
     -->
-    <style name="LaunchTheme" parent="Theme.AppCompat.Light.NoActionBar">
-        <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
+    <style name="LaunchTheme" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/splash_bg</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/owmee_splash_icon_system</item>
+        <item name="postSplashScreenTheme">@style/AppTheme</item>
         <item name="android:windowBackground">@drawable/launch_screen</item>
         <item name="android:statusBarColor">@color/splash_bg</item>
         <item name="android:navigationBarColor">@color/splash_bg</item>
         <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowSplashScreenBackground">@color/splash_bg</item>
-        <!-- Suppress the legacy "preview window" that fills with the
-             default windowBackground on older API levels. -->
         <item name="android:windowDisablePreview">false</item>
     </style>
 

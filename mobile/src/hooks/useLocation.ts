@@ -20,13 +20,14 @@
  *   - request() / setManualCity() — kept as no-ops so old callers
  *     compile. New code should use the AddressPicker / 3-screen flow.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LOCATION_KEY } from '../utils/storageKeys';
 import { useAuthStore } from '../store/authStore';
 import { Addresses } from '../services/api';
 import { addressToLocation, cacheAddressLocation, type UserLocation } from '../utils/addressLocation';
+import { afterInteractions } from '../utils/schedule';
 
 // Kept for legacy imports. Prefer reading the user's default address.
 export const INDIAN_CITIES = [
@@ -47,6 +48,7 @@ export function useLocation() {
   const [location, setLocation] = useState<UserLocation | null>(null);
   const [loading, setLoading] = useState(true);
   const [denied, setDenied] = useState(false);
+  const lastRefreshAt = useRef(0);
 
   // Cold start: read whatever was cached locally so the UI doesn't flash.
   useEffect(() => {
@@ -62,8 +64,14 @@ export function useLocation() {
       .finally(() => setLoading(false));
   }, []);
 
-  const refresh = useCallback(async (isCancelled?: () => boolean) => {
+  const refresh = useCallback(async (isCancelled?: () => boolean, force = false) => {
     if (!isAuthenticated) return;
+    const now = Date.now();
+    if (!force && now - lastRefreshAt.current < 30_000) {
+      setLoading(false);
+      return;
+    }
+    lastRefreshAt.current = now;
     try {
       const res = await Addresses.list();
       if (isCancelled?.()) return;
@@ -91,7 +99,7 @@ export function useLocation() {
   // Authed path: refresh from API. Default address wins.
   useEffect(() => {
     let cancelled = false;
-    refresh(() => cancelled);
+    refresh(() => cancelled, true);
     return () => {
       cancelled = true;
     };
@@ -100,9 +108,10 @@ export function useLocation() {
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
-      refresh(() => cancelled);
+      const cancelTask = afterInteractions(() => refresh(() => cancelled));
       return () => {
         cancelled = true;
+        cancelTask();
       };
     }, [refresh]),
   );

@@ -45,7 +45,7 @@ export default function SellerProfileScreen({ navigation, route }: any) {
       navigation.navigate('AuthFlow');
       return;
     }
-    navigation.navigate('ListingDetail', { listingId: listing.id, openOffer: true });
+    navigation.navigate('ListingDetail', { listingId: listing.id, openOffer: true, initialListing: listing });
   };
 
   const header = () => (
@@ -141,7 +141,7 @@ export default function SellerProfileScreen({ navigation, route }: any) {
           renderItem={({ item }) => (
             <ListingCard
               listing={item}
-              onPress={l => navigation.navigate('ListingDetail', { listingId: l.id })}
+              onPress={l => navigation.navigate('ListingDetail', { listingId: l.id, initialListing: l })}
               onBuySafely={openBuySafely}
               onMakeOffer={openMakeOffer}
               cardWidth={cardWidth}

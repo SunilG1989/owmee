@@ -13,6 +13,7 @@ import {
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { enableFreeze } from 'react-native-screens';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
@@ -28,68 +29,59 @@ import { ONBOARDING_SEEN_KEY } from '../utils/storageKeys';
 import { C, T, S, R, Shadow } from '../utils/tokens';
 import SplashScreen from '../components/SplashScreen';
 
-// Consumer screens
-import HomeScreen from '../screens/HomeScreen';
-import SearchScreen from '../screens/SearchScreen';
-import CreateListingScreen from '../screens/listings/CreateListingScreen';
-import OffersScreen from '../screens/OffersScreen';
-import ProfileScreen from '../screens/profile/ProfileScreen';
-import ListingDetailScreen from '../screens/listings/ListingDetailScreen';
-import TransactionDetailScreen from '../screens/TransactionDetailScreen';
-import KidsSectionScreen from '../screens/kids/KidsSectionScreen';
-import OnboardingScreen from '../screens/auth/OnboardingScreen';
-import RegisterScreen from '../screens/auth/RegisterScreen';
-import OtpVerifyScreen from '../screens/auth/OtpVerifyScreen';
-import KycFlowScreen from '../screens/auth/KycFlowScreen';
-import KycRequiredForActionScreen from '../screens/KycRequiredForActionScreen';
-import LocationDetectScreen from '../screens/auth/address/LocationDetectScreen';
-import LocationMapScreen from '../screens/auth/address/LocationMapScreen';
-import AddressDetailsScreen from '../screens/auth/address/AddressDetailsScreen';
-import AddressPickerScreen from '../screens/auth/address/AddressPickerScreen';
-// Profile sub-screens
-import MyListingsScreen from '../screens/listings/MyListingsScreen';
-import MyFeVisitsScreen from '../screens/profile/MyFeVisitsScreen';
-import TransactionListScreen from '../screens/profile/TransactionListScreen';
-import WishlistScreen from '../screens/profile/WishlistScreen';
-import EditProfileScreen from '../screens/profile/EditProfileScreen';
-import NotificationsScreen from '../screens/profile/NotificationsScreen';
-import SellerProfileScreen from '../screens/profile/SellerProfileScreen';
-// Purchase flow
-import CheckoutScreen from '../screens/purchase/CheckoutScreen';
-import OrderConfirmationScreen from '../screens/purchase/OrderConfirmationScreen';
-// Sprint 4 / Pass 2: FE flow
-import FeHomeScreen from '../screens/fe/FeHomeScreen';
-import FeVisitDetailScreen from '../screens/fe/FeVisitDetailScreen';
-import FeCaptureScreen from '../screens/fe/FeCaptureScreen';
-// Sprint 6c: post-purchase pickups + deliveries
-import FeOpsScreen from '../screens/fe/FeOpsScreen';
-import FeVisitHistoryScreen from '../screens/fe/FeVisitHistoryScreen';
-// Concierge Phase 3 — specialist excellence (FE app)
-import SellerApprovalScreen from '../screens/fe/SellerApprovalScreen';
-import VisitContinueScreen from '../screens/fe/VisitContinueScreen';
-// Concierge Phase 5 — trust safety net
-import ReportIssueScreen from '../screens/fe/ReportIssueScreen';
-import NpsScreen from '../screens/listings/concierge/NpsScreen';
-import CommunityProofScreen from '../screens/community/CommunityProofScreen';
-// Sprint 4 / Pass 3: real screens replacing Pass 2 stubs
-import VerificationWallScreen from '../screens/auth/VerificationWallScreen';
-import FeVisitConfirmationScreen from '../screens/listings/FeVisitConfirmationScreen';
-// ── Sprint 8 / Phase 2: AI-Assisted Listing ─────────────────────────────  // SPRINT8_PHASE2_AI
-import AIListingCameraScreen from '../screens/listings/ai/AIListingCameraScreen';
-import AIListingSuggestScreen from '../screens/listings/ai/AIListingSuggestScreen';
-import AIListingIdentifierScreen from '../screens/listings/ai/AIListingIdentifierScreen';
-import EditListingScreen from '../screens/listings/EditListingScreen';
-import SellTabRedirect from '../screens/listings/ai/SellTabRedirect';
-// Concierge master spec — Phase 1
-import SellModeForkScreen from '../screens/listings/SellModeForkScreen';
-import ConciergeBookingScreen from '../screens/listings/concierge/BookingScreen';
-import ConciergeBookingConfirmedScreen from '../screens/listings/concierge/BookingConfirmedScreen';
-import MyConciergeScreen from '../screens/listings/concierge/MyConciergeScreen';
-// Concierge master spec — Phase 2
-import VisitDetailScreen from '../screens/listings/concierge/VisitDetailScreen';
-import ArrivalVerificationScreen from '../screens/listings/concierge/ArrivalVerificationScreen';
-
 import type { RootStackParams, AuthStackParams, TabParams } from './types';
+
+type ScreenLoader = () => { default: React.ComponentType<any> };
+const screen = (loader: ScreenLoader) => () => loader().default;
+
+const getHomeScreen = screen(() => require('../screens/HomeScreen'));
+const getSearchScreen = screen(() => require('../screens/SearchScreen'));
+const getSellModeForkScreen = screen(() => require('../screens/listings/SellModeForkScreen'));
+const getNotificationsScreen = screen(() => require('../screens/profile/NotificationsScreen'));
+const getProfileScreen = screen(() => require('../screens/profile/ProfileScreen'));
+const getOnboardingScreen = screen(() => require('../screens/auth/OnboardingScreen'));
+const getRegisterScreen = screen(() => require('../screens/auth/RegisterScreen'));
+const getOtpVerifyScreen = screen(() => require('../screens/auth/OtpVerifyScreen'));
+const getListingDetailScreen = screen(() => require('../screens/listings/ListingDetailScreen'));
+const getTransactionDetailScreen = screen(() => require('../screens/TransactionDetailScreen'));
+const getKidsSectionScreen = screen(() => require('../screens/kids/KidsSectionScreen'));
+const getKycFlowScreen = screen(() => require('../screens/auth/KycFlowScreen'));
+const getKycRequiredForActionScreen = screen(() => require('../screens/KycRequiredForActionScreen'));
+const getMyListingsScreen = screen(() => require('../screens/listings/MyListingsScreen'));
+const getMyFeVisitsScreen = screen(() => require('../screens/profile/MyFeVisitsScreen'));
+const getWishlistScreen = screen(() => require('../screens/profile/WishlistScreen'));
+const getTransactionListScreen = screen(() => require('../screens/profile/TransactionListScreen'));
+const getEditProfileScreen = screen(() => require('../screens/profile/EditProfileScreen'));
+const getSellerProfileScreen = screen(() => require('../screens/profile/SellerProfileScreen'));
+const getCheckoutScreen = screen(() => require('../screens/purchase/CheckoutScreen'));
+const getOrderConfirmationScreen = screen(() => require('../screens/purchase/OrderConfirmationScreen'));
+const getFeHomeScreen = screen(() => require('../screens/fe/FeHomeScreen'));
+const getFeOpsScreen = screen(() => require('../screens/fe/FeOpsScreen'));
+const getFeVisitDetailScreen = screen(() => require('../screens/fe/FeVisitDetailScreen'));
+const getFeCaptureScreen = screen(() => require('../screens/fe/FeCaptureScreen'));
+const getFeVisitHistoryScreen = screen(() => require('../screens/fe/FeVisitHistoryScreen'));
+const getSellerApprovalScreen = screen(() => require('../screens/fe/SellerApprovalScreen'));
+const getVisitContinueScreen = screen(() => require('../screens/fe/VisitContinueScreen'));
+const getReportIssueScreen = screen(() => require('../screens/fe/ReportIssueScreen'));
+const getConciergeBookingScreen = screen(() => require('../screens/listings/concierge/BookingScreen'));
+const getConciergeBookingConfirmedScreen = screen(() => require('../screens/listings/concierge/BookingConfirmedScreen'));
+const getMyConciergeScreen = screen(() => require('../screens/listings/concierge/MyConciergeScreen'));
+const getVisitDetailScreen = screen(() => require('../screens/listings/concierge/VisitDetailScreen'));
+const getArrivalVerificationScreen = screen(() => require('../screens/listings/concierge/ArrivalVerificationScreen'));
+const getConciergeNpsScreen = screen(() => require('../screens/listings/concierge/NpsScreen'));
+const getFeVisitConfirmationScreen = screen(() => require('../screens/listings/FeVisitConfirmationScreen'));
+const getVerificationWallScreen = screen(() => require('../screens/auth/VerificationWallScreen'));
+const getCommunityProofScreen = screen(() => require('../screens/community/CommunityProofScreen'));
+const getOffersScreen = screen(() => require('../screens/OffersScreen'));
+const getAIListingCameraScreen = screen(() => require('../screens/listings/ai/AIListingCameraScreen'));
+const getAIListingSuggestScreen = screen(() => require('../screens/listings/ai/AIListingSuggestScreen'));
+const getAIListingIdentifierScreen = screen(() => require('../screens/listings/ai/AIListingIdentifierScreen'));
+const getEditListingScreen = screen(() => require('../screens/listings/EditListingScreen'));
+const getCreateListingScreen = screen(() => require('../screens/listings/CreateListingScreen'));
+const getLocationDetectScreen = screen(() => require('../screens/auth/address/LocationDetectScreen'));
+const getLocationMapScreen = screen(() => require('../screens/auth/address/LocationMapScreen'));
+const getAddressDetailsScreen = screen(() => require('../screens/auth/address/AddressDetailsScreen'));
+const getAddressPickerScreen = screen(() => require('../screens/auth/address/AddressPickerScreen'));
 
 const RootStack = createNativeStackNavigator<RootStackParams>();
 const FeStack = createNativeStackNavigator<RootStackParams>();
@@ -97,6 +89,9 @@ const AuthStack = createNativeStackNavigator<AuthStackParams>();
 const Tab = createBottomTabNavigator<TabParams>();
 const SPLASH_STATUS_BG = '#003F4B';
 const APP_STATUS_BG = '#FEFBF4';
+const SPLASH_MIN_MS = 450;
+
+enableFreeze(true);
 
 function setAndroidNavigationBar(backgroundColor: string, darkIcons: boolean) {
   if (Platform.OS !== 'android') return;
@@ -169,8 +164,8 @@ function SellFab({ active }: { active: boolean }) {
 function AuthFlowNavigator() {
   return (
     <AuthStack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
-      <AuthStack.Screen name="Register" component={RegisterScreen} />
-      <AuthStack.Screen name="OtpVerify" component={OtpVerifyScreen} />
+      <AuthStack.Screen name="Register" getComponent={getRegisterScreen} />
+      <AuthStack.Screen name="OtpVerify" getComponent={getOtpVerifyScreen} />
     </AuthStack.Navigator>
   );
 }
@@ -256,7 +251,8 @@ function MainTabs() {
 
   return (
     <Tab.Navigator
-      screenOptions={{ headerShown: false }}
+      detachInactiveScreens
+      screenOptions={{ headerShown: false, freezeOnBlur: true, lazy: true }}
       tabBar={({ state, navigation: tabNav }) => (
         <View style={[st.tabBar, { paddingBottom: Math.max(insets.bottom, S.sm) }]}>
           {tabs.map((tab, index) => {
@@ -299,12 +295,12 @@ function MainTabs() {
         </View>
       )}
     >
-      <Tab.Screen name="Home" component={HomeScreen} />
-      <Tab.Screen name="Search" component={SearchScreen} />
+      <Tab.Screen name="Home" getComponent={getHomeScreen} />
+      <Tab.Screen name="Search" getComponent={getSearchScreen} />
       {/* Sell tab → fork screen. Renders as raised FAB in the bar. */}
-      <Tab.Screen name="Sell" component={SellModeForkScreen} />
-      <Tab.Screen name="Notifications" component={NotificationsScreen} />
-      <Tab.Screen name="Profile" component={ProfileScreen} />
+      <Tab.Screen name="Sell" getComponent={getSellModeForkScreen} />
+      <Tab.Screen name="Notifications" getComponent={getNotificationsScreen} />
+      <Tab.Screen name="Profile" getComponent={getProfileScreen} />
     </Tab.Navigator>
   );
 }
@@ -312,17 +308,17 @@ function MainTabs() {
 function FeRootStack() {
   return (
     <NavigationContainer>
-      <FeStack.Navigator screenOptions={{ headerShown: false }} initialRouteName="FeHome">
-        <FeStack.Screen name="FeHome" component={FeHomeScreen} />
-        <FeStack.Screen name="FeOps" component={FeOpsScreen} options={{ animation: 'slide_from_right' }} />
-        <FeStack.Screen name="FeVisitDetail" component={FeVisitDetailScreen} options={{ animation: 'slide_from_right' }} />
-        <FeStack.Screen name="FeCapture" component={FeCaptureScreen} options={{ animation: 'slide_from_right' }} />
-        <FeStack.Screen name="FeVisitHistory" component={FeVisitHistoryScreen} options={{ animation: 'slide_from_right' }} />
+      <FeStack.Navigator screenOptions={{ headerShown: false, freezeOnBlur: true }} initialRouteName="FeHome">
+        <FeStack.Screen name="FeHome" getComponent={getFeHomeScreen} />
+        <FeStack.Screen name="FeOps" getComponent={getFeOpsScreen} options={{ animation: 'slide_from_right' }} />
+        <FeStack.Screen name="FeVisitDetail" getComponent={getFeVisitDetailScreen} options={{ animation: 'slide_from_right' }} />
+        <FeStack.Screen name="FeCapture" getComponent={getFeCaptureScreen} options={{ animation: 'slide_from_right' }} />
+        <FeStack.Screen name="FeVisitHistory" getComponent={getFeVisitHistoryScreen} options={{ animation: 'slide_from_right' }} />
         {/* Concierge Phase 3 — specialist excellence */}
-        <FeStack.Screen name="SellerApproval" component={SellerApprovalScreen} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
-        <FeStack.Screen name="VisitContinue" component={VisitContinueScreen} options={{ animation: 'slide_from_right' }} />
+        <FeStack.Screen name="SellerApproval" getComponent={getSellerApprovalScreen} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
+        <FeStack.Screen name="VisitContinue" getComponent={getVisitContinueScreen} options={{ animation: 'slide_from_right' }} />
         {/* Concierge Phase 5 — trust safety net (FE side) */}
-        <FeStack.Screen name="ReportIssue" component={ReportIssueScreen} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
+        <FeStack.Screen name="ReportIssue" getComponent={getReportIssueScreen} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
       </FeStack.Navigator>
     </NavigationContainer>
   );
@@ -331,14 +327,12 @@ function FeRootStack() {
 export default function RootNavigator() {
   const { hydrate, hydrated, isAuthenticated, role } = useAuthStore();
   const [onboardingSeen, setOnboardingSeen] = useState<boolean | null>(null);
-  const [appChromeReady, setAppChromeReady] = useState(false);
-  // Minimum-display floor so the splash doesn't flash on fast devices —
-  // same 700ms guard Amazon / Meesho use to keep brand perception
-  // consistent regardless of cold-start speed.
+  // Small display floor prevents a blink on fast starts without making
+  // the launch feel artificially held.
   const [splashMinElapsed, setSplashMinElapsed] = useState(false);
 
   useEffect(() => {
-    const t = setTimeout(() => setSplashMinElapsed(true), 700);
+    const t = setTimeout(() => setSplashMinElapsed(true), SPLASH_MIN_MS);
     return () => clearTimeout(t);
   }, []);
 
@@ -352,20 +346,16 @@ export default function RootNavigator() {
   const appReady = hydrated && onboardingSeen !== null && splashMinElapsed;
 
   useEffect(() => {
-    if (!appReady) {
-      setAppChromeReady(false);
-      return undefined;
-    }
-    const t = setTimeout(() => setAppChromeReady(true), 180);
-    return () => clearTimeout(t);
+    setAndroidNavigationBar(
+      appReady ? APP_STATUS_BG : SPLASH_STATUS_BG,
+      appReady,
+    );
   }, [appReady]);
 
   useEffect(() => {
-    setAndroidNavigationBar(
-      appChromeReady ? APP_STATUS_BG : SPLASH_STATUS_BG,
-      appChromeReady,
-    );
-  }, [appChromeReady]);
+    if (!appReady || Platform.OS !== 'android') return;
+    NativeModules.SplashControl?.hide?.();
+  }, [appReady]);
 
   useEffect(() => {
     if (!hydrated || !isAuthenticated) return;
@@ -400,8 +390,8 @@ export default function RootNavigator() {
 
   const appStatusBar = (
     <StatusBar
-      barStyle={appChromeReady ? 'dark-content' : 'light-content'}
-      backgroundColor={appChromeReady ? APP_STATUS_BG : SPLASH_STATUS_BG}
+      barStyle="dark-content"
+      backgroundColor={APP_STATUS_BG}
       translucent={false}
     />
   );
@@ -417,6 +407,7 @@ export default function RootNavigator() {
   }
 
   if (!onboardingSeen) {
+    const OnboardingScreen = getOnboardingScreen();
     return (
       <>
         {appStatusBar}
@@ -436,53 +427,53 @@ export default function RootNavigator() {
     <>
       {appStatusBar}
       <NavigationContainer>
-        <RootStack.Navigator screenOptions={{ headerShown: false }}>
+        <RootStack.Navigator screenOptions={{ headerShown: false, freezeOnBlur: true }}>
           <RootStack.Screen name="MainTabs" component={MainTabsWithAddressGate} />
-          <RootStack.Screen name="ListingDetail" component={ListingDetailScreen} options={{ animation: 'slide_from_right' }} />
-          <RootStack.Screen name="TransactionDetail" component={TransactionDetailScreen} options={{ animation: 'slide_from_right' }} />
-          <RootStack.Screen name="KidsSection" component={KidsSectionScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="ListingDetail" getComponent={getListingDetailScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="TransactionDetail" getComponent={getTransactionDetailScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="KidsSection" getComponent={getKidsSectionScreen} options={{ animation: 'slide_from_right' }} />
           <RootStack.Screen name="AuthFlow" component={AuthFlowNavigator} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
-          <RootStack.Screen name="KycFlow" component={KycFlowScreen} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
-          <RootStack.Screen name="KycRequiredForAction" component={KycRequiredForActionScreen} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
+          <RootStack.Screen name="KycFlow" getComponent={getKycFlowScreen} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
+          <RootStack.Screen name="KycRequiredForAction" getComponent={getKycRequiredForActionScreen} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
           {/* Profile sub-screens */}
-          <RootStack.Screen name="MyListings" component={MyListingsScreen} options={{ animation: 'slide_from_right' }} />
-          <RootStack.Screen name="MyFeVisits" component={MyFeVisitsScreen} options={{ animation: 'slide_from_right' }} />
-          <RootStack.Screen name="SavedItems" component={WishlistScreen} options={{ animation: 'slide_from_right' }} />
-          <RootStack.Screen name="TransactionList" component={TransactionListScreen} options={{ animation: 'slide_from_right' }} />
-          <RootStack.Screen name="EditProfile" component={EditProfileScreen} options={{ animation: 'slide_from_right' }} />
-          <RootStack.Screen name="Notifications" component={NotificationsScreen} options={{ animation: 'slide_from_right' }} />
-          <RootStack.Screen name="SellerProfile" component={SellerProfileScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="MyListings" getComponent={getMyListingsScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="MyFeVisits" getComponent={getMyFeVisitsScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="SavedItems" getComponent={getWishlistScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="TransactionList" getComponent={getTransactionListScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="EditProfile" getComponent={getEditProfileScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="Notifications" getComponent={getNotificationsScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="SellerProfile" getComponent={getSellerProfileScreen} options={{ animation: 'slide_from_right' }} />
           {/* Purchase flow */}
-          <RootStack.Screen name="Checkout" component={CheckoutScreen} options={{ animation: 'slide_from_right' }} />
-          <RootStack.Screen name="OrderConfirmation" component={OrderConfirmationScreen} options={{ animation: 'fade', gestureEnabled: false }} />
+          <RootStack.Screen name="Checkout" getComponent={getCheckoutScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="OrderConfirmation" getComponent={getOrderConfirmationScreen} options={{ animation: 'fade', gestureEnabled: false }} />
           {/* Concierge master spec — Phase 1 booking flow */}
-          <RootStack.Screen name="SellModeFork" component={SellModeForkScreen} options={{ animation: 'slide_from_right' }} />
-          <RootStack.Screen name="ConciergeBooking" component={ConciergeBookingScreen} options={{ animation: 'slide_from_right' }} />
-          <RootStack.Screen name="ConciergeBookingConfirmed" component={ConciergeBookingConfirmedScreen} options={{ animation: 'fade', gestureEnabled: false }} />
-          <RootStack.Screen name="MyConcierge" component={MyConciergeScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="SellModeFork" getComponent={getSellModeForkScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="ConciergeBooking" getComponent={getConciergeBookingScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="ConciergeBookingConfirmed" getComponent={getConciergeBookingConfirmedScreen} options={{ animation: 'fade', gestureEnabled: false }} />
+          <RootStack.Screen name="MyConcierge" getComponent={getMyConciergeScreen} options={{ animation: 'slide_from_right' }} />
           {/* Concierge Phase 2 — trust theater deep links */}
-          <RootStack.Screen name="VisitDetail" component={VisitDetailScreen} options={{ animation: 'slide_from_right' }} />
-          <RootStack.Screen name="ArrivalVerification" component={ArrivalVerificationScreen} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
+          <RootStack.Screen name="VisitDetail" getComponent={getVisitDetailScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="ArrivalVerification" getComponent={getArrivalVerificationScreen} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
           {/* Concierge Phase 5 — seller NPS (deep-linked from notification) */}
-          <RootStack.Screen name="ConciergeNps" component={NpsScreen} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
-          <RootStack.Screen name="FeVisitConfirmation" component={FeVisitConfirmationScreen} options={{ animation: 'slide_from_right' }} />
-          <RootStack.Screen name="VerificationWall" component={VerificationWallScreen} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
+          <RootStack.Screen name="ConciergeNps" getComponent={getConciergeNpsScreen} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
+          <RootStack.Screen name="FeVisitConfirmation" getComponent={getFeVisitConfirmationScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="VerificationWall" getComponent={getVerificationWallScreen} options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
           {/* Sprint 7 / Phase 1: Community proof */}
-          <RootStack.Screen name="CommunityProof" component={CommunityProofScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="CommunityProof" getComponent={getCommunityProofScreen} options={{ animation: 'slide_from_right' }} />
           {/* Sprint 6b: My Offers (Received / Sent / Deals) */}
-          <RootStack.Screen name="MyOffers" component={OffersScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="MyOffers" getComponent={getOffersScreen} options={{ animation: 'slide_from_right' }} />
           {/* Sprint 8 / Phase 2: AI-Assisted Listing — SPRINT8_PHASE2_AI */}
-          <RootStack.Screen name="AIListingCamera" component={AIListingCameraScreen} options={{ animation: 'slide_from_bottom', presentation: 'fullScreenModal' }} />
-          <RootStack.Screen name="AIListingSuggest" component={AIListingSuggestScreen} options={{ animation: 'slide_from_right' }} />
-          <RootStack.Screen name="AIListingIdentifier" component={AIListingIdentifierScreen} options={{ animation: 'slide_from_right' }} />
-          <RootStack.Screen name="EditListing" component={EditListingScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="AIListingCamera" getComponent={getAIListingCameraScreen} options={{ animation: 'slide_from_bottom', presentation: 'fullScreenModal' }} />
+          <RootStack.Screen name="AIListingSuggest" getComponent={getAIListingSuggestScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="AIListingIdentifier" getComponent={getAIListingIdentifierScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="EditListing" getComponent={getEditListingScreen} options={{ animation: 'slide_from_right' }} />
           {/* Manual-entry listing form — fallback when AI can't run. */}
-          <RootStack.Screen name="CreateListing" component={CreateListingScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="CreateListing" getComponent={getCreateListingScreen} options={{ animation: 'slide_from_right' }} />
           {/* Address PRD: 3-screen flow + picker */}
-          <RootStack.Screen name="LocationDetect" component={LocationDetectScreen} options={{ animation: 'slide_from_right' }} />
-          <RootStack.Screen name="LocationMap" component={LocationMapScreen} options={{ animation: 'slide_from_right' }} />
-          <RootStack.Screen name="AddressDetails" component={AddressDetailsScreen} options={{ animation: 'slide_from_right' }} />
-          <RootStack.Screen name="AddressPicker" component={AddressPickerScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="LocationDetect" getComponent={getLocationDetectScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="LocationMap" getComponent={getLocationMapScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="AddressDetails" getComponent={getAddressDetailsScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="AddressPicker" getComponent={getAddressPickerScreen} options={{ animation: 'slide_from_right' }} />
         </RootStack.Navigator>
       </NavigationContainer>
     </>

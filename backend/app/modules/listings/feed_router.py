@@ -11,6 +11,7 @@ import json
 import logging
 import math
 from datetime import datetime, timezone
+from time import monotonic
 
 from fastapi import APIRouter, Query
 from sqlalchemy import text
@@ -18,6 +19,9 @@ from sqlalchemy import text
 from app.core.dependencies import DBSession, OptionalUser
 from app.core.redis import get_redis
 from app.core.storage import generate_presigned_download_url
+
+_IMG_URL_CACHE: dict[str, tuple[float, str | None]] = {}
+_IMG_URL_CACHE_TTL_SECONDS = 60 * 60 * 5
 
 
 def _img_url(key: str | None) -> str | None:
@@ -35,10 +39,21 @@ def _img_url(key: str | None) -> str | None:
         # Legacy data: full URL or sentinel. r2:// strings won't load
         # but at least the row doesn't blow up the response.
         return key if not key.startswith("r2://") else None
+    now = monotonic()
+    cached = _IMG_URL_CACHE.get(key)
+    if cached and cached[0] > now:
+        return cached[1]
     try:
-        return generate_presigned_download_url(key, expires_in=60 * 60 * 6)
+        url = generate_presigned_download_url(key, expires_in=60 * 60 * 6)
+        _IMG_URL_CACHE[key] = (now + _IMG_URL_CACHE_TTL_SECONDS, url)
+        return url
     except Exception:
+        _IMG_URL_CACHE[key] = (now + 60, None)
         return None
+
+
+def _first_image_url(thumbnail_key: str | None, image_keys: list[str] | None) -> str | None:
+    return _img_url(thumbnail_key or next(iter(image_keys or []), None))
 
 router = APIRouter(prefix="/v1/feed", tags=["feed"])
 log = logging.getLogger(__name__)
@@ -108,10 +123,9 @@ def _serialize_row(r, distance_km):
         "condition": r.get("condition"),
         "original_price": float(r["original_price"]) if r.get("original_price") is not None else None,
         "discount_pct": float(r["discount_pct"]) if r.get("discount_pct") is not None else None,
-        # image_urls in DB is a list of object keys, not absolute URLs —
-        # mobile needs presigned URLs to actually fetch them.
-        "image_urls": [u for u in (_img_url(k) for k in (r.get("image_urls") or [])) if u],
-        "thumbnail_url": _img_url(r.get("thumbnail_url")),
+        # Feed cards only render one image; detail fetches the full gallery.
+        "image_urls": [u] if (u := _first_image_url(r.get("thumbnail_url"), r.get("image_urls") or [])) else [],
+        "thumbnail_url": _first_image_url(r.get("thumbnail_url"), r.get("image_urls") or []),
         "city": r.get("city"),
         "state": r.get("state"),
         "category_slug": r.get("category_slug"),

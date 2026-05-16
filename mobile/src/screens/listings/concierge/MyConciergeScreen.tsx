@@ -38,6 +38,7 @@ import {
 import { BackButton, Button } from '../../../components/ui';
 import { C, R, S, T, Shadow, formatPrice } from '../../../utils/tokens';
 import type { RootScreen } from '../../../navigation/types';
+import { afterInteractions } from '../../../utils/schedule';
 
 interface MyListing {
   id: string;
@@ -88,9 +89,7 @@ export default function MyConciergeScreen({
   }, []);
 
   useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load]),
+    useCallback(() => afterInteractions(load), [load]),
   );
 
   const groups: VisitGroup[] = useMemo(() => {
@@ -242,7 +241,7 @@ function VisitCard({
                     transactionId: sale.id,
                   });
                 } else {
-                  navigation.navigate('ListingDetail', { listingId: l.id });
+                  navigation.navigate('ListingDetail', { listingId: l.id, initialListing: l });
                 }
               }}
             />

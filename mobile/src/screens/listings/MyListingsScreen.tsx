@@ -1,7 +1,7 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  RefreshControl, ActivityIndicator, Alert, Image, Modal,
+  RefreshControl, Alert, Image, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BackButton, Button, IconButton } from '../../components/ui';
@@ -9,6 +9,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { C, T, S, R, Shadow, formatPrice, timeAgo } from '../../utils/tokens';
 import { Listings, type Listing, type ListingDeletionReason } from '../../services/api';
 import ReasonSheet, { type ReasonOption } from '../../components/listing/ReasonSheet';
+import { afterInteractions } from '../../utils/schedule';
 
 // Mirrors backend _VALID_DELETION_REASONS (router.py). Order is the chip
 // order users see — most common reasons first.
@@ -27,6 +28,8 @@ const EDITABLE_STATUSES = new Set(['active', 'pending_review', 'pending_moderati
 // Statuses where Delete is a no-op (already gone or seller can't pull
 // the rug from a buyer mid-transaction).
 const DELETABLE_STATUSES = new Set(['draft', 'pending_review', 'pending_moderation', 'active', 'expired']);
+const LISTING_ROW_HEIGHT = 106;
+const SKELETON_ROWS = Array.from({ length: 6 }, (_, i) => `my-listing-skeleton-${i}`);
 
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
   draft:              { label: 'Draft',     color: C.text3,  bg: C.bone2        },
@@ -39,9 +42,22 @@ const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> =
   removed:            { label: 'Removed',   color: C.text4,  bg: C.bone2        },
 };
 
+function listingsFromResponse(res: any): Listing[] {
+  return res?.data?.listings || res?.data || [];
+}
+
+function prefetchThumbs(rows: Listing[]) {
+  rows.slice(0, 6).forEach((item) => {
+    const img = item.thumbnail_url || (item.image_urls || item.images)?.[0];
+    if (img) Image.prefetch(img).catch(() => {});
+  });
+}
+
 export default function MyListingsScreen({ navigation }: any) {
-  const [listings, setListings] = useState<Listing[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cachedListings = useMemo(() => listingsFromResponse(Listings.peekMyListings()), []);
+  const [listings, setListings] = useState<Listing[]>(cachedListings);
+  const [loading, setLoading] = useState(cachedListings.length === 0);
+  const [backgroundUpdating, setBackgroundUpdating] = useState(cachedListings.length > 0);
   const [refreshing, setRefreshing] = useState(false);
 
   // Action menu (kebab) + reason sheet state. Both target the same
@@ -51,17 +67,35 @@ export default function MyListingsScreen({ navigation }: any) {
   const [showDeleteSheet, setShowDeleteSheet] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (showErrors = true) => {
     try {
       const res = await Listings.myListings();
-      setListings(res.data?.listings || res.data || []);
+      const next = listingsFromResponse(res);
+      setListings(next);
+      prefetchThumbs(next);
     } catch (e: any) {
-      const { parseApiError } = require('../../utils/errors');
-      Alert.alert('Could not load listings', parseApiError(e));
-    } finally { setLoading(false); setRefreshing(false); }
-  }, []);
+      if (showErrors && listings.length === 0) {
+        const { parseApiError } = require('../../utils/errors');
+        Alert.alert('Could not load listings', parseApiError(e));
+      }
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+      setBackgroundUpdating(false);
+    }
+  }, [listings.length]);
 
-  useFocusEffect(useCallback(() => { load(); }, []));
+  useFocusEffect(useCallback(() => {
+    const cached = Listings.peekMyListings();
+    if (cached) {
+      const next = listingsFromResponse(cached);
+      setListings(next);
+      setLoading(false);
+      setBackgroundUpdating(true);
+      prefetchThumbs(next);
+    }
+    return afterInteractions(() => load(!cached));
+  }, [load]));
 
   const openActions = useCallback((listing: Listing) => {
     setSelectedListing(listing);
@@ -100,7 +134,7 @@ export default function MyListingsScreen({ navigation }: any) {
         'Listing removed',
         parts.length ? `${parts.join(' · ')}. Buyers were notified.` : 'Buyers searching for it will no longer see it.',
       );
-      load();
+      load(false);
     } catch (e: any) {
       const { parseApiError } = require('../../utils/errors');
       Alert.alert('Could not remove', parseApiError(e));
@@ -120,7 +154,7 @@ export default function MyListingsScreen({ navigation }: any) {
     setShowActions(false);
     try {
       await Listings.markSold(selectedListing.id, where);
-      load();
+      load(false);
     } catch (e: any) {
       const { parseApiError } = require('../../utils/errors');
       Alert.alert('Could not update', parseApiError(e));
@@ -146,7 +180,8 @@ export default function MyListingsScreen({ navigation }: any) {
     );
   }, [markSold, selectedListing]);
 
-  const renderItem = ({ item }: { item: Listing }) => {
+  const renderItem = ({ item }: { item: Listing | string }) => {
+    if (typeof item === 'string') return <MyListingSkeleton />;
     const st = STATUS_MAP[item.status] || STATUS_MAP.draft;
     const img = item.thumbnail_url || (item.image_urls || item.images)?.[0];
     const showKebab = EDITABLE_STATUSES.has(item.status) || DELETABLE_STATUSES.has(item.status);
@@ -154,7 +189,7 @@ export default function MyListingsScreen({ navigation }: any) {
       <View style={s.card}>
         <TouchableOpacity
           style={s.cardTouch}
-          onPress={() => navigation.navigate('ListingDetail', { listingId: item.id })}
+          onPress={() => navigation.navigate('ListingDetail', { listingId: item.id, initialListing: item })}
           onLongPress={() => showKebab && openActions(item)}
           activeOpacity={0.85}
         >
@@ -193,18 +228,11 @@ export default function MyListingsScreen({ navigation }: any) {
     );
   };
 
-  if (loading) {
-    return (
-      <SafeAreaView style={s.safe}>
-        <ActivityIndicator color={C.petrol} style={s.loading} />
-      </SafeAreaView>
-    );
-  }
-
   const sel = selectedListing;
   const canEdit = !!sel && EDITABLE_STATUSES.has(sel.status);
   const canDelete = !!sel && DELETABLE_STATUSES.has(sel.status);
   const canMarkSold = !!sel && sel.status === 'active';
+  const rows: Array<Listing | string> = loading && listings.length === 0 ? SKELETON_ROWS : listings;
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
@@ -219,13 +247,19 @@ export default function MyListingsScreen({ navigation }: any) {
           size="sm"
         />
       </View>
+      {backgroundUpdating && listings.length > 0 ? (
+        <View style={s.syncPill} pointerEvents="none">
+          <Text style={s.syncText}>Refreshing</Text>
+        </View>
+      ) : null}
       <FlatList
-        data={listings}
-        keyExtractor={i => i.id}
+        data={rows}
+        keyExtractor={i => typeof i === 'string' ? i : i.id}
         renderItem={renderItem}
+        getItemLayout={(_, index) => ({ length: LISTING_ROW_HEIGHT, offset: LISTING_ROW_HEIGHT * index, index })}
         contentContainerStyle={s.list}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={C.petrol} />}
-        ListEmptyComponent={
+        ListEmptyComponent={!loading ? (
           <View style={s.empty}>
             <Text style={s.emptyEmoji}>📦</Text>
             <Text style={s.emptyTitle}>No listings yet</Text>
@@ -236,8 +270,11 @@ export default function MyListingsScreen({ navigation }: any) {
               onPress={goToSell}
             />
           </View>
-        }
-        removeClippedSubviews maxToRenderPerBatch={8} windowSize={5}
+        ) : null}
+        initialNumToRender={8}
+        maxToRenderPerBatch={8}
+        removeClippedSubviews
+        windowSize={5}
       />
 
       {/* Action menu — kebab tap brings up this slide-up sheet */}
@@ -319,9 +356,24 @@ export default function MyListingsScreen({ navigation }: any) {
   );
 }
 
+function MyListingSkeleton() {
+  return (
+    <View style={s.card}>
+      <View style={[s.thumb, s.skelBlock]} />
+      <View style={s.info}>
+        <View style={[s.skelLine, s.skelTitle]} />
+        <View style={[s.skelLine, s.skelPrice]} />
+        <View style={s.metaRow}>
+          <View style={[s.skelLine, s.skelBadge]} />
+          <View style={[s.skelLine, s.skelMeta]} />
+        </View>
+      </View>
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bone },
-  loading: { marginTop: S.xxxl + S.xxxl },
 
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -330,6 +382,24 @@ const s = StyleSheet.create({
     borderBottomWidth: 0.5, borderBottomColor: C.border,
   },
   headerTitle: { fontSize: T.size.lg - 1, fontWeight: T.weight.semi, color: C.text },
+  syncPill: {
+    position: 'absolute',
+    top: 58,
+    alignSelf: 'center',
+    zIndex: 4,
+    paddingHorizontal: S.sm,
+    paddingVertical: S.xs,
+    borderRadius: R.pill,
+    backgroundColor: 'rgba(255,253,248,0.96)',
+    borderWidth: 1,
+    borderColor: 'rgba(79, 127, 134, 0.18)',
+    ...Shadow.subtle,
+  },
+  syncText: {
+    fontSize: T.size.xs,
+    fontWeight: T.weight.semi,
+    color: C.petrolDeep,
+  },
 
   list: { padding: S.lg },
   card: {
@@ -362,6 +432,16 @@ const s = StyleSheet.create({
   views: { fontSize: T.size.xs, color: C.text3 },
   time: { fontSize: T.size.xs, color: C.text4 },
   arrow: { fontSize: T.size.xl, color: C.text4, marginLeft: S.xs },
+  skelBlock: { backgroundColor: '#EFE2D6' },
+  skelLine: {
+    height: 12,
+    borderRadius: R.pill,
+    backgroundColor: '#E9DACD',
+  },
+  skelTitle: { width: '72%', marginBottom: S.sm },
+  skelPrice: { width: 92, height: 16, marginBottom: S.sm },
+  skelBadge: { width: 74 },
+  skelMeta: { width: 92 },
 
   empty: { alignItems: 'center', paddingTop: S.xxxl + S.xxl },
   emptyEmoji: { fontSize: T.size.display + 18, marginBottom: S.lg },

@@ -43,6 +43,7 @@ import {
 import { parseApiError } from '../../../utils/errors';
 import { C, MIN_TAP, R, S, Shadow, T } from '../../../utils/tokens';
 import type { RootScreen } from '../../../navigation/types';
+import { afterInteractions } from '../../../utils/schedule';
 
 const STR = CONCIERGE_STRINGS.booking;
 
@@ -149,9 +150,7 @@ export default function BookingScreen({
   }, [preferredAddressId]);
 
   useFocusEffect(
-    React.useCallback(() => {
-      loadAddresses();
-    }, [loadAddresses]),
+    React.useCallback(() => afterInteractions(loadAddresses), [loadAddresses]),
   );
 
   // ── Tag toggle ──────────────────────────────────────────────────────

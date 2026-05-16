@@ -30,7 +30,7 @@ import {
 } from 'lucide-react-native';
 import { C, T, S, R, Shadow } from '../utils/tokens';
 import type { TabScreen } from '../navigation/types';
-import { Feed, Wishlist, type FeedListing } from '../services/api';
+import { Feed, Listings, Wishlist, type FeedListing } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import { useLocation } from '../hooks/useLocation';
 import HeroCard from '../components/HeroCard';
@@ -39,8 +39,10 @@ import { FeedCard } from '../components/OwmeeListingCard';
 import OwmeeLogo from '../components/OwmeeLogo';
 import { parseApiError } from '../utils/errors';
 import { locationDisplayLabel } from '../utils/addressLocation';
+import { afterInteractions } from '../utils/schedule';
 
 const HOME_SECTION_GAP = S.sm;
+const SEARCH_PREFETCH_SLUGS = ['smartphones', 'laptops', 'kids-utility', 'small-appliances'];
 
 const RECENT_FALLBACK_IMAGES: Record<string, ImageSourcePropType> = {
   smartphones: require('../../assets/owmee/home/cat-mobile-photo-v2.png'),
@@ -178,6 +180,29 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
   }, [loadFeed]);
 
   useEffect(() => {
+    if (feedLoading) return undefined;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const cancelTask = afterInteractions(() => {
+      SEARCH_PREFETCH_SLUGS.forEach((slug, index) => {
+        timers.push(setTimeout(() => {
+          const params: any = { category_slug: slug, limit: 30 };
+          if (location) {
+            params.lat = location.lat;
+            params.lng = location.lng;
+            params.radius_km = 50;
+            params.city = location.city;
+          }
+          Listings.browse(params).catch(() => {});
+        }, 220 * index));
+      });
+    });
+    return () => {
+      cancelTask();
+      timers.forEach(clearTimeout);
+    };
+  }, [feedLoading, location]);
+
+  useEffect(() => {
     if (!isAuthenticated) {
       setSavedIds(new Set());
       return;
@@ -207,7 +232,7 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
   }, [location, loadFeed]);
 
   const handleCardPress = (l: FeedListing) => {
-    navigation.navigate('ListingDetail', { listingId: l.id });
+    navigation.navigate('ListingDetail', { listingId: l.id, initialListing: l });
   };
 
   const handleMakeOffer = (l: FeedListing) => {
@@ -215,7 +240,7 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
       navigation.navigate('AuthFlow');
       return;
     }
-    navigation.navigate('ListingDetail', { listingId: l.id, openOffer: true });
+    navigation.navigate('ListingDetail', { listingId: l.id, openOffer: true, initialListing: l });
   };
 
   const handleWishlistPress = useCallback(async (l: FeedListing) => {
@@ -271,8 +296,8 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
     navigation.navigate('Notifications');
   };
 
-  const handleSearchPress = () => navigation.navigate('Search');
-  const handleFilterPress = () => navigation.navigate('Search', { openFilters: true });
+  const handleSearchPress = () => navigation.navigate('Search', { category_slug: undefined });
+  const handleFilterPress = () => navigation.navigate('Search', { category_slug: undefined, openFilters: true });
 
   const handleCategoryPress = (cat: CategoryDef) => {
     if (!cat.slug) {

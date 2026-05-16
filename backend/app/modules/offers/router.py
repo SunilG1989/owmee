@@ -41,6 +41,8 @@ from app.modules.offers.service import (
     remove_from_wishlist, submit_rating, update_offer_price, withdraw_offer,
 )
 from app.modules.listings.models import Listing
+from app.modules.listings.router import _fmt_card, _seller_verified
+from app.modules.identity_auth.models import User
 
 router = APIRouter()
 logger = structlog.get_logger()
@@ -540,11 +542,24 @@ async def update_notification_preferences(body: NotificationPreferencesRequest,
 @router.get("/wishlist")
 async def get_wishlist(current_user: BasicUser, db: DBSession):
     result = await db.execute(
-        select(Wishlist).where(Wishlist.user_id == current_user.user_id)
+        select(Wishlist, Listing, User)
+        .select_from(Wishlist)
+        .join(Listing, Listing.id == Wishlist.listing_id)
+        .outerjoin(User, User.id == Listing.seller_id)
+        .where(Wishlist.user_id == current_user.user_id)
         .order_by(Wishlist.created_at.desc())
     )
-    return {"wishlist": [{"listing_id": str(w.listing_id), "saved_at": w.created_at.isoformat()}
-                          for w in result.scalars().all()]}
+    wishlist = []
+    for w, listing, seller in result.all():
+        wishlist.append({
+            "listing_id": str(w.listing_id),
+            "saved_at": w.created_at.isoformat(),
+            "listing": _fmt_card(
+                listing,
+                seller_verified=_seller_verified(listing, seller),
+            ),
+        })
+    return {"wishlist": wishlist}
 
 
 @router.post("/wishlist/{listing_id}", status_code=status.HTTP_201_CREATED)

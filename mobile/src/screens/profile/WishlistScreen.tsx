@@ -7,6 +7,7 @@ import { C, T, S, R } from '../../utils/tokens';
 import { Wishlist, Listings, type Listing } from '../../services/api';
 import { ListingCard, calcCardWidth } from '../../components/listing/ListingCard';
 import { useAuthStore } from '../../store/authStore';
+import { afterInteractions } from '../../utils/schedule';
 
 export default function WishlistScreen({ navigation }: any) {
   const { width: sw } = useWindowDimensions();
@@ -20,18 +21,31 @@ export default function WishlistScreen({ navigation }: any) {
     try {
       const res = await Wishlist.list();
       const wishlist = res.data?.wishlist || [];
-      // Fetch listing details for each wishlisted item
-      const listings = await Promise.all(
-        wishlist.slice(0, 20).map(async (w: any) => {
+      const cardListings = wishlist
+        .slice(0, 20)
+        .map((w: any) => w?.listing)
+        .filter(Boolean) as Listing[];
+
+      if (cardListings.length === wishlist.length || cardListings.length >= 20) {
+        setItems(cardListings);
+        return;
+      }
+
+      // Backward compatibility for older API responses that only return ids.
+      const missing = wishlist
+        .slice(0, 20)
+        .filter((w: any) => !w?.listing);
+      const fetched = await Promise.all(
+        missing.map(async (w: any) => {
           try { const r = await Listings.get(w.listing_id); return r.data; }
           catch { return null; }
-        })
+        }),
       );
-      setItems(listings.filter(Boolean) as Listing[]);
+      setItems([...cardListings, ...(fetched.filter(Boolean) as Listing[])]);
     } catch {} finally { setLoading(false); setRefreshing(false); }
   }, []);
 
-  useFocusEffect(useCallback(() => { load(); }, []));
+  useFocusEffect(useCallback(() => afterInteractions(load), [load]));
 
   const openBuySafely = (listing: Listing) => {
     if (!isAuthenticated) {
@@ -46,7 +60,7 @@ export default function WishlistScreen({ navigation }: any) {
       navigation.navigate('AuthFlow');
       return;
     }
-    navigation.navigate('ListingDetail', { listingId: listing.id, openOffer: true });
+    navigation.navigate('ListingDetail', { listingId: listing.id, openOffer: true, initialListing: listing });
   };
 
   if (loading) {
@@ -73,7 +87,7 @@ export default function WishlistScreen({ navigation }: any) {
         renderItem={({ item }) => (
           <ListingCard
             listing={item}
-            onPress={l => navigation.navigate('ListingDetail', { listingId: l.id })}
+            onPress={l => navigation.navigate('ListingDetail', { listingId: l.id, initialListing: l })}
             onBuySafely={openBuySafely}
             onMakeOffer={openMakeOffer}
             cardWidth={cardWidth}

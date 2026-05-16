@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import {
-  View, Text, TextInput, StyleSheet, FlatList, Modal, ScrollView, Keyboard,
+  ActivityIndicator, View, Text, TextInput, StyleSheet, FlatList, Modal, ScrollView, Keyboard,
   useWindowDimensions, TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,13 +8,14 @@ import Svg, { Circle, Defs, LinearGradient, RadialGradient, Rect, Stop } from 'r
 import {
   ArrowLeft, MapPin, SlidersHorizontal, Sparkles, X,
 } from 'lucide-react-native';
-import { C, T, S, R } from '../utils/tokens';
+import { C, T, S, R, Shadow } from '../utils/tokens';
 import { Button, Chip, IconButton } from '../components/ui';
 import type { TabScreen } from '../navigation/types';
 import { Listings, type BrowseParams, type Listing } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import { useLocation } from '../hooks/useLocation';
-import { ListingCard, SkeletonCard, calcCardWidth } from '../components/listing/ListingCard';
+import { ListingCard, SkeletonCard, calcCardWidth, getCardLayout } from '../components/listing/ListingCard';
+import { afterInteractions } from '../utils/schedule';
 
 const CONDS = [
   { key: 'like_new', label: 'Like new' },
@@ -44,8 +45,8 @@ export default function SearchScreen({ navigation, route }: TabScreen<'Search'>)
   const initCat = route?.params?.category_slug || null;
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Listing[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [searched, setSearched] = useState(false);
+  const [loading, setLoading] = useState(!!initCat);
+  const [searched, setSearched] = useState(!!initCat);
   const [category, setCategory] = useState<string | null>(initCat);
   const [condition, setCondition] = useState('');
   const [sort, setSort] = useState('ranking');
@@ -53,14 +54,9 @@ export default function SearchScreen({ navigation, route }: TabScreen<'Search'>)
   const [maxPrice, setMaxPrice] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const debounce = useRef<NodeJS.Timeout | null>(null);
-
-  // Re-run the category-prefilled search when filters change too. Without
-  // condition/sort in deps, changing those filters did nothing until the
-  // user typed in the search box.
-  useEffect(() => {
-    if (initCat) doSearch('', condition, initCat, sort);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initCat, condition, sort]);
+  const activeRequest = useRef(0);
+  const lastRouteCategory = useRef<string | null | undefined>(undefined);
+  const skeletonItems = useMemo(() => Array.from({ length: 6 }, (_, i) => `skel-${i}`), []);
 
   useEffect(() => {
     return () => { if (debounce.current) clearTimeout(debounce.current); };
@@ -75,7 +71,9 @@ export default function SearchScreen({ navigation, route }: TabScreen<'Search'>)
     return () => cancelAnimationFrame(frame);
   }, [navigation, route?.params?.openFilters]);
 
-  const doSearch = async (q: string, cond: string, cat: string | null, sortBy: string) => {
+  const doSearch = useCallback(async (q: string, cond: string, cat: string | null, sortBy: string) => {
+    const requestId = activeRequest.current + 1;
+    activeRequest.current = requestId;
     setLoading(true); setSearched(true);
     try {
       const p: BrowseParams = {
@@ -90,10 +88,35 @@ export default function SearchScreen({ navigation, route }: TabScreen<'Search'>)
         p.lat = location.lat; p.lng = location.lng; p.radius_km = 50; p.city = location.city;
       }
       const res = q.trim().length >= 2 ? await Listings.search(q.trim(), p) : await Listings.browse(p);
+      if (requestId !== activeRequest.current) return;
       setResults(res.data.listings || []);
-    } catch { setResults([]); }
-    finally { setLoading(false); if (cat) Keyboard.dismiss(); }
-  };
+    } catch {
+      if (requestId === activeRequest.current) setResults([]);
+    } finally {
+      if (requestId === activeRequest.current) {
+        setLoading(false);
+        if (cat) Keyboard.dismiss();
+      }
+    }
+  }, [location, maxPrice, minPrice]);
+
+  useEffect(() => {
+    const routeCategory = route?.params?.category_slug || null;
+    if (lastRouteCategory.current === routeCategory) return undefined;
+    lastRouteCategory.current = routeCategory;
+    if (!routeCategory) {
+      setCategory(null);
+      setLoading(false);
+      setSearched(false);
+      setResults([]);
+      return undefined;
+    }
+
+    setCategory(routeCategory);
+    setLoading(true);
+    setSearched(true);
+    return afterInteractions(() => doSearch('', condition, routeCategory, sort));
+  }, [condition, doSearch, route?.params?.category_slug, sort]);
 
   const onText = (t: string) => {
     setQuery(t);
@@ -121,7 +144,7 @@ export default function SearchScreen({ navigation, route }: TabScreen<'Search'>)
       navigation.navigate('AuthFlow');
       return;
     }
-    navigation.navigate('ListingDetail', { listingId: listing.id, openOffer: true });
+    navigation.navigate('ListingDetail', { listingId: listing.id, openOffer: true, initialListing: listing });
   };
 
   return (
@@ -163,7 +186,7 @@ export default function SearchScreen({ navigation, route }: TabScreen<'Search'>)
             placeholderTextColor={C.text4}
             value={query}
             onChangeText={onText}
-            autoFocus={!initCat}
+            autoFocus={false}
             returnKeyType="search"
             onSubmitEditing={() => doSearch(query, condition, category, sort)}
           />
@@ -209,7 +232,7 @@ export default function SearchScreen({ navigation, route }: TabScreen<'Search'>)
               onPress={() => {
                 const n = category === c.slug ? null : c.slug;
                 setCategory(n);
-                doSearch(query, condition, n, sort);
+                requestAnimationFrame(() => doSearch(query, condition, n, sort));
               }}
             />
           ))}
@@ -221,7 +244,7 @@ export default function SearchScreen({ navigation, route }: TabScreen<'Search'>)
               onPress={() => {
                 const n = condition === c.key ? '' : c.key;
                 setCondition(n);
-                doSearch(query, n, category, sort);
+                requestAnimationFrame(() => doSearch(query, n, category, sort));
               }}
             />
           ))}
@@ -243,50 +266,57 @@ export default function SearchScreen({ navigation, route }: TabScreen<'Search'>)
         </TouchableOpacity>
       </View>
 
-      {loading && (
-        <View style={s.skelRow}>
-          <SkeletonCard cardWidth={cardWidth} />
-          <SkeletonCard cardWidth={cardWidth} />
-        </View>
-      )}
-      {!loading && !searched && results.length === 0 && (
-        <SearchStarter />
-      )}
-      {!loading && searched && results.length === 0 && (
-        <View style={s.empty}>
-          <View style={s.emptyIcon}>
-            <Sparkles size={21} strokeWidth={2.1} color={C.petrol} />
+      <View style={s.resultsFrame}>
+        {loading && results.length > 0 && (
+          <View style={s.updatingPill} pointerEvents="none">
+            <ActivityIndicator size="small" color={C.petrolDeep} />
+            <Text style={s.updatingText}>Updating</Text>
           </View>
-          <Text style={s.emptyTitle}>
-            {query ? `Nothing found for "${query}"` : 'No items found'}
-          </Text>
-          <Text style={s.emptySub}>Try another category or clear filters.</Text>
-        </View>
-      )}
-      {!loading && results.length > 0 && (
-        <FlatList
-          data={results}
-          keyExtractor={i => i.id}
-          numColumns={2}
-          columnWrapperStyle={s.gridRow}
-          contentContainerStyle={s.gridPadding}
-          renderItem={({ item }) => (
-            <ListingCard
-              listing={item}
-              onPress={l => navigation.navigate('ListingDetail', { listingId: l.id })}
-              onBuySafely={openBuySafely}
-              onMakeOffer={openMakeOffer}
-              showDistance={!!location}
-              cardWidth={cardWidth}
-            />
-          )}
-          showsVerticalScrollIndicator={false}
-          removeClippedSubviews
-          maxToRenderPerBatch={6}
-          windowSize={5}
-          initialNumToRender={4}
-        />
-      )}
+        )}
+        {!loading && !searched && results.length === 0 && (
+          <SearchStarter />
+        )}
+        {!loading && searched && results.length === 0 && (
+          <View style={s.empty}>
+            <View style={s.emptyIcon}>
+              <Sparkles size={21} strokeWidth={2.1} color={C.petrol} />
+            </View>
+            <Text style={s.emptyTitle}>
+              {query ? `Nothing found for "${query}"` : 'No items found'}
+            </Text>
+            <Text style={s.emptySub}>Try another category or clear filters.</Text>
+          </View>
+        )}
+        {(loading && results.length === 0) || results.length > 0 ? (
+          <FlatList
+            data={loading && results.length === 0 ? skeletonItems : results}
+            keyExtractor={(item: Listing | string) => typeof item === 'string' ? item : item.id}
+            numColumns={2}
+            columnWrapperStyle={s.gridRow}
+            contentContainerStyle={s.gridPadding}
+            getItemLayout={getCardLayout(sw)}
+            renderItem={({ item }) => (
+              typeof item === 'string' ? (
+                <SkeletonCard cardWidth={cardWidth} />
+              ) : (
+                <ListingCard
+                  listing={item}
+                  onPress={l => navigation.navigate('ListingDetail', { listingId: l.id, initialListing: l })}
+                  onBuySafely={openBuySafely}
+                  onMakeOffer={openMakeOffer}
+                  showDistance={!!location}
+                  cardWidth={cardWidth}
+                />
+              )
+            )}
+            showsVerticalScrollIndicator={false}
+            removeClippedSubviews
+            maxToRenderPerBatch={6}
+            windowSize={5}
+            initialNumToRender={6}
+          />
+        ) : null}
+      </View>
 
       <Modal visible={showFilters} animationType="slide" transparent>
         <View style={s.modalOv}>
@@ -439,9 +469,33 @@ const s = StyleSheet.create({
   statusText: { fontSize: T.size.sm, color: C.text3 },
   sortLabel: { fontSize: T.size.sm, color: C.petrolDeep, fontWeight: T.weight.semi },
 
+  resultsFrame: {
+    flex: 1,
+    minHeight: 420,
+  },
   gridRow: { flexDirection: 'row', gap: S.sm, paddingHorizontal: S.xl },
   gridPadding: { paddingBottom: S.xxxl * 3 },
-  skelRow: { flexDirection: 'row', gap: S.sm, paddingHorizontal: S.xl },
+  updatingPill: {
+    position: 'absolute',
+    top: S.xs,
+    alignSelf: 'center',
+    zIndex: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: S.xs,
+    paddingHorizontal: S.sm,
+    paddingVertical: S.xs,
+    borderRadius: R.pill,
+    backgroundColor: 'rgba(255,253,248,0.96)',
+    borderWidth: 1,
+    borderColor: 'rgba(79, 127, 134, 0.18)',
+    ...Shadow.subtle,
+  },
+  updatingText: {
+    fontSize: T.size.xs,
+    fontWeight: T.weight.semi,
+    color: C.petrolDeep,
+  },
 
   empty: {
     margin: S.xl,

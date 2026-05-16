@@ -28,6 +28,7 @@ import { Transactions, Disputes, Returns, Evidence, type TrackingResponse, type 
 import { useAuthStore } from '../store/authStore';
 import { BackButton, Button } from '../components/ui';
 import { parseApiError } from '../utils/errors';
+import { afterInteractions } from '../utils/schedule';
 
 const DISPUTE_REASONS: { key: string; label: string }[] = [
   { key: 'item_not_received', label: 'I never received the item' },
@@ -89,7 +90,7 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
     }
   }, [transactionId]);
 
-  useFocusEffect(useCallback(() => { reload(); }, [reload]));
+  useFocusEffect(useCallback(() => afterInteractions(reload), [reload]));
 
   if (loading) {
     return <SafeAreaView style={s.safe}><ActivityIndicator color={C.petrol} style={{ marginTop: 60 }} /></SafeAreaView>;

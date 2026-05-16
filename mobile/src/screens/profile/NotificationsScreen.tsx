@@ -6,6 +6,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { C, T, S, R, timeAgo } from '../../utils/tokens';
 import { Notifications } from '../../services/api';
 import { parseApiError } from '../../utils/errors';
+import { afterInteractions } from '../../utils/schedule';
 
 interface NotifItem {
   id: string; type: string; title: string; body: string;
@@ -35,7 +36,7 @@ export default function NotificationsScreen({ navigation }: any) {
     } finally { setLoading(false); setRefreshing(false); }
   }, []);
 
-  useFocusEffect(useCallback(() => { load(); }, []));
+  useFocusEffect(useCallback(() => afterInteractions(load), [load]));
 
   const handleTap = async (item: NotifItem) => {
     // Mark as read

@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from time import monotonic
 from typing import Optional
 """
 Listings router — Epic 3 + Epic 5 + UI v3 fixes + Sprint 4 Pass 3
@@ -35,6 +36,9 @@ from app.core.storage import (
 )
 from fastapi import Depends
 
+_IMG_URL_CACHE: dict[str, tuple[float, str | None]] = {}
+_IMG_URL_CACHE_TTL_SECONDS = 60 * 60 * 5
+
 
 def _img_url(key: str | None) -> str | None:
     """6h presigned download URL. Used by card/detail/my-listings format.
@@ -55,9 +59,16 @@ def _img_url(key: str | None) -> str | None:
         return key
     if key.startswith("r2://"):
         return None
+    now = monotonic()
+    cached = _IMG_URL_CACHE.get(key)
+    if cached and cached[0] > now:
+        return cached[1]
     try:
-        return generate_presigned_download_url(key, expires_in=60 * 60 * 6)
+        url = generate_presigned_download_url(key, expires_in=60 * 60 * 6)
+        _IMG_URL_CACHE[key] = (now + _IMG_URL_CACHE_TTL_SECONDS, url)
+        return url
     except Exception:
+        _IMG_URL_CACHE[key] = (now + 60, None)
         return None
 
 
@@ -78,6 +89,13 @@ from app.modules.identity_auth.models import User
 
 router = APIRouter()
 logger = structlog.get_logger()
+
+
+def _card_image_urls(listing: Listing) -> list[str]:
+    """Cards render one image; avoid presigning every gallery image on list APIs."""
+    first_key = listing.thumbnail_url or next(iter(listing.image_urls or []), None)
+    first_url = _img_url(first_key)
+    return [first_url] if first_url else []
 
 
 # ── Schemas ────────────────────────────────────────────────────────────────────
@@ -165,7 +183,7 @@ def _fmt_card(listing: Listing, seller_verified: bool = False) -> dict:
         "city": listing.city,
         "locality": listing.locality,
         "category_id": str(listing.category_id),
-        "image_urls": [u for u in (_img_url(k) for k in (listing.image_urls or [])) if u],
+        "image_urls": _card_image_urls(listing),
         "thumbnail_url": _img_url(listing.thumbnail_url),
         "view_count": listing.view_count,
         "seller_verified": seller_verified,
@@ -200,6 +218,7 @@ def _fmt_detail(listing: Listing, seller: User | None, avg_rating: float | None,
     base = _fmt_card(listing, seller_verified=verified)
     base.update({
         "description": listing.description,
+        "image_urls": [u for u in (_img_url(k) for k in (listing.image_urls or [])) if u],
         "state": listing.state,
         "moderation_status": listing.moderation_status,
         # UI v3 metadata
@@ -239,7 +258,7 @@ def _fmt_my(listing: Listing) -> dict:
         "moderation_status": listing.moderation_status,
         "city": listing.city,
         "category_id": str(listing.category_id),
-        "image_urls": [u for u in (_img_url(k) for k in (listing.image_urls or [])) if u],
+        "image_urls": _card_image_urls(listing),
         "thumbnail_url": _img_url(listing.thumbnail_url),
         "view_count": listing.view_count,
         "is_kids_item": listing.is_kids_item,
@@ -274,19 +293,18 @@ def _fmt_my(listing: Listing) -> dict:
 
 async def _seller_stats(db: DBSession, seller_id: UUID) -> tuple[float | None, int]:
     ratings_result = await db.execute(
-        select(Rating).where(Rating.ratee_id == seller_id)
+        select(func.avg(Rating.stars)).where(Rating.ratee_id == seller_id)
     )
-    ratings = ratings_result.scalars().all()
-    avg = sum(r.stars for r in ratings) / len(ratings) if ratings else None
+    avg = ratings_result.scalar()
 
     deals_result = await db.execute(
-        select(Transaction).where(
+        select(func.count(Transaction.id)).where(
             Transaction.seller_id == seller_id,
             Transaction.status.in_(["completed", "auto_completed"]),
         )
     )
-    deal_count = len(deals_result.scalars().all())
-    return avg, deal_count
+    deal_count = deals_result.scalar() or 0
+    return float(avg) if avg is not None else None, int(deal_count)
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────

@@ -30,6 +30,7 @@ import ReasonSheet, { type ReasonOption } from '../../../components/listing/Reas
 import { parseApiError } from '../../../utils/errors';
 import { C, R, S, T, Shadow } from '../../../utils/tokens';
 import type { RootScreen } from '../../../navigation/types';
+import { afterInteractions } from '../../../utils/schedule';
 
 // Mirrors backend _VALID_CANCEL_REASONS. Order = chip order users see.
 const CANCEL_REASONS: ReasonOption<FEVisitCancelReason>[] = [
@@ -68,9 +69,7 @@ export default function VisitDetailScreen({
   }, [visit_id]);
 
   useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load]),
+    useCallback(() => afterInteractions(load), [load]),
   );
 
   const submitCancel = useCallback(

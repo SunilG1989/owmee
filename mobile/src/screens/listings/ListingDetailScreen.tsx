@@ -13,6 +13,7 @@ import { Listings, Offers, Reports, Wishlist, type Listing } from '../../service
 import { useAuthStore } from '../../store/authStore';
 import { BackButton, Button, IconButton } from '../../components/ui';
 import { parseApiError } from '../../utils/errors';
+import { afterInteractions } from '../../utils/schedule';
 import type { RootScreen } from '../../navigation/types';
 
 // Sprint 4 / Pass 3: kids safety checklist labels — must match FeCaptureScreen.
@@ -30,10 +31,11 @@ const KIDS_SAFETY_PANEL_KEYS: { key: string; label: string }[] = [
 export default function ListingDetailScreen({ navigation, route }: RootScreen<'ListingDetail'>) {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const { listingId, openOffer } = route.params;
+  const { listingId, openOffer, initialListing } = route.params;
   const { isAuthenticated, userId } = useAuthStore();
-  const [listing, setListing] = useState<Listing | null>(null);
-  const [loading, setLoading] = useState(true);
+  const visibleListingRef = useRef(!!initialListing);
+  const [listing, setListing] = useState<Listing | null>((initialListing as Listing | undefined) ?? null);
+  const [loading, setLoading] = useState(!initialListing);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [wishlisted, setWishlisted] = useState(false);
   const [showOffer, setShowOffer] = useState(false);
@@ -44,32 +46,51 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
   const imgH = width * 0.85;
 
   useFocusEffect(useCallback(() => {
-    (async () => {
-      try {
-        setLoadError(null);
-        const r = await Listings.get(listingId); setListing(r.data);
-        // Save to recently viewed
-        try {
-          const rv = JSON.parse(await AsyncStorage.getItem('@ow_recent_viewed') || '[]');
-          await AsyncStorage.setItem(
+    let cancelled = false;
+    if (!visibleListingRef.current) setLoading(true);
+    setLoadError(null);
+
+    const cancelTask = afterInteractions(() => {
+      Listings.get(listingId)
+        .then((r) => {
+          if (cancelled) return;
+          visibleListingRef.current = true;
+          setListing(r.data);
+        })
+        .catch((e) => {
+          if (cancelled) return;
+          setLoadError(parseApiError(e, 'This listing could not be loaded.'));
+          if (!visibleListingRef.current) setListing(null);
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+
+      // Non-critical side effects should not keep the product page spinner up.
+      AsyncStorage.getItem('@ow_recent_viewed')
+        .then((s) => {
+          const rv = JSON.parse(s || '[]');
+          return AsyncStorage.setItem(
             '@ow_recent_viewed',
             JSON.stringify([listingId, ...rv.filter((x: string) => x !== listingId)].slice(0, 20)),
           );
-        } catch {}
-        if (isAuthenticated) {
-          try {
-            const w = await Wishlist.list();
+        })
+        .catch(() => {});
+
+      if (isAuthenticated) {
+        Wishlist.list()
+          .then((w) => {
+            if (cancelled) return;
             const items = w.data?.wishlist || [];
             setWishlisted(items.some((i: any) => i.listing_id === listingId));
-          } catch (e) {
-            console.warn('[ListingDetail.wishlistLoad]', e);
-          }
-        }
-      } catch (e) {
-        setLoadError(parseApiError(e, 'This listing could not be loaded.'));
-        setListing(null);
-      } finally { setLoading(false); }
-    })();
+          })
+          .catch((e) => {
+            if (!cancelled) console.warn('[ListingDetail.wishlistLoad]', e);
+          });
+      }
+    });
+
+    return () => { cancelled = true; cancelTask(); };
   }, [listingId, isAuthenticated]));
 
   useEffect(() => {
@@ -549,7 +570,6 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
                 keyboardType="numeric"
                 value={offerAmt}
                 onChangeText={setOfferAmt}
-                autoFocus
               />
             </View>
             <TextInput

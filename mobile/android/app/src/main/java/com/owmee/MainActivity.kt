@@ -1,6 +1,7 @@
 package com.owmee
 
 import android.os.Bundle
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
@@ -16,6 +17,10 @@ class MainActivity : ReactActivity() {
   // Keep LaunchTheme through the native-to-React handoff so Android never
   // shows a blank frame between the native icon and the JS brand splash.
   override fun onCreate(savedInstanceState: Bundle?) {
+    SplashControlModule.reset()
+    installSplashScreen().setKeepOnScreenCondition {
+      SplashControlModule.shouldKeepOnScreen()
+    }
     super.onCreate(null)
   }
 }
