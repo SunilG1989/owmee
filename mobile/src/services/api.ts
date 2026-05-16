@@ -110,7 +110,7 @@ export interface Listing {
   images: string[]; image_urls?: string[]; thumbnail_url?: string;
   seller_id: string; seller_verified?: boolean;
   is_negotiable?: boolean; is_kids_item?: boolean;
-  accessories?: string; warranty_status?: string; battery_health?: string;
+  accessories?: string; warranty_info?: string; warranty_status?: string; battery_health?: string | number;
   imei?: string; view_count?: number; status: string;
   brand?: string; model?: string; storage?: string; ram?: string; color?: string;
   processor?: string; screen_size?: string; purchase_year?: number;
@@ -337,8 +337,14 @@ export const Listings = {
     brand: string;
     model: string;
     storage: string;
+    ram: string;
+    processor: string;
+    screen_size: string;
     color: string;
+    purchase_year: number;
+    battery_health: number;
     accessories: string;
+    warranty_status: string;
   }>) => api.patch(`/v1/listings/${id}/ai`, fields),
   markSold: (id: string, soldWhere: string = 'on_owmee') => api.post(`/v1/listings/${id}/mark-sold`, { sold_where: soldWhere }),
   requestImageUpload: (listingId: string, contentType: string = 'image/jpeg', sortOrder: number = 0) =>
@@ -830,8 +836,18 @@ export interface AIDetectedFields {
   brand: string | null;
   model: string | null;
   storage: string | null;
+  ram: string | null;
+  processor: string | null;
+  screen_size: string | null;
   color: string | null;
+  purchase_year: number | null;
   condition_guess: string | null;
+  screen_condition?: string | null;
+  body_condition?: string | null;
+  defects?: string[];
+  battery_health?: number | null;
+  accessories?: string | null;
+  warranty_status?: string | null;
   title_suggestion: string | null;
   description_suggestion: string | null;
   flags: string[];
@@ -875,7 +891,14 @@ export interface AICreateFromDraftRequest {
   brand?: string | null;
   model?: string | null;
   storage?: string | null;
+  ram?: string | null;
+  processor?: string | null;
+  screen_size?: string | null;
   color?: string | null;
+  purchase_year?: number | null;
+  battery_health?: number | null;
+  accessories?: string | null;
+  warranty_status?: string | null;
   description?: string | null;
   imei_1?: string | null;
   imei_2?: string | null;
@@ -977,8 +1000,14 @@ export const AIListing = {
     brand?: string;
     model?: string;
     storage?: string;
+    ram?: string;
+    processor?: string;
+    screen_size?: string;
     color?: string;
+    purchase_year?: number;
+    battery_health?: number;
     accessories?: string;
+    warranty_status?: string;
   }) => api.patch(`/v1/listings/${listingId}/ai`, fields),
 
   /** Re-run Claude haiku to regenerate the description from current fields. */

@@ -146,7 +146,14 @@ class CreateFromDraftRequest(BaseModel):
     brand: str | None = None
     model: str | None = None
     storage: str | None = None
+    ram: str | None = None
+    processor: str | None = None
+    screen_size: str | None = None
     color: str | None = None
+    purchase_year: int | None = Field(None, ge=2000, le=2030)
+    battery_health: int | None = Field(None, ge=0, le=100)
+    accessories: str | None = None
+    warranty_status: str | None = None
     description: str | None = None
     imei_1: str | None = None
     imei_2: str | None = None
@@ -191,8 +198,14 @@ class EditListingRequest(BaseModel):
     brand: str | None = None
     model: str | None = None
     storage: str | None = None
+    ram: str | None = None
+    processor: str | None = None
+    screen_size: str | None = None
     color: str | None = None
+    purchase_year: int | None = Field(None, ge=2000, le=2030)
+    battery_health: int | None = Field(None, ge=0, le=100)
     accessories: str | None = None
+    warranty_status: str | None = None
 
 
 class EditListingResponse(BaseModel):

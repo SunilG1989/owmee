@@ -24,18 +24,18 @@ import { Button, IconButton } from '../../components/ui';
 import { Listings } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { useLocation } from '../../hooks/useLocation';
+import {
+  COLOR_OPTIONS,
+  PROCESSOR_OPTIONS,
+  RAM_OPTIONS,
+  SCREEN_SIZE_OPTIONS,
+  STORAGE_OPTIONS,
+  getBrandsForCategory,
+  getCategoryKind,
+  getModelSuggestions,
+} from '../../utils/listingCatalog';
 
 // ── Reference data ───────────────────────────────────────────────
-const PHONE_BRANDS = ['Apple', 'Samsung', 'OnePlus', 'Xiaomi', 'Vivo', 'Oppo', 'Realme', 'Google', 'Nothing', 'Motorola', 'Other'];
-const LAPTOP_BRANDS = ['Apple', 'Dell', 'HP', 'Lenovo', 'Asus', 'Acer', 'MSI', 'Samsung', 'Microsoft', 'Other'];
-const APPLIANCE_BRANDS = ['Samsung', 'LG', 'Whirlpool', 'Bosch', 'Philips', 'Bajaj', 'Havells', 'Prestige', 'Dyson', 'Other'];
-
-const STORAGE_OPTIONS = ['32GB', '64GB', '128GB', '256GB', '512GB', '1TB'];
-const RAM_OPTIONS = ['2GB', '3GB', '4GB', '6GB', '8GB', '12GB', '16GB', '32GB'];
-const COLORS = ['Black', 'White', 'Silver', 'Gold', 'Blue', 'Green', 'Red', 'Purple', 'Other'];
-const SCREEN_SIZES = ['11"', '13"', '14"', '15.6"', '16"', '17"'];
-const PROCESSORS = ['Apple M1', 'Apple M2', 'Apple M3', 'Intel i3', 'Intel i5', 'Intel i7', 'Intel i9', 'AMD Ryzen 5', 'AMD Ryzen 7', 'Other'];
-
 const DEFECT_OPTIONS = [
   { key: 'dead_pixels', label: 'Dead pixels on screen' },
   { key: 'touch_issue', label: 'Touch unresponsive in spots' },
@@ -75,15 +75,6 @@ const HYGIENE_OPTIONS = ['Cleaned and sanitised', 'Gently used', 'Needs cleaning
 
 type Category = { id: string; slug: string; name: string; imei_required?: boolean };
 
-// ── Helper: get category type ────────────────────────────────────
-function getCatType(slug: string): 'phone' | 'laptop' | 'appliance' | 'kids' | 'generic' {
-  if (slug === 'smartphones') return 'phone';
-  if (slug === 'laptops' || slug === 'tablets') return 'laptop';
-  if (slug === 'small-appliances') return 'appliance';
-  if (slug === 'kids-utility') return 'kids';
-  return 'generic';
-}
-
 // ── Component ────────────────────────────────────────────────────
 export default function CreateListingScreen({ navigation }: any) {
   const { isAuthenticated, kycStatus } = useAuthStore();
@@ -102,6 +93,7 @@ export default function CreateListingScreen({ navigation }: any) {
 
   // Common fields
   const [title, setTitle] = useState('');
+  const [autoTitle, setAutoTitle] = useState('');
   const [desc, setDesc] = useState('');
   const [condition, setCondition] = useState('');
   const [price, setPrice] = useState('');
@@ -153,6 +145,19 @@ export default function CreateListingScreen({ navigation }: any) {
     }).catch(() => {});
   }, []);
 
+  const valid = photos.filter(Boolean) as string[];
+  const catType = getCategoryKind(cat?.slug);
+  const categorySlug = cat?.slug;
+
+  // Auto-generate title from brand + model until the seller edits it.
+  useEffect(() => {
+    const next = [brand, model].filter(Boolean).join(' ').trim();
+    if (next && (!title || title === autoTitle)) {
+      setTitle(next);
+      setAutoTitle(next);
+    }
+  }, [brand, model, title, autoTitle]);
+
   // Auth gate
   if (!isAuthenticated) return (
     <SafeAreaView style={st.safe}>
@@ -167,9 +172,6 @@ export default function CreateListingScreen({ navigation }: any) {
       </View>
     </SafeAreaView>
   );
-
-  const valid = photos.filter(Boolean) as string[];
-  const catType = cat ? getCatType(cat.slug) : 'generic';
 
   // ── Runtime permission helpers (Android 6+) ─────────────────────
   // Structural fix: react-native-image-picker docs say "camera permission
@@ -306,13 +308,6 @@ export default function CreateListingScreen({ navigation }: any) {
     setDefects(prev => prev.includes(key) ? prev.filter(d => d !== key) : [...prev, key]);
   };
 
-  // Auto-generate title from brand + model
-  useEffect(() => {
-    if (brand && model && !title) {
-      setTitle(`${brand} ${model}`);
-    }
-  }, [brand, model]);
-
   // Smartphone IMEI is required and must be exactly 15 digits — matching the
   // AI flow's validation in AIListingIdentifierScreen. Without this, manual
   // listings let stolen / spoofed IMEIs through.
@@ -331,7 +326,7 @@ export default function CreateListingScreen({ navigation }: any) {
       );
       return;
     }
-    if ((catType === 'phone' || catType === 'laptop')) {
+    if ((catType === 'phone' || catType === 'laptop' || catType === 'tablet')) {
       if (waterDamageHistory === null) {
         Alert.alert('One more thing', 'Please answer the water-damage question — buyers and the refund team rely on this.');
         return;
@@ -454,7 +449,13 @@ export default function CreateListingScreen({ navigation }: any) {
   const canProceed = () => {
     if (step === 0) return valid.length >= 3;
     if (step === 1) return !!cat;
-    if (step === 2) return title.length >= 3;
+    if (step === 2) {
+      if (title.trim().length < 3) return false;
+      if (catType === 'phone' || catType === 'laptop' || catType === 'tablet' || catType === 'appliance') {
+        return brand.trim().length > 0 && model.trim().length > 0;
+      }
+      return true;
+    }
     if (step === 3) return !!condition;
     if (step === 4) return !!price && parseFloat(price) > 0;
     return true;
@@ -534,14 +535,28 @@ export default function CreateListingScreen({ navigation }: any) {
             {/* ── Smartphones ── */}
             {catType === 'phone' && (
               <>
-                <Text style={st.lbl}>Brand *</Text>
-                <Chips options={PHONE_BRANDS} selected={brand} onSelect={setBrand} />
-                <Text style={st.lbl}>Model *</Text>
-                <TextInput style={st.inp} placeholder="e.g. iPhone 15 Pro, Galaxy S24" placeholderTextColor={C.text4} value={model} onChangeText={setModel} />
+                <SuggestedInput
+                  label="Brand"
+                  required
+                  value={brand}
+                  onChangeText={setBrand}
+                  placeholder="Apple, Samsung, OnePlus..."
+                  suggestions={getBrandsForCategory(categorySlug)}
+                />
+                <SuggestedInput
+                  label="Model"
+                  required
+                  value={model}
+                  onChangeText={setModel}
+                  placeholder="iPhone 15 Pro, Galaxy S24..."
+                  suggestions={getModelSuggestions(categorySlug, brand)}
+                />
                 <Text style={st.lbl}>Storage</Text>
                 <Chips options={STORAGE_OPTIONS} selected={storage} onSelect={setStorage} />
+                <Text style={st.lbl}>RAM</Text>
+                <Chips options={RAM_OPTIONS} selected={ram} onSelect={setRam} />
                 <Text style={st.lbl}>Color</Text>
-                <Chips options={COLORS} selected={color} onSelect={setColor} />
+                <Chips options={COLOR_OPTIONS} selected={color} onSelect={setColor} />
                 <Text style={st.lbl}>IMEI *  (dial *#06#)</Text>
                 <TextInput
                   style={st.inp}
@@ -578,20 +593,32 @@ export default function CreateListingScreen({ navigation }: any) {
             )}
 
             {/* ── Laptops/Tablets ── */}
-            {catType === 'laptop' && (
+            {(catType === 'laptop' || catType === 'tablet') && (
               <>
-                <Text style={st.lbl}>Brand *</Text>
-                <Chips options={LAPTOP_BRANDS} selected={brand} onSelect={setBrand} />
-                <Text style={st.lbl}>Model *</Text>
-                <TextInput style={st.inp} placeholder="e.g. MacBook Air M2, ThinkPad X1" placeholderTextColor={C.text4} value={model} onChangeText={setModel} />
-                <Text style={st.lbl}>Processor</Text>
-                <Chips options={PROCESSORS} selected={processor} onSelect={setProcessor} />
+                <SuggestedInput
+                  label="Brand"
+                  required
+                  value={brand}
+                  onChangeText={setBrand}
+                  placeholder={catType === 'tablet' ? 'Apple, Samsung, Lenovo...' : 'HP, Dell, Lenovo, Apple...'}
+                  suggestions={getBrandsForCategory(categorySlug)}
+                />
+                <SuggestedInput
+                  label="Model"
+                  required
+                  value={model}
+                  onChangeText={setModel}
+                  placeholder={catType === 'tablet' ? 'iPad Air M2, Galaxy Tab S9...' : 'MacBook Air M2, ThinkPad X1...'}
+                  suggestions={getModelSuggestions(categorySlug, brand)}
+                />
                 <Text style={st.lbl}>RAM</Text>
                 <Chips options={RAM_OPTIONS} selected={ram} onSelect={setRam} />
                 <Text style={st.lbl}>Storage</Text>
                 <Chips options={STORAGE_OPTIONS} selected={storage} onSelect={setStorage} />
+                <Text style={st.lbl}>Processor / chip</Text>
+                <Chips options={PROCESSOR_OPTIONS} selected={processor} onSelect={setProcessor} />
                 <Text style={st.lbl}>Screen Size</Text>
-                <Chips options={SCREEN_SIZES} selected={screenSize} onSelect={setScreenSize} />
+                <Chips options={SCREEN_SIZE_OPTIONS} selected={screenSize} onSelect={setScreenSize} />
                 <Text style={st.lbl}>Serial Number</Text>
                 <TextInput style={st.inp} placeholder="Found in Settings → About" placeholderTextColor={C.text4} value={serialNumber} onChangeText={setSerialNumber} />
               </>
@@ -600,16 +627,42 @@ export default function CreateListingScreen({ navigation }: any) {
             {/* ── Small Appliances ── */}
             {catType === 'appliance' && (
               <>
-                <Text style={st.lbl}>Brand</Text>
-                <Chips options={APPLIANCE_BRANDS} selected={brand} onSelect={setBrand} />
-                <Text style={st.lbl}>Model / Product name *</Text>
-                <TextInput style={st.inp} placeholder="e.g. Air Purifier XF-200" placeholderTextColor={C.text4} value={model} onChangeText={setModel} />
+                <SuggestedInput
+                  label="Brand"
+                  required
+                  value={brand}
+                  onChangeText={setBrand}
+                  placeholder="LG, Samsung, Bosch..."
+                  suggestions={getBrandsForCategory(categorySlug)}
+                />
+                <SuggestedInput
+                  label="Model / product name"
+                  required
+                  value={model}
+                  onChangeText={setModel}
+                  placeholder="Air Purifier XF-200, 7kg front load..."
+                  suggestions={getModelSuggestions(categorySlug, brand)}
+                />
               </>
             )}
 
             {/* ── Kids ── */}
             {catType === 'kids' && (
               <>
+                <SuggestedInput
+                  label="Brand"
+                  value={brand}
+                  onChangeText={setBrand}
+                  placeholder="LEGO, Fisher-Price, Babyhug..."
+                  suggestions={getBrandsForCategory(categorySlug)}
+                />
+                <SuggestedInput
+                  label="Item type / model"
+                  value={model}
+                  onChangeText={setModel}
+                  placeholder="Stroller, STEM kit, LEGO set..."
+                  suggestions={getModelSuggestions(categorySlug, brand)}
+                />
                 <Text style={st.lbl}>Age Suitability</Text>
                 <Chips options={KIDS_AGE_RANGES} selected={ageSuitability} onSelect={setAgeSuitability} />
                 <Text style={st.lbl}>Hygiene Status</Text>
@@ -652,7 +705,7 @@ export default function CreateListingScreen({ navigation }: any) {
           ))}
 
           {/* Screen + body condition for electronics */}
-          {(catType === 'phone' || catType === 'laptop') && (
+          {(catType === 'phone' || catType === 'laptop' || catType === 'tablet') && (
             <>
               <Text style={[st.lbl, st.lblSpaced]}>Screen Condition</Text>
               {SCREEN_CONDITIONS.map(c => (
@@ -726,7 +779,7 @@ export default function CreateListingScreen({ navigation }: any) {
 
           {/* What's in the box — structured Yes/No checkboxes per India ecom convention.
              Free-text "accessories" stayed available below for anything else. */}
-          {(catType === 'phone' || catType === 'laptop' || catType === 'appliance') && (
+          {(catType === 'phone' || catType === 'laptop' || catType === 'tablet' || catType === 'appliance') && (
             <>
               <Text style={[st.lbl, st.lblSpaced]}>What's in the box?</Text>
               <View style={st.includesRow}>
@@ -845,8 +898,8 @@ export default function CreateListingScreen({ navigation }: any) {
                 ['Title', title],
                 ['Brand', brand],
                 ['Model', model],
-                ...(catType === 'phone' ? [['Storage', storage], ['Color', color], ['Battery', batteryHealth ? `${batteryHealth}%` : '']] : []),
-                ...(catType === 'laptop' ? [['Processor', processor], ['RAM', ram], ['Screen', screenSize]] : []),
+                ...(catType === 'phone' ? [['Storage', storage], ['RAM', ram], ['Color', color], ['Battery', batteryHealth ? `${batteryHealth}%` : '']] : []),
+                ...(catType === 'laptop' || catType === 'tablet' ? [['Processor', processor], ['RAM', ram], ['Storage', storage], ['Screen', screenSize]] : []),
                 ['Condition', CONDITION_OPTIONS.find(c => c.key === condition)?.label],
                 ['Location', location?.city || 'Not set'],
               ].filter(([, v]) => v).map(([k, v]) => (
@@ -902,6 +955,76 @@ function Includes({ label, on, onToggle }: { label: string; on: boolean; onToggl
       </View>
       <Text style={[st.includesLbl, on && st.includesLblOn]}>{label}</Text>
     </TouchableOpacity>
+  );
+}
+
+function SuggestedInput({
+  label,
+  required = false,
+  value,
+  onChangeText,
+  placeholder,
+  suggestions,
+}: {
+  label: string;
+  required?: boolean;
+  value: string;
+  onChangeText: (next: string) => void;
+  placeholder: string;
+  suggestions: string[];
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const query = value.trim().toLowerCase();
+  const uniqueSuggestions = Array.from(new Set(suggestions));
+  const filtered = query
+    ? uniqueSuggestions.filter((item) => item.toLowerCase().includes(query))
+    : uniqueSuggestions;
+  const visible = (expanded ? filtered : filtered.slice(0, 8));
+
+  return (
+    <View>
+      <Text style={st.lbl}>
+        {label}{required ? <Text style={st.req}> *</Text> : null}
+      </Text>
+      <TextInput
+        style={st.inp}
+        placeholder={placeholder}
+        placeholderTextColor={C.text4}
+        value={value}
+        onChangeText={onChangeText}
+        autoCapitalize="words"
+      />
+      {visible.length > 0 ? (
+        <View style={st.suggestionWrap}>
+          {visible.map((item) => {
+            const active = value.trim().toLowerCase() === item.toLowerCase();
+            return (
+              <TouchableOpacity
+                key={item}
+                style={[st.suggestionChip, active && st.suggestionChipOn]}
+                onPress={() => onChangeText(item)}
+                activeOpacity={0.75}
+              >
+                <Text style={[st.suggestionText, active && st.suggestionTextOn]}>
+                  {item}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+          {filtered.length > 8 ? (
+            <TouchableOpacity
+              style={st.suggestionMore}
+              onPress={() => setExpanded(!expanded)}
+              activeOpacity={0.75}
+            >
+              <Text style={st.suggestionMoreText}>
+                {expanded ? 'Less' : `More ${filtered.length - 8}`}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -993,6 +1116,7 @@ const st = StyleSheet.create({
     fontSize: T.size.sm, fontWeight: T.weight.semi,
     color: C.text2, marginTop: S.lg, marginBottom: S.xs + 2,
   },
+  req: { color: C.petrolDeep },
   inp: {
     borderWidth: 0.5, borderColor: C.border, borderRadius: R.sm,
     paddingHorizontal: S.md, paddingVertical: S.sm + 2,
@@ -1095,6 +1219,44 @@ const st = StyleSheet.create({
   chipActive: { backgroundColor: C.petrolLight, borderColor: C.petrol },
   chipText: { fontSize: T.size.base, color: C.text2 },
   chipTextActive: { color: C.petrolDeep, fontWeight: T.weight.semi },
+  suggestionWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: S.sm,
+    marginTop: S.sm,
+  },
+  suggestionChip: {
+    paddingHorizontal: S.md,
+    paddingVertical: S.sm,
+    borderRadius: R.pill,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.surface,
+  },
+  suggestionChipOn: {
+    borderColor: C.petrol,
+    backgroundColor: C.petrolLight,
+  },
+  suggestionText: {
+    fontSize: T.size.sm,
+    color: C.text2,
+    fontWeight: T.weight.medium,
+  },
+  suggestionTextOn: {
+    color: C.petrolDeep,
+    fontWeight: T.weight.semi,
+  },
+  suggestionMore: {
+    paddingHorizontal: S.md,
+    paddingVertical: S.sm,
+    borderRadius: R.pill,
+    backgroundColor: C.bone2,
+  },
+  suggestionMoreText: {
+    fontSize: T.size.sm,
+    color: C.text2,
+    fontWeight: T.weight.semi,
+  },
 
   // Category cards
   catCard: {

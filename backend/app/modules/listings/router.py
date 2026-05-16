@@ -205,6 +205,7 @@ def _fmt_detail(listing: Listing, seller: User | None, avg_rating: float | None,
         # UI v3 metadata
         "accessories": listing.accessories,
         "warranty_info": listing.warranty_info,
+        "warranty_status": listing.warranty_info,
         "battery_health": listing.battery_health,
         "hygiene_status": listing.hygiene_status,
         # Sprint 4 / Pass 2: provenance badges

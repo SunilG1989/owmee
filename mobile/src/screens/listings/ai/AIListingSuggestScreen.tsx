@@ -52,6 +52,11 @@ const CONDITION_OPTIONS: { key: 'like_new' | 'good' | 'fair'; label: string; mul
 // Categories that need an IMEI/serial sub-step before listing goes live
 const IDENTIFIER_CATEGORIES = new Set(['smartphones', 'laptops', 'tablets']);
 
+const cleanText = (value?: string | null) => {
+  const cleaned = (value || '').replace(/\s+/g, ' ').trim();
+  return cleaned.length ? cleaned : null;
+};
+
 export default function AIListingSuggestScreen({
   route,
   navigation,
@@ -68,7 +73,13 @@ export default function AIListingSuggestScreen({
     brand?: string;
     model?: string;
     storage?: string;
+    ram?: string;
+    processor?: string;
+    screen_size?: string;
     color?: string;
+    purchase_year?: number | null;
+    accessories?: string;
+    warranty_status?: string;
     category_slug?: string;
   }>({});
   const [editSheet, setEditSheet] = useState(false);
@@ -90,7 +101,13 @@ export default function AIListingSuggestScreen({
   const brand = overrides.brand ?? draft.detected.brand ?? '';
   const model = overrides.model ?? draft.detected.model ?? '';
   const storage = overrides.storage ?? draft.detected.storage ?? '';
+  const ram = overrides.ram ?? draft.detected.ram ?? '';
+  const processor = overrides.processor ?? draft.detected.processor ?? '';
+  const screenSize = overrides.screen_size ?? draft.detected.screen_size ?? '';
   const color = overrides.color ?? draft.detected.color ?? '';
+  const purchaseYear = overrides.purchase_year ?? draft.detected.purchase_year ?? null;
+  const accessories = overrides.accessories ?? draft.detected.accessories ?? '';
+  const warrantyStatus = overrides.warranty_status ?? draft.detected.warranty_status ?? '';
   const categorySlug = overrides.category_slug ?? draft.detected.category_slug ?? '';
 
   // Live re-priced based on condition. Custom price short-circuits.
@@ -107,15 +124,30 @@ export default function AIListingSuggestScreen({
   }, [condition, customPrice, draft]);
 
   const titleGuess = useMemo(() => {
-    if (draft.detected.title_suggestion) return draft.detected.title_suggestion;
+    const identityWasEdited = ['brand', 'model', 'storage', 'ram', 'color', 'category_slug']
+      .some((key) => Object.prototype.hasOwnProperty.call(overrides, key));
+    if (!identityWasEdited && draft.detected.title_suggestion) return draft.detected.title_suggestion;
     const parts = [brand, model, storage, color].filter(Boolean);
     return parts.join(' ').slice(0, 80) || 'Used item';
-  }, [draft, brand, model, storage, color]);
+  }, [draft, overrides, brand, model, storage, color]);
 
   const subtitleSpecifics = useMemo(() => {
-    const parts = [storage, color].filter(Boolean);
+    const parts = [storage, ram, color].filter(Boolean);
     return parts.length ? parts.join(' · ') : '';
-  }, [storage, color]);
+  }, [storage, ram, color]);
+
+  const finalDetails = useMemo(() => ({
+    brand: cleanText(brand),
+    model: cleanText(model),
+    storage: cleanText(storage),
+    ram: cleanText(ram),
+    processor: cleanText(processor),
+    screen_size: cleanText(screenSize),
+    color: cleanText(color),
+    purchase_year: purchaseYear || null,
+    accessories: cleanText(accessories),
+    warranty_status: cleanText(warrantyStatus),
+  }), [brand, model, storage, ram, processor, screenSize, color, purchaseYear, accessories, warrantyStatus]);
 
   const submit = useCallback(async () => {
     if (submitting) return;
@@ -137,10 +169,7 @@ export default function AIListingSuggestScreen({
           price: effectivePrice,
           condition,
           category_slug: categorySlug,
-          brand,
-          model,
-          storage,
-          color,
+          ...finalDetails,
           description: draft.detected.description_suggestion ?? '',
         },
       });
@@ -156,10 +185,7 @@ export default function AIListingSuggestScreen({
         price: effectivePrice,
         condition,
         category_slug: categorySlug,
-        brand,
-        model,
-        storage,
-        color,
+        ...finalDetails,
         description: draft.detected.description_suggestion ?? '',
       });
       setSuccess({
@@ -171,7 +197,7 @@ export default function AIListingSuggestScreen({
       Alert.alert('Could not list', parseApiError(e));
       setSubmitting(false);
     }
-  }, [draft, effectivePrice, condition, brand, model, storage, color, categorySlug, titleGuess, navigation, submitting]);
+  }, [draft, effectivePrice, condition, categorySlug, titleGuess, navigation, submitting, finalDetails]);
 
   // ── Success state (in-place, replaces form) ─────────────────────────────
   if (success) {
@@ -346,7 +372,19 @@ export default function AIListingSuggestScreen({
       {/* Bottom sheets */}
       {editSheet && (
         <EditDetailsSheet
-          initial={{ brand, model, storage, color, category_slug: categorySlug }}
+          initial={{
+            brand,
+            model,
+            storage,
+            ram,
+            processor,
+            screen_size: screenSize,
+            color,
+            purchase_year: purchaseYear,
+            accessories,
+            warranty_status: warrantyStatus,
+            category_slug: categorySlug,
+          }}
           onSave={(next) => {
             setOverrides(next);
             setEditSheet(false);

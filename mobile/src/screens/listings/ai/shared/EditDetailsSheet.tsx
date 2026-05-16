@@ -19,32 +19,35 @@ import {
 
 import { C, T, S, R } from '../../../../utils/tokens';
 import { Button } from '../../../../components/ui';
+import {
+  CATEGORY_PICKS,
+  COLOR_OPTIONS,
+  PROCESSOR_OPTIONS,
+  RAM_OPTIONS,
+  SCREEN_SIZE_OPTIONS,
+  STORAGE_OPTIONS,
+  getBrandsForCategory,
+  getCategoryKind,
+  getModelSuggestions,
+} from '../../../../utils/listingCatalog';
 
-const CATEGORY_PICKS = [
-  { slug: 'smartphones', label: 'Smartphone' },
-  { slug: 'laptops', label: 'Laptop' },
-  { slug: 'tablets', label: 'Tablet' },
-  { slug: 'small-appliances', label: 'Appliance' },
-  { slug: 'kids-utility', label: 'Kids / Utility' },
-];
-
-const STORAGE_PICKS = ['32GB', '64GB', '128GB', '256GB', '512GB', '1TB'];
+type EditableDetails = {
+  brand?: string;
+  model?: string;
+  storage?: string;
+  ram?: string;
+  processor?: string;
+  screen_size?: string;
+  color?: string;
+  purchase_year?: number | null;
+  accessories?: string;
+  warranty_status?: string;
+  category_slug?: string;
+};
 
 interface Props {
-  initial: {
-    brand?: string;
-    model?: string;
-    storage?: string;
-    color?: string;
-    category_slug?: string;
-  };
-  onSave: (next: {
-    brand?: string;
-    model?: string;
-    storage?: string;
-    color?: string;
-    category_slug?: string;
-  }) => void;
+  initial: EditableDetails;
+  onSave: (next: EditableDetails) => void;
   onClose: () => void;
 }
 
@@ -53,7 +56,16 @@ export default function EditDetailsSheet({ initial, onSave, onClose }: Props) {
   const [brand, setBrand] = useState(initial.brand || '');
   const [model, setModel] = useState(initial.model || '');
   const [storage, setStorage] = useState(initial.storage || '');
+  const [ram, setRam] = useState(initial.ram || '');
+  const [processor, setProcessor] = useState(initial.processor || '');
+  const [screenSize, setScreenSize] = useState(initial.screen_size || '');
   const [color, setColor] = useState(initial.color || '');
+  const [purchaseYear, setPurchaseYear] = useState(initial.purchase_year ? String(initial.purchase_year) : '');
+  const [accessories, setAccessories] = useState(initial.accessories || '');
+  const [warrantyStatus, setWarrantyStatus] = useState(initial.warranty_status || '');
+  const [moreOpen, setMoreOpen] = useState(false);
+  const categoryKind = getCategoryKind(category_slug);
+  const isElectronic = categoryKind === 'phone' || categoryKind === 'laptop' || categoryKind === 'tablet';
 
   return (
     <Modal transparent visible animationType="slide" onRequestClose={onClose}>
@@ -66,6 +78,7 @@ export default function EditDetailsSheet({ initial, onSave, onClose }: Props) {
           <Text style={st.title}>Edit details</Text>
 
           <ScrollView style={st.scroll}>
+            <Text style={st.sectionTitle}>Essential</Text>
             <Text style={st.label}>Category</Text>
             <View style={st.chipRow}>
               {CATEGORY_PICKS.map((c) => (
@@ -80,50 +93,88 @@ export default function EditDetailsSheet({ initial, onSave, onClose }: Props) {
               ))}
             </View>
 
-            <Text style={st.label}>Brand</Text>
-            <TextInput
-              style={st.input}
+            <SuggestionField
+              label="Brand"
               value={brand}
               onChangeText={setBrand}
-              placeholder="e.g. Apple"
-              placeholderTextColor={C.text4}
+              placeholder="Apple, Samsung, HP..."
+              suggestions={getBrandsForCategory(category_slug)}
             />
 
-            <Text style={st.label}>Model</Text>
-            <TextInput
-              style={st.input}
+            <SuggestionField
+              label="Model"
               value={model}
               onChangeText={setModel}
-              placeholder="e.g. iPhone 13"
-              placeholderTextColor={C.text4}
+              placeholder="Exact model or product name"
+              suggestions={getModelSuggestions(category_slug, brand)}
             />
 
-            {(category_slug === 'smartphones' || category_slug === 'laptops' || category_slug === 'tablets') && (
+            {isElectronic ? (
               <>
                 <Text style={st.label}>Storage</Text>
-                <View style={st.chipRow}>
-                  {STORAGE_PICKS.map((s) => (
-                    <TouchableOpacity
-                      key={s}
-                      onPress={() => setStorage(s)}
-                      style={[st.chip, storage === s && st.chipActive]}>
-                      <Text style={[st.chipText, storage === s && st.chipTextActive]}>
-                        {s}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+                <ChipSet options={STORAGE_OPTIONS} selected={storage} onSelect={setStorage} />
+
+                <Text style={st.label}>RAM</Text>
+                <ChipSet options={RAM_OPTIONS} selected={ram} onSelect={setRam} />
               </>
-            )}
+            ) : null}
 
             <Text style={st.label}>Colour</Text>
-            <TextInput
-              style={st.input}
-              value={color}
-              onChangeText={setColor}
-              placeholder="e.g. Midnight Black"
-              placeholderTextColor={C.text4}
-            />
+            <ChipSet options={COLOR_OPTIONS} selected={color} onSelect={setColor} />
+
+            <TouchableOpacity
+              style={st.moreToggle}
+              onPress={() => setMoreOpen(!moreOpen)}
+              activeOpacity={0.8}
+            >
+              <Text style={st.moreToggleText}>
+                {moreOpen ? 'Hide extra details' : 'Add extra details'}
+              </Text>
+              <Text style={st.moreToggleIcon}>{moreOpen ? '-' : '+'}</Text>
+            </TouchableOpacity>
+
+            {moreOpen ? (
+              <View style={st.moreBlock}>
+                {isElectronic ? (
+                  <>
+                    <Text style={st.label}>Processor / chip</Text>
+                    <ChipSet options={PROCESSOR_OPTIONS} selected={processor} onSelect={setProcessor} />
+
+                    <Text style={st.label}>Screen size</Text>
+                    <ChipSet options={SCREEN_SIZE_OPTIONS} selected={screenSize} onSelect={setScreenSize} />
+                  </>
+                ) : null}
+
+                <Text style={st.label}>Purchase year</Text>
+                <TextInput
+                  style={st.input}
+                  value={purchaseYear}
+                  onChangeText={(v) => setPurchaseYear(v.replace(/[^\d]/g, '').slice(0, 4))}
+                  placeholder="e.g. 2024"
+                  placeholderTextColor={C.text4}
+                  keyboardType="numeric"
+                  maxLength={4}
+                />
+
+                <Text style={st.label}>Included items</Text>
+                <TextInput
+                  style={st.input}
+                  value={accessories}
+                  onChangeText={setAccessories}
+                  placeholder="Box, charger, case, bill..."
+                  placeholderTextColor={C.text4}
+                />
+
+                <Text style={st.label}>Warranty</Text>
+                <TextInput
+                  style={st.input}
+                  value={warrantyStatus}
+                  onChangeText={setWarrantyStatus}
+                  placeholder="No warranty, active till Dec 2026..."
+                  placeholderTextColor={C.text4}
+                />
+              </View>
+            ) : null}
           </ScrollView>
 
           <View style={st.ctaRow}>
@@ -136,13 +187,118 @@ export default function EditDetailsSheet({ initial, onSave, onClose }: Props) {
             <Button
               label="Save"
               variant="primary"
-              onPress={() => onSave({ brand, model, storage, color, category_slug })}
+              onPress={() => onSave({
+                brand,
+                model,
+                storage,
+                ram,
+                processor,
+                screen_size: screenSize,
+                color,
+                purchase_year: /^\d{4}$/.test(purchaseYear) ? parseInt(purchaseYear, 10) : null,
+                accessories,
+                warranty_status: warrantyStatus,
+                category_slug,
+              })}
               style={st.saveBtn}
             />
           </View>
         </KeyboardAvoidingView>
       </View>
     </Modal>
+  );
+}
+
+function ChipSet({
+  options,
+  selected,
+  onSelect,
+}: {
+  options: string[];
+  selected: string;
+  onSelect: (next: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? options : options.slice(0, 8);
+
+  return (
+    <View style={st.chipRow}>
+      {visible.map((s) => (
+        <TouchableOpacity
+          key={s}
+          onPress={() => onSelect(selected === s ? '' : s)}
+          style={[st.chip, selected === s && st.chipActive]}>
+          <Text style={[st.chipText, selected === s && st.chipTextActive]}>
+            {s}
+          </Text>
+        </TouchableOpacity>
+      ))}
+      {options.length > 8 ? (
+        <TouchableOpacity
+          onPress={() => setExpanded(!expanded)}
+          style={st.chipMore}
+        >
+          <Text style={st.chipMoreText}>{expanded ? 'Less' : `More ${options.length - 8}`}</Text>
+        </TouchableOpacity>
+      ) : null}
+    </View>
+  );
+}
+
+function SuggestionField({
+  label,
+  value,
+  onChangeText,
+  placeholder,
+  suggestions,
+}: {
+  label: string;
+  value: string;
+  onChangeText: (next: string) => void;
+  placeholder: string;
+  suggestions: string[];
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const query = value.trim().toLowerCase();
+  const unique = Array.from(new Set(suggestions));
+  const filtered = query ? unique.filter((item) => item.toLowerCase().includes(query)) : unique;
+  const visible = expanded ? filtered : filtered.slice(0, 8);
+
+  return (
+    <View>
+      <Text style={st.label}>{label}</Text>
+      <TextInput
+        style={st.input}
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor={C.text4}
+        autoCapitalize="words"
+      />
+      {visible.length > 0 ? (
+        <View style={st.chipRow}>
+          {visible.map((item) => (
+            <TouchableOpacity
+              key={item}
+              onPress={() => onChangeText(item)}
+              style={[st.chip, value.trim().toLowerCase() === item.toLowerCase() && st.chipActive]}
+            >
+              <Text style={[st.chipText, value.trim().toLowerCase() === item.toLowerCase() && st.chipTextActive]}>
+                {item}
+              </Text>
+            </TouchableOpacity>
+          ))}
+          {filtered.length > 8 ? (
+            <TouchableOpacity
+              onPress={() => setExpanded(!expanded)}
+              style={st.chipMore}
+            >
+              <Text style={st.chipMoreText}>{expanded ? 'Less' : `More ${filtered.length - 8}`}</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -171,6 +327,12 @@ const st = StyleSheet.create({
     color: C.text,
     marginBottom: S.lg,
   },
+  sectionTitle: {
+    fontSize: T.size.base,
+    fontWeight: T.weight.bold,
+    color: C.text,
+    marginBottom: S.xs,
+  },
   label: {
     fontSize: T.size.sm,
     fontWeight: T.weight.semi,
@@ -192,6 +354,17 @@ const st = StyleSheet.create({
   chipActive: { backgroundColor: C.petrolLight, borderColor: C.petrol },
   chipText: { color: C.text2, fontSize: T.size.base, fontWeight: T.weight.medium },
   chipTextActive: { color: C.petrolText, fontWeight: T.weight.bold },
+  chipMore: {
+    paddingHorizontal: S.md,
+    paddingVertical: S.sm,
+    borderRadius: R.pill,
+    backgroundColor: C.bone2,
+  },
+  chipMoreText: {
+    color: C.text2,
+    fontSize: T.size.base,
+    fontWeight: T.weight.semi,
+  },
   input: {
     borderWidth: 1,
     borderColor: C.border,
@@ -203,6 +376,31 @@ const st = StyleSheet.create({
     backgroundColor: C.bone,
   },
   scroll: { maxHeight: 460 },
+  moreToggle: {
+    marginTop: S.lg,
+    padding: S.md,
+    borderRadius: R.md,
+    backgroundColor: C.petrolLight,
+    borderWidth: 1,
+    borderColor: C.blueBorder,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  moreToggleText: {
+    color: C.petrolDeep,
+    fontSize: T.size.base,
+    fontWeight: T.weight.bold,
+  },
+  moreToggleIcon: {
+    color: C.petrolDeep,
+    fontSize: T.size.lg,
+    fontWeight: T.weight.bold,
+  },
+  moreBlock: {
+    marginTop: S.sm,
+    paddingTop: S.xs,
+  },
   ctaRow: { flexDirection: 'row', gap: S.md, marginTop: S.lg },
   cancelBtn: { flex: 1 },
   saveBtn: { flex: 2 },

@@ -62,6 +62,13 @@ router = APIRouter(prefix="/v1/listings", tags=["ai-assistant"])
 # Categories that need an identifier (smartphones, laptops/tablets).
 IDENTIFIER_CATEGORIES = {"smartphones", "laptops", "tablets"}
 
+
+def _canonical_category_slug(slug: str) -> str:
+    normalized = (slug or "").strip().lower()
+    if normalized in {"kids-toys", "kids-education"}:
+        return "kids-utility"
+    return normalized
+
 # Listing states that allow seller edits.
 EDITABLE_STATES = {"draft_ai", "pending_buyer"}
 
@@ -320,8 +327,10 @@ async def create_from_draft(
     if rec.status != "open":
         raise HTTPException(status_code=400, detail="DRAFT_ALREADY_CONSUMED")
 
+    category_slug = _canonical_category_slug(payload.category_slug)
+
     # IMEI requirement check for smartphones
-    if payload.category_slug.lower() == "smartphones" and not payload.imei_1:
+    if category_slug == "smartphones" and not payload.imei_1:
         raise HTTPException(status_code=400, detail="IMEI_REQUIRED_FOR_SMARTPHONES")
 
     # Validate IMEI(s) if present — defence in depth
@@ -360,7 +369,7 @@ async def create_from_draft(
     # Resolve category_id from slug
     cat_row = await db.execute(
         text("SELECT id FROM categories WHERE slug = :slug AND is_active = true"),
-        {"slug": payload.category_slug},
+        {"slug": category_slug},
     )
     category_id = cat_row.scalar()
     if not category_id:
@@ -368,7 +377,7 @@ async def create_from_draft(
 
     # CEIR check (mock) for smartphone IMEIs
     verification_status = "pending"
-    if payload.category_slug.lower() == "smartphones" and payload.imei_1:
+    if category_slug == "smartphones" and payload.imei_1:
         ceir = await ceir_client.check(payload.imei_1)
         if ceir["status"] == "clean":
             verification_status = "verified"
@@ -406,7 +415,9 @@ async def create_from_draft(
         INSERT INTO listings (
             id, seller_id, category_id, title, description, price, condition,
             status, moderation_status, image_urls, thumbnail_url,
-            brand, model, storage, color, serial_number,
+            brand, model, storage, ram, processor, screen_size, color,
+            purchase_year, battery_health, accessories, warranty_info,
+            serial_number,
             imei_1, imei_2, listing_state, verification_status, video_url,
             ai_draft_id, city, state, listing_source, reviewed_by,
             published_at
@@ -414,7 +425,9 @@ async def create_from_draft(
         VALUES (
             :id, :seller_id, :category_id, :title, :description, :price, :condition,
             'active', 'pending', :image_urls, :thumb,
-            :brand, :model, :storage, :color, :serial,
+            :brand, :model, :storage, :ram, :processor, :screen_size, :color,
+            :purchase_year, :battery_health, :accessories, :warranty_info,
+            :serial,
             :imei_1, :imei_2, 'pending_buyer', :verif, :video,
             :draft_id, :city, :state, 'self_prep', 'none',
             NOW()
@@ -436,7 +449,14 @@ async def create_from_draft(
             "brand": payload.brand,
             "model": payload.model,
             "storage": payload.storage,
+            "ram": payload.ram,
+            "processor": payload.processor,
+            "screen_size": payload.screen_size,
             "color": payload.color,
+            "purchase_year": payload.purchase_year,
+            "battery_health": payload.battery_health,
+            "accessories": payload.accessories,
+            "warranty_info": payload.warranty_status,
             "serial": payload.serial_number,
             "imei_1": payload.imei_1,
             "imei_2": payload.imei_2,
@@ -618,8 +638,14 @@ async def edit_listing(
         "brand": payload.brand,
         "model": payload.model,
         "storage": payload.storage,
+        "ram": payload.ram,
+        "processor": payload.processor,
+        "screen_size": payload.screen_size,
         "color": payload.color,
+        "purchase_year": payload.purchase_year,
+        "battery_health": payload.battery_health,
         "accessories": payload.accessories,
+        "warranty_info": payload.warranty_status,
     }
     updates = {k: v for k, v in field_map.items() if v is not None}
 
@@ -654,8 +680,9 @@ async def regenerate_description(
     """Re-run Claude haiku on current fields to regenerate the description."""
     row = await db.execute(
         text("""
-            SELECT seller_id, brand, model, storage, color, condition,
-                   accessories, title
+            SELECT seller_id, brand, model, storage, ram, processor,
+                   screen_size, color, purchase_year, battery_health,
+                   warranty_info, condition, accessories, title
             FROM listings WHERE id = :id
         """),
         {"id": listing_id},
@@ -671,7 +698,13 @@ async def regenerate_description(
         "brand": rec.brand,
         "model": rec.model,
         "storage": rec.storage,
+        "ram": rec.ram,
+        "processor": rec.processor,
+        "screen_size": rec.screen_size,
         "color": rec.color,
+        "purchase_year": rec.purchase_year,
+        "battery_health": rec.battery_health,
+        "warranty_info": rec.warranty_info,
         "condition": rec.condition,
         "accessories": rec.accessories,
     }
