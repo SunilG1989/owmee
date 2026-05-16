@@ -49,16 +49,16 @@ export default function PriceSheet({
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={st.sheet}>
           <View style={st.handle} />
-          <Text style={st.title}>Set your price</Text>
+          <Text style={st.title}>Set asking price</Text>
 
           {/* Suggested context */}
           <View style={st.suggestBox}>
-            <Text style={st.suggestLabel}>Owmee suggests</Text>
+            <Text style={st.suggestLabel}>Owmee guidance</Text>
             <Text style={st.suggestPrice}>{formatPrice(suggested)}</Text>
           </View>
 
           {/* Custom input */}
-          <Text style={st.label}>Your price (₹)</Text>
+          <Text style={st.label}>Your asking price (₹)</Text>
           <TextInput
             style={st.input}
             value={text}

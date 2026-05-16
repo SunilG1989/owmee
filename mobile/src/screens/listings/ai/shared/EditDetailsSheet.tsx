@@ -45,6 +45,12 @@ type EditableDetails = {
   purchase_year?: number | null;
   accessories?: string;
   warranty_status?: string;
+  has_box?: boolean | null;
+  has_bill?: boolean | null;
+  has_charger?: boolean | null;
+  has_earphones?: boolean | null;
+  water_damage_history?: boolean | null;
+  seller_functional_attestation?: boolean | null;
   category_slug?: string;
 };
 
@@ -75,6 +81,14 @@ export default function EditDetailsSheet({ initial, onSave, onClose }: Props) {
   const [purchaseYear, setPurchaseYear] = useState(initial.purchase_year ? String(initial.purchase_year) : '');
   const [accessories, setAccessories] = useState(initial.accessories || '');
   const [warrantyStatus, setWarrantyStatus] = useState(initial.warranty_status || '');
+  const [hasBox, setHasBox] = useState<boolean | null>(initial.has_box ?? null);
+  const [hasBill, setHasBill] = useState<boolean | null>(initial.has_bill ?? null);
+  const [hasCharger, setHasCharger] = useState<boolean | null>(initial.has_charger ?? null);
+  const [hasEarphones, setHasEarphones] = useState<boolean | null>(initial.has_earphones ?? null);
+  const [waterDamageHistory, setWaterDamageHistory] = useState<boolean | null>(initial.water_damage_history ?? null);
+  const [sellerFunctionalAttestation, setSellerFunctionalAttestation] = useState<boolean | null>(
+    initial.seller_functional_attestation ?? null,
+  );
   const [moreOpen, setMoreOpen] = useState(false);
   const categoryKind = getCategoryKind(category_slug);
   const isElectronic = categoryKind === 'phone' || categoryKind === 'laptop' || categoryKind === 'tablet';
@@ -93,9 +107,36 @@ export default function EditDetailsSheet({ initial, onSave, onClose }: Props) {
       if (modelOptions.length > 0 && !findCatalogOption(model, modelOptions)) missing.push('model');
       if (!findCatalogOption(storage, storageOptions)) missing.push('storage');
       if (ramRequired && !findCatalogOption(ram, ramOptions)) missing.push('RAM');
+      if (hasBox === null) missing.push('box');
+      if (hasBill === null) missing.push('bill');
+      if (hasCharger === null) missing.push('charger');
+      if (categoryKind === 'phone' && hasEarphones === null) missing.push('earphones');
+      if (waterDamageHistory === null) missing.push('water damage');
+      if (sellerFunctionalAttestation !== true) missing.push('working condition');
     }
     return missing;
-  }, [brand, brandOptions, category_slug, isElectronic, isOther, model, modelOptions, ram, ramOptions, ramRequired, storage, storageOptions, title]);
+  }, [
+    brand,
+    brandOptions,
+    categoryKind,
+    category_slug,
+    hasBill,
+    hasBox,
+    hasCharger,
+    hasEarphones,
+    isElectronic,
+    isOther,
+    model,
+    modelOptions,
+    ram,
+    ramOptions,
+    ramRequired,
+    sellerFunctionalAttestation,
+    storage,
+    storageOptions,
+    title,
+    waterDamageHistory,
+  ]);
 
   const selectCategory = (nextSlug: string) => {
     const next = canonicalCategorySlug(nextSlug);
@@ -106,6 +147,7 @@ export default function EditDetailsSheet({ initial, onSave, onClose }: Props) {
     setModel('');
     setStorage(findCatalogOption(storage, getStorageOptionsForCategory(next)));
     setRam(findCatalogOption(ram, getRamOptionsForCategory(next)));
+    if (getCategoryKind(next) !== 'phone') setHasEarphones(null);
   };
 
   const selectBrand = (next: string) => {
@@ -123,7 +165,7 @@ export default function EditDetailsSheet({ initial, onSave, onClose }: Props) {
           <View style={st.handle} />
           <Text style={st.title}>Edit details</Text>
 
-          <ScrollView style={st.scroll}>
+          <ScrollView style={st.scroll} keyboardShouldPersistTaps="always">
             <Text style={st.sectionTitle}>Essential</Text>
             <Text style={st.label}>Category</Text>
             <View style={st.chipRow}>
@@ -170,6 +212,34 @@ export default function EditDetailsSheet({ initial, onSave, onClose }: Props) {
 
                 <Text style={st.label}>RAM{ramRequired ? ' *' : ''}</Text>
                 <ChipSet options={ramOptions} selected={ram} onSelect={setRam} />
+
+                <View style={st.p0Box}>
+                  <Text style={st.p0Title}>Top buyer questions</Text>
+                  <Text style={st.p0Helper}>
+                    These answers prevent disputes and help buyers trust the listing.
+                  </Text>
+                  <BooleanChoice label="Original box" value={hasBox} onChange={setHasBox} />
+                  <BooleanChoice label="Bill / invoice" value={hasBill} onChange={setHasBill} />
+                  <BooleanChoice label="Charger included" value={hasCharger} onChange={setHasCharger} />
+                  {categoryKind === 'phone' ? (
+                    <BooleanChoice label="Earphones included" value={hasEarphones} onChange={setHasEarphones} />
+                  ) : null}
+                  <BooleanChoice
+                    label="Ever had water damage?"
+                    value={waterDamageHistory}
+                    onChange={setWaterDamageHistory}
+                  />
+                  <BooleanChoice
+                    label="Everything works as expected?"
+                    value={sellerFunctionalAttestation}
+                    onChange={setSellerFunctionalAttestation}
+                  />
+                  {sellerFunctionalAttestation === false ? (
+                    <Text style={st.blockHint}>
+                      Use the manual listing form for items with functional issues so the defect can be captured clearly.
+                    </Text>
+                  ) : null}
+                </View>
               </>
             ) : (
               <>
@@ -297,6 +367,12 @@ export default function EditDetailsSheet({ initial, onSave, onClose }: Props) {
                 purchase_year: /^\d{4}$/.test(purchaseYear) ? parseInt(purchaseYear, 10) : null,
                 accessories,
                 warranty_status: warrantyStatus,
+                has_box: hasBox,
+                has_bill: hasBill,
+                has_charger: hasCharger,
+                has_earphones: hasEarphones,
+                water_damage_history: waterDamageHistory,
+                seller_functional_attestation: sellerFunctionalAttestation,
                 category_slug: canonicalCategorySlug(category_slug),
               })}
               style={st.saveBtn}
@@ -335,6 +411,38 @@ function OptionChips({
   );
 }
 
+function BooleanChoice({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: boolean | null;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <View style={st.choiceRow}>
+      <Text style={st.choiceLabel}>{label}</Text>
+      <View style={st.choiceButtons}>
+        <TouchableOpacity
+          onPress={() => onChange(true)}
+          activeOpacity={0.82}
+          style={[st.choicePill, value === true && st.choicePillActive]}
+        >
+          <Text style={[st.choiceText, value === true && st.choiceTextActive]}>Yes</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => onChange(false)}
+          activeOpacity={0.82}
+          style={[st.choicePill, value === false && st.choicePillActive]}
+        >
+          <Text style={[st.choiceText, value === false && st.choiceTextActive]}>No</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
 function ChipSet({
   options,
   selected,
@@ -353,6 +461,7 @@ function ChipSet({
         <TouchableOpacity
           key={s}
           onPress={() => onSelect(selected === s ? '' : s)}
+          activeOpacity={0.82}
           style={[st.chip, selected === s && st.chipActive]}>
           <Text style={[st.chipText, selected === s && st.chipTextActive]}>
             {s}
@@ -470,6 +579,65 @@ const st = StyleSheet.create({
     marginTop: 2,
     fontSize: T.size.sm,
     color: C.petrolText,
+    lineHeight: T.size.sm + 4,
+  },
+  p0Box: {
+    marginTop: S.lg,
+    padding: S.md,
+    borderRadius: R.md,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.bone,
+  },
+  p0Title: {
+    fontSize: T.size.base,
+    fontWeight: T.weight.bold,
+    color: C.text,
+  },
+  p0Helper: {
+    marginTop: 2,
+    marginBottom: S.sm,
+    color: C.text3,
+    fontSize: T.size.sm,
+    lineHeight: T.size.sm + 4,
+  },
+  choiceRow: {
+    paddingVertical: S.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: C.border,
+  },
+  choiceLabel: {
+    color: C.text,
+    fontSize: T.size.base,
+    fontWeight: T.weight.semi,
+    marginBottom: S.sm,
+  },
+  choiceButtons: { flexDirection: 'row', gap: S.sm },
+  choicePill: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: R.md,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: S.sm,
+  },
+  choicePillActive: {
+    backgroundColor: C.petrolLight,
+    borderColor: C.petrol,
+  },
+  choiceText: {
+    color: C.text2,
+    fontSize: T.size.base,
+    fontWeight: T.weight.semi,
+  },
+  choiceTextActive: { color: C.petrolDeep, fontWeight: T.weight.bold },
+  blockHint: {
+    marginTop: S.sm,
+    color: C.red,
+    fontSize: T.size.sm,
     lineHeight: T.size.sm + 4,
   },
   sectionTitle: {

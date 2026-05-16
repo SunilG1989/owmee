@@ -159,6 +159,12 @@ class CreateFromDraftRequest(BaseModel):
     battery_health: int | None = Field(None, ge=0, le=100)
     accessories: str | None = None
     warranty_status: str | None = None
+    has_box: bool | None = None
+    has_bill: bool | None = None
+    has_charger: bool | None = None
+    has_earphones: bool | None = None
+    water_damage_history: bool | None = None
+    seller_functional_attestation: bool | None = None
     description: str | None = None
     imei_1: str | None = None
     imei_2: str | None = None

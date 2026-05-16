@@ -1038,6 +1038,7 @@ export interface AIDetectedFields {
   blocking_reasons?: string[];
   seller_photo_feedback?: string[];
   seller_edit_fields?: string[];
+  image_set_quality?: Record<string, any>;
   field_confidence?: Record<string, number>;
   field_evidence?: Record<string, string>;
 }
@@ -1088,6 +1089,12 @@ export interface AICreateFromDraftRequest {
   battery_health?: number | null;
   accessories?: string | null;
   warranty_status?: string | null;
+  has_box?: boolean | null;
+  has_bill?: boolean | null;
+  has_charger?: boolean | null;
+  has_earphones?: boolean | null;
+  water_damage_history?: boolean | null;
+  seller_functional_attestation?: boolean | null;
   description?: string | null;
   imei_1?: string | null;
   imei_2?: string | null;

@@ -43,6 +43,7 @@ import EditDetailsSheet from './shared/EditDetailsSheet';
 import PriceSheet from './shared/PriceSheet';
 import ComparablesSheet from './shared/ComparablesSheet';
 import {
+  CATEGORY_PICKS,
   canonicalCategorySlug,
   findCatalogOption,
   getBrandsForCategory,
@@ -62,6 +63,50 @@ const CONDITION_OPTIONS: { key: 'like_new' | 'good' | 'fair'; label: string; mul
 // Categories that need an IMEI/serial sub-step before listing goes live
 const IDENTIFIER_CATEGORIES = new Set(['smartphones', 'laptops', 'tablets']);
 
+type DetailOverrides = {
+  title?: string;
+  brand?: string;
+  model?: string;
+  storage?: string;
+  ram?: string;
+  processor?: string;
+  screen_size?: string;
+  color?: string;
+  purchase_year?: number | null;
+  accessories?: string;
+  warranty_status?: string;
+  has_box?: boolean | null;
+  has_bill?: boolean | null;
+  has_charger?: boolean | null;
+  has_earphones?: boolean | null;
+  water_damage_history?: boolean | null;
+  seller_functional_attestation?: boolean | null;
+  category_slug?: string;
+};
+
+type InlineField =
+  | 'category'
+  | 'title'
+  | 'brand'
+  | 'model'
+  | 'storage'
+  | 'ram'
+  | 'has_box'
+  | 'has_bill'
+  | 'has_charger'
+  | 'has_earphones'
+  | 'water_damage_history'
+  | 'seller_functional_attestation'
+  | null;
+
+type BooleanDetailField =
+  | 'has_box'
+  | 'has_bill'
+  | 'has_charger'
+  | 'has_earphones'
+  | 'water_damage_history'
+  | 'seller_functional_attestation';
+
 const cleanText = (value?: string | null) => {
   const cleaned = (value || '').replace(/\s+/g, ' ').trim();
   return cleaned.length ? cleaned : null;
@@ -74,30 +119,17 @@ export default function AIListingSuggestScreen({
   const initialDraft: AIDraftResponse = route.params.draft;
 
   // Editable state, seeded from AI response
-  const [draft, setDraft] = useState<AIDraftResponse>(initialDraft);
+  const draft = initialDraft;
   const [condition, setCondition] = useState<'like_new' | 'good' | 'fair'>(
     (initialDraft.detected.condition_guess as any) || 'good',
   );
   const [customPrice, setCustomPrice] = useState<number | null>(null);
-  const [overrides, setOverrides] = useState<{
-    title?: string;
-    brand?: string;
-    model?: string;
-    storage?: string;
-    ram?: string;
-    processor?: string;
-    screen_size?: string;
-    color?: string;
-    purchase_year?: number | null;
-    accessories?: string;
-    warranty_status?: string;
-    category_slug?: string;
-  }>({});
+  const [overrides, setOverrides] = useState<DetailOverrides>({});
+  const [inlineField, setInlineField] = useState<InlineField>(null);
   const [editSheet, setEditSheet] = useState(false);
   const [priceSheet, setPriceSheet] = useState(false);
   const [compsSheet, setCompsSheet] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [detailsConfirmed, setDetailsConfirmed] = useState(false);
   const [success, setSuccess] = useState<{ listingId: string; price: number; title: string } | null>(null);
 
   // Timer for the comparables → price sheet handoff. Tracked via ref so we
@@ -107,6 +139,10 @@ export default function AIListingSuggestScreen({
     return () => {
       if (compsToPriceTimer.current) clearTimeout(compsToPriceTimer.current);
     };
+  }, []);
+
+  const applyOverrides = useCallback((patch: Partial<DetailOverrides>) => {
+    setOverrides((prev) => ({ ...prev, ...patch }));
   }, []);
 
   // Effective fields (overrides win over AI)
@@ -143,6 +179,21 @@ export default function AIListingSuggestScreen({
   const purchaseYear = overrides.purchase_year ?? draft.detected.purchase_year ?? null;
   const accessories = overrides.accessories ?? draft.detected.accessories ?? '';
   const warrantyStatus = overrides.warranty_status ?? draft.detected.warranty_status ?? '';
+  const imageQuality = draft.detected.image_set_quality || {};
+  const hasBox = Object.prototype.hasOwnProperty.call(overrides, 'has_box')
+    ? overrides.has_box ?? null
+    : imageQuality.has_box_or_packaging === true
+      ? true
+      : null;
+  const hasBill = Object.prototype.hasOwnProperty.call(overrides, 'has_bill') ? overrides.has_bill ?? null : null;
+  const hasCharger = Object.prototype.hasOwnProperty.call(overrides, 'has_charger') ? overrides.has_charger ?? null : null;
+  const hasEarphones = Object.prototype.hasOwnProperty.call(overrides, 'has_earphones') ? overrides.has_earphones ?? null : null;
+  const waterDamageHistory = Object.prototype.hasOwnProperty.call(overrides, 'water_damage_history')
+    ? overrides.water_damage_history ?? null
+    : null;
+  const sellerFunctionalAttestation = Object.prototype.hasOwnProperty.call(overrides, 'seller_functional_attestation')
+    ? overrides.seller_functional_attestation ?? null
+    : null;
   const detailReviewIssues = useMemo(() => {
     const issues: string[] = [];
     if (!categorySlug) {
@@ -159,12 +210,22 @@ export default function AIListingSuggestScreen({
     if (modelOptions.length > 0 && !findCatalogOption(model, modelOptions)) issues.push('model');
     if (!findCatalogOption(storage, storageOptions)) issues.push('storage');
     if (categoryKind === 'laptop' && !findCatalogOption(ram, ramOptions)) issues.push('RAM');
+    if (hasBox === null) issues.push('box');
+    if (hasBill === null) issues.push('bill');
+    if (hasCharger === null) issues.push('charger');
+    if (categoryKind === 'phone' && hasEarphones === null) issues.push('earphones');
+    if (waterDamageHistory === null) issues.push('water damage');
+    if (sellerFunctionalAttestation !== true) issues.push('working condition');
     return issues;
   }, [
     brand,
     brandOptions,
     categoryKind,
     categorySlug,
+    hasBill,
+    hasBox,
+    hasCharger,
+    hasEarphones,
     isElectronic,
     isOther,
     model,
@@ -173,24 +234,109 @@ export default function AIListingSuggestScreen({
     overrides.title,
     ram,
     ramOptions,
+    sellerFunctionalAttestation,
     storage,
     storageOptions,
+    waterDamageHistory,
   ]);
   const needsDetailsReview = !categorySlug
-    || ((isElectronic || isOther) && (!detailsConfirmed || detailReviewIssues.length > 0));
+    || ((isElectronic || isOther) && detailReviewIssues.length > 0);
 
-  // Live re-priced based on condition. Custom price short-circuits.
+  const firstRequiredField = useMemo<InlineField>(() => {
+    if (!categorySlug) return 'category';
+    if (isOther) {
+      const otherTitle = (overrides.title ?? draft.detected.title_suggestion ?? '').trim();
+      if (otherTitle.length < 4 || /^used item$/i.test(otherTitle)) return 'title';
+      return null;
+    }
+    if (!isElectronic) return null;
+    if (!findCatalogOption(brand, brandOptions)) return 'brand';
+    if (modelOptions.length > 0 && !findCatalogOption(model, modelOptions)) return 'model';
+    if (!findCatalogOption(storage, storageOptions)) return 'storage';
+    if (categoryKind === 'laptop' && !findCatalogOption(ram, ramOptions)) return 'ram';
+    if (hasBox === null) return 'has_box';
+    if (hasBill === null) return 'has_bill';
+    if (hasCharger === null) return 'has_charger';
+    if (categoryKind === 'phone' && hasEarphones === null) return 'has_earphones';
+    if (waterDamageHistory === null) return 'water_damage_history';
+    if (sellerFunctionalAttestation !== true) return 'seller_functional_attestation';
+    return null;
+  }, [
+    brand,
+    brandOptions,
+    categoryKind,
+    categorySlug,
+    draft.detected.title_suggestion,
+    hasBill,
+    hasBox,
+    hasCharger,
+    hasEarphones,
+    isElectronic,
+    isOther,
+    model,
+    modelOptions,
+    overrides.title,
+    ram,
+    ramOptions,
+    sellerFunctionalAttestation,
+    storage,
+    storageOptions,
+    waterDamageHistory,
+  ]);
+
+  const openFirstRequiredField = useCallback(() => {
+    if (firstRequiredField === 'title') {
+      setInlineField(null);
+      setEditSheet(true);
+      return;
+    }
+    if (firstRequiredField) {
+      setInlineField(firstRequiredField);
+      return;
+    }
+    setEditSheet(true);
+  }, [firstRequiredField]);
+
+  const selectCategoryInline = useCallback((nextSlug: string) => {
+    const next = canonicalCategorySlug(nextSlug);
+    if (!next) return;
+    const nextKind = getCategoryKind(next);
+    const nextBrandOptions = getBrandsForCategory(next);
+    const nextStorageOptions = getStorageOptionsForCategory(next);
+    const nextRamOptions = getRamOptionsForCategory(next);
+    setOverrides((prev) => {
+      const sourceBrand = prev.brand ?? draft.detected.brand ?? '';
+      const sourceStorage = prev.storage ?? draft.detected.storage ?? '';
+      const sourceRam = prev.ram ?? draft.detected.ram ?? '';
+      return {
+        ...prev,
+        category_slug: next,
+        brand: findCatalogOption(sourceBrand, nextBrandOptions) || '',
+        model: '',
+        storage: findCatalogOption(sourceStorage, nextStorageOptions) || '',
+        ram: findCatalogOption(sourceRam, nextRamOptions) || '',
+        has_earphones: nextKind === 'phone' ? prev.has_earphones ?? null : null,
+      };
+    });
+    setInlineField(null);
+  }, [draft.detected.brand, draft.detected.ram, draft.detected.storage]);
+
+  const selectBrandInline = useCallback((next: string) => {
+    setOverrides((prev) => ({ ...prev, brand: next, model: '' }));
+    setInlineField(getModelSuggestions(categorySlug, next).length > 0 ? 'model' : null);
+  }, [categorySlug]);
+
+  const selectBooleanInline = useCallback((field: BooleanDetailField, next: boolean) => {
+    applyOverrides({ [field]: next });
+    setInlineField(null);
+  }, [applyOverrides]);
+
+  // The seller owns the asking price. Owmee gives guidance, but changing
+  // condition must not silently move the number under their feet.
   const effectivePrice = useMemo(() => {
     if (customPrice != null) return customPrice;
-    const base = draft.suggested_price ?? 0;
-    const m = CONDITION_OPTIONS.find((o) => o.key === condition)?.multiplier ?? 1.0;
-    // Initial AI suggestion already factors in detected condition; if user
-    // changes condition we adjust *relative to* the like_new baseline.
-    const baseLikeNew = base / (CONDITION_OPTIONS.find(
-      (o) => o.key === (draft.detected.condition_guess as any) || 'good',
-    )?.multiplier ?? 1.0);
-    return Math.round(baseLikeNew * m / 10) * 10;
-  }, [condition, customPrice, draft]);
+    return draft.suggested_price ?? 0;
+  }, [customPrice, draft.suggested_price]);
 
   const titleGuess = useMemo(() => {
     if (overrides.title?.trim()) return overrides.title.trim();
@@ -217,7 +363,31 @@ export default function AIListingSuggestScreen({
     purchase_year: purchaseYear || null,
     accessories: cleanText(accessories),
     warranty_status: cleanText(warrantyStatus),
-  }), [brand, model, storage, ram, processor, screenSize, color, purchaseYear, accessories, warrantyStatus]);
+    has_box: hasBox,
+    has_bill: hasBill,
+    has_charger: hasCharger,
+    has_earphones: categoryKind === 'phone' ? hasEarphones : null,
+    water_damage_history: waterDamageHistory,
+    seller_functional_attestation: sellerFunctionalAttestation,
+  }), [
+    accessories,
+    brand,
+    categoryKind,
+    color,
+    hasBill,
+    hasBox,
+    hasCharger,
+    hasEarphones,
+    model,
+    processor,
+    purchaseYear,
+    ram,
+    screenSize,
+    sellerFunctionalAttestation,
+    storage,
+    warrantyStatus,
+    waterDamageHistory,
+  ]);
 
   const submit = useCallback(async () => {
     if (submitting) return;
@@ -226,12 +396,12 @@ export default function AIListingSuggestScreen({
       return;
     }
     if (!categorySlug) {
-      setEditSheet(true);
+      setInlineField('category');
       Alert.alert('Pick a category', 'Confirm the product category before listing.');
       return;
     }
     if (needsDetailsReview) {
-      setEditSheet(true);
+      openFirstRequiredField();
       return;
     }
 
@@ -272,7 +442,147 @@ export default function AIListingSuggestScreen({
       Alert.alert('Could not list', parseApiError(e));
       setSubmitting(false);
     }
-  }, [draft, effectivePrice, condition, categorySlug, needsDetailsReview, titleGuess, navigation, submitting, finalDetails]);
+  }, [
+    draft,
+    effectivePrice,
+    condition,
+    categorySlug,
+    needsDetailsReview,
+    titleGuess,
+    navigation,
+    submitting,
+    finalDetails,
+    openFirstRequiredField,
+  ]);
+
+  const renderInlinePicker = () => {
+    if (!inlineField) return null;
+
+    if (inlineField === 'category') {
+      return (
+        <InlineChoicePanel
+          title="Choose category"
+          helper="Pick the closest category so the right buyer specs appear."
+          options={CATEGORY_PICKS.map((pick) => ({ label: pick.label, value: pick.slug }))}
+          selected={categorySlug}
+          onSelect={selectCategoryInline}
+          onClose={() => setInlineField(null)}
+        />
+      );
+    }
+
+    if (inlineField === 'brand') {
+      return (
+        <InlineChoicePanel
+          title="Choose brand"
+          helper="Select the brand buyers will search for."
+          options={brandOptions.map((option) => ({ label: option, value: option }))}
+          selected={brand}
+          onSelect={selectBrandInline}
+          onClose={() => setInlineField(null)}
+          emptyText="Pick a category first."
+        />
+      );
+    }
+
+    if (inlineField === 'model') {
+      return (
+        <InlineChoicePanel
+          title="Choose model"
+          helper="Choose the closest model. Use Other / not sure if the exact one is not listed."
+          options={modelOptions.map((option) => ({ label: option, value: option }))}
+          selected={model}
+          onSelect={(next) => {
+            applyOverrides({ model: next });
+            setInlineField(null);
+          }}
+          onClose={() => setInlineField(null)}
+          emptyText={brand ? 'Model catalogue is not loaded for this brand yet.' : 'Choose brand first.'}
+        />
+      );
+    }
+
+    if (inlineField === 'storage') {
+      return (
+        <InlineChoicePanel
+          title="Choose storage"
+          helper="Storage should match the device setting or invoice, not only AI guess."
+          options={storageOptions.map((option) => ({ label: option, value: option }))}
+          selected={storage}
+          onSelect={(next) => {
+            applyOverrides({ storage: next });
+            setInlineField(null);
+          }}
+          onClose={() => setInlineField(null)}
+        />
+      );
+    }
+
+    if (inlineField === 'ram') {
+      return (
+        <InlineChoicePanel
+          title="Choose RAM"
+          helper="For laptops, RAM is a key price and trust detail."
+          options={ramOptions.map((option) => ({ label: option, value: option }))}
+          selected={ram}
+          onSelect={(next) => {
+            applyOverrides({ ram: next });
+            setInlineField(null);
+          }}
+          onClose={() => setInlineField(null)}
+        />
+      );
+    }
+
+    const booleanConfig: Partial<Record<Exclude<InlineField, null>, { title: string; helper: string; value: boolean | null }>> = {
+      has_box: {
+        title: 'Original box',
+        helper: 'Tell buyers if original packaging is included.',
+        value: hasBox,
+      },
+      has_bill: {
+        title: 'Bill / invoice',
+        helper: 'Invoice availability improves buyer confidence.',
+        value: hasBill,
+      },
+      has_charger: {
+        title: 'Charger included',
+        helper: 'Confirm if the original or compatible charger is included.',
+        value: hasCharger,
+      },
+      has_earphones: {
+        title: 'Earphones included',
+        helper: 'Choose No if the phone did not come with earphones or they are missing.',
+        value: hasEarphones,
+      },
+      water_damage_history: {
+        title: 'Water damage history',
+        helper: 'Choose Yes only if the item has ever had water damage.',
+        value: waterDamageHistory,
+      },
+      seller_functional_attestation: {
+        title: 'Working condition',
+        helper: 'Choose Yes only if everything works as expected right now.',
+        value: sellerFunctionalAttestation,
+      },
+    };
+    const config = booleanConfig[inlineField];
+    if (!config) return null;
+
+    return (
+      <InlineChoicePanel
+        title={config.title}
+        helper={config.helper}
+        options={[
+          { label: 'Yes', value: 'yes' },
+          { label: 'No', value: 'no' },
+        ]}
+        selected={config.value === null ? '' : config.value ? 'yes' : 'no'}
+        onSelect={(next) => selectBooleanInline(inlineField as BooleanDetailField, next === 'yes')}
+        onClose={() => setInlineField(null)}
+      />
+    );
+  };
 
   // ── Success state (in-place, replaces form) ─────────────────────────────
   if (success) {
@@ -353,37 +663,98 @@ export default function AIListingSuggestScreen({
                 <Text style={st.detailTitle}>Product details</Text>
                 <Text style={st.detailSub}>
                   {needsDetailsReview
-                    ? 'Confirm exact specs before listing.'
+                    ? 'Tap highlighted fields to complete them.'
                     : 'Exact specs confirmed.'}
                 </Text>
               </View>
-              <View style={[st.detailBadge, needsDetailsReview ? st.detailBadgeWarn : st.detailBadgeOk]}>
+              <TouchableOpacity
+                onPress={needsDetailsReview ? openFirstRequiredField : () => setEditSheet(true)}
+                activeOpacity={0.82}
+                style={[st.detailBadge, needsDetailsReview ? st.detailBadgeWarn : st.detailBadgeOk]}
+              >
                 <Text style={[st.detailBadgeText, needsDetailsReview ? st.detailBadgeWarnText : st.detailBadgeOkText]}>
                   {needsDetailsReview ? 'Review' : 'Ready'}
                 </Text>
-              </View>
+              </TouchableOpacity>
             </View>
             <View style={st.specRow}>
-              <SpecPill label="Category" value={categorySlug ? getCategoryLabel(categorySlug) : ''} missing={!categorySlug} />
+              <SpecPill
+                label="Category"
+                value={categorySlug ? getCategoryLabel(categorySlug) : ''}
+                missing={!categorySlug}
+                onPress={() => setInlineField('category')}
+              />
               {isOther ? (
-                <SpecPill label="Item" value={titleGuess} missing={titleGuess.trim().length < 4} />
+                <SpecPill
+                  label="Item"
+                  value={titleGuess}
+                  missing={titleGuess.trim().length < 4}
+                  onPress={() => setEditSheet(true)}
+                />
               ) : null}
-              <SpecPill label="Brand" value={brand} missing={isElectronic && !findCatalogOption(brand, brandOptions)} />
-              <SpecPill label="Model" value={model} missing={isElectronic && modelOptions.length > 0 && !findCatalogOption(model, modelOptions)} />
+              <SpecPill
+                label="Brand"
+                value={brand}
+                missing={isElectronic && !findCatalogOption(brand, brandOptions)}
+                onPress={() => setInlineField('brand')}
+              />
+              <SpecPill
+                label="Model"
+                value={model}
+                missing={isElectronic && modelOptions.length > 0 && !findCatalogOption(model, modelOptions)}
+                onPress={() => setInlineField('model')}
+              />
               {isElectronic ? (
-                <SpecPill label="Storage" value={storage} missing={!findCatalogOption(storage, storageOptions)} />
+                <SpecPill
+                  label="Storage"
+                  value={storage}
+                  missing={!findCatalogOption(storage, storageOptions)}
+                  onPress={() => setInlineField('storage')}
+                />
               ) : null}
               {categoryKind === 'laptop' ? (
-                <SpecPill label="RAM" value={ram} missing={!findCatalogOption(ram, ramOptions)} />
+                <SpecPill
+                  label="RAM"
+                  value={ram}
+                  missing={!findCatalogOption(ram, ramOptions)}
+                  onPress={() => setInlineField('ram')}
+                />
+              ) : null}
+              {isElectronic ? (
+                <>
+                  <SpecPill label="Box" value={boolLabel(hasBox)} missing={hasBox === null} onPress={() => setInlineField('has_box')} />
+                  <SpecPill label="Bill" value={boolLabel(hasBill)} missing={hasBill === null} onPress={() => setInlineField('has_bill')} />
+                  <SpecPill label="Charger" value={boolLabel(hasCharger)} missing={hasCharger === null} onPress={() => setInlineField('has_charger')} />
+                  {categoryKind === 'phone' ? (
+                    <SpecPill label="Earphones" value={boolLabel(hasEarphones)} missing={hasEarphones === null} onPress={() => setInlineField('has_earphones')} />
+                  ) : null}
+                  <SpecPill
+                    label="Water damage"
+                    value={boolLabel(waterDamageHistory)}
+                    missing={waterDamageHistory === null}
+                    onPress={() => setInlineField('water_damage_history')}
+                  />
+                  <SpecPill
+                    label="Works"
+                    value={boolLabel(sellerFunctionalAttestation)}
+                    missing={sellerFunctionalAttestation !== true}
+                    onPress={() => setInlineField('seller_functional_attestation')}
+                  />
+                </>
               ) : null}
             </View>
             {detailReviewIssues.length > 0 ? (
               <Text style={st.detailIssue}>
-                Select {detailReviewIssues.join(', ')} from the detail sheet.
+                Required before listing: {detailReviewIssues.join(', ')}.
               </Text>
             ) : null}
-            <TouchableOpacity style={st.detailAction} onPress={() => setEditSheet(true)} activeOpacity={0.82}>
-              <Text style={st.detailActionText}>{needsDetailsReview ? 'Confirm details' : 'Edit details'}</Text>
+            {renderInlinePicker()}
+            <TouchableOpacity
+              style={st.detailAction}
+              onPress={needsDetailsReview ? openFirstRequiredField : () => setEditSheet(true)}
+              activeOpacity={0.82}
+            >
+              <Text style={st.detailActionText}>{needsDetailsReview ? 'Complete highlighted fields' : 'More details'}</Text>
             </TouchableOpacity>
           </View>
         ) : null}
@@ -393,21 +764,26 @@ export default function AIListingSuggestScreen({
           <Text style={st.sectionH1}>Set your price</Text>
           <Text style={st.sectionSub}>
             {draft.price_source === 'comparables' && draft.comparables.length > 0
-              ? `Based on ${draft.comparables.length} similar items sold recently.`
+              ? `Owmee guidance is based on ${draft.comparables.length} similar items sold recently.`
               : draft.price_source === 'ai'
-                ? 'Suggested using Indian market estimates.'
-                : 'Confirm or set a base price for your listing.'}
+                ? 'Owmee guidance uses Indian market estimates.'
+                : 'Choose the asking price buyers will see.'}
           </Text>
 
           <TouchableOpacity style={st.priceBtn} onPress={() => setPriceSheet(true)}>
-            <Text style={st.priceBtnTitle}>Set my price</Text>
-            <Text style={st.priceBtnHint}>Enter the amount you want.</Text>
+            <Text style={st.priceBtnTitle}>Your asking price</Text>
+            <Text style={st.priceBtnHint}>
+              {customPrice != null ? 'You set this price.' : 'Starts from Owmee guidance. Change anytime.'}
+            </Text>
             <Text style={st.priceBtnArrow}>›</Text>
           </TouchableOpacity>
+          <Text style={st.priceNote}>
+            Owmee suggests a range; you choose the final asking price.
+          </Text>
 
           {draft.comparables.length > 0 && (
             <TouchableOpacity style={st.priceBtn} onPress={() => setCompsSheet(true)}>
-              <Text style={st.priceBtnTitle}>See our price suggestion</Text>
+              <Text style={st.priceBtnTitle}>See Owmee price guidance</Text>
               <Text style={st.priceBtnHint}>{formatPrice(draft.suggested_price ?? effectivePrice)} · based on similar sales</Text>
               <Text style={st.priceBtnArrow}>›</Text>
             </TouchableOpacity>
@@ -424,10 +800,7 @@ export default function AIListingSuggestScreen({
               return (
                 <TouchableOpacity
                   key={opt.key}
-                  onPress={() => {
-                    setCondition(opt.key);
-                    setCustomPrice(null);
-                  }}
+                  onPress={() => setCondition(opt.key)}
                   style={[st.condPill, active && st.condPillActive]}>
                   {active && <Text style={st.condPillTick}>✓</Text>}
                   <Text style={[st.condPillLabel, active && st.condPillLabelActive]}>
@@ -475,12 +848,12 @@ export default function AIListingSuggestScreen({
       {/* Sticky CTA */}
       <View style={st.ctaBar}>
         <Button
-          label={needsDetailsReview ? 'Confirm details' : 'Continue to list'}
+          label={needsDetailsReview ? 'Complete required details' : 'Continue to list'}
           variant="primary"
           size="lg"
           loading={submitting}
           disabled={submitting}
-          onPress={needsDetailsReview ? () => setEditSheet(true) : submit}
+          onPress={needsDetailsReview ? openFirstRequiredField : submit}
           fullWidth
           style={st.primaryBtn}
         />
@@ -501,6 +874,12 @@ export default function AIListingSuggestScreen({
             purchase_year: purchaseYear,
             accessories,
             warranty_status: warrantyStatus,
+            has_box: hasBox,
+            has_bill: hasBill,
+            has_charger: hasCharger,
+            has_earphones: categoryKind === 'phone' ? hasEarphones : null,
+            water_damage_history: waterDamageHistory,
+            seller_functional_attestation: sellerFunctionalAttestation,
             category_slug: categorySlug,
           }}
           onSave={(next) => {
@@ -508,7 +887,6 @@ export default function AIListingSuggestScreen({
               ...next,
               category_slug: canonicalCategorySlug(next.category_slug),
             });
-            setDetailsConfirmed(true);
             setEditSheet(false);
           }}
           onClose={() => setEditSheet(false)}
@@ -556,13 +934,102 @@ function TrustRow({ text }: { text: string }) {
   );
 }
 
-function SpecPill({ label, value, missing }: { label: string; value: string; missing?: boolean }) {
-  return (
-    <View style={[st.specPill, missing && st.specPillMissing]}>
+function boolLabel(value: boolean | null | undefined) {
+  if (value === true) return 'Yes';
+  if (value === false) return 'No';
+  return '';
+}
+
+function SpecPill({
+  label,
+  value,
+  missing,
+  onPress,
+}: {
+  label: string;
+  value: string;
+  missing?: boolean;
+  onPress?: () => void;
+}) {
+  const content = (
+    <>
       <Text style={[st.specPillLabel, missing && st.specPillMissingText]}>{label}</Text>
       <Text style={[st.specPillValue, missing && st.specPillMissingText]} numberOfLines={1}>
         {value || 'Select'}
       </Text>
+    </>
+  );
+  if (!onPress) {
+    return (
+      <View style={[st.specPill, missing && st.specPillMissing]}>
+        {content}
+      </View>
+    );
+  }
+  return (
+    <TouchableOpacity
+      style={[st.specPill, st.specPillTap, missing && st.specPillMissing]}
+      onPress={onPress}
+      activeOpacity={0.82}
+      accessibilityRole="button">
+      {content}
+    </TouchableOpacity>
+  );
+}
+
+type InlineChoice = {
+  label: string;
+  value: string;
+};
+
+function InlineChoicePanel({
+  title,
+  helper,
+  options,
+  selected,
+  onSelect,
+  onClose,
+  emptyText,
+}: {
+  title: string;
+  helper: string;
+  options: InlineChoice[];
+  selected?: string;
+  onSelect: (value: string) => void;
+  onClose: () => void;
+  emptyText?: string;
+}) {
+  return (
+    <View style={st.inlinePanel}>
+      <View style={st.inlineHeader}>
+        <View style={st.inlineTitleWrap}>
+          <Text style={st.inlineTitle}>{title}</Text>
+          <Text style={st.inlineHelper}>{helper}</Text>
+        </View>
+        <TouchableOpacity onPress={onClose} style={st.inlineClose} activeOpacity={0.82}>
+          <Text style={st.inlineCloseText}>Close</Text>
+        </TouchableOpacity>
+      </View>
+      {options.length > 0 ? (
+        <View style={st.inlineChoiceRow}>
+          {options.map((option) => {
+            const active = selected === option.value;
+            return (
+              <TouchableOpacity
+                key={option.value}
+                onPress={() => onSelect(option.value)}
+                activeOpacity={0.82}
+                style={[st.inlineChoice, active && st.inlineChoiceActive]}>
+                <Text style={[st.inlineChoiceText, active && st.inlineChoiceTextActive]}>
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      ) : (
+        <Text style={st.inlineEmpty}>{emptyText || 'No options available yet.'}</Text>
+      )}
     </View>
   );
 }
@@ -693,6 +1160,13 @@ const st = StyleSheet.create({
     borderColor: C.border2,
     backgroundColor: C.bone,
   },
+  specPillTap: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
+  },
   specPillMissing: {
     borderColor: C.amberBorder,
     backgroundColor: C.amberSoft,
@@ -710,6 +1184,77 @@ const st = StyleSheet.create({
     fontWeight: T.weight.bold,
   },
   specPillMissingText: { color: C.amberDeep },
+  inlinePanel: {
+    marginTop: S.md,
+    padding: S.md,
+    borderRadius: R.md,
+    borderWidth: 1,
+    borderColor: C.petrol,
+    backgroundColor: C.petrolLight,
+  },
+  inlineHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: S.md,
+  },
+  inlineTitleWrap: { flex: 1 },
+  inlineTitle: {
+    fontSize: T.size.base,
+    fontWeight: T.weight.bold,
+    color: C.petrolText,
+  },
+  inlineHelper: {
+    marginTop: 2,
+    fontSize: T.size.sm,
+    color: C.text2,
+    lineHeight: T.size.sm + 5,
+  },
+  inlineClose: {
+    paddingHorizontal: S.sm,
+    paddingVertical: 4,
+    borderRadius: R.pill,
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.blueBorder,
+  },
+  inlineCloseText: {
+    fontSize: T.size.xs,
+    fontWeight: T.weight.bold,
+    color: C.petrolDeep,
+  },
+  inlineChoiceRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: S.sm,
+    marginTop: S.md,
+  },
+  inlineChoice: {
+    paddingHorizontal: S.md,
+    paddingVertical: S.sm,
+    borderRadius: R.pill,
+    borderWidth: 1,
+    borderColor: C.blueBorder,
+    backgroundColor: C.surface,
+  },
+  inlineChoiceActive: {
+    backgroundColor: C.petrol,
+    borderColor: C.petrol,
+  },
+  inlineChoiceText: {
+    fontSize: T.size.sm,
+    fontWeight: T.weight.semi,
+    color: C.petrolText,
+  },
+  inlineChoiceTextActive: {
+    color: C.surface,
+  },
+  inlineEmpty: {
+    marginTop: S.md,
+    fontSize: T.size.sm,
+    color: C.text3,
+    fontWeight: T.weight.medium,
+  },
   detailIssue: {
     marginTop: S.md,
     fontSize: T.size.sm,
@@ -774,6 +1319,13 @@ const st = StyleSheet.create({
     marginTop: 2,
     fontSize: T.size.sm,
     color: C.text3,
+  },
+  priceNote: {
+    marginTop: -2,
+    marginBottom: S.sm,
+    fontSize: T.size.xs,
+    color: C.text4,
+    lineHeight: T.size.xs + 4,
   },
   priceBtnArrow: {
     position: 'absolute',
