@@ -112,6 +112,14 @@ Also fill the structured image_set_quality block (descriptive, not blocking):
 - is_stock_or_catalog_image_suspected: true if any photo looks like a stock/catalog image
 - overall_photo_quality: one of "good" | "usable" | "poor" | "unusable"
 
+Also select the listing hero photo:
+- hero_image_index must be the zero-based index of the best buyer-facing hero image.
+- Pick the clearest actual product photo with the full product visible.
+- Prefer natural seller photos over box, receipt, warranty, settings/spec screenshots, or accessory-only photos.
+- Avoid photos with private information, heavy blur, severe crop, or multiple products.
+- If there is only one usable product photo, use index 0.
+- hero_image_rationale should be one short sentence.
+
 ==================================================
 EVIDENCE DISCIPLINE
 ==================================================

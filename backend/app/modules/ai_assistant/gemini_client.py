@@ -177,6 +177,8 @@ class _GeminiVisionOut(BaseModel):
 
     # ── PROMPT v2 additions ─────────────────────────────────────────────
     image_set_quality: _ImageSetQuality = _ImageSetQuality()
+    hero_image_index: int | None = None
+    hero_image_rationale: str | None = None
     manual_review_required: bool = False
     auto_publish_candidate: bool = False
     blocking_reasons: list[str] = []
@@ -312,10 +314,13 @@ async def detect_from_images(
     parts: list[Any] = []
     text_intro = (
         "These photos show ONE product from multiple angles. "
-        "Combine signals from all photos. Be confident."
+        "Combine signals from all photos. Be confident. "
+        "Photos are provided with zero-based indexes; use those indexes "
+        "when setting hero_image_index."
     )
     parts.append(text_intro)
-    for image_bytes, content_type in images:
+    for idx, (image_bytes, content_type) in enumerate(images):
+        parts.append(f"Photo index {idx}:")
         parts.append(
             types.Part.from_bytes(
                 data=image_bytes,
@@ -433,6 +438,8 @@ def _translate_vision_response(parsed: "_GeminiVisionOut") -> AIDetected:
         flags=[str(f) for f in flags_in],
         # PROMPT v2 additions
         image_set_quality=isq_dict,
+        hero_image_index=parsed.hero_image_index,
+        hero_image_rationale=parsed.hero_image_rationale,
         manual_review_required=bool(parsed.manual_review_required),
         auto_publish_candidate=bool(parsed.auto_publish_candidate),
         blocking_reasons=[str(b)[:200] for b in (parsed.blocking_reasons or [])][:8],

@@ -112,6 +112,13 @@ export const SCREEN_SIZE_OPTIONS = [
   '6.1"', '6.5"', '6.7"', '7"', '8"', '10.9"', '11"', '12.9"',
   '13"', '14"', '15.6"', '16"', '17"', 'Other',
 ];
+export const KIDS_AGE_OPTIONS = [
+  '0-6 months', '6-12 months', '1-2 years', '2-3 years', '3-5 years',
+  '5-7 years', '7-10 years', '10+ years', 'All ages', 'Other',
+];
+export const HYGIENE_OPTIONS = [
+  'Sanitised', 'Cleaned', 'Washed', 'Needs cleaning', 'Sealed / unused', 'Not applicable',
+];
 export const PROCESSOR_OPTIONS = [
   'Apple M1', 'Apple M2', 'Apple M3', 'Apple M4',
   'Intel Core i3', 'Intel Core i5', 'Intel Core i7', 'Intel Core i9',

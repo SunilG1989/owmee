@@ -44,6 +44,8 @@ import PriceSheet from './shared/PriceSheet';
 import ComparablesSheet from './shared/ComparablesSheet';
 import {
   CATEGORY_PICKS,
+  HYGIENE_OPTIONS,
+  KIDS_AGE_OPTIONS,
   canonicalCategorySlug,
   findCatalogOption,
   getBrandsForCategory,
@@ -75,6 +77,8 @@ type DetailOverrides = {
   purchase_year?: number | null;
   accessories?: string;
   warranty_status?: string;
+  age_suitability?: string;
+  hygiene_status?: string;
   has_box?: boolean | null;
   has_bill?: boolean | null;
   has_charger?: boolean | null;
@@ -91,6 +95,8 @@ type InlineField =
   | 'model'
   | 'storage'
   | 'ram'
+  | 'age_suitability'
+  | 'hygiene_status'
   | 'has_box'
   | 'has_bill'
   | 'has_charger'
@@ -179,6 +185,8 @@ export default function AIListingSuggestScreen({
   const purchaseYear = overrides.purchase_year ?? draft.detected.purchase_year ?? null;
   const accessories = overrides.accessories ?? draft.detected.accessories ?? '';
   const warrantyStatus = overrides.warranty_status ?? draft.detected.warranty_status ?? '';
+  const ageSuitability = overrides.age_suitability ?? '';
+  const hygieneStatus = overrides.hygiene_status ?? '';
   const imageQuality = draft.detected.image_set_quality || {};
   const hasBox = Object.prototype.hasOwnProperty.call(overrides, 'has_box')
     ? overrides.has_box ?? null
@@ -205,7 +213,16 @@ export default function AIListingSuggestScreen({
       if (otherTitle.length < 4 || /^used item$/i.test(otherTitle)) issues.push('title');
       return issues;
     }
-    if (!isElectronic) return issues;
+    if (!isElectronic) {
+      if ((categoryKind === 'appliance' || categoryKind === 'kids') && modelOptions.length > 0 && !findCatalogOption(model, modelOptions)) {
+        issues.push('item type');
+      }
+      if (categoryKind === 'kids') {
+        if (!findCatalogOption(ageSuitability, KIDS_AGE_OPTIONS)) issues.push('age suitability');
+        if (!findCatalogOption(hygieneStatus, HYGIENE_OPTIONS)) issues.push('cleanliness');
+      }
+      return issues;
+    }
     if (!findCatalogOption(brand, brandOptions)) issues.push('brand');
     if (modelOptions.length > 0 && !findCatalogOption(model, modelOptions)) issues.push('model');
     if (!findCatalogOption(storage, storageOptions)) issues.push('storage');
@@ -228,6 +245,8 @@ export default function AIListingSuggestScreen({
     hasEarphones,
     isElectronic,
     isOther,
+    ageSuitability,
+    hygieneStatus,
     model,
     modelOptions,
     draft.detected.title_suggestion,
@@ -239,8 +258,7 @@ export default function AIListingSuggestScreen({
     storageOptions,
     waterDamageHistory,
   ]);
-  const needsDetailsReview = !categorySlug
-    || ((isElectronic || isOther) && detailReviewIssues.length > 0);
+  const needsDetailsReview = !categorySlug || detailReviewIssues.length > 0;
 
   const firstRequiredField = useMemo<InlineField>(() => {
     if (!categorySlug) return 'category';
@@ -249,7 +267,16 @@ export default function AIListingSuggestScreen({
       if (otherTitle.length < 4 || /^used item$/i.test(otherTitle)) return 'title';
       return null;
     }
-    if (!isElectronic) return null;
+    if (!isElectronic) {
+      if ((categoryKind === 'appliance' || categoryKind === 'kids') && modelOptions.length > 0 && !findCatalogOption(model, modelOptions)) {
+        return 'model';
+      }
+      if (categoryKind === 'kids') {
+        if (!findCatalogOption(ageSuitability, KIDS_AGE_OPTIONS)) return 'age_suitability';
+        if (!findCatalogOption(hygieneStatus, HYGIENE_OPTIONS)) return 'hygiene_status';
+      }
+      return null;
+    }
     if (!findCatalogOption(brand, brandOptions)) return 'brand';
     if (modelOptions.length > 0 && !findCatalogOption(model, modelOptions)) return 'model';
     if (!findCatalogOption(storage, storageOptions)) return 'storage';
@@ -273,6 +300,8 @@ export default function AIListingSuggestScreen({
     hasEarphones,
     isElectronic,
     isOther,
+    ageSuitability,
+    hygieneStatus,
     model,
     modelOptions,
     overrides.title,
@@ -348,9 +377,14 @@ export default function AIListingSuggestScreen({
   }, [draft, overrides, brand, model, storage, color]);
 
   const subtitleSpecifics = useMemo(() => {
-    const parts = [storage, ram, color].filter(Boolean);
+    const parts = (() => {
+      if (categoryKind === 'kids') return [ageSuitability, hygieneStatus, color].filter(Boolean);
+      if (categoryKind === 'appliance') return [model, brand, color].filter(Boolean);
+      if (categoryKind === 'other') return [model, brand, color].filter(Boolean);
+      return [storage, ram, color].filter(Boolean);
+    })();
     return parts.length ? parts.join(' · ') : '';
-  }, [storage, ram, color]);
+  }, [ageSuitability, brand, categoryKind, color, hygieneStatus, model, storage, ram]);
 
   const finalDetails = useMemo(() => ({
     brand: cleanText(brand),
@@ -363,6 +397,8 @@ export default function AIListingSuggestScreen({
     purchase_year: purchaseYear || null,
     accessories: cleanText(accessories),
     warranty_status: cleanText(warrantyStatus),
+    age_suitability: cleanText(ageSuitability),
+    hygiene_status: cleanText(hygieneStatus),
     has_box: hasBox,
     has_bill: hasBill,
     has_charger: hasCharger,
@@ -371,6 +407,7 @@ export default function AIListingSuggestScreen({
     seller_functional_attestation: sellerFunctionalAttestation,
   }), [
     accessories,
+    ageSuitability,
     brand,
     categoryKind,
     color,
@@ -378,6 +415,7 @@ export default function AIListingSuggestScreen({
     hasBox,
     hasCharger,
     hasEarphones,
+    hygieneStatus,
     model,
     processor,
     purchaseYear,
@@ -534,6 +572,38 @@ export default function AIListingSuggestScreen({
       );
     }
 
+    if (inlineField === 'age_suitability') {
+      return (
+        <InlineChoicePanel
+          title="Choose age"
+          helper="Age suitability is the first thing parents check for kids items."
+          options={KIDS_AGE_OPTIONS.map((option) => ({ label: option, value: option }))}
+          selected={ageSuitability}
+          onSelect={(next) => {
+            applyOverrides({ age_suitability: next });
+            setInlineField(null);
+          }}
+          onClose={() => setInlineField(null)}
+        />
+      );
+    }
+
+    if (inlineField === 'hygiene_status') {
+      return (
+        <InlineChoicePanel
+          title="Choose cleanliness"
+          helper="Be clear about whether the item is cleaned, sealed, or needs cleaning."
+          options={HYGIENE_OPTIONS.map((option) => ({ label: option, value: option }))}
+          selected={hygieneStatus}
+          onSelect={(next) => {
+            applyOverrides({ hygiene_status: next });
+            setInlineField(null);
+          }}
+          onClose={() => setInlineField(null)}
+        />
+      );
+    }
+
     const booleanConfig: Partial<Record<Exclude<InlineField, null>, { title: string; helper: string; value: boolean | null }>> = {
       has_box: {
         title: 'Original box',
@@ -656,8 +726,7 @@ export default function AIListingSuggestScreen({
           </TouchableOpacity>
         </View>
 
-        {(isElectronic || isOther || !categorySlug) ? (
-          <View style={st.detailCard}>
+        <View style={st.detailCard}>
             <View style={st.detailHeader}>
               <View>
                 <Text style={st.detailTitle}>Product details</Text>
@@ -699,11 +768,31 @@ export default function AIListingSuggestScreen({
                 onPress={() => setInlineField('brand')}
               />
               <SpecPill
-                label="Model"
+                label={isElectronic ? 'Model' : 'Item type'}
                 value={model}
-                missing={isElectronic && modelOptions.length > 0 && !findCatalogOption(model, modelOptions)}
+                missing={
+                  modelOptions.length > 0
+                  && (isElectronic || categoryKind === 'appliance' || categoryKind === 'kids')
+                  && !findCatalogOption(model, modelOptions)
+                }
                 onPress={() => setInlineField('model')}
               />
+              {categoryKind === 'kids' ? (
+                <>
+                  <SpecPill
+                    label="Age"
+                    value={ageSuitability}
+                    missing={!findCatalogOption(ageSuitability, KIDS_AGE_OPTIONS)}
+                    onPress={() => setInlineField('age_suitability')}
+                  />
+                  <SpecPill
+                    label="Cleanliness"
+                    value={hygieneStatus}
+                    missing={!findCatalogOption(hygieneStatus, HYGIENE_OPTIONS)}
+                    onPress={() => setInlineField('hygiene_status')}
+                  />
+                </>
+              ) : null}
               {isElectronic ? (
                 <SpecPill
                   label="Storage"
@@ -718,6 +807,13 @@ export default function AIListingSuggestScreen({
                   value={ram}
                   missing={!findCatalogOption(ram, ramOptions)}
                   onPress={() => setInlineField('ram')}
+                />
+              ) : null}
+              {!isElectronic && categoryKind !== 'kids' ? (
+                <SpecPill
+                  label="Colour"
+                  value={color}
+                  onPress={() => setEditSheet(true)}
                 />
               ) : null}
               {isElectronic ? (
@@ -756,8 +852,7 @@ export default function AIListingSuggestScreen({
             >
               <Text style={st.detailActionText}>{needsDetailsReview ? 'Complete highlighted fields' : 'More details'}</Text>
             </TouchableOpacity>
-          </View>
-        ) : null}
+        </View>
 
         {/* Set your price */}
         <View style={st.section}>
@@ -874,6 +969,8 @@ export default function AIListingSuggestScreen({
             purchase_year: purchaseYear,
             accessories,
             warranty_status: warrantyStatus,
+            age_suitability: ageSuitability,
+            hygiene_status: hygieneStatus,
             has_box: hasBox,
             has_bill: hasBill,
             has_charger: hasCharger,

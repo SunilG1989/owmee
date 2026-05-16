@@ -15,6 +15,7 @@ import { Heart, MapPin, ShieldCheck, UserCheck } from 'lucide-react-native';
 import { C, T, S, R, Home, pickCardBg } from '../utils/tokens';
 import type { FeedListing } from '../services/api';
 import { Button } from './ui';
+import { buildListingFactChips } from '../utils/listingDisplay';
 
 interface Props {
   listing: FeedListing;
@@ -169,79 +170,6 @@ function dealSignal(listing: FeedListing): string | null {
   return null;
 }
 
-function cleanFact(value: string | number | null | undefined): string | null {
-  const cleaned = String(value ?? '')
-    .replace(/[_-]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  if (!cleaned || /^(n\/a|na|none|null|unknown|not sure)$/i.test(cleaned)) return null;
-  return cleaned
-    .replace(/\bgb\b/gi, 'GB')
-    .replace(/\btb\b/gi, 'TB')
-    .replace(/\bmah\b/gi, 'mAh');
-}
-
-function withCapacityUnit(value: string): string {
-  return /^\d+$/.test(value) ? `${value}GB` : value;
-}
-
-function formatStorageFact(value?: string | null): string | null {
-  const cleaned = cleanFact(value);
-  return cleaned ? withCapacityUnit(cleaned) : null;
-}
-
-function formatRamFact(value?: string | null): string | null {
-  const cleaned = cleanFact(value);
-  if (!cleaned) return null;
-  const capacity = withCapacityUnit(cleaned);
-  return /\bram\b/i.test(capacity) ? capacity : `${capacity} RAM`;
-}
-
-function normalizedSearchText(value: string | null | undefined): string {
-  return (value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
-}
-
-function titleAlreadyHas(title: string, value: string | null): boolean {
-  if (!value) return false;
-  const needle = normalizedSearchText(value);
-  return needle.length >= 3 && normalizedSearchText(title).includes(needle);
-}
-
-function addUniqueFact(list: string[], value: string | null | undefined) {
-  if (!value) return;
-  const label = value.trim();
-  if (!label) return;
-  const key = label.toLowerCase();
-  if (!list.some(item => item.toLowerCase() === key)) list.push(label);
-}
-
-function buyerFactChips(
-  listing: FeedListing,
-  displayTitle: string,
-  conditionLabel: string,
-): string[] {
-  const chips: string[] = [];
-  const brand = cleanFact(listing.brand);
-  const model = cleanFact(listing.model);
-  const identity = [brand, model].filter(Boolean).join(' ');
-
-  addUniqueFact(chips, conditionLabel);
-  if (identity && !titleAlreadyHas(displayTitle, identity)) {
-    addUniqueFact(chips, titleCaseWords(identity));
-  }
-  addUniqueFact(chips, formatStorageFact(listing.storage));
-  addUniqueFact(chips, formatRamFact(listing.ram));
-  addUniqueFact(chips, cleanFact(listing.color));
-  if (listing.warranty_active) {
-    const months = listing.warranty_months_left;
-    addUniqueFact(chips, months && months > 0 ? `${Math.round(months)}mo warranty` : 'Warranty');
-  }
-  if (listing.bill_available) addUniqueFact(chips, 'Bill');
-  if (listing.box_available) addUniqueFact(chips, 'Box');
-
-  return chips.slice(0, 4);
-}
-
 // ── DEAL VARIANT ─────────────────────────────────────────────────────────────
 
 export function DealCard({ listing, onPress, index = 0 }: Props) {
@@ -314,7 +242,20 @@ export function FeedCard({
   const sellerTrustLine = sellerTrustSummary(listing);
   const placeLine = placeSummary(listing);
   const signal = dealSignal(listing);
-  const buyerFacts = buyerFactChips(listing, displayTitle, conditionLabel);
+  const buyerFacts = buildListingFactChips(
+    {
+      ...listing,
+      has_bill: listing.bill_available,
+      has_box: listing.box_available,
+      warranty_status: listing.warranty_active ? 'Warranty' : undefined,
+    },
+    {
+      displayTitle,
+      conditionLabel,
+      includeCondition: true,
+      max: 4,
+    },
+  );
 
   const handleViewDetails = () => onPress();
   const handleMakeOffer = () => {

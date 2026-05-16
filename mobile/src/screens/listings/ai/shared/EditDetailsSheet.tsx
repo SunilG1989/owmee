@@ -22,6 +22,8 @@ import { Button } from '../../../../components/ui';
 import {
   CATEGORY_PICKS,
   COLOR_OPTIONS,
+  HYGIENE_OPTIONS,
+  KIDS_AGE_OPTIONS,
   PROCESSOR_OPTIONS,
   SCREEN_SIZE_OPTIONS,
   canonicalCategorySlug,
@@ -45,6 +47,8 @@ type EditableDetails = {
   purchase_year?: number | null;
   accessories?: string;
   warranty_status?: string;
+  age_suitability?: string;
+  hygiene_status?: string;
   has_box?: boolean | null;
   has_bill?: boolean | null;
   has_charger?: boolean | null;
@@ -81,6 +85,8 @@ export default function EditDetailsSheet({ initial, onSave, onClose }: Props) {
   const [purchaseYear, setPurchaseYear] = useState(initial.purchase_year ? String(initial.purchase_year) : '');
   const [accessories, setAccessories] = useState(initial.accessories || '');
   const [warrantyStatus, setWarrantyStatus] = useState(initial.warranty_status || '');
+  const [ageSuitability, setAgeSuitability] = useState(initial.age_suitability || '');
+  const [hygieneStatus, setHygieneStatus] = useState(initial.hygiene_status || '');
   const [hasBox, setHasBox] = useState<boolean | null>(initial.has_box ?? null);
   const [hasBill, setHasBill] = useState<boolean | null>(initial.has_bill ?? null);
   const [hasCharger, setHasCharger] = useState<boolean | null>(initial.has_charger ?? null);
@@ -102,6 +108,9 @@ export default function EditDetailsSheet({ initial, onSave, onClose }: Props) {
     const missing: string[] = [];
     if (!category_slug) missing.push('category');
     if (isOther && (title.trim().length < 4 || /^used item$/i.test(title.trim()))) missing.push('title');
+    if (!isElectronic && !isOther && modelOptions.length > 0 && !findCatalogOption(model, modelOptions)) {
+      missing.push('item type');
+    }
     if (isElectronic) {
       if (!findCatalogOption(brand, brandOptions)) missing.push('brand');
       if (modelOptions.length > 0 && !findCatalogOption(model, modelOptions)) missing.push('model');
@@ -114,8 +123,13 @@ export default function EditDetailsSheet({ initial, onSave, onClose }: Props) {
       if (waterDamageHistory === null) missing.push('water damage');
       if (sellerFunctionalAttestation !== true) missing.push('working condition');
     }
+    if (categoryKind === 'kids') {
+      if (!findCatalogOption(ageSuitability, KIDS_AGE_OPTIONS)) missing.push('age suitability');
+      if (!findCatalogOption(hygieneStatus, HYGIENE_OPTIONS)) missing.push('cleanliness');
+    }
     return missing;
   }, [
+    ageSuitability,
     brand,
     brandOptions,
     categoryKind,
@@ -124,6 +138,7 @@ export default function EditDetailsSheet({ initial, onSave, onClose }: Props) {
     hasBox,
     hasCharger,
     hasEarphones,
+    hygieneStatus,
     isElectronic,
     isOther,
     model,
@@ -272,12 +287,22 @@ export default function EditDetailsSheet({ initial, onSave, onClose }: Props) {
                 />
 
                 <SuggestionField
-                  label="Model"
+                  label={categoryKind === 'appliance' || categoryKind === 'kids' ? 'Item type *' : 'Model'}
                   value={model}
                   onChangeText={setModel}
-                  placeholder="Exact model or product name"
+                  placeholder={categoryKind === 'appliance' || categoryKind === 'kids' ? 'Choose item type' : 'Exact model or product name'}
                   suggestions={modelOptions}
                 />
+
+                {categoryKind === 'kids' ? (
+                  <>
+                    <Text style={st.label}>Age suitability *</Text>
+                    <ChipSet options={KIDS_AGE_OPTIONS} selected={ageSuitability} onSelect={setAgeSuitability} />
+
+                    <Text style={st.label}>Cleanliness *</Text>
+                    <ChipSet options={HYGIENE_OPTIONS} selected={hygieneStatus} onSelect={setHygieneStatus} />
+                  </>
+                ) : null}
               </>
             )}
 
@@ -367,6 +392,8 @@ export default function EditDetailsSheet({ initial, onSave, onClose }: Props) {
                 purchase_year: /^\d{4}$/.test(purchaseYear) ? parseInt(purchaseYear, 10) : null,
                 accessories,
                 warranty_status: warrantyStatus,
+                age_suitability: ageSuitability,
+                hygiene_status: hygieneStatus,
                 has_box: hasBox,
                 has_bill: hasBill,
                 has_charger: hasCharger,

@@ -6,6 +6,7 @@ import { MapPin, ShieldCheck } from 'lucide-react-native';
 import { C, T, S, R, Shadow, formatPrice, percentOff, condStyle } from '../../utils/tokens';
 import { Button, IconButton } from '../ui';
 import type { Listing } from '../../services/api';
+import { buildListingFactChips } from '../../utils/listingDisplay';
 
 interface Props {
   listing: Listing;
@@ -63,52 +64,6 @@ function dealSignal(listing: Listing): string | null {
   return null;
 }
 
-function cleanSpecValue(value: string | number | null | undefined): string | null {
-  const cleaned = String(value ?? '')
-    .replace(/[_-]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  if (!cleaned || /^(n\/a|na|none|null|unknown|not sure)$/i.test(cleaned)) return null;
-  return cleaned
-    .replace(/\bgb\b/gi, 'GB')
-    .replace(/\btb\b/gi, 'TB')
-    .replace(/\bmah\b/gi, 'mAh');
-}
-
-function withCapacityUnit(value: string): string {
-  return /^\d+$/.test(value) ? `${value}GB` : value;
-}
-
-function formatRamChip(value?: string | null): string | null {
-  const cleaned = cleanSpecValue(value);
-  if (!cleaned) return null;
-  const capacity = withCapacityUnit(cleaned);
-  return /\bram\b/i.test(capacity) ? capacity : `${capacity} RAM`;
-}
-
-function addUniqueChip(chips: string[], value: string | null | undefined) {
-  if (!value) return;
-  const label = value.trim();
-  if (!label) return;
-  const key = label.toLowerCase();
-  if (!chips.some(item => item.toLowerCase() === key)) chips.push(label);
-}
-
-function compactSpecChips(listing: Listing): string[] {
-  const chips: string[] = [];
-  const storage = cleanSpecValue(listing.storage);
-  const warranty = cleanSpecValue(listing.warranty_status);
-
-  addUniqueChip(chips, storage ? withCapacityUnit(storage) : null);
-  addUniqueChip(chips, formatRamChip(listing.ram));
-  addUniqueChip(chips, cleanSpecValue(listing.color));
-  if (warranty && !/no|none|expired/i.test(warranty)) addUniqueChip(chips, 'Warranty');
-  if (listing.has_bill) addUniqueChip(chips, 'Bill');
-  if (listing.has_box) addUniqueChip(chips, 'Box');
-
-  return chips.slice(0, 3);
-}
-
 // T2-07: REMOVED useWindowDimensions — parent calculates once, passes to all cards
 export const ListingCard = memo(function ListingCard({
   listing, onPress, onBuySafely, onMakeOffer, onWishlist, isWishlisted, showDistance = true, cardWidth,
@@ -128,7 +83,11 @@ export const ListingCard = memo(function ListingCard({
     || (listing.reviewed_by && listing.reviewed_by !== 'none'),
   );
   const signal = dealSignal(listing);
-  const specChips = compactSpecChips(listing);
+  const specChips = buildListingFactChips(listing, {
+    conditionLabel: cs.label,
+    includeCondition: false,
+    max: 3,
+  });
   const detailChipLimit = off ? 2 : 3;
   const detailChips = [off ? null : signal, ...specChips]
     .filter(Boolean)

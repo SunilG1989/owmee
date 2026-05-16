@@ -44,6 +44,11 @@ export const C = {
   coralBright:   '#D7A89E',
   wordmarkCoral: '#B85E42',
   wordmarkTeal:  '#245E56',
+  wordmarkOrangeTop: '#C97861',
+  wordmarkOrangeMid: '#B85E42',
+  wordmarkOrangeBase: '#6E4C45',
+  wordmarkOrangeBoost: '#B85E42',
+  wordmarkOrangeRim: '#5F3A34',
 
   // ── ACTIONS · LOGO/HOME CTA SYSTEM ──────────────────────────────────
   ctaPrimary:        '#245E56',

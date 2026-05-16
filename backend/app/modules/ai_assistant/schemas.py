@@ -88,6 +88,11 @@ class AIDetected(BaseModel):
     #   overall_photo_quality ("good" | "usable" | "poor" | "unusable").
     # This block is purely descriptive — it is NOT a guardrail input.
     image_set_quality: dict = Field(default_factory=dict)
+    # Zero-based index into the uploaded image set. The backend uses this
+    # to choose the listing hero image and process only that image for
+    # background cleanup.
+    hero_image_index: int | None = None
+    hero_image_rationale: str | None = None
 
     # Review routing — populated by Gemini per PROMPT v2 + reinforced
     # by the post-processing guardrails in the configured provider adapter.
@@ -159,6 +164,8 @@ class CreateFromDraftRequest(BaseModel):
     battery_health: int | None = Field(None, ge=0, le=100)
     accessories: str | None = None
     warranty_status: str | None = None
+    age_suitability: str | None = None
+    hygiene_status: str | None = None
     has_box: bool | None = None
     has_bill: bool | None = None
     has_charger: bool | None = None
@@ -217,6 +224,8 @@ class EditListingRequest(BaseModel):
     battery_health: int | None = Field(None, ge=0, le=100)
     accessories: str | None = None
     warranty_status: str | None = None
+    age_suitability: str | None = None
+    hygiene_status: str | None = None
 
 
 class EditListingResponse(BaseModel):

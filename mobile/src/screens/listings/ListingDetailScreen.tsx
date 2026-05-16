@@ -15,6 +15,7 @@ import { BackButton, Button, IconButton } from '../../components/ui';
 import { parseApiError } from '../../utils/errors';
 import { afterInteractions } from '../../utils/schedule';
 import type { RootScreen } from '../../navigation/types';
+import { buildListingProductFacts, type ProductFact } from '../../utils/listingDisplay';
 
 // Sprint 4 / Pass 3: kids safety checklist labels — must match FeCaptureScreen.
 const KIDS_SAFETY_PANEL_KEYS: { key: string; label: string }[] = [
@@ -27,84 +28,6 @@ const KIDS_SAFETY_PANEL_KEYS: { key: string; label: string }[] = [
   { key: 'no_recalled_model',  label: 'Not a recalled model' },
   { key: 'age_label_correct',  label: 'Age suitability confirmed' },
 ];
-
-type ProductFact = {
-  label: string;
-  value: string;
-};
-
-function textValue(value: unknown): string | null {
-  if (value == null) return null;
-  const text = String(value)
-    .replace(/[_-]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/\bgb\b/gi, 'GB')
-    .replace(/\btb\b/gi, 'TB')
-    .replace(/\bmah\b/gi, 'mAh');
-  if (/^(n\/a|na|none|null|unknown|not sure)$/i.test(text)) return null;
-  return text.length ? text : null;
-}
-
-function capacityValue(value: unknown): string | null {
-  const text = textValue(value);
-  if (!text) return null;
-  return /^\d+$/.test(text) ? `${text}GB` : text;
-}
-
-function batteryValue(value: unknown): string | null {
-  const text = textValue(value);
-  if (!text) return null;
-  return /%$/.test(text) ? text : `${text}%`;
-}
-
-function booleanFact(value: boolean | null | undefined, yes: string, no: string): string | null {
-  if (value === true) return yes;
-  if (value === false) return no;
-  return null;
-}
-
-function buildProductFacts(listing: Listing, conditionLabel: string): ProductFact[] {
-  const defects = Array.isArray(listing.defects)
-    ? listing.defects.map(textValue).filter(Boolean).join(', ')
-    : null;
-  const rows: Array<[string, string | null]> = [
-    ['Brand', textValue(listing.brand)],
-    ['Model', textValue(listing.model)],
-    ['Condition', conditionLabel],
-    ['Color', textValue(listing.color)],
-    ['Storage', capacityValue(listing.storage)],
-    ['RAM', capacityValue(listing.ram)],
-    ['Processor', textValue(listing.processor)],
-    ['Screen size', textValue(listing.screen_size)],
-    ['Battery', batteryValue(listing.battery_health)],
-    ['Purchase year', listing.purchase_year ? String(listing.purchase_year) : null],
-    ['Warranty', textValue(listing.warranty_status || listing.warranty_info)],
-    ['Bill', booleanFact(listing.has_bill, 'Available', 'Not available')],
-    ['Box', booleanFact(listing.has_box, 'Available', 'Not available')],
-    ['Charger', booleanFact(listing.has_charger, 'Included', 'Not included')],
-    ['Earphones', booleanFact(listing.has_earphones, 'Included', 'Not included')],
-    ['Screen condition', textValue(listing.screen_condition)],
-    ['Body condition', textValue(listing.body_condition)],
-    ['Water damage', booleanFact(listing.water_damage_history, 'Reported', 'No history declared')],
-    ['Functionality', booleanFact(
-      listing.seller_functional_attestation,
-      'Seller says fully functional',
-      'Needs buyer review',
-    )],
-    ['Known issues', defects],
-  ];
-
-  const seen = new Set<string>();
-  return rows
-    .filter(([, value]) => !!value)
-    .filter(([label]) => {
-      if (seen.has(label)) return false;
-      seen.add(label);
-      return true;
-    })
-    .map(([label, value]) => ({ label, value: value! }));
-}
 
 function PremiumGalleryImage({ uri, width, height }: { uri: string; width: number; height: number }) {
   return (
@@ -221,7 +144,7 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
   const isOwn = listing.seller_id === userId;
   const off = percentOff(listing.price, listing.original_price);
   const cs = condStyle(listing.condition);
-  const productFacts = buildProductFacts(listing, cs.label);
+  const productFacts = buildListingProductFacts(listing, cs.label);
 
   const toggleWish = async () => {
     if (!isAuthenticated) { navigation.navigate('AuthFlow'); return; }

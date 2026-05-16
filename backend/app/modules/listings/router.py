@@ -26,7 +26,8 @@ from uuid import UUID
 import structlog
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import func, inspect, or_, select, update
+from sqlalchemy.orm import selectinload
 
 from app.core.dependencies import BasicUser, DBSession, OptionalUser, VerifiedUser
 from app.core.rate_limit import LISTING_CREATE_PER_USER, limit_by_user
@@ -96,6 +97,18 @@ def _card_image_urls(listing: Listing) -> list[str]:
     first_key = listing.thumbnail_url or next(iter(listing.image_urls or []), None)
     first_url = _img_url(first_key)
     return [first_url] if first_url else []
+
+
+def _category_slug(listing: Listing) -> str | None:
+    state = inspect(listing, raiseerr=False)
+    if state is not None and "category" in state.unloaded:
+        return None
+    category = getattr(listing, "category", None)
+    return getattr(category, "slug", None) if category else None
+
+
+def _iso_or_none(value) -> str | None:
+    return value.isoformat() if value else None
 
 
 # ── Schemas ────────────────────────────────────────────────────────────────────
@@ -183,6 +196,7 @@ def _fmt_card(listing: Listing, seller_verified: bool = False) -> dict:
         "city": listing.city,
         "locality": listing.locality,
         "category_id": str(listing.category_id),
+        "category_slug": _category_slug(listing),
         "image_urls": _card_image_urls(listing),
         "thumbnail_url": _img_url(listing.thumbnail_url),
         "view_count": listing.view_count,
@@ -203,8 +217,19 @@ def _fmt_card(listing: Listing, seller_verified: bool = False) -> dict:
         "original_price": str(listing.original_price) if listing.original_price else None,
         "serial_number": listing.serial_number,
         "age_suitability": listing.age_suitability,
-        "published_at": listing.published_at.isoformat() if listing.published_at else None,
-        "created_at": listing.created_at.isoformat() if listing.created_at else None,
+        "hygiene_status": listing.hygiene_status,
+        "accessories": listing.accessories,
+        "warranty_info": listing.warranty_info,
+        "warranty_status": listing.warranty_info,
+        "battery_health": listing.battery_health,
+        "has_box": getattr(listing, "has_box", None),
+        "has_bill": getattr(listing, "has_bill", None),
+        "has_charger": getattr(listing, "has_charger", None),
+        "has_earphones": getattr(listing, "has_earphones", None),
+        "water_damage_history": getattr(listing, "water_damage_history", None),
+        "seller_functional_attestation": getattr(listing, "seller_functional_attestation", None),
+        "published_at": _iso_or_none(getattr(listing, "published_at", None)),
+        "created_at": _iso_or_none(getattr(listing, "created_at", None)),
         "listing_state": getattr(listing, "listing_state", None),
         "verification_status": getattr(listing, "verification_status", None),
         "imei_verified": getattr(listing, "verification_status", None) == "verified",
@@ -262,6 +287,7 @@ def _fmt_my(listing: Listing) -> dict:
         "moderation_status": listing.moderation_status,
         "city": listing.city,
         "category_id": str(listing.category_id),
+        "category_slug": _category_slug(listing),
         "image_urls": _card_image_urls(listing),
         "thumbnail_url": _img_url(listing.thumbnail_url),
         "view_count": listing.view_count,
@@ -280,10 +306,22 @@ def _fmt_my(listing: Listing) -> dict:
         "defects": listing.defects,
         "original_price": str(listing.original_price) if listing.original_price else None,
         "serial_number": listing.serial_number,
+        "age_suitability": listing.age_suitability,
+        "hygiene_status": listing.hygiene_status,
+        "accessories": listing.accessories,
+        "warranty_info": listing.warranty_info,
+        "warranty_status": listing.warranty_info,
+        "battery_health": listing.battery_health,
+        "has_box": getattr(listing, "has_box", None),
+        "has_bill": getattr(listing, "has_bill", None),
+        "has_charger": getattr(listing, "has_charger", None),
+        "has_earphones": getattr(listing, "has_earphones", None),
+        "water_damage_history": getattr(listing, "water_damage_history", None),
+        "seller_functional_attestation": getattr(listing, "seller_functional_attestation", None),
         "listing_source": listing.listing_source,
         "reviewed_by": listing.reviewed_by,
-        "created_at": listing.created_at.isoformat() if listing.created_at else None,
-        "published_at": listing.published_at.isoformat() if listing.published_at else None,
+        "created_at": _iso_or_none(getattr(listing, "created_at", None)),
+        "published_at": _iso_or_none(getattr(listing, "published_at", None)),
         "listing_state": getattr(listing, "listing_state", None),
         "verification_status": getattr(listing, "verification_status", None),
         "imei_verified": getattr(listing, "verification_status", None) == "verified",
@@ -346,7 +384,7 @@ async def search_listings(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ):
-    query = select(Listing).where(Listing.status == "active")
+    query = select(Listing).options(selectinload(Listing.category)).where(Listing.status == "active")
     ts_query = func.plainto_tsquery("english", q)
     query = query.where(
         or_(Listing.search_vector.op("@@")(ts_query), Listing.title.ilike(f"%{q}%"))
@@ -397,7 +435,7 @@ async def search_listings(
 @router.get("/me")
 async def seller_dashboard(current_user: VerifiedUser, db: DBSession):
     listings_result = await db.execute(
-        select(Listing).where(Listing.seller_id == current_user.user_id)
+        select(Listing).options(selectinload(Listing.category)).where(Listing.seller_id == current_user.user_id)
         .order_by(Listing.created_at.desc())
     )
     listings = listings_result.scalars().all()
@@ -462,7 +500,7 @@ async def seller_dashboard(current_user: VerifiedUser, db: DBSession):
 @router.get("/me/listings")
 async def my_listings(current_user: BasicUser, db: DBSession,
                       status_filter: str | None = Query(None)):
-    query = select(Listing).where(Listing.seller_id == current_user.user_id)
+    query = select(Listing).options(selectinload(Listing.category)).where(Listing.seller_id == current_user.user_id)
     if status_filter:
         query = query.where(Listing.status == status_filter)
     result = await db.execute(query.order_by(Listing.created_at.desc()))
@@ -659,7 +697,7 @@ async def browse_listings(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ):
-    query = select(Listing).where(Listing.status == "active")
+    query = select(Listing).options(selectinload(Listing.category)).where(Listing.status == "active")
     # Sprint 7 / Phase 1: community-scoped browse
     if current_user and community_only:
         cu_res = await db.execute(select(User).where(User.id == current_user.user_id))
@@ -928,7 +966,9 @@ async def price_suggestion(
 
 @router.get("/{listing_id}")
 async def get_listing(listing_id: UUID, db: DBSession):
-    result = await db.execute(select(Listing).where(Listing.id == listing_id))
+    result = await db.execute(
+        select(Listing).options(selectinload(Listing.category)).where(Listing.id == listing_id)
+    )
     listing = result.scalar_one_or_none()
     if not listing:
         raise HTTPException(status_code=404, detail={"error": "LISTING_NOT_FOUND"})

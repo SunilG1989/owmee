@@ -51,6 +51,11 @@ from app.modules.ai_assistant.schemas import (
     SellerInfoNeededResponse,
     SellerInfoRequest,
 )
+from app.modules.media.image_cleanup import (
+    clean_hero_background,
+    move_hero_first,
+    select_hero_image_index,
+)
 
 log = logging.getLogger(__name__)
 
@@ -602,6 +607,7 @@ async def create_from_draft(
             status, moderation_status, image_urls, thumbnail_url,
             brand, model, storage, ram, processor, screen_size, color,
             purchase_year, battery_health, accessories, warranty_info,
+            age_suitability, hygiene_status,
             has_box, has_bill, has_charger, has_earphones,
             water_damage_history, seller_functional_attestation,
             serial_number,
@@ -614,6 +620,7 @@ async def create_from_draft(
             'active', 'pending', :image_urls, :thumb,
             :brand, :model, :storage, :ram, :processor, :screen_size, :color,
             :purchase_year, :battery_health, :accessories, :warranty_info,
+            :age_suitability, :hygiene_status,
             :has_box, :has_bill, :has_charger, :has_earphones,
             :water_damage_history, :seller_functional_attestation,
             :serial,
@@ -650,6 +657,8 @@ async def create_from_draft(
             "battery_health": payload.battery_health,
             "accessories": payload.accessories,
             "warranty_info": payload.warranty_status,
+            "age_suitability": payload.age_suitability,
+            "hygiene_status": payload.hygiene_status,
             "has_box": payload.has_box,
             "has_bill": payload.has_bill,
             "has_charger": payload.has_charger,
@@ -845,6 +854,8 @@ async def edit_listing(
         "battery_health": payload.battery_health,
         "accessories": payload.accessories,
         "warranty_info": payload.warranty_status,
+        "age_suitability": payload.age_suitability,
+        "hygiene_status": payload.hygiene_status,
     }
     updates = {k: v for k, v in field_map.items() if v is not None}
 
@@ -963,8 +974,10 @@ async def draft_from_images(
 
     draft_id = uuid4()
 
-    # Store every photo and collect URLs
+    # Store every photo and collect display keys. The AI-selected hero may be
+    # reordered/cleaned below, but all originals stay in R2 under these keys.
     photo_urls: list[str] = []
+    original_keys: list[str] = []
     for idx, (image_bytes, content_type) in enumerate(image_pairs):
         # We use the draft_id + index in the key so all photos for a draft
         # share a logical prefix. _store_photo's signature uses just draft_id;
@@ -975,6 +988,7 @@ async def draft_from_images(
         elif content_type == "image/webp":
             ext = "webp"
         key = f"ai-drafts/{user.user_id}/{draft_id}_{idx}.{ext}"
+        original_keys.append(key)
         try:
             processed = process_listing_image_bytes(
                 image_bytes,
@@ -989,6 +1003,8 @@ async def draft_from_images(
     # ONE multi-image vision call — see all angles at once
     detected = await ai_provider.detect_from_images(image_pairs)
     detected = _with_canonical_category(detected)
+    hero_index = select_hero_image_index(detected, len(photo_urls))
+    detected = detected.model_copy(update={"hero_image_index": hero_index})
 
     # Hard reject unsafe or unusable photos — "Other" is only for visible
     # sellable products outside the launch taxonomy.
@@ -998,6 +1014,31 @@ async def draft_from_images(
             status_code=400,
             detail=rejection,
         )
+
+    # One-image AI cleanup: only the AI-selected hero gets background cleanup.
+    # This keeps analysis-time latency bounded and preserves all other photos
+    # as seller originals for buyer trust/disputes.
+    if 0 <= hero_index < len(image_pairs) and 0 <= hero_index < len(original_keys):
+        hero_bytes, hero_content_type = image_pairs[hero_index]
+        cleanup = await clean_hero_background(
+            hero_bytes,
+            hero_content_type,
+            original_key=original_keys[hero_index],
+            selected_index=hero_index,
+            category_slug=detected.category_slug,
+        )
+        image_quality = dict(detected.image_set_quality or {})
+        image_quality["hero_image_cleanup"] = {
+            "status": "ready" if cleanup.cleaned else "fallback_original",
+            "provider": cleanup.provider,
+            "model": cleanup.model,
+            "reason": cleanup.reason,
+        }
+        detected = detected.model_copy(update={"image_set_quality": image_quality})
+        if cleanup.cleaned and cleanup.display_key:
+            photo_urls[hero_index] = cleanup.display_key
+
+    photo_urls = move_hero_first(photo_urls, hero_index)
 
     # Note: ai_failed:* flags are NOT a hard reject. The seller can still
     # complete the listing manually. The mobile UI uses this flag to show

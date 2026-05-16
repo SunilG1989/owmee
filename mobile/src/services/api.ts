@@ -214,6 +214,7 @@ export interface Listing {
   seller_id: string; seller_verified?: boolean;
   is_negotiable?: boolean; is_kids_item?: boolean;
   accessories?: string; warranty_info?: string; warranty_status?: string; battery_health?: string | number;
+  age_suitability?: string; hygiene_status?: string;
   imei?: string; view_count?: number; status: string;
   listing_state?: string | null; verification_status?: string | null; video_url?: string | null;
   brand?: string; model?: string; storage?: string; ram?: string; color?: string;
@@ -255,6 +256,17 @@ export interface FeedListing {
   storage?: string | null;
   ram?: string | null;
   color?: string | null;
+  processor?: string | null;
+  screen_size?: string | null;
+  purchase_year?: number | null;
+  accessories?: string | null;
+  warranty_info?: string | null;
+  battery_health?: number | null;
+  age_suitability?: string | null;
+  hygiene_status?: string | null;
+  has_charger?: boolean | null;
+  has_earphones?: boolean | null;
+  seller_functional_attestation?: boolean | null;
   shipping_eligible: boolean;
   created_at: string | null;
   seller_id: string;
@@ -1046,6 +1058,8 @@ export interface AIDetectedFields {
   seller_photo_feedback?: string[];
   seller_edit_fields?: string[];
   image_set_quality?: Record<string, any>;
+  hero_image_index?: number | null;
+  hero_image_rationale?: string | null;
   field_confidence?: Record<string, number>;
   field_evidence?: Record<string, string>;
 }
@@ -1096,6 +1110,8 @@ export interface AICreateFromDraftRequest {
   battery_health?: number | null;
   accessories?: string | null;
   warranty_status?: string | null;
+  age_suitability?: string | null;
+  hygiene_status?: string | null;
   has_box?: boolean | null;
   has_bill?: boolean | null;
   has_charger?: boolean | null;

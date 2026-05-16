@@ -55,6 +55,10 @@ class Settings(BaseSettings):
 
     # ── Cloudflare R2 ──────────────────────────────────────────────────────
     r2_endpoint: str
+    # Backward-compatible alias used by some local .env files. Server-side
+    # storage uses r2_endpoint; keep this accepted so app import/tests do not
+    # fail on older environments.
+    r2_internal_endpoint: str = ""
     r2_bucket: str = "owmee-media"
     r2_evidence_bucket: str = "owmee-evidence"
     r2_access_key: str
@@ -149,6 +153,8 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_vision_model: str = "gemini-3-pro-preview"
     gemini_text_model: str = "gemini-3-flash-preview"
+    gemini_image_model: str = "gemini-3.1-flash-image-preview"
+    image_cleanup_provider: str = "gemini"
 
     # ── Photon (reverse geocoding) ───────────────────────────────────────
     # Public Photon (komoot.io) by default. If we hit fair-use limits in
