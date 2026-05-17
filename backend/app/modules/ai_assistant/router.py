@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timezone
+from io import BytesIO
 from time import perf_counter
 from uuid import UUID, uuid4
 
@@ -70,6 +71,11 @@ router = APIRouter(prefix="/v1/listings", tags=["ai-assistant"])
 VISION_TIMEOUT_SECONDS = 32
 HERO_CLEANUP_TIMEOUT_SECONDS = 18
 PRICE_TIMEOUT_SECONDS = 8
+MAX_ANALYSIS_UPLOAD_BYTES = 8 * 1024 * 1024
+MAX_ANALYSIS_IMAGE_DIMENSION = 1280
+ANALYSIS_IMAGE_JPEG_QUALITY = 82
+AI_DRAFT_DISPLAY_DIMENSION = 1280
+AI_DRAFT_THUMBNAIL_DIMENSION = 720
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────
@@ -253,6 +259,44 @@ def _image_extension(content_type: str | None) -> str:
     return "jpg"
 
 
+def _prepare_analysis_image_bytes(raw: bytes, content_type: str) -> tuple[bytes, str]:
+    """Bound server-side memory before storage and Gemini vision.
+
+    Mobile already compresses captures, but production cannot trust every
+    client/device. Normalising each upload to a 1280px JPEG keeps Pillow,
+    R2 upload, and Gemini request memory predictable on small Render instances.
+    If Pillow cannot parse a test/edge image, preserve the original bytes and
+    let the normal validation/vision path handle it.
+    """
+    try:
+        from PIL import Image, ImageOps  # type: ignore
+
+        img = Image.open(BytesIO(raw))
+        img = ImageOps.exif_transpose(img)
+        if img.mode == "RGBA":
+            bg = Image.new("RGB", img.size, (255, 255, 255))
+            bg.paste(img, mask=img.getchannel("A"))
+            img = bg
+        elif img.mode != "RGB":
+            img = img.convert("RGB")
+        img.thumbnail(
+            (MAX_ANALYSIS_IMAGE_DIMENSION, MAX_ANALYSIS_IMAGE_DIMENSION),
+            Image.Resampling.LANCZOS,
+        )
+        out = BytesIO()
+        img.save(
+            out,
+            format="JPEG",
+            quality=ANALYSIS_IMAGE_JPEG_QUALITY,
+            optimize=True,
+            progressive=False,
+        )
+        prepared = out.getvalue()
+        return prepared or raw, "image/jpeg"
+    except Exception:
+        return raw, content_type
+
+
 def _client_photo_url(key: str | None) -> str:
     """Return a short-lived URL for mobile preview while persisting R2 keys."""
     if not key:
@@ -288,10 +332,16 @@ async def _store_photo(image_bytes: bytes, content_type: str, user_id: UUID, dra
     key = _photo_object_key(user_id, draft_id, _image_extension(content_type))
 
     try:
-        processed = process_listing_image_bytes(
+        processed = await asyncio.to_thread(
+            process_listing_image_bytes,
             image_bytes,
             original_key=key,
             content_type=content_type,
+            max_display_dimension=AI_DRAFT_DISPLAY_DIMENSION,
+            max_thumbnail_dimension=AI_DRAFT_THUMBNAIL_DIMENSION,
+            display_quality=86,
+            thumbnail_quality=78,
+            polish=False,
         )
     except Exception as e:
         log.warning("ai_assistant.photo_upload_failed", extra={"error": str(e), "key": key})
@@ -316,6 +366,11 @@ async def _store_draft_photo(
             image_bytes,
             original_key=key,
             content_type=content_type,
+            max_display_dimension=AI_DRAFT_DISPLAY_DIMENSION,
+            max_thumbnail_dimension=AI_DRAFT_THUMBNAIL_DIMENSION,
+            display_quality=86,
+            thumbnail_quality=78,
+            polish=False,
         )
         return processed.display_key or processed.original_key, key
     except Exception as e:
@@ -329,18 +384,17 @@ async def _store_draft_photos(
     user_id: UUID,
     draft_id: UUID,
 ) -> tuple[list[str], list[str]]:
-    stored = await asyncio.gather(
-        *[
-            _store_draft_photo(
+    stored: list[tuple[str, str]] = []
+    for idx, (image_bytes, content_type) in enumerate(image_pairs):
+        stored.append(
+            await _store_draft_photo(
                 image_bytes=image_bytes,
                 content_type=content_type,
                 user_id=user_id,
                 draft_id=draft_id,
                 index=idx,
             )
-            for idx, (image_bytes, content_type) in enumerate(image_pairs)
-        ]
-    )
+        )
     photo_urls = [photo_url for photo_url, _ in stored]
     original_keys = [key for _, key in stored]
     return photo_urls, original_keys
@@ -590,10 +644,15 @@ async def draft_from_image(
     timings["read_ms"] = _ms_since(step_started)
     if not image_bytes:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="EMPTY_IMAGE")
-    if len(image_bytes) > 10 * 1024 * 1024:
+    if len(image_bytes) > MAX_ANALYSIS_UPLOAD_BYTES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="IMAGE_TOO_LARGE")
 
     content_type = image.content_type or "image/jpeg"
+    image_bytes, content_type = await asyncio.to_thread(
+        _prepare_analysis_image_bytes,
+        image_bytes,
+        content_type,
+    )
     draft_id = uuid4()
 
     # Store photo first (so the URL is valid for the response)
@@ -1328,9 +1387,15 @@ async def draft_from_images(
         b = await img.read()
         if not b:
             continue
-        if len(b) > 10 * 1024 * 1024:
+        if len(b) > MAX_ANALYSIS_UPLOAD_BYTES:
             raise HTTPException(status_code=400, detail="IMAGE_TOO_LARGE")
-        image_pairs.append((b, img.content_type or "image/jpeg"))
+        prepared = await asyncio.to_thread(
+            _prepare_analysis_image_bytes,
+            b,
+            img.content_type or "image/jpeg",
+        )
+        image_pairs.append(prepared)
+        del b
     timings["read_ms"] = _ms_since(step_started)
 
     if not image_pairs:
@@ -1338,21 +1403,19 @@ async def draft_from_images(
 
     draft_id = uuid4()
 
-    # Store photos, run multi-image vision, and fetch seller state in parallel.
-    # These are independent, and serializing them was the largest avoidable
-    # delay in the seller analysis path.
+    # Store photos before vision. This avoids running Pillow/WebP processing
+    # and Gemini multipart assembly at the same time, which can exceed memory
+    # on small production instances when several users list in parallel.
     from app.modules.identity_auth.user_location import get_user_location
 
-    photo_task = _timed_step(
+    location_task = _timed_step(timings, "location_ms", get_user_location(db, user.user_id))
+    photo_urls, _original_keys_unused = await _timed_step(
         timings,
         "store_ms",
         _store_draft_photos(image_pairs, user_id=user.user_id, draft_id=draft_id),
     )
-    vision_task = _timed_step(timings, "vision_ms", _detect_from_images_bounded(image_pairs))
-    location_task = _timed_step(timings, "location_ms", get_user_location(db, user.user_id))
-    (photo_urls, _original_keys_unused), detected, (_lat, _lng, _city, user_state) = await asyncio.gather(
-        photo_task,
-        vision_task,
+    detected, (_lat, _lng, _city, user_state) = await asyncio.gather(
+        _timed_step(timings, "vision_ms", _detect_from_images_bounded(image_pairs)),
         location_task,
     )
     detected = _with_canonical_category(detected)
