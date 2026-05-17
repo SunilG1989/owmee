@@ -19,17 +19,18 @@ photo and still keeps the listing flow working.
 
 The default background is consistent across listings:
 
-- `owmee_warm_ivory`: warm ivory studio background with a subtle eucalyptus
-  green wash, matte finish, and natural contact shadow.
+- `owmee_warm_ivory`: warm ivory studio background, matte finish, and natural
+  contact shadow. This is the default for almost every product so the catalog
+  feels consistent and premium.
 
 Only switch background style when the centered product color would blend into
 the default background:
 
-- Light/white/cream/silver product: use `owmee_soft_sage_contrast`.
-- Green/teal/blue product: use `owmee_soft_burnt_orange_contrast`.
-- Orange/copper/brown product: use `owmee_soft_eucalyptus_contrast`.
+- Light/white/cream/silver product: use `owmee_soft_green_contrast`.
 
 The product is never recolored for contrast. Only the background shade changes.
+Brown, tan, caramel, copper, orange, and burnt-orange background tones are not
+allowed in the cleanup prompt.
 
 ## Product Preservation Rules
 
@@ -42,8 +43,6 @@ moderation, and dispute review.
 
 - Product color close to standard background.
 - White/cream products disappearing on ivory.
-- Green products disappearing on the green-tinted Owmee background.
-- Orange/copper products clashing with warm background accents.
 - Provider failure or missing API key.
 - Legacy single-photo clients.
 - Multi-photo clients where the AI-selected hero is not the first uploaded

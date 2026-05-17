@@ -590,7 +590,14 @@ function RecentListingsSection({
               accessibilityRole="button"
               accessibilityLabel={`Open recently listed ${item.title}`}
             >
-              <Image source={recentImageSource(item)} style={s.recentImage} resizeMode="contain" />
+              <View style={s.recentImageStage}>
+                <Image
+                  source={recentImageSource(item)}
+                  style={s.recentImage}
+                  resizeMode="contain"
+                  resizeMethod="resize"
+                />
+              </View>
               <View style={s.recentCopy}>
                 <Text style={s.recentCardTitle} numberOfLines={2}>
                   {item.title}
@@ -813,7 +820,7 @@ const s = StyleSheet.create({
   },
   recentCard: {
     width: 154,
-    minHeight: 176,
+    minHeight: 194,
     borderRadius: R.md,
     overflow: 'hidden',
     backgroundColor: 'rgba(255,253,248,0.96)',
@@ -821,10 +828,17 @@ const s = StyleSheet.create({
     borderColor: 'rgba(224, 203, 188, 0.68)',
     ...Shadow.subtle,
   },
+  recentImageStage: {
+    width: '100%',
+    height: 112,
+    padding: S.xs + 1,
+    backgroundColor: '#FEFBF4',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(224, 203, 188, 0.42)',
+  },
   recentImage: {
     width: '100%',
-    height: 96,
-    backgroundColor: '#F7EFE7',
+    height: '100%',
   },
   recentCopy: {
     paddingHorizontal: S.sm,

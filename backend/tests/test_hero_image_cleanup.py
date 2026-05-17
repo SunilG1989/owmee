@@ -92,23 +92,23 @@ def test_google_gemini_provider_switches_background_for_light_products():
 
     style = GoogleGeminiBackgroundCleanupProvider._choose_background_style(image)
 
-    assert style.name == "owmee_soft_sage_contrast"
+    assert style.name == "owmee_soft_green_contrast"
 
 
-def test_google_gemini_provider_switches_background_for_green_products():
+def test_google_gemini_provider_keeps_ivory_background_for_green_products():
     image = Image.new("RGB", (120, 120), "#4f9b82")
 
     style = GoogleGeminiBackgroundCleanupProvider._choose_background_style(image)
 
-    assert style.name == "owmee_soft_burnt_orange_contrast"
+    assert style.name == "owmee_warm_ivory"
 
 
-def test_google_gemini_provider_switches_background_for_warm_products():
+def test_google_gemini_provider_keeps_ivory_background_for_warm_products():
     image = Image.new("RGB", (120, 120), "#b66b3d")
 
     style = GoogleGeminiBackgroundCleanupProvider._choose_background_style(image)
 
-    assert style.name == "owmee_soft_eucalyptus_contrast"
+    assert style.name == "owmee_warm_ivory"
 
 
 def test_google_gemini_cleanup_prompt_locks_product_preservation():
@@ -138,7 +138,8 @@ def test_google_gemini_cleanup_prompt_locks_product_preservation():
     assert "crop, zoom, or recompose slightly" in prompt
     assert "rejected by an automatic audit" in prompt
     assert "If any human body part, skin patch, finger edge" in prompt
-    assert "soft desaturated burnt-orange/coral wash" in prompt
+    assert "warm ivory studio background" in prompt
+    assert "Do not use brown, tan, caramel" in prompt
 
 
 def test_google_gemini_cleanup_prompt_has_strict_human_retry_mode():

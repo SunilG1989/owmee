@@ -33,37 +33,20 @@ class _CleanupQualityAudit(BaseModel):
 _DEFAULT_STYLE = _BackgroundStyle(
     name="owmee_warm_ivory",
     description=(
-        "Owmee standard warm ivory studio background (#FEFBF4) with a very "
-        "subtle soft eucalyptus green wash (#EAF4F1), matte finish, clean floor "
-        "curve, and a natural soft contact shadow."
+        "Owmee standard warm ivory studio background (#FEFBF4), matte finish, "
+        "clean floor curve, and a natural soft contact shadow. Keep the surface "
+        "neutral, premium, and marketplace-clean. Do not use brown, tan, "
+        "caramel, copper, orange, or burnt-orange background tones."
     ),
 )
 
-_WARM_CONTRAST_STYLE = _BackgroundStyle(
-    name="owmee_soft_burnt_orange_contrast",
+_LIGHT_PRODUCT_CONTRAST_STYLE = _BackgroundStyle(
+    name="owmee_soft_green_contrast",
     description=(
-        "Owmee contrast background for green/teal/blue products: warm ivory "
-        "base (#FEFBF4) with a soft desaturated burnt-orange/coral wash "
-        "(#F1D7C8), matte finish, clean floor curve, and a natural soft "
-        "contact shadow."
-    ),
-)
-
-_EUCALYPTUS_CONTRAST_STYLE = _BackgroundStyle(
-    name="owmee_soft_eucalyptus_contrast",
-    description=(
-        "Owmee contrast background for orange/copper/brown products: soft "
-        "eucalyptus green studio background (#E3F0EB), matte finish, clean "
-        "floor curve, and a natural soft contact shadow."
-    ),
-)
-
-_SAGE_CONTRAST_STYLE = _BackgroundStyle(
-    name="owmee_soft_sage_contrast",
-    description=(
-        "Owmee contrast background for white/cream/silver products: slightly "
-        "deeper soft sage green-gray studio background (#D7E7E1), matte finish, "
-        "clean floor curve, and a natural soft contact shadow."
+        "Owmee contrast background only for white/ivory/cream/silver products: "
+        "soft eucalyptus green studio background (#E3F0EB), matte finish, clean "
+        "floor curve, and a natural soft contact shadow. Keep it light and "
+        "fresh, not dark or saturated."
     ),
 )
 
@@ -444,36 +427,21 @@ class GoogleGeminiBackgroundCleanupProvider:
 
         light_total = 0.0
         sat_total = 0.0
-        hue_buckets = {
-            "warm": 0,
-            "green_blue": 0,
-        }
         vivid_pixels = 0
 
         for r, g, b in pixels:
-            hue, lightness, saturation = rgb_to_hls(r / 255.0, g / 255.0, b / 255.0)
-            degrees = hue * 360.0
+            _hue, lightness, saturation = rgb_to_hls(r / 255.0, g / 255.0, b / 255.0)
             light_total += lightness
             sat_total += saturation
             if saturation > 0.16 and 0.18 < lightness < 0.88:
                 vivid_pixels += 1
-                if 15 <= degrees <= 70 or degrees >= 335:
-                    hue_buckets["warm"] += 1
-                elif 80 <= degrees <= 230:
-                    hue_buckets["green_blue"] += 1
 
         avg_light = light_total / len(pixels)
         avg_sat = sat_total / len(pixels)
         vivid_ratio = vivid_pixels / len(pixels)
-        warm_ratio = hue_buckets["warm"] / len(pixels)
-        green_blue_ratio = hue_buckets["green_blue"] / len(pixels)
 
         if avg_light > 0.80 and (avg_sat < 0.45 or vivid_ratio < 0.08):
-            return _SAGE_CONTRAST_STYLE
-        if vivid_ratio > 0.12 and green_blue_ratio > 0.10:
-            return _WARM_CONTRAST_STYLE
-        if vivid_ratio > 0.12 and warm_ratio > 0.10:
-            return _EUCALYPTUS_CONTRAST_STYLE
+            return _LIGHT_PRODUCT_CONTRAST_STYLE
         return _DEFAULT_STYLE
 
     @staticmethod
