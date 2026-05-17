@@ -83,3 +83,18 @@ def test_cleanup_prompt_preserves_reflective_or_same_color_products():
     assert "transparent, glossy, reflective" in prompt
     assert "same color as the background" in prompt
     assert "change only the background tone and shadow" in prompt
+
+
+def test_cleanup_prompt_removes_human_body_parts():
+    prompt = GoogleGeminiBackgroundCleanupProvider._build_cleanup_prompt(
+        "smartphones",
+        _DEFAULT_STYLE,
+    )
+
+    assert "final hero image must contain the product only" in prompt
+    assert "PRIORITY ORDER: first remove human/body artifacts" in prompt
+    assert "Never keep a hand or skin area merely because it touches the product" in prompt
+    assert "Remove all visible hands, fingers, thumbs, arms" in prompt
+    assert "reflections of people" in prompt
+    assert "Do not invent hidden labels" in prompt
+    assert "If any human body part, skin patch, finger edge" in prompt

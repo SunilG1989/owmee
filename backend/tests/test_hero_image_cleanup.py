@@ -121,6 +121,12 @@ def test_google_gemini_cleanup_prompt_locks_product_preservation():
     assert "only replace/clean the background" in prompt
     assert "preserve the product exactly" in prompt
     assert "never recolor the product" in prompt
+    assert "human body parts must still be removed" in prompt
+    assert "Never keep a hand or skin area merely because it touches the product" in prompt
+    assert "Treat every human body part as background/occlusion" in prompt
+    assert "Remove all visible hands, fingers, thumbs, arms" in prompt
+    assert "Do not leave skin-colored fragments" in prompt
+    assert "If any human body part, skin patch, finger edge" in prompt
     assert "soft desaturated burnt-orange/coral wash" in prompt
 
 
