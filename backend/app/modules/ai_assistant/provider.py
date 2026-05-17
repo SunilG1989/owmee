@@ -17,6 +17,12 @@ class AIListingProvider(Protocol):
     def current_text_model(self) -> str: ...
     async def detect_from_images(self, images: list[tuple[bytes, str]]) -> AIDetected: ...
     async def detect_from_image(self, image_bytes: bytes, content_type: str = "image/jpeg") -> AIDetected: ...
+    async def extract_identifier(
+        self,
+        image_bytes: bytes,
+        content_type: str = "image/jpeg",
+        category_slug: str | None = None,
+    ) -> dict: ...
     async def extract_imei(self, image_bytes: bytes, content_type: str = "image/jpeg") -> dict: ...
     async def regenerate_description(self, fields: dict[str, Any]) -> str: ...
     async def estimate_price(
@@ -55,6 +61,18 @@ class _GeminiListingProvider:
         self, image_bytes: bytes, content_type: str = "image/jpeg",
     ) -> dict:
         return await self._client.extract_imei(image_bytes, content_type)
+
+    async def extract_identifier(
+        self,
+        image_bytes: bytes,
+        content_type: str = "image/jpeg",
+        category_slug: str | None = None,
+    ) -> dict:
+        return await self._client.extract_identifier(
+            image_bytes,
+            content_type,
+            category_slug=category_slug,
+        )
 
     async def regenerate_description(self, fields: dict[str, Any]) -> str:
         return await self._client.regenerate_description(fields)
@@ -109,6 +127,18 @@ async def extract_imei(
     image_bytes: bytes, content_type: str = "image/jpeg",
 ) -> dict:
     return await get_ai_listing_provider().extract_imei(image_bytes, content_type)
+
+
+async def extract_identifier(
+    image_bytes: bytes,
+    content_type: str = "image/jpeg",
+    category_slug: str | None = None,
+) -> dict:
+    return await get_ai_listing_provider().extract_identifier(
+        image_bytes,
+        content_type,
+        category_slug=category_slug,
+    )
 
 
 async def regenerate_description(fields: dict[str, Any]) -> str:

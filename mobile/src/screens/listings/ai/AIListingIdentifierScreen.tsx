@@ -55,6 +55,10 @@ function isValidImei(value: string): boolean {
   return total % 10 === 0;
 }
 
+function normalizeSerialInput(value: string): string {
+  return value.toUpperCase().replace(/[^A-Z0-9._-]/g, '').slice(0, 50);
+}
+
 async function requestCameraPermission(): Promise<boolean> {
   if (Platform.OS !== 'android') return true;
   try {
@@ -62,7 +66,7 @@ async function requestCameraPermission(): Promise<boolean> {
       PermissionsAndroid.PERMISSIONS.CAMERA,
       {
         title: 'Camera permission',
-        message: 'Used to capture the IMEI sticker on your phone.',
+        message: 'Used to capture the device identifier label.',
         buttonPositive: 'OK',
       },
     );
@@ -111,12 +115,13 @@ export default function AIListingIdentifierScreen({
         const uri = r.assets[0].uri;
         setPhotoUri(uri);
 
-        if (isSmartphone) {
-          // Run OCR
-          setExtracting(true);
-          try {
-            const { data } = await AIListing.extractIMEI(draft.draft_id, uri);
-            setExtractionAttempts((n) => n + 1);
+        setExtracting(true);
+        try {
+          const { data } = await AIListing.extractIdentifier(draft.draft_id, uri, finalFields.category_slug);
+          const nextAttempts = extractionAttempts + 1;
+          setExtractionAttempts(nextAttempts);
+
+          if (isSmartphone) {
             if (data.imei && data.luhn_valid) {
               setImei(data.imei);
             } else if (data.imei) {
@@ -127,33 +132,56 @@ export default function AIListingIdentifierScreen({
                 'Owmee read 15 digits, but the checksum did not match. Compare it with the photo and fix any wrong digit.',
                 [{ text: 'Review number' }],
               );
+            } else if (nextAttempts >= 2) {
+              Alert.alert(
+                "Couldn't read IMEI",
+                'Two attempts failed. Please type it in.',
+                [{ text: 'OK', onPress: () => setManualMode(true) }],
+              );
             } else {
-              if (extractionAttempts + 1 >= 2) {
+              Alert.alert(
+                "Couldn't read clearly",
+                'Try a closer or better-lit photo.',
+                [{ text: 'Retry', style: 'default' }, { text: 'Type manually', onPress: () => setManualMode(true) }],
+              );
+            }
+          } else {
+            const extractedSerial = normalizeSerialInput(data.serial_number || data.identifier_value || '');
+            if (extractedSerial) {
+              setSerial(extractedSerial);
+              if (data.suggest_manual) {
+                setManualMode(true);
                 Alert.alert(
-                  "Couldn't read IMEI",
-                  'Two attempts failed. Please type it in.',
-                  [{ text: 'OK', onPress: () => setManualMode(true) }],
-                );
-              } else {
-                Alert.alert(
-                  "Couldn't read clearly",
-                  'Try a closer or better-lit photo.',
-                  [{ text: 'Retry', style: 'default' }, { text: 'Type manually', onPress: () => setManualMode(true) }],
+                  'Please verify serial number',
+                  'Owmee found a serial/service tag, but the photo confidence was low. Compare it with the device or box before listing.',
+                  [{ text: 'Review number' }],
                 );
               }
+            } else if (nextAttempts >= 2) {
+              Alert.alert(
+                "Couldn't read serial number",
+                'Two attempts failed. Please type the serial or service tag.',
+                [{ text: 'OK', onPress: () => setManualMode(true) }],
+              );
+            } else {
+              Alert.alert(
+                "Couldn't read clearly",
+                'Try a closer photo of the Serial Number, S/N, SN, or Service Tag label.',
+                [{ text: 'Retry', style: 'default' }, { text: 'Type manually', onPress: () => setManualMode(true) }],
+              );
             }
-          } catch (e) {
-            Alert.alert('Could not extract', parseApiError(e), [
-              { text: 'Type manually', onPress: () => setManualMode(true) },
-              { text: 'OK', style: 'cancel' },
-            ]);
-          } finally {
-            setExtracting(false);
           }
+        } catch (e) {
+          Alert.alert('Could not extract', parseApiError(e), [
+            { text: 'Type manually', onPress: () => setManualMode(true) },
+            { text: 'OK', style: 'cancel' },
+          ]);
+        } finally {
+          setExtracting(false);
         }
       },
     );
-  }, [draft, isSmartphone, extractionAttempts]);
+  }, [draft, finalFields.category_slug, isSmartphone, extractionAttempts]);
 
   const submit = useCallback(async () => {
     if (submitting) return;
@@ -168,8 +196,13 @@ export default function AIListingIdentifierScreen({
         return;
       }
     } else {
-      if (!serial.trim()) {
+      const normalizedSerial = normalizeSerialInput(serial);
+      if (!normalizedSerial) {
         Alert.alert('Serial required', 'Please enter the serial number.');
+        return;
+      }
+      if (normalizedSerial.length < 4) {
+        Alert.alert('Check serial number', 'Serial number or service tag looks too short. Please recheck the device or box.');
         return;
       }
     }
@@ -181,7 +214,7 @@ export default function AIListingIdentifierScreen({
         draft_id: draft.draft_id,
         ...finalFields,
         imei_1: isSmartphone ? imei : null,
-        serial_number: !isSmartphone ? serial.trim() : null,
+        serial_number: !isSmartphone ? normalizeSerialInput(serial) : null,
       });
       setSuccess({
         listingId: data.listing_id,
@@ -294,7 +327,7 @@ export default function AIListingIdentifierScreen({
                 {isSmartphone ? 'IMEI number' : 'Serial number'}
               </Text>
               <Text style={st.bodySub}>
-                {isSmartphone ? '15-digit number, no spaces.' : 'As shown on the device or its box.'}
+                {isSmartphone ? '15-digit number, no spaces.' : 'Serial Number, S/N, SN, or Service Tag as shown on the device or box.'}
               </Text>
 
               {isSmartphone ? (
@@ -311,11 +344,11 @@ export default function AIListingIdentifierScreen({
                 <TextInput
                   style={st.input}
                   value={serial}
-                  onChangeText={setSerial}
+                  onChangeText={(v) => setSerial(normalizeSerialInput(v))}
                   placeholder="e.g. C02XR1234ABC"
                   placeholderTextColor={C.text4}
                   autoCapitalize="characters"
-                  maxLength={32}
+                  maxLength={50}
                 />
               )}
 

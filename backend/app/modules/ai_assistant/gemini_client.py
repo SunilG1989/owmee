@@ -54,8 +54,13 @@ from pydantic import BaseModel, Field
 from app.modules.ai_assistant.prompts import (
     PROMPT_VISION_DETECT,
     PROMPT_IMEI_OCR,
+    PROMPT_SERIAL_OCR,
     PROMPT_DESCRIPTION_REGEN,
     PROMPT_PRICE_ESTIMATE,
+)
+from app.modules.ai_assistant.identifier_extraction import (
+    extract_imei_candidate,
+    extract_serial_candidate,
 )
 from app.modules.ai_assistant.schemas import AIDetected
 
@@ -195,53 +200,19 @@ class _GeminiIMEIOut(BaseModel):
     extracted_text: str = ""
 
 
+class _GeminiSerialOut(BaseModel):
+    serial_number: str | None = None
+    confidence: float = 0.0
+    extracted_text: str = ""
+
+
 class _GeminiPriceOut(BaseModel):
     price_inr: int = 0
     confidence: float = 0.0
     reasoning: str = ""
 
 
-def _digits_only(value: str | None) -> str:
-    import re
-
-    return re.sub(r"\D", "", value or "")
-
-
-def _extract_imei_candidate(*values: str | None) -> str | None:
-    """Extract one 15-digit IMEI from OCR text.
-
-    Gemini often reads IMEI as grouped digits (`490154 203237 518`) or includes
-    the label in the `imei` field. Prefer explicitly labelled IMEI values; if
-    no label exists, accept a single unambiguous 15-digit candidate.
-    """
-    import re
-
-    text = "\n".join(v for v in values if v)
-    if not text.strip():
-        return None
-
-    direct_digits = _digits_only(values[0] if values else None)
-    if len(direct_digits) == 15:
-        return direct_digits
-
-    labelled_patterns = (
-        r"(?i)\bimei\s*1\b[^\d]{0,30}((?:\d[\s\-]*){15})",
-        r"(?i)\bimei\b[^\d]{0,30}((?:\d[\s\-]*){15})",
-        r"(?i)\bmeid\s*/\s*imei\b[^\d]{0,30}((?:\d[\s\-]*){15})",
-    )
-    for pattern in labelled_patterns:
-        for match in re.finditer(pattern, text):
-            digits = _digits_only(match.group(1))
-            if len(digits) == 15:
-                return digits
-
-    candidates: list[str] = []
-    for match in re.finditer(r"(?<!\d)((?:\d[\s\-]*){15})(?!\d)", text):
-        digits = _digits_only(match.group(1))
-        if len(digits) == 15 and digits not in candidates:
-            candidates.append(digits)
-
-    return candidates[0] if len(candidates) == 1 else None
+_extract_imei_candidate = extract_imei_candidate
 
 
 # ── Lazy SDK + key resolution ─────────────────────────────────────────────
@@ -659,7 +630,23 @@ async def detect_from_image(image_bytes: bytes, content_type: str = "image/jpeg"
     return await detect_from_images([(image_bytes, content_type)])
 
 
-# ── Vision: IMEI OCR ──────────────────────────────────────────────────────
+# ── Vision: device identifier OCR ─────────────────────────────────────────
+
+
+async def extract_identifier(
+    image_bytes: bytes,
+    content_type: str = "image/jpeg",
+    category_slug: str | None = None,
+) -> dict:
+    """OCR a category-appropriate device identifier.
+
+    Smartphones use IMEI because CEIR/Luhn applies. Laptops/tablets use serial
+    number or service tag. Other electronic categories may still call this as
+    a best-effort serial read, but they are not blocked on it elsewhere.
+    """
+    if category_slug == "smartphones" or not category_slug:
+        return await extract_imei(image_bytes, content_type)
+    return await extract_serial(image_bytes, content_type, category_slug=category_slug)
 
 
 async def extract_imei(image_bytes: bytes, content_type: str = "image/jpeg") -> dict:
@@ -726,12 +713,123 @@ async def extract_imei(image_bytes: bytes, content_type: str = "image/jpeg") -> 
             )
             return {"imei": None, "confidence": 0.0, "extracted_text": ""}
 
-    imei = _extract_imei_candidate(parsed.imei, parsed.extracted_text)
+    imei = extract_imei_candidate(parsed.imei, parsed.extracted_text)
     if imei and imei != parsed.imei:
         log.info("ai_assistant.imei_normalized_from_ocr_text")
 
     return {
+        "identifier_kind": "imei",
+        "identifier_value": imei,
         "imei": imei,
+        "serial_number": None,
+        "confidence": float(parsed.confidence or 0.0),
+        "extracted_text": str(parsed.extracted_text or "")[:500],
+    }
+
+
+async def extract_serial(
+    image_bytes: bytes,
+    content_type: str = "image/jpeg",
+    *,
+    category_slug: str | None = None,
+) -> dict:
+    """OCR a laptop/tablet serial number or service tag."""
+    client = _get_client()
+    if client is None:
+        return {
+            "identifier_kind": "serial",
+            "identifier_value": None,
+            "imei": None,
+            "serial_number": None,
+            "confidence": 0.0,
+            "extracted_text": "",
+        }
+
+    from google.genai import types
+
+    image_part = types.Part.from_bytes(
+        data=image_bytes,
+        mime_type=_normalize_media_type(content_type),
+    )
+
+    model = _get_model("vision")
+    config = types.GenerateContentConfig(
+        system_instruction=PROMPT_SERIAL_OCR,
+        response_mime_type="application/json",
+        response_schema=_GeminiSerialOut,
+        temperature=0.0,
+        max_output_tokens=512,
+        thinking_config=_thinking_config(types, model, "vision"),
+    )
+
+    category_hint = "tablet" if category_slug == "tablets" else "laptop"
+    try:
+        resp = await client.aio.models.generate_content(
+            model=model,
+            contents=[
+                "Read the device serial number from this image. The item is a "
+                f"{category_hint}. Prefer labels such as 'Serial Number', "
+                "'S/N', 'SN', or Dell 'Service Tag'. Do not return model "
+                "number, product number, SKU, IMEI, EID, ICCID, MAC address, "
+                "invoice/order number, or barcode value.",
+                image_part,
+            ],
+            config=config,
+        )
+    except Exception as e:
+        log.warning(
+            "ai_assistant.serial_api_failed",
+            extra={"error": f"{type(e).__name__}: {str(e)[:200]}"},
+        )
+        return {
+            "identifier_kind": "serial",
+            "identifier_value": None,
+            "imei": None,
+            "serial_number": None,
+            "confidence": 0.0,
+            "extracted_text": "",
+        }
+
+    parsed = getattr(resp, "parsed", None)
+    if parsed is None:
+        raw = (resp.text or "").strip()
+        if not raw:
+            log.warning("ai_assistant.serial_empty_response")
+            return {
+                "identifier_kind": "serial",
+                "identifier_value": None,
+                "imei": None,
+                "serial_number": None,
+                "confidence": 0.0,
+                "extracted_text": "",
+            }
+        import json
+        try:
+            data = json.loads(raw)
+            parsed = _GeminiSerialOut(**data)
+        except Exception as e:
+            log.warning(
+                "ai_assistant.serial_parse_failed",
+                extra={"error": str(e)[:200], "raw": raw[:300]},
+            )
+            return {
+                "identifier_kind": "serial",
+                "identifier_value": None,
+                "imei": None,
+                "serial_number": None,
+                "confidence": 0.0,
+                "extracted_text": "",
+            }
+
+    serial = extract_serial_candidate(parsed.serial_number, parsed.extracted_text)
+    if serial and serial != parsed.serial_number:
+        log.info("ai_assistant.serial_normalized_from_ocr_text")
+
+    return {
+        "identifier_kind": "serial",
+        "identifier_value": serial,
+        "imei": None,
+        "serial_number": serial,
         "confidence": float(parsed.confidence or 0.0),
         "extracted_text": str(parsed.extracted_text or "")[:500],
     }

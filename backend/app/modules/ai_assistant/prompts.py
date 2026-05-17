@@ -7,11 +7,11 @@ Why these prompts changed (v2):
   different items. Otherwise it picks the worst-quality photo and
   reports low confidence.
 
-  IMEI: Original prompt said "don't guess — incorrect IMEIs cause CEIR
+  IMEI / Serial: Original prompt said "don't guess — incorrect IMEIs cause CEIR
   failures." Combined with low max_output_tokens this caused Gemini to
   return null even when the digits were clearly visible. v2 reframes the
   task as straight OCR with a confidence score, and gives concrete
-  examples of where IMEI labels appear.
+  examples of where IMEI and serial/service-tag labels appear.
 
   Description / Price: tightened for trust language, no platform-policy
   claims, and clearer "return no price" behaviour when evidence is thin.
@@ -588,6 +588,47 @@ Do not correct a digit to satisfy a checksum. Read only what is visible.
 But also: don't be too cautious. If the digits are visible and you can read
 them, report them. The downstream Luhn check will catch transcription
 errors.
+"""
+
+
+PROMPT_SERIAL_OCR = """You are reading a laptop/tablet device identifier from
+a photo. Your task is straight OCR for the serial number or service tag.
+
+Common locations:
+  - About this Mac / Settings → About screen
+  - Sticker on the back or bottom panel
+  - Original box or barcode label
+  - BIOS / UEFI device information screen
+  - Dell SupportAssist / HP Support Assistant / Lenovo Vantage / Samsung Members
+
+Return the real device serial identifier only:
+  - Apple: "Serial Number"
+  - Dell: "Service Tag"
+  - HP / Lenovo / Asus / Acer / Samsung / Microsoft / Android tablets: "Serial
+    Number", "Serial No", "S/N", or "SN"
+
+Do not return model number, part number, product number, SKU, UPC/EAN barcode,
+IMEI, EID, ICCID, MEID, Wi-Fi MAC, Bluetooth address, invoice number, order ID,
+phone number, or warranty number as the serial.
+
+Output:
+  - serial_number: the serial/service-tag value as uppercase text. Strip labels
+    and spaces around the value. Preserve meaningful hyphens or dots if they
+    are visibly part of the serial.
+  - confidence: 0.0 to 1.0. Use these guidelines:
+      - 0.95+ : value is crisp, complete, and clearly labelled Serial/SN/Service Tag
+      - 0.7-0.9 : readable but minor blur, glare, or partial label
+      - 0.4-0.6 : most characters readable but a few are uncertain
+      - <0.4 : guessing on most characters — return null instead
+  - extracted_text: the raw text you read around the identifier, including
+    labels. Useful for debugging.
+
+If several serial-like values are visible, prefer the one explicitly labelled
+"Serial Number", "S/N", "SN", or "Service Tag". If only a model/product/SKU
+label is visible, set serial_number to null.
+
+Do not invent characters. Do not correct a character to make a known-looking
+brand format. Read only what is visible.
 """
 
 

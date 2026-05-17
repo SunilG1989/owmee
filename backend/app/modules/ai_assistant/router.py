@@ -2,6 +2,7 @@
 
 Seven endpoints power the photo-first flow:
     POST   /v1/listings/draft/from-image
+    POST   /v1/listings/draft/{draft_id}/extract-identifier
     POST   /v1/listings/draft/{draft_id}/extract-imei
     POST   /v1/listings/from-draft
     POST   /v1/listings/{id}/seller-info
@@ -24,7 +25,7 @@ import logging
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from sqlalchemy import bindparam, text
 from sqlalchemy.dialects.postgresql import ARRAY as PGARRAY
 from sqlalchemy.types import String as SAString
@@ -40,6 +41,7 @@ from app.modules.ai_assistant import (
     provider as ai_provider,
     price_estimator,
 )
+from app.modules.ai_assistant.identifier_extraction import normalize_serial_number
 from app.modules.ai_assistant.schemas import (
     AIDetected,
     CreateFromDraftRequest,
@@ -453,45 +455,61 @@ async def draft_from_image(
     )
 
 
-# ── 2. POST /v1/listings/draft/{draft_id}/extract-imei ────────────────────
+# ── 2. POST /v1/listings/draft/{draft_id}/extract-identifier ──────────────
 
 
+@router.post("/draft/{draft_id}/extract-identifier", response_model=ExtractIMEIResponse)
 @router.post("/draft/{draft_id}/extract-imei", response_model=ExtractIMEIResponse)
-async def extract_imei(
+async def extract_identifier(
     draft_id: UUID,
     user: AuthUser,
     db: DBSession,
+    category_slug: str | None = Form(None),
     image: UploadFile = File(...),
 ):
-    """Photo of an IMEI sticker → OCR + Luhn + CEIR check.
+    """Photo of an identifier label → OCR + category-specific validation.
 
-    The mobile client passes this draft through 1-2 attempts; if both
-    fail it forces manual entry (suggest_manual=True returned).
+    Smartphones return IMEI plus Luhn/CEIR status. Laptops/tablets return
+    serial number or service tag. The old extract-imei path remains as a
+    compatibility alias for already-installed app builds.
     """
     # Verify draft ownership
     drow = await db.execute(
-        text("SELECT user_id FROM listing_drafts WHERE id = :id"),
+        text("SELECT user_id, ai_response FROM listing_drafts WHERE id = :id"),
         {"id": draft_id},
     )
-    owner = drow.scalar()
-    if owner is None:
+    draft_row = drow.first()
+    if draft_row is None:
         raise HTTPException(status_code=404, detail="DRAFT_NOT_FOUND")
-    if str(owner) != str(user.user_id):
+    if str(draft_row.user_id) != str(user.user_id):
         raise HTTPException(status_code=403, detail="DRAFT_NOT_OWNED")
 
     image_bytes = await image.read()
     if not image_bytes:
         raise HTTPException(status_code=400, detail="EMPTY_IMAGE")
 
+    draft_ai = draft_row.ai_response if isinstance(draft_row.ai_response, dict) else {}
+    draft_category = draft_ai.get("category_slug") if draft_ai else None
+    identifier_category = (
+        _canonical_category_slug(category_slug, fallback_empty_to_others=False)
+        or _canonical_category_slug(draft_category, fallback_empty_to_others=False)
+        or "smartphones"
+    )
+
     content_type = image.content_type or "image/jpeg"
-    ocr = await ai_provider.extract_imei(image_bytes, content_type)
+    ocr = await ai_provider.extract_identifier(
+        image_bytes,
+        content_type,
+        category_slug=identifier_category,
+    )
 
     imei = ocr.get("imei")
+    serial_number = ocr.get("serial_number")
     confidence = float(ocr.get("confidence") or 0.0)
-    luhn_ok = ceir_client.luhn_valid(imei) if imei else False
+    luhn_ok = ceir_client.luhn_valid(imei) if identifier_category == "smartphones" and imei else False
 
     ceir_status = None
-    if luhn_ok:
+    if identifier_category == "smartphones" and luhn_ok:
         ceir = await ceir_client.check(imei)
         ceir_status = ceir.get("status")
         if ceir_status == "blacklisted":
@@ -500,11 +518,20 @@ async def extract_imei(
                 detail={"error": "IMEI_BLACKLISTED", "imei": imei},
             )
 
-    # Suggest manual after low-confidence or invalid Luhn
-    suggest_manual = (not imei) or (confidence < 0.8) or (not luhn_ok)
+    if identifier_category == "smartphones":
+        suggest_manual = (not imei) or (confidence < 0.8) or (not luhn_ok)
+        identifier_kind = "imei"
+        identifier_value = imei
+    else:
+        suggest_manual = (not serial_number) or (confidence < 0.65)
+        identifier_kind = "serial"
+        identifier_value = serial_number
 
     return ExtractIMEIResponse(
+        identifier_kind=identifier_kind,
+        identifier_value=identifier_value,
         imei=imei,
+        serial_number=serial_number,
         confidence=confidence,
         luhn_valid=luhn_ok,
         ceir_status=ceir_status,
@@ -557,6 +584,16 @@ async def create_from_draft(
     # IMEI requirement check for smartphones
     if category_slug == "smartphones" and not payload.imei_1:
         raise HTTPException(status_code=400, detail="IMEI_REQUIRED_FOR_SMARTPHONES")
+
+    serial_number = normalize_serial_number(payload.serial_number)
+    if category_slug in {"laptops", "tablets"} and not serial_number:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "SERIAL_REQUIRED_FOR_DEVICE",
+                "message": "Serial number or service tag is required for laptop and tablet listings.",
+            },
+        )
 
     # Validate IMEI(s) if present — defence in depth
     for imei in (payload.imei_1, payload.imei_2):
@@ -708,7 +745,7 @@ async def create_from_draft(
             "has_earphones": payload.has_earphones,
             "water_damage_history": payload.water_damage_history,
             "seller_functional_attestation": payload.seller_functional_attestation,
-            "serial": payload.serial_number,
+            "serial": serial_number,
             "imei_1": payload.imei_1,
             "imei_2": payload.imei_2,
             "verif": verification_status,

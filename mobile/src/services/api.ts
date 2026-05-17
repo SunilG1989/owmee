@@ -1085,7 +1085,10 @@ export interface AIDraftResponse {
 }
 
 export interface AIExtractIMEIResponse {
+  identifier_kind: 'imei' | 'serial' | null;
+  identifier_value: string | null;
   imei: string | null;
+  serial_number: string | null;
   confidence: number;
   luhn_valid: boolean;
   ceir_status: string | null;
@@ -1141,6 +1144,24 @@ export interface AISellerInfoNeededResponse {
   listing_state: string;
 }
 
+function postIdentifierOCR(draftId: string, imageUri: string, categorySlug?: string | null) {
+  const form = new FormData();
+  if (categorySlug) form.append('category_slug', categorySlug);
+  form.append('image', {
+    uri: imageUri,
+    type: 'image/jpeg',
+    name: 'identifier.jpg',
+  } as any);
+  return api.post<AIExtractIMEIResponse>(
+    `/v1/listings/draft/${draftId}/extract-identifier`,
+    form,
+    {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: UPLOAD_TIMEOUT,
+    },
+  );
+}
+
 export const AIListing = {
   // SPRINT8_PHASE2_GEMINI_V2 — multi-image upload (1-6 photos)
   /** Upload multiple photos. AI sees all angles in one Gemini call. */
@@ -1175,23 +1196,11 @@ export const AIListing = {
     });
   },
 
-  /** Photo of IMEI sticker → OCR + Luhn + CEIR check. */
-  extractIMEI: (draftId: string, imageUri: string) => {
-    const form = new FormData();
-    form.append('image', {
-      uri: imageUri,
-      type: 'image/jpeg',
-      name: 'imei.jpg',
-    } as any);
-    return api.post<AIExtractIMEIResponse>(
-      `/v1/listings/draft/${draftId}/extract-imei`,
-      form,
-      {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: UPLOAD_TIMEOUT,
-      },
-    );
-  },
+  /** Photo of IMEI / serial / service-tag label → OCR + category validation. */
+  extractIdentifier: postIdentifierOCR,
+
+  /** Backward-compatible alias for older call sites. */
+  extractIMEI: (draftId: string, imageUri: string) => postIdentifierOCR(draftId, imageUri, 'smartphones'),
 
   /** Convert a draft + final fields into a real listing in pending_buyer state. */
   createFromDraft: (body: AICreateFromDraftRequest) =>

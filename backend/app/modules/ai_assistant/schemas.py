@@ -128,7 +128,7 @@ class DraftFromImageResponse(BaseModel):
     price_source: str = "none"               # comparables | ai | none
     comparables: list[Comparable] = Field(default_factory=list)
     expires_at: datetime
-    needs_identifier: bool = False           # True for smartphones/laptops
+    needs_identifier: bool = False           # True for smartphones/laptops/tablets
     fallback_reason: str | None = None       # set if vision/price failed
 
 
@@ -136,7 +136,10 @@ class DraftFromImageResponse(BaseModel):
 
 
 class ExtractIMEIResponse(BaseModel):
+    identifier_kind: str | None = None          # imei | serial
+    identifier_value: str | None = None
     imei: str | None = None
+    serial_number: str | None = None
     confidence: float = 0.0
     luhn_valid: bool = False
     ceir_status: str | None = None           # clean | blacklisted | invalid

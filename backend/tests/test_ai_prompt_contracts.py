@@ -3,6 +3,7 @@ from app.modules.ai_assistant.prompts import (
     PROMPT_DESCRIPTION_REGEN,
     PROMPT_IMEI_OCR,
     PROMPT_PRICE_ESTIMATE,
+    PROMPT_SERIAL_OCR,
     PROMPT_VISION_DETECT,
 )
 from app.modules.media.providers.google_gemini import (
@@ -50,6 +51,13 @@ def test_imei_prompt_rejects_common_non_imei_numbers():
     assert "Do not return serial number, EID, ICCID" in PROMPT_IMEI_OCR
     assert "prefer the one explicitly labelled" in PROMPT_IMEI_OCR
     assert "Do not correct a digit to satisfy a checksum" in PROMPT_IMEI_OCR
+
+
+def test_serial_prompt_rejects_common_non_serial_numbers():
+    assert "Dell: \"Service Tag\"" in PROMPT_SERIAL_OCR
+    assert "Do not return model number, part number" in PROMPT_SERIAL_OCR
+    assert "IMEI, EID, ICCID" in PROMPT_SERIAL_OCR
+    assert "Do not invent characters" in PROMPT_SERIAL_OCR
 
 
 def test_description_prompt_stays_product_only():
