@@ -3,13 +3,13 @@
  *
  * Conditional sub-step for smartphones / laptops / tablets.
  *
- * Smartphones: capture IMEI via photo OCR (Claude vision) → CEIR check → confirm
+ * Smartphones: capture IMEI via AI photo OCR → CEIR check → confirm
  * Laptops/tablets: capture serial number, no CEIR
  *
  * Flow:
  *   1. Show overlay guide ("IMEI is on Settings → About / box / SIM tray")
  *   2. User takes photo OR taps "Enter manually"
- *   3. If photo: API extracts via Claude OCR. Show extracted IMEI + Confirm/Fix
+ *   3. If photo: API extracts via AI OCR. Show extracted IMEI + Confirm/Fix
  *   4. After 2 failed photo extractions, force manual keypad entry
  *   5. Validate Luhn (smartphones) and CEIR check
  *   6. On success: createFromDraft with imei_1 set, then in-place success
@@ -39,6 +39,21 @@ import { parseApiError } from '../../../utils/errors';
 import type { RootScreen } from '../../../navigation/types';
 
 const SMARTPHONE = 'smartphones';
+
+function isValidImei(value: string): boolean {
+  if (!/^\d{15}$/.test(value)) return false;
+  let total = 0;
+  const reversed = value.split('').reverse();
+  reversed.forEach((ch, i) => {
+    let n = Number(ch);
+    if (i % 2 === 1) {
+      n *= 2;
+      if (n > 9) n -= 9;
+    }
+    total += n;
+  });
+  return total % 10 === 0;
+}
 
 async function requestCameraPermission(): Promise<boolean> {
   if (Platform.OS !== 'android') return true;
@@ -104,6 +119,14 @@ export default function AIListingIdentifierScreen({
             setExtractionAttempts((n) => n + 1);
             if (data.imei && data.luhn_valid) {
               setImei(data.imei);
+            } else if (data.imei) {
+              setImei(data.imei);
+              setManualMode(true);
+              Alert.alert(
+                'Please verify IMEI',
+                'Owmee read 15 digits, but the checksum did not match. Compare it with the photo and fix any wrong digit.',
+                [{ text: 'Review number' }],
+              );
             } else {
               if (extractionAttempts + 1 >= 2) {
                 Alert.alert(
@@ -138,6 +161,10 @@ export default function AIListingIdentifierScreen({
     if (isSmartphone) {
       if (!imei || imei.length !== 15 || !/^\d+$/.test(imei)) {
         Alert.alert('Invalid IMEI', 'IMEI must be exactly 15 digits.');
+        return;
+      }
+      if (!isValidImei(imei)) {
+        Alert.alert('Check IMEI', 'This IMEI does not pass checksum. Please recheck the digits on the device or box.');
         return;
       }
     } else {

@@ -201,6 +201,49 @@ class _GeminiPriceOut(BaseModel):
     reasoning: str = ""
 
 
+def _digits_only(value: str | None) -> str:
+    import re
+
+    return re.sub(r"\D", "", value or "")
+
+
+def _extract_imei_candidate(*values: str | None) -> str | None:
+    """Extract one 15-digit IMEI from OCR text.
+
+    Gemini often reads IMEI as grouped digits (`490154 203237 518`) or includes
+    the label in the `imei` field. Prefer explicitly labelled IMEI values; if
+    no label exists, accept a single unambiguous 15-digit candidate.
+    """
+    import re
+
+    text = "\n".join(v for v in values if v)
+    if not text.strip():
+        return None
+
+    direct_digits = _digits_only(values[0] if values else None)
+    if len(direct_digits) == 15:
+        return direct_digits
+
+    labelled_patterns = (
+        r"(?i)\bimei\s*1\b[^\d]{0,30}((?:\d[\s\-]*){15})",
+        r"(?i)\bimei\b[^\d]{0,30}((?:\d[\s\-]*){15})",
+        r"(?i)\bmeid\s*/\s*imei\b[^\d]{0,30}((?:\d[\s\-]*){15})",
+    )
+    for pattern in labelled_patterns:
+        for match in re.finditer(pattern, text):
+            digits = _digits_only(match.group(1))
+            if len(digits) == 15:
+                return digits
+
+    candidates: list[str] = []
+    for match in re.finditer(r"(?<!\d)((?:\d[\s\-]*){15})(?!\d)", text):
+        digits = _digits_only(match.group(1))
+        if len(digits) == 15 and digits not in candidates:
+            candidates.append(digits)
+
+    return candidates[0] if len(candidates) == 1 else None
+
+
 # ── Lazy SDK + key resolution ─────────────────────────────────────────────
 
 
@@ -683,18 +726,9 @@ async def extract_imei(image_bytes: bytes, content_type: str = "image/jpeg") -> 
             )
             return {"imei": None, "confidence": 0.0, "extracted_text": ""}
 
-    imei = parsed.imei
-    # Gemini sometimes returns "IMEI: 12..." or strips trailing chars.
-    # Pull the first 15-digit run from extracted_text as a backup.
-    if not imei or not (isinstance(imei, str) and imei.isdigit() and len(imei) == 15):
-        import re
-        text = (parsed.extracted_text or "") + " " + (imei or "")
-        m = re.search(r"\b(\d{15})\b", text)
-        if m:
-            imei = m.group(1)
-            log.info("ai_assistant.imei_extracted_from_text")
-        else:
-            imei = None
+    imei = _extract_imei_candidate(parsed.imei, parsed.extracted_text)
+    if imei and imei != parsed.imei:
+        log.info("ai_assistant.imei_normalized_from_ocr_text")
 
     return {
         "imei": imei,

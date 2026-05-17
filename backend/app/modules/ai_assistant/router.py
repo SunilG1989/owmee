@@ -504,7 +504,7 @@ async def extract_imei(
     suggest_manual = (not imei) or (confidence < 0.8) or (not luhn_ok)
 
     return ExtractIMEIResponse(
-        imei=imei if luhn_ok else None,
+        imei=imei,
         confidence=confidence,
         luhn_valid=luhn_ok,
         ceir_status=ceir_status,
