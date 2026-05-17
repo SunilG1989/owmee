@@ -31,6 +31,17 @@ def test_extract_imei_candidate_handles_android_slot_label():
     assert extract_imei_candidate(None, text) == "356938035643809"
 
 
+def test_extract_imei_candidate_handles_android_compact_imei1_label():
+    text = "IMEI1 356938035643809\nIMEI2 490154203237518"
+
+    assert extract_imei_candidate(None, text) == "356938035643809"
+
+
+def test_extract_imei_candidate_handles_primary_and_physical_sim_labels():
+    assert extract_imei_candidate(None, "Primary IMEI: 356 938 035 643 809") == "356938035643809"
+    assert extract_imei_candidate(None, "Physical SIM IMEI 356938035643809") == "356938035643809"
+
+
 def test_extract_serial_candidate_prefers_apple_serial_label():
     text = "Model Name: MacBook Air\nSerial Number: C02ZQ0ABCDEF\nModel Number: A2337"
 

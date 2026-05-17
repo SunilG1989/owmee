@@ -47,10 +47,23 @@ def test_vision_prompt_mentions_fields_supported_by_schema():
     assert expected_prompt_fields.issubset(schema_fields)
 
 
+def test_vision_prompt_forces_phone_front_face_hero_metadata():
+    image_quality_fields = set(_GeminiVisionOut.model_fields["image_set_quality"].annotation.model_fields)
+
+    assert "front_face_image_index" in image_quality_fields
+    assert "front_face_rationale" in image_quality_fields
+    assert "hero_image_has_human_artifact" in image_quality_fields
+    assert "Phone/tablet hero rule" in PROMPT_VISION_DETECT
+    assert "front/screen/face side" in PROMPT_VISION_DETECT
+    assert "Do not choose the back panel as hero" in PROMPT_VISION_DETECT
+
+
 def test_imei_prompt_rejects_common_non_imei_numbers():
     assert "Do not return serial number, EID, ICCID" in PROMPT_IMEI_OCR
     assert "prefer the one explicitly labelled" in PROMPT_IMEI_OCR
     assert "Do not correct a digit to satisfy a checksum" in PROMPT_IMEI_OCR
+    assert "IMEI (slot 1)" in PROMPT_IMEI_OCR
+    assert "Primary IMEI" in PROMPT_IMEI_OCR
 
 
 def test_serial_prompt_rejects_common_non_serial_numbers():
@@ -99,4 +112,5 @@ def test_cleanup_prompt_removes_human_body_parts():
     assert "Do not invent hidden labels" in prompt
     assert "crop, zoom, or recompose slightly" in prompt
     assert "rejected by an automatic audit" in prompt
+    assert "product recoloring" in prompt
     assert "If any human body part, skin patch, finger edge" in prompt

@@ -88,6 +88,91 @@ async def test_hero_cleanup_marks_retake_when_human_artifacts_remain(monkeypatch
     assert cleanup["selected_index"] == 0
 
 
+def test_phone_hero_prefers_front_face_metadata_over_back_panel_choice():
+    detected = AIDetected(
+        category_slug="smartphones",
+        hero_image_index=2,
+        image_set_quality={"front_face_image_index": 0},
+    )
+
+    assert router._front_face_hero_override(detected, 2, 4) == 0
+
+
+def test_phone_hero_keeps_ai_choice_when_front_face_metadata_missing():
+    detected = AIDetected(
+        category_slug="smartphones",
+        hero_image_index=2,
+        image_set_quality={},
+    )
+
+    assert router._front_face_hero_override(detected, 2, 4) == 2
+
+
+@pytest.mark.asyncio
+async def test_hero_cleanup_marks_retake_when_product_is_modified(monkeypatch):
+    detected = AIDetected(
+        category_slug="smartphones",
+        image_set_quality={"overall_photo_quality": "good"},
+    )
+
+    async def fake_clean_hero_background(image_bytes, content_type, *, original_key, selected_index, category_slug):
+        return HeroCleanupOutcome(
+            selected_index=selected_index,
+            cleaned=False,
+            provider="test-cleaner",
+            model="test-model",
+            reason="product_modified",
+            style="owmee_warm_ivory",
+        )
+
+    monkeypatch.setattr(router, "clean_hero_background", fake_clean_hero_background)
+
+    _, updated = await router._clean_hero_and_mark_detected(
+        detected=detected,
+        image_bytes=b"phone",
+        content_type="image/jpeg",
+        original_key="ai-drafts/u/d_0.jpg",
+        selected_index=0,
+        fallback_key="ai-drafts/u/d_0.jpg.display.webp",
+    )
+
+    cleanup = updated.image_set_quality["hero_image_cleanup"]
+    assert cleanup["status"] == "needs_retake"
+    assert cleanup["requires_retake"] is True
+    assert cleanup["reason"] == "product_modified"
+
+
+@pytest.mark.asyncio
+async def test_hero_cleanup_marks_retake_when_ai_saw_hand_and_cleanup_fallback(monkeypatch):
+    detected = AIDetected(
+        category_slug="smartphones",
+        image_set_quality={"hero_image_has_human_artifact": True},
+    )
+
+    async def fake_clean_hero_background(image_bytes, content_type, *, original_key, selected_index, category_slug):
+        return HeroCleanupOutcome(
+            selected_index=selected_index,
+            cleaned=False,
+            provider="test-cleaner",
+            reason="quality_audit_unavailable",
+        )
+
+    monkeypatch.setattr(router, "clean_hero_background", fake_clean_hero_background)
+
+    _, updated = await router._clean_hero_and_mark_detected(
+        detected=detected,
+        image_bytes=b"phone",
+        content_type="image/jpeg",
+        original_key="ai-drafts/u/d_0.jpg",
+        selected_index=0,
+        fallback_key="ai-drafts/u/d_0.jpg.display.webp",
+    )
+
+    cleanup = updated.image_set_quality["hero_image_cleanup"]
+    assert cleanup["status"] == "needs_retake"
+    assert cleanup["requires_retake"] is True
+
+
 @pytest.mark.asyncio
 async def test_single_image_draft_cleans_hero_for_legacy_clients(monkeypatch):
     db = _FakeDB()

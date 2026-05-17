@@ -21,6 +21,7 @@ Notes:
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from time import perf_counter
@@ -294,6 +295,74 @@ async def _store_photo(image_bytes: bytes, content_type: str, user_id: UUID, dra
     return processed.display_key or processed.original_key
 
 
+async def _store_draft_photo(
+    *,
+    image_bytes: bytes,
+    content_type: str,
+    user_id: UUID,
+    draft_id: UUID,
+    index: int,
+) -> tuple[str, str]:
+    ext = _image_extension(content_type)
+    key = f"ai-drafts/{user_id}/{draft_id}_{index}.{ext}"
+    try:
+        processed = await asyncio.to_thread(
+            process_listing_image_bytes,
+            image_bytes,
+            original_key=key,
+            content_type=content_type,
+        )
+        return processed.display_key or processed.original_key, key
+    except Exception as e:
+        log.warning("ai_assistant.photo_upload_failed", extra={"error": str(e), "key": key})
+        return f"r2://{key}", key
+
+
+async def _store_draft_photos(
+    image_pairs: list[tuple[bytes, str]],
+    *,
+    user_id: UUID,
+    draft_id: UUID,
+) -> tuple[list[str], list[str]]:
+    stored = await asyncio.gather(
+        *[
+            _store_draft_photo(
+                image_bytes=image_bytes,
+                content_type=content_type,
+                user_id=user_id,
+                draft_id=draft_id,
+                index=idx,
+            )
+            for idx, (image_bytes, content_type) in enumerate(image_pairs)
+        ]
+    )
+    photo_urls = [photo_url for photo_url, _ in stored]
+    original_keys = [key for _, key in stored]
+    return photo_urls, original_keys
+
+
+async def _timed_step(timings: dict[str, int], key: str, coro):
+    started = perf_counter()
+    try:
+        return await coro
+    finally:
+        timings[key] = _ms_since(started)
+
+
+def _front_face_hero_override(detected: AIDetected, hero_index: int, image_count: int) -> int:
+    if image_count <= 0 or detected.category_slug not in {"smartphones", "tablets"}:
+        return hero_index
+    image_quality = detected.image_set_quality or {}
+    raw = image_quality.get("front_face_image_index")
+    try:
+        front_index = int(raw)
+    except (TypeError, ValueError):
+        return hero_index
+    if 0 <= front_index < image_count:
+        return front_index
+    return hero_index
+
+
 async def _clean_hero_and_mark_detected(
     *,
     detected: AIDetected,
@@ -312,7 +381,11 @@ async def _clean_hero_and_mark_detected(
     )
     image_quality = dict(detected.image_set_quality or {})
     status = "ready" if cleanup.cleaned else "fallback_original"
-    if not cleanup.cleaned and (cleanup.reason or "").startswith("human_artifact"):
+    hero_has_human_artifact = image_quality.get("hero_image_has_human_artifact") is True
+    if not cleanup.cleaned and (
+        hero_has_human_artifact
+        or (cleanup.reason or "").startswith(("human_artifact", "product_modified"))
+    ):
         status = "needs_retake"
     image_quality["hero_image_cleanup"] = {
         "status": status,
@@ -1113,37 +1186,27 @@ async def draft_from_images(
 
     draft_id = uuid4()
 
-    # Store every photo and collect display keys. The AI-selected hero may be
-    # reordered/cleaned below, but all originals stay in R2 under these keys.
-    step_started = perf_counter()
-    photo_urls: list[str] = []
-    original_keys: list[str] = []
-    for idx, (image_bytes, content_type) in enumerate(image_pairs):
-        # We use the draft_id + index in the key so all photos for a draft
-        # share a logical prefix. _store_photo's signature uses just draft_id;
-        # we adapt the key inline here.
-        ext = _image_extension(content_type)
-        key = f"ai-drafts/{user.user_id}/{draft_id}_{idx}.{ext}"
-        original_keys.append(key)
-        try:
-            processed = process_listing_image_bytes(
-                image_bytes,
-                original_key=key,
-                content_type=content_type,
-            )
-            photo_urls.append(processed.display_key or processed.original_key)
-        except Exception as e:
-            log.warning("ai_assistant.photo_upload_failed", extra={"error": str(e), "key": key})
-            photo_urls.append(f"r2://{key}")
-    timings["store_ms"] = _ms_since(step_started)
+    # Store photos, run multi-image vision, and fetch seller state in parallel.
+    # These are independent, and serializing them was the largest avoidable
+    # delay in the seller analysis path.
+    from app.modules.identity_auth.user_location import get_user_location
 
-    # ONE multi-image vision call — see all angles at once
-    step_started = perf_counter()
-    detected = await ai_provider.detect_from_images(image_pairs)
+    photo_task = _timed_step(
+        timings,
+        "store_ms",
+        _store_draft_photos(image_pairs, user_id=user.user_id, draft_id=draft_id),
+    )
+    vision_task = _timed_step(timings, "vision_ms", ai_provider.detect_from_images(image_pairs))
+    location_task = _timed_step(timings, "location_ms", get_user_location(db, user.user_id))
+    (photo_urls, original_keys), detected, (_, _, _, user_state) = await asyncio.gather(
+        photo_task,
+        vision_task,
+        location_task,
+    )
     detected = _with_canonical_category(detected)
     hero_index = select_hero_image_index(detected, len(photo_urls))
+    hero_index = _front_face_hero_override(detected, hero_index, len(photo_urls))
     detected = detected.model_copy(update={"hero_image_index": hero_index})
-    timings["vision_ms"] = _ms_since(step_started)
 
     # Hard reject unsafe or unusable photos — "Other" is only for visible
     # sellable products outside the launch taxonomy.
@@ -1154,21 +1217,42 @@ async def draft_from_images(
             detail=rejection,
         )
 
-    # One-image AI cleanup: only the AI-selected hero gets background cleanup.
-    # This keeps analysis-time latency bounded and preserves all other photos
-    # as seller originals for buyer trust/disputes.
-    step_started = perf_counter()
-    if 0 <= hero_index < len(image_pairs) and 0 <= hero_index < len(original_keys):
-        hero_bytes, hero_content_type = image_pairs[hero_index]
-        photo_urls[hero_index], detected = await _clean_hero_and_mark_detected(
-            detected=detected,
-            image_bytes=hero_bytes,
-            content_type=hero_content_type,
-            original_key=original_keys[hero_index],
-            selected_index=hero_index,
-            fallback_key=photo_urls[hero_index],
+    vision_price_available = bool(detected.suggested_price_inr)
+
+    async def cleanup_step() -> tuple[list[str], AIDetected]:
+        next_photo_urls = list(photo_urls)
+        next_detected = detected
+        if 0 <= hero_index < len(image_pairs) and 0 <= hero_index < len(original_keys):
+            hero_bytes, hero_content_type = image_pairs[hero_index]
+            next_photo_urls[hero_index], next_detected = await _clean_hero_and_mark_detected(
+                detected=detected,
+                image_bytes=hero_bytes,
+                content_type=hero_content_type,
+                original_key=original_keys[hero_index],
+                selected_index=hero_index,
+                fallback_key=photo_urls[hero_index],
+            )
+        return next_photo_urls, next_detected
+
+    async def price_step() -> dict:
+        return await price_estimator.estimate_price(
+            db,
+            brand=detected.brand,
+            model=detected.model,
+            storage=detected.storage,
+            condition=detected.condition_guess or "good",
+            state=user_state,
+            category_slug=detected.category_slug,
+            allow_ai_fallback=not vision_price_available,
         )
-    timings["cleanup_ms"] = _ms_since(step_started)
+
+    # Cleanup and pricing are independent after vision completes. Running them
+    # together preserves quality checks without making the seller wait for each
+    # network call in sequence.
+    (photo_urls, detected), price_result = await asyncio.gather(
+        _timed_step(timings, "cleanup_ms", cleanup_step()),
+        _timed_step(timings, "price_ms", price_step()),
+    )
 
     photo_urls = move_hero_first(photo_urls, hero_index)
 
@@ -1182,29 +1266,6 @@ async def draft_from_images(
             (f.split(":", 1)[1] for f in detected.flags if f.startswith("ai_failed:")),
             "unknown",
         )
-
-    # Lookup user state for region-aware comparables (Address PRD — prefer
-    # user_addresses, fall back to legacy user columns).
-    from app.modules.identity_auth.user_location import get_user_location
-    step_started = perf_counter()
-    _, _, _, user_state = await get_user_location(db, user.user_id)
-    timings["location_ms"] = _ms_since(step_started)
-
-    # Price estimate (same priority order as the single-image draft path:
-    # comparables > vision > text-only AI fallback)
-    step_started = perf_counter()
-    vision_price_available = bool(detected.suggested_price_inr)
-    price_result = await price_estimator.estimate_price(
-        db,
-        brand=detected.brand,
-        model=detected.model,
-        storage=detected.storage,
-        condition=detected.condition_guess or "good",
-        state=user_state,
-        category_slug=detected.category_slug,
-        allow_ai_fallback=not vision_price_available,
-    )
-    timings["price_ms"] = _ms_since(step_started)
 
     if price_result["source"] in ("none", "ai") and detected.suggested_price_inr:
         price_result = {

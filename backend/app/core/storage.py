@@ -127,7 +127,7 @@ def download_bytes(object_key: str, bucket: str | None = None) -> bytes:
     return obj["Body"].read()
 
 
-def _normalise_catalog_image(raw: bytes):
+def _normalise_catalog_image(raw: bytes, *, polish: bool = True):
     """Open, orient, and lightly polish a seller photo for marketplace display.
 
     This intentionally does not remove or invent product details. It cleans the
@@ -146,6 +146,9 @@ def _normalise_catalog_image(raw: bytes):
         img = bg
     elif img.mode != "RGB":
         img = img.convert("RGB")
+
+    if not polish:
+        return img
 
     # Subtle denoise while keeping wear/scratches visible for buyer trust.
     denoised = img.filter(ImageFilter.MedianFilter(size=3))
@@ -240,6 +243,7 @@ def process_listing_image_bytes(
     max_thumbnail_dimension: int = 1200,
     display_quality: int = 92,
     thumbnail_quality: int = 86,
+    polish: bool = True,
     bucket: str | None = None,
 ) -> ProcessedListingImage:
     """Upload the original bytes and create polished listing variants.
@@ -259,7 +263,7 @@ def process_listing_image_bytes(
         if upload_original:
             upload_bytes(raw, original_key, content_type=content_type, bucket=bucket)
 
-        img = _normalise_catalog_image(raw)
+        img = _normalise_catalog_image(raw, polish=polish)
         display = img.copy()
         display.thumbnail((max_display_dimension, max_display_dimension), Image.Resampling.LANCZOS)
         thumb = img.copy()

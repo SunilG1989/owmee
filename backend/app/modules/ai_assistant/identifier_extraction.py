@@ -103,12 +103,15 @@ def extract_imei_candidate(*values: str | None) -> str | None:
         return direct_digits
 
     labelled_patterns = (
-        r"(?i)\bimei\b\s*(?:1|one|sim\s*(?:slot\s*)?1|slot\s*1|\(\s*sim\s*slot\s*1\s*\)|\(\s*slot\s*1\s*\))[^\d]{0,45}"
+        r"(?i)\bimei\s*(?:1|one|sim\s*(?:slot\s*)?1|slot\s*1|\(\s*sim\s*slot\s*1\s*\)|\(\s*slot\s*1\s*\)|\(\s*slot\s*one\s*\))[^\d]{0,60}"
         + _IMEI_NUMBER,
+        r"(?i)\bimei1\b[^\d]{0,60}" + _IMEI_NUMBER,
         r"(?i)\bprimary\s+imei\b[^\d]{0,45}" + _IMEI_NUMBER,
+        r"(?i)\b(?:physical|digital|device)\s+(?:sim\s+)?imei\b[^\d]{0,60}" + _IMEI_NUMBER,
         r"(?i)\b(?:meid\s*/\s*imei|imei\s*/\s*sn)\b[^\d]{0,45}" + _IMEI_NUMBER,
         r"(?i)\bimei\s*(?:number|no\.?|#)?\s*(?:\([^)]+\))?(?:\b|(?=\W))[^\d]{0,45}"
         + _IMEI_NUMBER,
+        r"(?i)\b(?:phone|sim)\s*1\s+imei\b[^\d]{0,60}" + _IMEI_NUMBER,
     )
     for pattern in labelled_patterns:
         for match in re.finditer(pattern, text):

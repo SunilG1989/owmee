@@ -126,6 +126,18 @@ Also select the listing hero photo:
 - If there is only one usable product photo, use index 0.
 - hero_image_rationale should be one short sentence.
 
+Phone/tablet hero rule:
+- For smartphones and tablets, the hero should be the front/screen/face side
+  whenever a usable front photo exists. Do not choose the back panel as hero
+  merely because the logo/camera is visible. The back can support model/color,
+  but buyer trust starts with the screen/front condition.
+- Populate image_set_quality.front_face_image_index with the zero-based index
+  of the best usable front/screen-side photo for smartphones/tablets, or null
+  if no usable front photo exists.
+- Populate image_set_quality.front_face_rationale with one short reason.
+- Populate image_set_quality.hero_image_has_human_artifact true if the selected
+  hero has a visible hand, finger, wrist, arm, skin, sleeve, or body shadow.
+
 ==================================================
 EVIDENCE DISCIPLINE
 ==================================================
@@ -557,9 +569,15 @@ Common locations for the IMEI:
   - Original retail box, on a barcode label
   - Settings → About phone → IMEI screen
   - SIM tray (etched on the metal)
+  - Android status/about screens labelled "IMEI (slot 1)", "IMEI1",
+    "Primary IMEI", "Physical SIM IMEI", "Digital SIM IMEI", or "Device IMEI"
+  - iPhone Settings → General → About labels such as "IMEI", "IMEI2",
+    "MEID", "EID", "ICCID", and "Serial Number" may appear together; return
+    only the IMEI value
 
 The IMEI is exactly 15 digits. It may be labelled "IMEI", "IMEI 1",
-"MEID/IMEI", or just appear as a 15-digit number on a barcode label.
+"IMEI1", "IMEI (slot 1)", "Primary IMEI", "MEID/IMEI", or just appear as a
+15-digit number on a barcode label.
 Do not return serial number, EID, ICCID, Wi-Fi MAC, Bluetooth address, invoice
 number, order ID, barcode number, or phone number as IMEI.
 

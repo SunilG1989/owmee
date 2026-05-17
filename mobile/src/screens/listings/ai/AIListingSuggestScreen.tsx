@@ -453,7 +453,7 @@ export default function AIListingSuggestScreen({
     if (heroCleanupNeedsRetake) {
       Alert.alert(
         'Retake hero photo',
-        'Owmee still detected a hand or body part in the hero image. Retake with only the product visible.',
+        'Owmee could not safely clean this hero photo without a hand/body part or product color change. Retake with only the product visible.',
         [{ text: 'Retake', onPress: retakeHeroPhoto }],
       );
       return;
@@ -758,7 +758,7 @@ export default function AIListingSuggestScreen({
           <View style={[st.photoNotice, st.photoNoticeCritical]}>
             <Text style={[st.photoNoticeTitle, st.photoNoticeCriticalText]}>Retake hero photo</Text>
             <Text style={st.photoNoticeText}>
-              Owmee still detected a hand or body part. Use a product-only photo for a cleaner listing.
+              Owmee could not safely clean this photo. Use a product-only photo so color and condition stay true.
             </Text>
           </View>
         ) : heroCleanupUnavailable ? (

@@ -68,6 +68,9 @@ async def clean_hero_background(
             result.image_bytes,
             original_key=cleaned_key,
             content_type=result.content_type,
+            display_quality=96,
+            thumbnail_quality=90,
+            polish=False,
         )
     except Exception as e:
         log.warning(

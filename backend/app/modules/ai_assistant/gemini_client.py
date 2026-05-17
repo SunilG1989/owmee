@@ -45,6 +45,7 @@ Acceptable for prototype; revisit before production with real seller data.
 """
 from __future__ import annotations
 
+from io import BytesIO
 import logging
 import os
 from typing import Any
@@ -96,6 +97,11 @@ class _ImageSetQuality(BaseModel):
     is_stock_or_catalog_image_suspected: bool = False
     # good | usable | poor | unusable
     overall_photo_quality: str | None = None
+    # Phone/tablet hero guardrails. The backend uses this to override a
+    # back-panel hero when a usable front/screen photo exists.
+    front_face_image_index: int | None = None
+    front_face_rationale: str | None = None
+    hero_image_has_human_artifact: bool = False
 
 
 class _FieldConfidence(BaseModel):
@@ -293,6 +299,41 @@ def _normalize_media_type(content_type: str) -> str:
     if content_type in ("image/jpeg", "image/png", "image/webp", "image/gif", "image/heic", "image/heif"):
         return content_type
     return "image/jpeg"
+
+
+def _identifier_ocr_part(types: Any, image_bytes: bytes, content_type: str):
+    """Build a deterministic OCR-friendly image part.
+
+    We do not mutate seller photos or stored listing media here. This is only
+    the bytes sent to the OCR model: exif-corrected, gently upscaled when the
+    source is small, autocontrasted, and sharpened so tiny IMEI/serial labels
+    survive mobile camera blur.
+    """
+    try:
+        from PIL import Image, ImageEnhance, ImageFilter, ImageOps  # type: ignore
+
+        image = Image.open(BytesIO(image_bytes))
+        image = ImageOps.exif_transpose(image)
+        if image.mode != "RGB":
+            image = image.convert("RGB")
+        max_side = max(image.size)
+        if max_side < 2200:
+            scale = min(2.0, 2200 / max(1, max_side))
+            image = image.resize(
+                (round(image.width * scale), round(image.height * scale)),
+                Image.Resampling.LANCZOS,
+            )
+        image = ImageOps.autocontrast(image, cutoff=0.5)
+        image = ImageEnhance.Sharpness(image).enhance(1.45)
+        image = image.filter(ImageFilter.UnsharpMask(radius=1.0, percent=135, threshold=2))
+        out = BytesIO()
+        image.save(out, format="JPEG", quality=95, optimize=True)
+        return types.Part.from_bytes(data=out.getvalue(), mime_type="image/jpeg")
+    except Exception:
+        return types.Part.from_bytes(
+            data=image_bytes,
+            mime_type=_normalize_media_type(content_type),
+        )
 
 
 def _failed(reason: str) -> AIDetected:
@@ -661,10 +702,7 @@ async def extract_imei(image_bytes: bytes, content_type: str = "image/jpeg") -> 
 
     from google.genai import types
 
-    image_part = types.Part.from_bytes(
-        data=image_bytes,
-        mime_type=_normalize_media_type(content_type),
-    )
+    image_part = _identifier_ocr_part(types, image_bytes, content_type)
 
     model = _get_model("vision")
     config = types.GenerateContentConfig(
@@ -681,7 +719,8 @@ async def extract_imei(image_bytes: bytes, content_type: str = "image/jpeg") -> 
             model=model,
             contents=[
                 "Read the IMEI from this image. The IMEI is a 15-digit number, "
-                "usually labelled 'IMEI', 'IMEI 1', or 'MEID/IMEI'. It may "
+                "usually labelled 'IMEI', 'IMEI 1', 'IMEI1', 'IMEI (slot 1)', "
+                "'Primary IMEI', or 'MEID/IMEI'. It may "
                 "appear on a sticker on the back of the phone, on the original "
                 "box, or on the Settings → About phone screen. If you see two "
                 "IMEIs (dual-SIM), return the first one in the imei field.",
@@ -747,10 +786,7 @@ async def extract_serial(
 
     from google.genai import types
 
-    image_part = types.Part.from_bytes(
-        data=image_bytes,
-        mime_type=_normalize_media_type(content_type),
-    )
+    image_part = _identifier_ocr_part(types, image_bytes, content_type)
 
     model = _get_model("vision")
     config = types.GenerateContentConfig(

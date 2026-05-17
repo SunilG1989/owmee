@@ -23,8 +23,9 @@ class _BackgroundStyle:
     description: str
 
 
-class _CleanupHumanAudit(BaseModel):
+class _CleanupQualityAudit(BaseModel):
     has_human_artifact: bool = False
+    product_modified: bool = False
     confidence: float | None = None
     reason: str | None = None
 
@@ -141,15 +142,17 @@ class GoogleGeminiBackgroundCleanupProvider:
                 style=style.name,
             )
 
-        audit = await self._audit_human_artifacts(client, types, output_bytes)
-        if self._audit_requires_retry(audit):
+        audit = await self._audit_cleanup_quality(client, types, source, output_bytes)
+        rejection_reason = self._audit_rejection_reason(audit)
+        if rejection_reason:
             log.warning(
-                "media.cleanup.human_artifact_detected",
+                "media.cleanup.quality_rejected",
                 extra={
                     "provider": self.provider_name,
                     "model": settings.gemini_image_model,
                     "audit_confidence": audit.confidence,
                     "audit_reason": (audit.reason or "")[:180],
+                    "rejection_reason": rejection_reason,
                     "style": style.name,
                 },
             )
@@ -158,7 +161,7 @@ class GoogleGeminiBackgroundCleanupProvider:
                 style,
                 strict_human_removal=True,
             )
-            retry_bytes, retry_reason = await self._generate_cleanup_image(
+            retry_bytes, retry_failure_reason = await self._generate_cleanup_image(
                 client,
                 types,
                 strict_prompt,
@@ -170,19 +173,21 @@ class GoogleGeminiBackgroundCleanupProvider:
                     ok=False,
                     provider=self.provider_name,
                     model=settings.gemini_image_model,
-                    reason=f"human_artifact_retry_failed:{retry_reason or 'unknown'}",
+                    reason=f"{rejection_reason}_retry_failed:{retry_failure_reason or 'unknown'}",
                     style=style.name,
                 )
 
-            retry_audit = await self._audit_human_artifacts(client, types, retry_bytes)
-            if self._audit_requires_retry(retry_audit):
+            retry_audit = await self._audit_cleanup_quality(client, types, source, retry_bytes)
+            retry_rejection_reason = self._audit_rejection_reason(retry_audit)
+            if retry_rejection_reason:
                 log.warning(
-                    "media.cleanup.human_artifact_remaining",
+                    "media.cleanup.quality_rejected_after_retry",
                     extra={
                         "provider": self.provider_name,
                         "model": settings.gemini_image_model,
                         "audit_confidence": retry_audit.confidence,
                         "audit_reason": (retry_audit.reason or "")[:180],
+                        "rejection_reason": retry_rejection_reason,
                         "style": style.name,
                     },
                 )
@@ -190,7 +195,7 @@ class GoogleGeminiBackgroundCleanupProvider:
                     ok=False,
                     provider=self.provider_name,
                     model=settings.gemini_image_model,
-                    reason="human_artifact_remaining",
+                    reason=retry_rejection_reason,
                     style=style.name,
                 )
             output_bytes = retry_bytes
@@ -213,10 +218,12 @@ class GoogleGeminiBackgroundCleanupProvider:
     ) -> str:
         strict_block = (
             "STRICT CORRECTION MODE: a previous cleanup may have left a visible "
-            "hand, finger, skin patch, sleeve edge, or body shadow. Prioritize a "
-            "product-only hero result over preserving empty surrounding space. "
-            "If needed, crop, zoom, or recompose slightly to remove all human "
-            "pixels while keeping the actual product fully visible and centered.\n\n"
+            "hand, finger, skin patch, sleeve edge, or body shadow, or may have "
+            "changed the product color/material. Prioritize a product-only hero "
+            "result with exact product fidelity over preserving empty surrounding "
+            "space. If needed, crop, zoom, or recompose slightly to remove all "
+            "human pixels while keeping the actual product fully visible and "
+            "centered. Never recolor, restyle, repair, or beautify the product.\n\n"
             if strict_human_removal
             else ""
         )
@@ -266,8 +273,9 @@ class GoogleGeminiBackgroundCleanupProvider:
             "FINAL QUALITY GATE: before returning, inspect the final image. If any "
             "human body part, skin patch, finger edge, sleeve, face, hair, or person "
             "reflection remains visible, fix it before returning. This image will be "
-            "rejected by an automatic audit if any hand, finger, skin, clothing, or "
-            "person reflection remains. Return only the cleaned image."
+            "rejected by an automatic audit if any hand, finger, skin, clothing, "
+            "person reflection, product recoloring, product reshaping, logo/text "
+            "change, or condition change remains. Return only the cleaned image."
         )
 
     async def _generate_cleanup_image(
@@ -300,12 +308,13 @@ class GoogleGeminiBackgroundCleanupProvider:
             return None, "no_image_output"
         return output_bytes, None
 
-    async def _audit_human_artifacts(
+    async def _audit_cleanup_quality(
         self,
         client: Any,
         types: Any,
+        source_image: Any,
         image_bytes: bytes,
-    ) -> _CleanupHumanAudit | None:
+    ) -> _CleanupQualityAudit | None:
         try:
             from PIL import Image, ImageOps  # type: ignore
 
@@ -316,21 +325,34 @@ class GoogleGeminiBackgroundCleanupProvider:
             return None
 
         prompt = (
-            "Inspect this final marketplace hero image for Owmee. Return JSON only. "
-            "Set has_human_artifact=true if any human hand, finger, thumb, arm, wrist, "
-            "skin patch, nail, sleeve/clothing edge, face, hair, person reflection, or "
-            "human-shaped shadow remains visible anywhere in the image. Do not mark "
-            "a product's normal material, label, printed graphic, or warm product color "
-            "as human unless it is visibly part of a person. confidence must be 0 to 1. "
-            "reason should be a short visual note."
+            "You are auditing a marketplace background-cleanup result. The first "
+            "image is the seller's original source photo. The second image is the "
+            "candidate cleaned hero photo. Return JSON only.\n\n"
+            "Set has_human_artifact=true if the candidate contains any human hand, "
+            "finger, thumb, arm, wrist, skin patch, nail, sleeve/clothing edge, "
+            "face, hair, person reflection, or human-shaped shadow anywhere.\n\n"
+            "Set product_modified=true if the candidate changed the actual product "
+            "from the source: color, material, screen tint/content, printed text, "
+            "logos, stickers, labels, camera layout, ports/buttons, silhouette, "
+            "damage, scratches, dents, cracks, or visible wear. Ignore background "
+            "changes, removed hands/props, and neutral fill where a hand used to "
+            "occlude the product edge. Do not mark a product's normal warm color "
+            "as human unless it is visibly part of a person.\n\n"
+            "confidence must be 0 to 1. reason should be a short visual note."
         )
         try:
             response = await client.aio.models.generate_content(
                 model=settings.gemini_vision_model,
-                contents=[prompt, audit_image],
+                contents=[
+                    prompt,
+                    "Original source photo:",
+                    source_image,
+                    "Candidate cleaned hero photo:",
+                    audit_image,
+                ],
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
-                    response_schema=_CleanupHumanAudit,
+                    response_schema=_CleanupQualityAudit,
                     temperature=0.0,
                     max_output_tokens=160,
                 ),
@@ -343,11 +365,11 @@ class GoogleGeminiBackgroundCleanupProvider:
             return None
 
         parsed = getattr(response, "parsed", None)
-        if isinstance(parsed, _CleanupHumanAudit):
+        if isinstance(parsed, _CleanupQualityAudit):
             return parsed
         if isinstance(parsed, dict):
             try:
-                return _CleanupHumanAudit(**parsed)
+                return _CleanupQualityAudit(**parsed)
             except Exception:
                 return None
 
@@ -355,7 +377,7 @@ class GoogleGeminiBackgroundCleanupProvider:
         if not raw:
             return None
         try:
-            return _CleanupHumanAudit(**json.loads(raw))
+            return _CleanupQualityAudit(**json.loads(raw))
         except Exception as e:
             log.warning(
                 "media.cleanup.audit_parse_failed",
@@ -364,10 +386,16 @@ class GoogleGeminiBackgroundCleanupProvider:
             return None
 
     @staticmethod
-    def _audit_requires_retry(audit: _CleanupHumanAudit | None) -> bool:
-        if audit is None or not audit.has_human_artifact:
-            return False
-        return audit.confidence is None or audit.confidence >= 0.35
+    def _audit_rejection_reason(audit: _CleanupQualityAudit | None) -> str | None:
+        if audit is None:
+            return None
+        if audit.confidence is not None and audit.confidence < 0.35:
+            return None
+        if audit.has_human_artifact:
+            return "human_artifact_remaining"
+        if audit.product_modified:
+            return "product_modified"
+        return None
 
     @staticmethod
     def _choose_background_style(source) -> _BackgroundStyle:

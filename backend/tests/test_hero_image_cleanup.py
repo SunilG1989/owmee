@@ -8,7 +8,7 @@ from app.core.storage import ProcessedListingImage
 from app.modules.media import image_cleanup
 from app.modules.media.providers.base import BackgroundCleanupResult
 from app.modules.media.providers.google_gemini import (
-    _CleanupHumanAudit,
+    _CleanupQualityAudit,
     GoogleGeminiBackgroundCleanupProvider,
 )
 
@@ -148,22 +148,23 @@ def test_google_gemini_cleanup_prompt_has_strict_human_retry_mode():
 
     assert "STRICT CORRECTION MODE" in prompt
     assert "previous cleanup may have left a visible hand" in prompt
+    assert "Never recolor, restyle, repair, or beautify the product" in prompt
     assert "crop, zoom, or recompose slightly" in prompt
 
 
-def test_google_gemini_cleanup_retries_only_confident_human_audit():
-    assert GoogleGeminiBackgroundCleanupProvider._audit_requires_retry(
-        _CleanupHumanAudit(has_human_artifact=True, confidence=0.8)
-    )
-    assert GoogleGeminiBackgroundCleanupProvider._audit_requires_retry(
-        _CleanupHumanAudit(has_human_artifact=True, confidence=None)
-    )
-    assert not GoogleGeminiBackgroundCleanupProvider._audit_requires_retry(
-        _CleanupHumanAudit(has_human_artifact=True, confidence=0.2)
-    )
-    assert not GoogleGeminiBackgroundCleanupProvider._audit_requires_retry(
-        _CleanupHumanAudit(has_human_artifact=False, confidence=0.95)
-    )
+def test_google_gemini_cleanup_rejects_confident_quality_audit_failures():
+    assert GoogleGeminiBackgroundCleanupProvider._audit_rejection_reason(
+        _CleanupQualityAudit(has_human_artifact=True, confidence=0.8)
+    ) == "human_artifact_remaining"
+    assert GoogleGeminiBackgroundCleanupProvider._audit_rejection_reason(
+        _CleanupQualityAudit(product_modified=True, confidence=0.8)
+    ) == "product_modified"
+    assert GoogleGeminiBackgroundCleanupProvider._audit_rejection_reason(
+        _CleanupQualityAudit(has_human_artifact=True, confidence=0.2)
+    ) is None
+    assert GoogleGeminiBackgroundCleanupProvider._audit_rejection_reason(
+        _CleanupQualityAudit(has_human_artifact=False, product_modified=False, confidence=0.95)
+    ) is None
 
 
 def test_google_gemini_provider_extracts_inline_image_bytes_before_sdk_image_object():
