@@ -8,8 +8,8 @@ Usage:
 This does not mutate production. It checks:
   - API health is reachable
   - listing detail has thumbnail_url and image_urls
-  - image_urls[0] matches thumbnail_url after stripping signed query params
-    and thumbnail/display suffixes
+  - listing detail image_urls[0] is the AI-cleaned hero display image
+  - feed/listing-card endpoints also expose the cleaned hero first
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ from urllib.request import Request, urlopen
 
 
 DEFAULT_API_URL = "https://owmee-api.onrender.com"
+CLEANED_MARKER = ".hero-cleaned.png"
 
 
 def fetch_json(url: str) -> dict:
@@ -30,15 +31,38 @@ def fetch_json(url: str) -> dict:
         return json.loads(response.read().decode("utf-8"))
 
 
-def image_identity(url: str) -> str:
+def image_key(url: str) -> str:
     path = unquote(urlparse(url).path).lstrip("/")
     if path.startswith("owmee-media/"):
         path = path[len("owmee-media/") :]
+    return path.split("?", 1)[0]
+
+
+def image_identity(url: str) -> str:
+    path = image_key(url)
     return (
-        path.split("?", 1)[0]
+        path
         .removesuffix(".thumb.webp")
         .removesuffix(".display.webp")
     )
+
+
+def first_image_from_payload(payload: dict) -> str | None:
+    image_urls = payload.get("image_urls") or payload.get("images") or []
+    return image_urls[0] if image_urls else None
+
+
+def assert_cleaned(label: str, url: str | None) -> tuple[bool, str]:
+    if not url:
+        return False, f"{label}: missing first image"
+    key = image_key(url)
+    if CLEANED_MARKER not in key:
+        return False, f"{label}: first image is not cleaned: {key}"
+    return True, key
+
+
+def find_listing(items: list[dict], listing_id: str) -> dict | None:
+    return next((item for item in items if str(item.get("id")) == listing_id), None)
 
 
 def main() -> int:
@@ -54,27 +78,44 @@ def main() -> int:
         return 1
 
     listing = fetch_json(urljoin(api_url, f"v1/listings/{args.listing_id}"))
-    thumbnail = listing.get("thumbnail_url")
-    image_urls = listing.get("image_urls") or []
-    if not thumbnail or not image_urls:
-        print("FAIL listing is missing thumbnail_url or image_urls", file=sys.stderr)
+    checks: list[tuple[str, str | None]] = [
+        ("detail", first_image_from_payload(listing)),
+    ]
+
+    browse = fetch_json(urljoin(api_url, "v1/listings?limit=30"))
+    browse_items = browse.get("items") or browse.get("listings") or []
+    browse_listing = find_listing(browse_items, args.listing_id)
+    if browse_listing:
+        checks.append(("browse", first_image_from_payload(browse_listing)))
+
+    explore = fetch_json(urljoin(api_url, "v1/feed/explore?limit=30"))
+    explore_items = explore.get("items") or explore.get("listings") or []
+    explore_listing = find_listing(explore_items, args.listing_id)
+    if explore_listing:
+        checks.append(("feed", first_image_from_payload(explore_listing)))
+
+    failures = []
+    cleaned_keys = []
+    for label, url in checks:
+        ok, message = assert_cleaned(label, url)
+        if ok:
+            cleaned_keys.append(message)
+        else:
+            failures.append(message)
+
+    if failures:
+        print("FAIL production is not returning the cleaned hero first:", file=sys.stderr)
+        for failure in failures:
+            print(f"  - {failure}", file=sys.stderr)
+        thumbnail = listing.get("thumbnail_url")
+        if thumbnail:
+            print(f"  thumbnail identity: {image_identity(thumbnail)}", file=sys.stderr)
         return 1
 
-    thumb_id = image_identity(thumbnail)
-    first_id = image_identity(image_urls[0])
-    if first_id != thumb_id:
-        print(
-            "FAIL primary image mismatch:\n"
-            f"  thumbnail identity: {thumb_id}\n"
-            f"  first image identity: {first_id}",
-            file=sys.stderr,
-        )
-        return 1
-
-    print("OK production hero image order")
+    print("OK production cleaned hero image order")
     print(f"listing_id={listing.get('id')}")
     print(f"title={listing.get('title')}")
-    print(f"primary_identity={first_id}")
+    print(f"primary_key={cleaned_keys[0]}")
     return 0
 
 
