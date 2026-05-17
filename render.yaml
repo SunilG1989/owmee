@@ -111,6 +111,10 @@ services:
         value: gemini-3-pro-preview
       - key: GEMINI_TEXT_MODEL
         value: gemini-3-flash-preview
+      - key: GEMINI_IMAGE_MODEL
+        value: gemini-3.1-flash-image-preview
+      - key: IMAGE_CLEANUP_PROVIDER
+        value: gemini
 
   - type: worker
     name: owmee-worker
@@ -219,6 +223,10 @@ services:
         value: gemini-3-pro-preview
       - key: GEMINI_TEXT_MODEL
         value: gemini-3-flash-preview
+      - key: GEMINI_IMAGE_MODEL
+        value: gemini-3.1-flash-image-preview
+      - key: IMAGE_CLEANUP_PROVIDER
+        value: gemini
 
   - type: keyvalue
     name: owmee-redis

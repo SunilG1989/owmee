@@ -23,7 +23,10 @@ Fill these in the Render Blueprint flow before the first deploy:
   `R2_PUBLIC_ENDPOINT`.
 - `ALLOWED_ORIGINS`: production admin/app origins only, no localhost.
 - `APP_BASE_URL`: final API URL, for example `https://api.owmee.in`.
-- Gemini credentials if AI listing assist should work now.
+- Gemini credentials if AI listing assist should work now. Keep
+  `IMAGE_CLEANUP_PROVIDER=gemini` and `GEMINI_IMAGE_MODEL` configured so the
+  AI listing flow cleans only the selected hero photo background during
+  analysis.
 - `OTP_WHITELIST`: your private test phone numbers while SMS is not connected.
 - SMS, KYC, payment, Stream, FCM, Temporal, and Sentry credentials when you
   are ready for public launch.
@@ -110,3 +113,13 @@ cd android && ./gradlew assembleDebug
 
 Then run the API smoke script against the target URL. Do not promote if OTP,
 feed, listing detail, wishlist, offers, transactions, or safe-buy routes fail.
+
+For the production hero-image path, run:
+
+```sh
+python3 scripts/smoke_prod_hero_image.py \
+  --listing-id 7d79da1b-965e-4bb7-8ec4-e82bb2b73ac0
+```
+
+It should report `OK production hero image order`. If it fails, deploy the
+latest `main` backend first and rerun it before sharing the APK.

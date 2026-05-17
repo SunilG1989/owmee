@@ -48,6 +48,81 @@ class _FakeDB:
 
 
 @pytest.mark.asyncio
+async def test_single_image_draft_cleans_hero_for_legacy_clients(monkeypatch):
+    db = _FakeDB()
+    user = SimpleNamespace(user_id=uuid4())
+
+    async def fake_detect_from_image(image_bytes, content_type):
+        assert image_bytes == b"single"
+        assert content_type == "image/jpeg"
+        return AIDetected(
+            category_slug="kids-utility",
+            category_confidence=0.91,
+            condition_guess="good",
+            image_set_quality={"overall_photo_quality": "good"},
+        )
+
+    def fake_process_listing_image_bytes(raw, *, original_key, content_type, **kwargs):
+        return ProcessedListingImage(
+            original_key=original_key,
+            display_key=f"{original_key}.display.webp",
+            thumbnail_key=f"{original_key}.thumb.webp",
+        )
+
+    async def fake_clean_hero_background(image_bytes, content_type, *, original_key, selected_index, category_slug):
+        assert image_bytes == b"single"
+        assert content_type == "image/jpeg"
+        assert selected_index == 0
+        assert category_slug == "kids-utility"
+        return HeroCleanupOutcome(
+            selected_index=selected_index,
+            cleaned=True,
+            display_key=f"{original_key}.hero-cleaned.png.display.webp",
+            thumbnail_key=f"{original_key}.hero-cleaned.png.thumb.webp",
+            provider="test-cleaner",
+            model="test-model",
+        )
+
+    async def fake_estimate_price(*args, **kwargs):
+        return {
+            "price": None,
+            "source": "none",
+            "reasoning": "no comparable data",
+            "comparables": [],
+            "comparables_count": 0,
+        }
+
+    async def fake_get_user_location(db, user_id):
+        return (12.9, 77.6, "Bengaluru", "Karnataka")
+
+    monkeypatch.setattr(router.ai_provider, "detect_from_image", fake_detect_from_image)
+    monkeypatch.setattr(router.price_estimator, "estimate_price", fake_estimate_price)
+    monkeypatch.setattr(router, "process_listing_image_bytes", fake_process_listing_image_bytes)
+    monkeypatch.setattr(router, "clean_hero_background", fake_clean_hero_background)
+    monkeypatch.setattr(router, "generate_presigned_download_url", lambda key, expires_in=0: f"https://cdn.test/{key}")
+
+    import app.modules.identity_auth.user_location as user_location
+
+    monkeypatch.setattr(user_location, "get_user_location", fake_get_user_location)
+
+    response = await router.draft_from_image(
+        user=user,
+        db=db,
+        image=_Upload(b"single"),
+    )
+
+    assert response.photo_url.endswith(".jpg.hero-cleaned.png.display.webp")
+    assert db.insert_params is not None
+    saved_urls = db.insert_params["photo_urls"]
+    assert len(saved_urls) == 1
+    assert saved_urls[0].endswith(".jpg.hero-cleaned.png.display.webp")
+    cleanup = response.detected.image_set_quality["hero_image_cleanup"]
+    assert cleanup["status"] == "ready"
+    assert cleanup["provider"] == "test-cleaner"
+    assert db.commits == 1
+
+
+@pytest.mark.asyncio
 async def test_draft_from_images_selects_cleans_and_promotes_ai_hero(monkeypatch):
     db = _FakeDB()
     user = SimpleNamespace(user_id=uuid4())

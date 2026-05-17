@@ -41,6 +41,7 @@ from app.modules.ai_assistant import (
     price_estimator,
 )
 from app.modules.ai_assistant.schemas import (
+    AIDetected,
     CreateFromDraftRequest,
     CreateFromDraftResponse,
     DraftFromImageResponse,
@@ -235,6 +236,14 @@ def _photo_object_key(user_id: UUID, draft_id: UUID, ext: str = "jpg") -> str:
     return f"ai-drafts/{user_id}/{draft_id}.{ext}"
 
 
+def _image_extension(content_type: str | None) -> str:
+    if content_type == "image/png":
+        return "png"
+    if content_type == "image/webp":
+        return "webp"
+    return "jpg"
+
+
 def _client_photo_url(key: str | None) -> str:
     """Return a short-lived URL for mobile preview while persisting R2 keys."""
     if not key:
@@ -267,13 +276,7 @@ async def _store_photo(image_bytes: bytes, content_type: str, user_id: UUID, dra
     the AI flow can still complete (photos can be re-uploaded later
     via the existing image pipeline).
     """
-    ext = "jpg"
-    if content_type == "image/png":
-        ext = "png"
-    elif content_type == "image/webp":
-        ext = "webp"
-
-    key = _photo_object_key(user_id, draft_id, ext)
+    key = _photo_object_key(user_id, draft_id, _image_extension(content_type))
 
     try:
         processed = process_listing_image_bytes(
@@ -286,6 +289,35 @@ async def _store_photo(image_bytes: bytes, content_type: str, user_id: UUID, dra
         return f"r2://{key}"
 
     return processed.display_key or processed.original_key
+
+
+async def _clean_hero_and_mark_detected(
+    *,
+    detected: AIDetected,
+    image_bytes: bytes,
+    content_type: str,
+    original_key: str,
+    selected_index: int,
+    fallback_key: str,
+) -> tuple[str, AIDetected]:
+    cleanup = await clean_hero_background(
+        image_bytes,
+        content_type,
+        original_key=original_key,
+        selected_index=selected_index,
+        category_slug=detected.category_slug,
+    )
+    image_quality = dict(detected.image_set_quality or {})
+    image_quality["hero_image_cleanup"] = {
+        "status": "ready" if cleanup.cleaned else "fallback_original",
+        "provider": cleanup.provider,
+        "model": cleanup.model,
+        "reason": cleanup.reason,
+    }
+    updated_detected = detected.model_copy(update={"image_set_quality": image_quality})
+    if cleanup.cleaned and cleanup.display_key:
+        return cleanup.display_key, updated_detected
+    return fallback_key, updated_detected
 
 
 def _category_needs_identifier(slug: str | None) -> bool:
@@ -319,6 +351,7 @@ async def draft_from_image(
 
     # Store photo first (so the URL is valid for the response)
     photo_url = await _store_photo(image_bytes, content_type, user.user_id, draft_id)
+    original_key = _photo_object_key(user.user_id, draft_id, _image_extension(content_type))
 
     # Vision detection
     detected = await ai_provider.detect_from_image(image_bytes, content_type)
@@ -332,6 +365,15 @@ async def draft_from_image(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=rejection,
         )
+
+    photo_url, detected = await _clean_hero_and_mark_detected(
+        detected=detected,
+        image_bytes=image_bytes,
+        content_type=content_type,
+        original_key=original_key,
+        selected_index=0,
+        fallback_key=photo_url,
+    )
 
     # Lookup user's state for region-aware comparables. Prefer
     # user_addresses (Address PRD), fall back to legacy user columns.
@@ -982,11 +1024,7 @@ async def draft_from_images(
         # We use the draft_id + index in the key so all photos for a draft
         # share a logical prefix. _store_photo's signature uses just draft_id;
         # we adapt the key inline here.
-        ext = "jpg"
-        if content_type == "image/png":
-            ext = "png"
-        elif content_type == "image/webp":
-            ext = "webp"
+        ext = _image_extension(content_type)
         key = f"ai-drafts/{user.user_id}/{draft_id}_{idx}.{ext}"
         original_keys.append(key)
         try:
@@ -1020,23 +1058,14 @@ async def draft_from_images(
     # as seller originals for buyer trust/disputes.
     if 0 <= hero_index < len(image_pairs) and 0 <= hero_index < len(original_keys):
         hero_bytes, hero_content_type = image_pairs[hero_index]
-        cleanup = await clean_hero_background(
-            hero_bytes,
-            hero_content_type,
+        photo_urls[hero_index], detected = await _clean_hero_and_mark_detected(
+            detected=detected,
+            image_bytes=hero_bytes,
+            content_type=hero_content_type,
             original_key=original_keys[hero_index],
             selected_index=hero_index,
-            category_slug=detected.category_slug,
+            fallback_key=photo_urls[hero_index],
         )
-        image_quality = dict(detected.image_set_quality or {})
-        image_quality["hero_image_cleanup"] = {
-            "status": "ready" if cleanup.cleaned else "fallback_original",
-            "provider": cleanup.provider,
-            "model": cleanup.model,
-            "reason": cleanup.reason,
-        }
-        detected = detected.model_copy(update={"image_set_quality": image_quality})
-        if cleanup.cleaned and cleanup.display_key:
-            photo_urls[hero_index] = cleanup.display_key
 
     photo_urls = move_hero_first(photo_urls, hero_index)
 
