@@ -326,7 +326,7 @@ export interface GeoSearchResult {
 export interface Offer {
   id: string; listing_id: string; listing_title: string; listing_price: number;
   listing_thumbnail?: string; offered_price?: number; amount: number;
-  note?: string; status: string; counter_price?: number;
+  status: string; counter_price?: number;
   expires_at?: string; created_at: string;
   // Sprint 6b — offer v2 mechanics. Optional because older API responses
   // (or older transactions returned alongside) may not include them.
@@ -654,8 +654,8 @@ export const Profile = {
 
 // ── Offers ───────────────────────────────────────────────────────────────────
 export const Offers = {
-  create: (lid: string, amt: number, note?: string) =>
-    api.post('/v1/offers', { listing_id: lid, offered_price: amt, offer_note: note || undefined }).then((res) => {
+  create: (lid: string, amt: number) =>
+    api.post('/v1/offers', { listing_id: lid, offered_price: amt }).then((res) => {
       clearApiCaches(['/v1/offers', '/v1/transactions']);
       return res;
     }),

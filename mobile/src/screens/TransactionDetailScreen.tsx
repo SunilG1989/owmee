@@ -580,7 +580,7 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
               placeholder={
                 matchedListing === false
                   ? 'Tell us what was different (helps disputes)'
-                  : 'Add a note (optional)'
+                  : 'Share item feedback (optional)'
               }
               placeholderTextColor={C.text4}
               value={ratingNote}

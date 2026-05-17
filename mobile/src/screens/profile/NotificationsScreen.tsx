@@ -78,7 +78,7 @@ export default function NotificationsScreen({ navigation }: any) {
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
         <BackButton onPress={() => navigation.goBack()} />
-        <Text style={s.headerTitle}>Notifications</Text>
+        <Text style={s.headerTitle}>Activity</Text>
         <View style={s.headerSpacer} />
       </View>
       <FlatList
@@ -90,7 +90,7 @@ export default function NotificationsScreen({ navigation }: any) {
         ListEmptyComponent={
           <View style={s.empty}>
             <Text style={s.emptyEmoji}>🔔</Text>
-            <Text style={s.emptyTitle}>{error ? 'Could not load notifications' : 'No notifications'}</Text>
+            <Text style={s.emptyTitle}>{error ? 'Could not load activity' : 'No activity yet'}</Text>
             <Text style={s.emptySub}>
               {error || "You'll see offers, order updates, and safety alerts here."}
             </Text>

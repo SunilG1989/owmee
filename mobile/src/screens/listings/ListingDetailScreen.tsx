@@ -73,7 +73,6 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
   const [wishlisted, setWishlisted] = useState(false);
   const [showOffer, setShowOffer] = useState(false);
   const [offerAmt, setOfferAmt] = useState('');
-  const [offerNote, setOfferNote] = useState('');
   const [imgIdx, setImgIdx] = useState(0);
   const didAutoOpenOffer = useRef(false);
   const imgH = width * 0.85;
@@ -223,10 +222,9 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
   const makeOffer = async () => {
     if (!isAuthenticated) { navigation.navigate('AuthFlow'); return; }
     try {
-      await Offers.create(listingId, parseFloat(offerAmt), offerNote || undefined);
+      await Offers.create(listingId, parseFloat(offerAmt));
       setShowOffer(false);
       setOfferAmt('');
-      setOfferNote('');
       Alert.alert(
         'Offer sent!',
         'The seller will respond within 48 hours. You can update your price up to 3 times before the seller decides.',
@@ -530,13 +528,6 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
                 onChangeText={setOfferAmt}
               />
             </View>
-            <TextInput
-              style={[s.modalInput, s.modalNote]}
-              placeholder="Add a note (optional)"
-              placeholderTextColor={C.text4}
-              value={offerNote}
-              onChangeText={setOfferNote}
-            />
             <View style={s.modalActions}>
               <Button
                 label="Cancel"
@@ -807,7 +798,6 @@ const s = StyleSheet.create({
     fontSize: T.size.lg - 1,
     color: C.text, backgroundColor: C.bone,
   },
-  modalNote: { marginTop: S.sm, flex: undefined },                 // override flex for non-row layout
   modalActions: { flexDirection: 'row', gap: S.sm, marginTop: S.lg },
   modalCancel: { flex: 1 },
   modalSend:   { flex: 2 },

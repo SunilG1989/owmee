@@ -236,7 +236,6 @@ export default function OffersScreen({ navigation }: any) {
                 <Text style={s.listed}>{formatPrice(item.listing_price)} listed</Text>
               )}
             </View>
-            {item.note && <Text style={s.note} numberOfLines={1}>"{item.note}"</Text>}
             <View style={s.metaRow}>
               <Text style={s.time}>{timeAgo(item.created_at)}</Text>
               {minsToExpire !== null && !expired && (
@@ -465,7 +464,6 @@ const s = StyleSheet.create({
   // Was C.text4 + line-through; bumped to text3 for contrast on cream/sand backgrounds
   // and removed strike to avoid the price-confusion ambiguity ("Is it ₹X or ₹Y?").
   listed: { fontSize: T.size.sm, color: C.text3 },
-  note: { fontSize: T.size.sm, color: C.text2, fontStyle: 'italic', marginTop: 2 },
   metaRow: { flexDirection: 'row', gap: S.md, marginTop: S.xs, flexWrap: 'wrap' },
   time: { fontSize: T.size.xs, color: C.text3 },
   exp: { fontSize: T.size.xs, color: C.petrol, fontWeight: T.weight.semi },

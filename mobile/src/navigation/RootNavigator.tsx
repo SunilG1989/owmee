@@ -230,14 +230,13 @@ function MainTabs() {
   // Sell.Icon is unused (SellFab renders its own Camera glyph) but
   // kept in the array shape so the index/layout math stays clean.
   //
-  // Labels follow the locked product spec: Home / Search / Sell / Inbox /
-  // Profile. (An earlier iteration tried Browse/Alerts/You — reverted
-  // 2026-05-03 to match the home-redesign spec the design team signed off.)
+  // Direct buyer-seller chat is not part of Owmee. This tab is activity and
+  // transaction notifications only, so keep the label away from chat language.
   const tabs: { key: keyof TabParams; label: string; Icon: LucideIcon }[] = [
     { key: 'Home',          label: 'Home',    Icon: HomeIcon    },
     { key: 'Search',        label: 'Search',  Icon: CompassIcon },
     { key: 'Sell',          label: 'Sell',    Icon: CameraIcon  },
-    { key: 'Notifications', label: 'Inbox',   Icon: BellIcon    },
+    { key: 'Notifications', label: 'Activity', Icon: BellIcon   },
     { key: 'Profile',       label: 'Profile', Icon: UserIcon    },
   ];
 

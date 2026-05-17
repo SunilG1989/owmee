@@ -16,7 +16,7 @@ class Offer(Base, TimestampMixin):
     counter_price = Column(Numeric(10, 2))
     counter_offered_at = Column(DateTime(timezone=True))
     parent_offer_id = Column(UUID(as_uuid=True), nullable=True)
-    offer_note = Column(String(200))  # "I can pick up today", "Serious buyer"
+    offer_note = Column(String(200))  # Legacy no-op; direct buyer-seller notes are not supported.
     status = Column(String(30), nullable=False, default="pending")
     # pending | countered | accepted | rejected | expired | cancelled | withdrawn
     expires_at = Column(DateTime(timezone=True), nullable=False)

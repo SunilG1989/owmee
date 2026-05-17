@@ -79,7 +79,7 @@ export default function ProfileScreen({ navigation }: any) {
     { emoji: '📦', label: 'Your FE visits', route: 'MyFeVisits' },
     { emoji: '♡', label: 'Saved items', route: 'SavedItems' },
     { emoji: '📋', label: 'Transaction history', route: 'TransactionList' },
-    { emoji: '🔔', label: 'Notifications', route: 'Notifications' },
+    { emoji: '🔔', label: 'Activity', route: 'Notifications' },
     {
       emoji: '☎', label: 'Help & support', route: null,
       onPress: () => Alert.alert(

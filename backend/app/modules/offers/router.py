@@ -53,7 +53,6 @@ logger = structlog.get_logger()
 class MakeOfferRequest(BaseModel):
     listing_id: UUID
     offered_price: Decimal = Field(..., gt=0, le=10000000)
-    offer_note: str | None = Field(None, max_length=200)
 
 
 class CounterOfferRequest(BaseModel):
@@ -98,7 +97,6 @@ def _fmt_offer(o: Offer) -> dict:
         "seller_id": str(o.seller_id),
         "offered_price": str(o.offered_price),
         "counter_price": str(o.counter_price) if o.counter_price else None,
-        "offer_note": o.offer_note,
         "status": o.status,
         "expires_at": o.expires_at.isoformat() if o.expires_at else None,
         "created_at": o.created_at.isoformat() if o.created_at else None,
@@ -141,7 +139,7 @@ def _fmt_txn(t: Transaction) -> dict:
 async def make_offer_endpoint(body: MakeOfferRequest, current_user: BasicUser, db: DBSession):
     try:
         offer = await make_offer(db, body.listing_id, current_user.user_id,
-                                  body.offered_price, body.offer_note)
+                                  body.offered_price)
         await db.commit()
     except ValueError as e:
         code = str(e)
@@ -944,7 +942,6 @@ async def buy_now(body: BuyNowRequest, current_user: BasicUser, db: DBSession):
         listing_id=listing_id,
         buyer_id=current_user.user_id,
         offered_price=listing.price,
-        offer_note="Buy Now — direct purchase",
     )
 
     # Auto-accept

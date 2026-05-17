@@ -3,7 +3,6 @@ Risk engine — fraud rules and trust score management.
 
 Signals tracked:
   - Seller ghosting (no-show after payment)
-  - Off-platform payment pressure (UPI/phone sharing in chat)
   - Duplicate account attempts (same PAN)
   - Repeated lowball/spam offers
   - Dispute rate
@@ -36,8 +35,6 @@ SCORE_ADJUSTMENTS = {
     "dispute_opened":         -3,   # buyer opened a dispute
     "dispute_resolved_seller": -5,  # dispute resolved against seller (refund)
     "dispute_resolved_buyer":  +2,  # dispute resolved in seller's favour
-    "chat_abuse_warning":     -2,   # sent blocked message (off-platform pressure)
-    "chat_abuse_escalated":   -5,   # repeated abuse, transaction suspended
     "report_actioned":        -3,   # a report on this user was actioned by ops
     "verified_payout":        +5,   # payout account verified (one-time)
     "kyc_verified":           +5,   # KYC completed (one-time)
@@ -197,132 +194,6 @@ async def check_transaction_velocity(user_id: UUID) -> dict:
             }
 
     return {"is_suspicious": False}
-
-
-# ── Chat abuse detection ──────────────────────────────────────────────────────
-
-import re as _re
-
-# Patterns for off-platform payment pressure
-PHONE_PATTERN = _re.compile(
-    r'(?<!\d)(\+?91[-.\s]?)?[6-9]\d{9}(?!\d)'
-)
-UPI_PATTERN = _re.compile(
-    r'[\w.\-_]+@(upi|paytm|gpay|phonepe|okicici|oksbi|ybl|ibl|axl|okhdfcbank|okaxis|aubank)'
-)
-PAYMENT_LINK_PATTERN = _re.compile(
-    r'(razorpay|paytm|phonepe|gpay|bhim|upi)\.me|pay\.[\w]+\.in|paymentlink',
-    _re.IGNORECASE
-)
-OTP_PRESSURE_PATTERN = _re.compile(
-    r'\botp\b.*\bshar[e|ed]\b|\bsend.*\botp\b|\bgive.*\botp\b',
-    _re.IGNORECASE
-)
-THREAT_KEYWORDS = [
-    'police', 'complaint', 'fraud', 'scam', 'cheat', 'fake', 'report you',
-    'call you', 'address', 'find you', 'beat', 'harm', 'kill',
-]
-
-
-def scan_message(text: str) -> dict:
-    """
-    Scan a chat message for abuse signals.
-    Returns: {blocked, reason, severity}
-    """
-    if PHONE_PATTERN.search(text):
-        return {
-            "blocked": True,
-            "reason": "PHONE_NUMBER_SHARED",
-            "severity": "medium",
-            "message": "Sharing phone numbers outside the app is not allowed. Owmee manages payment and delivery support in-app.",
-        }
-
-    if UPI_PATTERN.search(text):
-        return {
-            "blocked": True,
-            "reason": "UPI_ID_SHARED",
-            "severity": "high",
-            "message": "All payments must go through Owmee. Off-platform payments are not protected.",
-        }
-
-    if PAYMENT_LINK_PATTERN.search(text):
-        return {
-            "blocked": True,
-            "reason": "PAYMENT_LINK_SHARED",
-            "severity": "high",
-            "message": "Do not share external payment links. All transactions must happen through Owmee.",
-        }
-
-    if OTP_PRESSURE_PATTERN.search(text):
-        return {
-            "blocked": True,
-            "reason": "OTP_PRESSURE",
-            "severity": "critical",
-            "message": "Never share your OTP with anyone. Owmee will never ask for your OTP.",
-        }
-
-    text_lower = text.lower()
-    for keyword in THREAT_KEYWORDS:
-        if keyword in text_lower:
-            return {
-                "blocked": True,
-                "reason": "THREATENING_CONTENT",
-                "severity": "critical",
-                "message": "This message has been flagged for review.",
-            }
-
-    return {"blocked": False}
-
-
-async def record_abuse_signal(user_id: UUID, reason: str, severity: str, transaction_id: UUID | None = None):
-    """
-    Record a chat abuse signal and update trust score.
-    Escalate to ops if repeated violations.
-    """
-    score_event = "chat_abuse_warning"
-    if severity == "critical":
-        score_event = "chat_abuse_escalated"
-
-    await adjust_trust_score(user_id, score_event, note=reason)
-
-    # Check if transaction should be auto-suspended (3+ violations)
-    if transaction_id:
-        await _check_auto_suspend(user_id, transaction_id, reason)
-
-    logger.warning("risk.abuse_signal",
-                   user_id=str(user_id), reason=reason,
-                   severity=severity,
-                   transaction_id=str(transaction_id) if transaction_id else None)
-
-
-async def _check_auto_suspend(user_id: UUID, transaction_id: UUID, reason: str):
-    """Auto-suspend transaction if user has 3+ abuse signals in this session."""
-    from app.db.session import AsyncSessionLocal
-    from app.modules.offers.models import NotificationEvent
-
-    async with AsyncSessionLocal() as db:
-        since = datetime.now(timezone.utc) - timedelta(hours=2)
-        result = await db.execute(
-            select(func.count(NotificationEvent.id)).where(
-                NotificationEvent.user_id == user_id,
-                NotificationEvent.event_type.like("chat_abuse%"),
-                NotificationEvent.created_at >= since,
-            )
-        )
-        abuse_count = result.scalar() or 0
-
-        if abuse_count >= 3:
-            # Flag for ops
-            from app.modules.offers.models import Transaction
-            txn_result = await db.execute(
-                select(Transaction).where(Transaction.id == transaction_id)
-            )
-            txn = txn_result.scalar_one_or_none()
-            if txn and txn.status not in ("completed", "cancelled", "disputed"):
-                logger.warning("risk.transaction_auto_suspended",
-                               transaction_id=str(transaction_id),
-                               user_id=str(user_id),
-                               abuse_count=abuse_count)
 
 
 # ── Listing risk checks ───────────────────────────────────────────────────────

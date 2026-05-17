@@ -156,7 +156,6 @@ async def make_offer(
     listing_id: UUID,
     buyer_id: UUID,
     offered_price: Decimal,
-    offer_note: str | None = None,
 ) -> Offer:
     result = await db.execute(select(Listing).where(Listing.id == listing_id))
     listing = result.scalar_one_or_none()
@@ -203,19 +202,17 @@ async def make_offer(
         buyer_id=buyer_id,
         seller_id=listing.seller_id,
         offered_price=offered_price,
-        offer_note=offer_note[:200] if offer_note else None,
         status="pending",
         expires_at=expires_at,
     )
     db.add(offer)
     await db.flush()
 
-    note_hint = f' · "{offer_note[:40]}"' if offer_note else ""
     await _notify(
         db, listing.seller_id,
         "offer_received",
         "New offer received",
-        f"₹{offered_price:,.0f} offer on '{listing.title}'{note_hint}",
+        f"₹{offered_price:,.0f} offer on '{listing.title}'",
         "offer", str(offer.id),
     )
     logger.info("offer.created", offer_id=str(offer.id), price=str(offered_price), expiry_h=expiry_hours)
