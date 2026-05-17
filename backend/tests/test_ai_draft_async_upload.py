@@ -11,6 +11,22 @@ from app.modules.ai_assistant import router
 from app.modules.ai_assistant.schemas import AIDraftUploadImageRequest, AIDraftUploadSessionRequest
 
 
+def test_ai_draft_async_routes_are_registered_for_release_app():
+    from app.main import create_app
+
+    app = create_app()
+    schema = app.openapi()
+
+    assert "/v1/listings/draft/uploads/request" in schema["paths"]
+    assert "post" in schema["paths"]["/v1/listings/draft/uploads/request"]
+    assert "/v1/listings/draft/{draft_id}/analysis/start" in schema["paths"]
+    assert "post" in schema["paths"]["/v1/listings/draft/{draft_id}/analysis/start"]
+    assert "/v1/listings/draft/{draft_id}/analysis/status" in schema["paths"]
+    assert "get" in schema["paths"]["/v1/listings/draft/{draft_id}/analysis/status"]
+    assert "/v1/listings/draft/from-images" in schema["paths"]
+    assert "post" in schema["paths"]["/v1/listings/draft/from-images"]
+
+
 class _Result:
     def __init__(self, *, value=None, row=None) -> None:
         self._value = value
