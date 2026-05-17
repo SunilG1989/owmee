@@ -166,7 +166,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     # ── Google Gemini AI ─────────────────────────────────────────────────
     gemini_api_key: str = ""
-    gemini_vision_model: str = "gemini-3-pro-preview"
+    gemini_vision_model: str = "gemini-3-flash-preview"
     gemini_text_model: str = "gemini-3-flash-preview"
     gemini_image_model: str = "gemini-3.1-flash-image-preview"
     image_cleanup_provider: str = "gemini"

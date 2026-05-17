@@ -644,6 +644,15 @@ def _ms_since(start: float) -> int:
     return int((perf_counter() - start) * 1000)
 
 
+def _draft_ai_response_json(detected: AIDetected, price_result: dict | None = None) -> str:
+    payload = detected.model_dump()
+    if price_result:
+        payload["_owmee_price_source"] = price_result.get("source") or "none"
+        if price_result.get("reasoning"):
+            payload["_owmee_price_reasoning"] = str(price_result["reasoning"])[:240]
+    return json.dumps(payload)
+
+
 # ── 1. POST /v1/listings/draft/from-image ─────────────────────────────────
 
 
@@ -733,6 +742,7 @@ async def draft_from_image(
             condition=detected.condition_guess or "good",
             state=user_state,
             category_slug=detected.category_slug,
+            detected_item_type=detected.detected_item_type,
             allow_ai_fallback=not vision_price_available and not ai_failed,
         )
     )
@@ -768,7 +778,7 @@ async def draft_from_image(
             "id": draft_id,
             "uid": user.user_id,
             "photo_urls": [photo_url],
-            "ai_response": detected.model_dump_json(),
+            "ai_response": _draft_ai_response_json(detected, price_result),
             "price": price_result.get("price"),
             "ccount": price_result.get("comparables_count", 0),
             "model": ai_provider.current_vision_model(),
@@ -984,6 +994,9 @@ async def get_ai_draft_analysis_status(
     if status_value == "open":
         raw_ai = row["ai_response"] if isinstance(row["ai_response"], dict) else {}
         detected = AIDetected(**raw_ai)
+        price_source = raw_ai.get("_owmee_price_source")
+        if not price_source:
+            price_source = "vision" if row["suggested_price"] is not None else "none"
         photo_urls = list(row["photo_urls"] or [])
         fallback_reason = next(
             (f.split(":", 1)[1] for f in detected.flags if f.startswith("ai_failed:")),
@@ -994,7 +1007,7 @@ async def get_ai_draft_analysis_status(
             photo_url=_client_photo_url(photo_urls[0] if photo_urls else None),
             detected=detected,
             suggested_price=float(row["suggested_price"]) if row["suggested_price"] is not None else None,
-            price_source="vision" if row["suggested_price"] is not None else "none",
+            price_source=price_source,
             comparables=[],
             expires_at=row["expires_at"] or datetime.now(timezone.utc),
             needs_identifier=_category_needs_identifier(detected.category_slug),
@@ -1680,6 +1693,7 @@ async def draft_from_images(
                 condition=detected.condition_guess or "good",
                 state=user_state,
                 category_slug=detected.category_slug,
+                detected_item_type=detected.detected_item_type,
                 allow_ai_fallback=not vision_price_available and not analysis_failed,
             )
         )
@@ -1726,7 +1740,7 @@ async def draft_from_images(
             "id": draft_id,
             "uid": user.user_id,
             "photo_urls": photo_urls,
-            "ai_response": detected.model_dump_json(),
+            "ai_response": _draft_ai_response_json(detected, price_result),
             "price": price_result.get("price"),
             "ccount": price_result.get("comparables_count", 0),
             "model": ai_provider.current_vision_model(),

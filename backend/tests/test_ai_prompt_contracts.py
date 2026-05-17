@@ -1,4 +1,5 @@
 from app.modules.ai_assistant.gemini_client import _GeminiVisionOut
+from app.modules.ai_assistant import gemini_client
 from app.modules.ai_assistant.prompts import (
     PROMPT_DESCRIPTION_REGEN,
     PROMPT_IMEI_OCR,
@@ -85,6 +86,14 @@ def test_price_prompt_allows_responsible_no_price_output():
     assert "live prices" in PROMPT_PRICE_ESTIMATE
     assert "return price_inr = 0" in PROMPT_PRICE_ESTIMATE
     assert "confidence <= 0.49" in PROMPT_PRICE_ESTIMATE
+    assert "everyday lower-value items" in PROMPT_PRICE_ESTIMATE
+
+
+def test_deprecated_gemini_model_aliases_fail_forward():
+    assert (
+        gemini_client._normalize_model_name("gemini-3-pro-preview", kind="vision")
+        == "gemini-3.1-pro-preview"
+    )
 
 
 def test_cleanup_prompt_preserves_reflective_or_same_color_products():

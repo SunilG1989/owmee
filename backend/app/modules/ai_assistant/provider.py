@@ -32,6 +32,8 @@ class AIListingProvider(Protocol):
         storage: str | None,
         condition: str | None,
         market: str = "India",
+        category_slug: str | None = None,
+        detected_item_type: str | None = None,
     ) -> dict | None: ...
 
 
@@ -84,6 +86,8 @@ class _GeminiListingProvider:
         storage: str | None,
         condition: str | None,
         market: str = "India",
+        category_slug: str | None = None,
+        detected_item_type: str | None = None,
     ) -> dict | None:
         return await self._client.estimate_price(
             brand=brand,
@@ -91,6 +95,8 @@ class _GeminiListingProvider:
             storage=storage,
             condition=condition,
             market=market,
+            category_slug=category_slug,
+            detected_item_type=detected_item_type,
         )
 
 
@@ -151,6 +157,8 @@ async def estimate_price(
     storage: str | None,
     condition: str | None,
     market: str = "India",
+    category_slug: str | None = None,
+    detected_item_type: str | None = None,
 ) -> dict | None:
     return await get_ai_listing_provider().estimate_price(
         brand=brand,
@@ -158,4 +166,6 @@ async def estimate_price(
         storage=storage,
         condition=condition,
         market=market,
+        category_slug=category_slug,
+        detected_item_type=detected_item_type,
     )

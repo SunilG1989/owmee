@@ -907,9 +907,13 @@ export default function AIListingSuggestScreen({
           <Text style={st.sectionSub}>
             {draft.price_source === 'comparables' && draft.comparables.length > 0
               ? `Owmee guidance is based on ${draft.comparables.length} similar items sold recently.`
-              : draft.price_source === 'ai'
-                ? 'Owmee guidance uses Indian market estimates.'
-                : 'Choose the asking price buyers will see.'}
+              : draft.price_source === 'vision'
+                ? 'Owmee guidance uses your photos and item condition.'
+                : draft.price_source === 'category_anchor'
+                  ? 'Owmee guidance uses the item type and condition.'
+                  : draft.price_source === 'ai'
+                    ? 'Owmee guidance uses Indian market estimates.'
+                    : 'Choose the asking price buyers will see.'}
           </Text>
 
           <TouchableOpacity style={st.priceBtn} onPress={() => setPriceSheet(true)}>

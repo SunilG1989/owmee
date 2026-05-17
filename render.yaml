@@ -108,7 +108,7 @@ services:
       - key: GEMINI_API_KEY
         sync: false
       - key: GEMINI_VISION_MODEL
-        value: gemini-3-pro-preview
+        value: gemini-3-flash-preview
       - key: GEMINI_TEXT_MODEL
         value: gemini-3-flash-preview
       - key: GEMINI_IMAGE_MODEL
@@ -240,7 +240,7 @@ services:
       - key: GEMINI_API_KEY
         sync: false
       - key: GEMINI_VISION_MODEL
-        value: gemini-3-pro-preview
+        value: gemini-3-flash-preview
       - key: GEMINI_TEXT_MODEL
         value: gemini-3-flash-preview
       - key: GEMINI_IMAGE_MODEL

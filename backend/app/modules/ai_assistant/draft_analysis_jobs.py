@@ -322,6 +322,7 @@ async def process_ai_draft_analysis(
                 condition=detected.condition_guess or "good",
                 state=user_state,
                 category_slug=detected.category_slug,
+                detected_item_type=detected.detected_item_type,
                 allow_ai_fallback=not vision_price_available and not analysis_failed,
             )
         )
@@ -349,7 +350,7 @@ async def process_ai_draft_analysis(
             {
                 "id": draft_id_str,
                 "photo_urls": photo_urls,
-                "ai_response": detected.model_dump_json(),
+                "ai_response": ai_router._draft_ai_response_json(detected, price_result),
                 "price": price_result.get("price"),
                 "ccount": price_result.get("comparables_count", 0),
                 "model": ai_provider.current_vision_model(),

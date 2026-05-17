@@ -125,7 +125,7 @@ class DraftFromImageResponse(BaseModel):
     photo_url: str
     detected: AIDetected
     suggested_price: float | None = None
-    price_source: str = "none"               # comparables | ai | none
+    price_source: str = "none"               # comparables | vision | category_anchor | ai | none
     comparables: list[Comparable] = Field(default_factory=list)
     expires_at: datetime
     needs_identifier: bool = False           # True for smartphones/laptops/tablets

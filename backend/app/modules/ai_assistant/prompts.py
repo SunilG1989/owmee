@@ -353,7 +353,9 @@ PRICING
 
 suggested_price_inr is optional and must be conservative.
 
-Return suggested_price_inr only if:
+Return suggested_price_inr whenever it can help the seller responsibly.
+
+For high-value electronics:
 - category_slug is known
 - brand is known
 - model is specific enough for pricing
@@ -361,6 +363,14 @@ Return suggested_price_inr only if:
 - no blocking flags
 - exact specs that materially affect price are visible or not needed
 - price_confidence >= 0.50
+
+For everyday low-value resale items such as books, kids bottles, toys, bags,
+basic home items, and small appliances:
+- exact brand/model is helpful but not mandatory
+- detected_item_type + condition_guess can be enough for a conservative
+  guidance price
+- use a wide, low-risk Indian resale anchor and underprice slightly
+- price_confidence may be 0.50-0.65 when item type and condition are clear
 
 Return suggested_price_inr = null if:
 - exact model is unclear
@@ -686,12 +696,18 @@ Consider:
     - fair: ~50%
 - Demand in the Indian resale market for that specific model
 
+For smartphones, laptops, and tablets, require enough model/spec detail to
+price responsibly. For everyday lower-value items such as kids bottles, books,
+toys, bags, basic home items, and simple small appliances, a clear item type
+and condition are enough for conservative guidance even when brand/model are
+unknown.
+
 Be conservative. Underprice by 5-10% rather than overprice — sellers can
 always edit the number upward, but an overpriced listing won't get offers.
 
-If the model, category, specs, condition, or completeness are not specific
-enough to price responsibly, return price_inr = 0, confidence <= 0.49, and a
-reasoning sentence that says what detail is missing.
+If the model, category, specs, condition, item type, or completeness are not
+specific enough to price responsibly, return price_inr = 0, confidence <= 0.49,
+and a reasoning sentence that says what detail is missing.
 
 Output INR only, no decimals, no currency symbol in the number.
 """

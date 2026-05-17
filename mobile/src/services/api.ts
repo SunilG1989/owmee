@@ -1077,7 +1077,7 @@ export interface AIDraftResponse {
   photo_url: string;
   detected: AIDetectedFields;
   suggested_price: number | null;
-  price_source: 'comparables' | 'ai' | 'none';
+  price_source: 'comparables' | 'vision' | 'category_anchor' | 'ai' | 'none';
   comparables: AIComparable[];
   expires_at: string;
   needs_identifier: boolean;

@@ -33,12 +33,12 @@ What v2 changes:
      show "AI couldn't read these photos" instead of silently empty fields.
 
 Models (latest Gemini defaults, override via .env):
-    Vision:  gemini-3-pro-preview     (best multimodal extraction)
-    Text:    gemini-3-flash-preview   (fast, current-generation text)
+    Vision:  gemini-3-flash-preview       (current, low-latency multimodal extraction)
+    Text:    gemini-3-flash-preview       (fast, current-generation text)
+    Image:   configured separately via GEMINI_IMAGE_MODEL
 
-WARNING: Gemini 3 is currently preview. Pin to a stable 2.5 model
-(gemini-2.5-pro / gemini-2.5-flash) if production stability matters
-more than the latest model family.
+WARNING: Gemini 3 Preview model IDs can deprecate. Keep normalization below
+so stale Render env vars fail forward instead of silently breaking listing AI.
 
 Privacy note: free-tier inputs may be used by Google for training.
 Acceptable for prototype; revisit before production with real seller data.
@@ -67,8 +67,14 @@ from app.modules.ai_assistant.schemas import AIDetected
 
 log = logging.getLogger(__name__)
 
-DEFAULT_GEMINI_VISION_MODEL = "gemini-3-pro-preview"
+DEFAULT_GEMINI_VISION_MODEL = "gemini-3-flash-preview"
 DEFAULT_GEMINI_TEXT_MODEL = "gemini-3-flash-preview"
+
+_DEPRECATED_MODEL_ALIASES = {
+    # Google shut down Gemini 3 Pro Preview on 2026-03-09. Some Render envs
+    # may still carry the old value from earlier blueprints.
+    "gemini-3-pro-preview": "gemini-3.1-pro-preview",
+}
 
 
 # ── Pydantic schemas used as response_schema for Gemini ───────────────────
@@ -251,19 +257,28 @@ def _get_client():
     return Client(api_key=key)
 
 
+def _normalize_model_name(model: str, *, kind: str) -> str:
+    value = (model or "").strip()
+    if not value:
+        return DEFAULT_GEMINI_VISION_MODEL if kind == "vision" else DEFAULT_GEMINI_TEXT_MODEL
+    return _DEPRECATED_MODEL_ALIASES.get(value, value)
+
+
 def _get_model(kind: str) -> str:
     try:
         from app.core.settings import settings
         if kind == "vision":
-            return (
+            return _normalize_model_name(
                 getattr(settings, "gemini_vision_model", "")
                 or os.environ.get("GEMINI_VISION_MODEL", "")
-                or DEFAULT_GEMINI_VISION_MODEL
+                or DEFAULT_GEMINI_VISION_MODEL,
+                kind=kind,
             )
-        return (
+        return _normalize_model_name(
             getattr(settings, "gemini_text_model", "")
             or os.environ.get("GEMINI_TEXT_MODEL", "")
-            or DEFAULT_GEMINI_TEXT_MODEL
+            or DEFAULT_GEMINI_TEXT_MODEL,
+            kind=kind,
         )
     except Exception:
         return DEFAULT_GEMINI_VISION_MODEL if kind == "vision" else DEFAULT_GEMINI_TEXT_MODEL
@@ -287,7 +302,11 @@ def _thinking_config(types: Any, model: str, kind: str):
     if model.startswith("gemini-3"):
         thinking_level = getattr(types, "ThinkingLevel", None)
         if thinking_level is not None:
-            level = thinking_level.LOW if kind == "vision" else thinking_level.MINIMAL
+            level = (
+                thinking_level.MINIMAL
+                if "flash" in model or kind == "text"
+                else thinking_level.LOW
+            )
             return types.ThinkingConfig(thinking_level=level)
         return types.ThinkingConfig(thinking_budget=-1)
     if model.startswith("gemini-2.5-pro"):
@@ -389,7 +408,7 @@ async def detect_from_images(
         response_mime_type="application/json",
         response_schema=_GeminiVisionOut,
         temperature=0.2,
-        max_output_tokens=1024,
+        max_output_tokens=2048,
         thinking_config=_thinking_config(types, model, "vision"),
     )
 
@@ -924,6 +943,8 @@ async def estimate_price(
     storage: str | None,
     condition: str | None,
     market: str = "India",
+    category_slug: str | None = None,
+    detected_item_type: str | None = None,
 ) -> dict | None:
     client = _get_client()
     if client is None:
@@ -932,6 +953,8 @@ async def estimate_price(
     from google.genai import types
 
     user_text = (
+        f"Category: {category_slug or 'unknown'}\n"
+        f"Item type: {detected_item_type or 'unknown'}\n"
         f"Brand: {brand or 'unknown'}\n"
         f"Model: {model or 'unknown'}\n"
         f"Storage: {storage or 'n/a'}\n"

@@ -3,7 +3,8 @@
 Phase 1: Query the DB for completed listings of the same brand/model in
          the same state from the last 90 days. If ≥3, return the median.
 
-Phase 2: If insufficient comparables, ask the configured AI provider.
+Phase 2: If insufficient comparables, use a conservative category anchor for
+         clear low-value everyday items, otherwise ask the configured AI provider.
 
 Sanity check: if AI returns a price >10x or <0.1x of category baseline,
               reject and let the seller set their own price.
@@ -14,7 +15,7 @@ Public API:
     ) -> dict
         Returns: {
             "price": float | None,
-            "source": "comparables" | "ai" | "none",
+            "source": "comparables" | "category_anchor" | "ai" | "none",
             "comparables": [Comparable, ...],   # for display in UI
             "comparables_count": int,
             "reasoning": str | None,
@@ -23,6 +24,7 @@ Public API:
 from __future__ import annotations
 
 import logging
+import re
 import statistics
 from typing import Any
 
@@ -45,6 +47,17 @@ CATEGORY_PRICE_BOUNDS: dict[str, tuple[int, int]] = {
     "kids-utility":     (100,  20_000),
     "others":           (50,   1_000_000),
 }
+
+_ELECTRONIC_CATEGORIES = {"smartphones", "laptops", "tablets"}
+
+_GENERIC_ITEM_PRICE_ANCHORS: list[tuple[re.Pattern[str], tuple[int, int]]] = [
+    (re.compile(r"\b(water\s*bottle|bottle|sipper|flask)\b", re.I), (120, 450)),
+    (re.compile(r"\b(book|textbook|ncert|storybook|novel)\b", re.I), (80, 350)),
+    (re.compile(r"\b(toy|teddy|doll|puzzle|board\s*game|blocks?)\b", re.I), (150, 900)),
+    (re.compile(r"\b(school\s*bag|backpack|bag)\b", re.I), (250, 900)),
+    (re.compile(r"\b(chair|study\s*table|desk)\b", re.I), (600, 3500)),
+    (re.compile(r"\b(mixer|kettle|iron|toaster|speaker|headphones?|earbuds?)\b", re.I), (350, 2500)),
+]
 
 
 async def _comparables_query(
@@ -117,6 +130,58 @@ def _sanity_check(price: float, category_slug: str | None) -> bool:
     return lo <= price <= hi
 
 
+def _condition_factor(condition: str | None) -> float:
+    normalized = (condition or "good").strip().lower()
+    if normalized in {"like_new", "like new", "excellent"}:
+        return 0.85
+    if normalized in {"fair", "used", "visible_wear"}:
+        return 0.55
+    return 0.70
+
+
+def _clean_price(value: float) -> float:
+    if value < 500:
+        return float(round(value / 10) * 10)
+    if value < 5000:
+        return float(round(value / 50) * 50)
+    return float(round(value / 100) * 100)
+
+
+def _generic_item_price(
+    *,
+    category_slug: str | None,
+    detected_item_type: str | None,
+    model: str | None,
+    condition: str | None,
+) -> dict[str, Any] | None:
+    """Low-risk guidance for common everyday resale items.
+
+    Electronics still need proper model/spec confidence. For visible low-value
+    items like bottles, books, toys, bags and small appliances, forcing exact
+    brand/model makes the seller flow look broken. This stays conservative and
+    only runs when the item type is specific enough.
+    """
+    if category_slug in _ELECTRONIC_CATEGORIES:
+        return None
+    text_value = " ".join(part for part in (detected_item_type, model) if part).strip()
+    if len(text_value) < 3:
+        return None
+
+    for pattern, (low, high) in _GENERIC_ITEM_PRICE_ANCHORS:
+        if pattern.search(text_value):
+            midpoint = (low + high) / 2
+            price = _clean_price(midpoint * _condition_factor(condition))
+            if _sanity_check(price, category_slug):
+                return {
+                    "price": price,
+                    "source": "category_anchor",
+                    "comparables": [],
+                    "comparables_count": 0,
+                    "reasoning": "Conservative Owmee estimate from item type and condition.",
+                }
+    return None
+
+
 async def estimate_price(
     db: AsyncSession,
     *,
@@ -126,6 +191,7 @@ async def estimate_price(
     condition: str | None = "good",
     state: str | None = None,
     category_slug: str | None = None,
+    detected_item_type: str | None = None,
     allow_ai_fallback: bool = True,
 ) -> dict[str, Any]:
     """Two-phase price estimate. Always returns a dict."""
@@ -163,12 +229,25 @@ async def estimate_price(
             "reasoning": "Not enough comparables. Vision price is available, so text price fallback was skipped.",
         }
 
+    generic = _generic_item_price(
+        category_slug=category_slug,
+        detected_item_type=detected_item_type,
+        model=model,
+        condition=condition,
+    )
+    if generic:
+        generic["comparables"] = comparables_objs[:5]
+        generic["comparables_count"] = len(rows)
+        return generic
+
     # ── Phase 2: AI fallback ───────────────────────────────────────────────
     ai = await ai_provider.estimate_price(
         brand=brand,
         model=model,
         storage=storage,
         condition=condition,
+        category_slug=category_slug,
+        detected_item_type=detected_item_type,
     )
 
     if ai and _sanity_check(ai["price_inr"], category_slug):

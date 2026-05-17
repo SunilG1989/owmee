@@ -31,6 +31,35 @@ async def test_estimate_price_skips_text_ai_when_vision_price_exists(monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_estimate_price_uses_generic_anchor_for_clear_everyday_items(monkeypatch):
+    async def fake_comparables_query(*args, **kwargs):
+        return []
+
+    async def fail_ai_price_call(*args, **kwargs):
+        raise AssertionError("generic low-risk anchor should avoid extra AI call")
+
+    monkeypatch.setattr(price_estimator, "_comparables_query", fake_comparables_query)
+    monkeypatch.setattr(price_estimator.ai_provider, "estimate_price", fail_ai_price_call)
+
+    result = await price_estimator.estimate_price(
+        None,
+        brand=None,
+        model=None,
+        storage=None,
+        condition="good",
+        state="Karnataka",
+        category_slug="kids-utility",
+        detected_item_type="kids water bottle",
+        allow_ai_fallback=True,
+    )
+
+    assert result["source"] == "category_anchor"
+    assert result["price"] is not None
+    assert result["price"] >= 100
+    assert result["comparables_count"] == 0
+
+
+@pytest.mark.asyncio
 async def test_estimate_price_keeps_comparables_priority_when_ai_disabled(monkeypatch):
     async def fake_comparables_query(*args, **kwargs):
         return [
