@@ -22,6 +22,7 @@ Notes:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from datetime import datetime, timezone
 from io import BytesIO
@@ -36,6 +37,7 @@ from sqlalchemy.types import String as SAString
 from app.core.dependencies import AuthUser, DBSession
 from app.core.storage import (
     generate_presigned_download_url,
+    generate_presigned_upload_url,
     process_listing_image_bytes,
     thumbnail_key_for_display_key,
 )
@@ -47,6 +49,11 @@ from app.modules.ai_assistant import (
 from app.modules.ai_assistant.identifier_extraction import normalize_serial_number
 from app.modules.ai_assistant.schemas import (
     AIDetected,
+    AIDraftAnalysisStartResponse,
+    AIDraftAnalysisStatusResponse,
+    AIDraftUploadSessionRequest,
+    AIDraftUploadSessionResponse,
+    AIDraftUploadSlot,
     CreateFromDraftRequest,
     CreateFromDraftResponse,
     DraftFromImageResponse,
@@ -63,6 +70,7 @@ from app.modules.media.image_cleanup import (
     select_hero_image_index,
 )
 from app.modules.media.hero_cleanup_jobs import enqueue_listing_hero_cleanup
+from app.modules.ai_assistant.draft_analysis_jobs import enqueue_ai_draft_analysis
 
 log = logging.getLogger(__name__)
 
@@ -251,12 +259,27 @@ def _photo_object_key(user_id: UUID, draft_id: UUID, ext: str = "jpg") -> str:
     return f"ai-drafts/{user_id}/{draft_id}.{ext}"
 
 
+def _draft_photo_object_key(user_id: UUID, draft_id: UUID, index: int, ext: str = "jpg") -> str:
+    return f"ai-drafts/{user_id}/{draft_id}_{index}.{ext}"
+
+
 def _image_extension(content_type: str | None) -> str:
     if content_type == "image/png":
         return "png"
     if content_type == "image/webp":
         return "webp"
     return "jpg"
+
+
+def _safe_upload_content_type(content_type: str | None) -> str:
+    normalized = (content_type or "image/jpeg").split(";", 1)[0].strip().lower()
+    if normalized in {"image/jpeg", "image/jpg"}:
+        return "image/jpeg"
+    if normalized == "image/png":
+        return "image/png"
+    if normalized == "image/webp":
+        return "image/webp"
+    return "image/jpeg"
 
 
 def _prepare_analysis_image_bytes(raw: bytes, content_type: str) -> tuple[bytes, str]:
@@ -787,6 +810,212 @@ async def draft_from_image(
 
 
 # ── 2. POST /v1/listings/draft/{draft_id}/extract-identifier ──────────────
+
+
+@router.post("/draft/uploads/request", response_model=AIDraftUploadSessionResponse)
+async def request_ai_draft_uploads(
+    payload: AIDraftUploadSessionRequest,
+    user: AuthUser,
+    db: DBSession,
+):
+    """Create an async AI draft upload session.
+
+    The API returns short-lived R2 PUT URLs and stores only object keys. Mobile
+    uploads bytes directly to R2, then starts the analysis worker job.
+    """
+    draft_id = uuid4()
+    uploads: list[AIDraftUploadSlot] = []
+    photo_keys: list[str] = []
+    expires_in = 300
+
+    for idx, image in enumerate(payload.images):
+        content_type = _safe_upload_content_type(image.content_type)
+        key = _draft_photo_object_key(user.user_id, draft_id, idx, _image_extension(content_type))
+        upload_url = generate_presigned_upload_url(key, content_type=content_type, expires_in=expires_in)
+        photo_keys.append(key)
+        uploads.append(
+            AIDraftUploadSlot(
+                index=idx,
+                upload_url=upload_url,
+                r2_key=key,
+                content_type=content_type,
+                expires_in_seconds=expires_in,
+            )
+        )
+
+    await db.execute(
+        text("""
+            INSERT INTO listing_drafts (
+                id, user_id, photo_urls, ai_response, status
+            )
+            VALUES (
+                :id, :uid, :photo_urls, CAST(:ai_response AS JSONB), 'uploading'
+            )
+        """).bindparams(bindparam("photo_urls", type_=PGARRAY(SAString))),
+        {
+            "id": draft_id,
+            "uid": user.user_id,
+            "photo_urls": photo_keys,
+            "ai_response": json.dumps({"async_status": "uploading"}),
+        },
+    )
+    await db.commit()
+
+    drow = await db.execute(
+        text("SELECT expires_at FROM listing_drafts WHERE id = :id"),
+        {"id": draft_id},
+    )
+    expires_at = drow.scalar() or datetime.now(timezone.utc)
+
+    return AIDraftUploadSessionResponse(
+        draft_id=draft_id,
+        uploads=uploads,
+        status="uploading",
+        expires_at=expires_at,
+    )
+
+
+@router.post("/draft/{draft_id}/analysis/start", response_model=AIDraftAnalysisStartResponse)
+async def start_ai_draft_analysis(
+    draft_id: UUID,
+    user: AuthUser,
+    db: DBSession,
+):
+    row = (
+        await db.execute(
+            text("""
+                SELECT user_id, photo_urls, expires_at, status, ai_response
+                FROM listing_drafts
+                WHERE id = :id
+            """),
+            {"id": draft_id},
+        )
+    ).mappings().first()
+    if not row:
+        raise HTTPException(status_code=404, detail="DRAFT_NOT_FOUND")
+    if str(row["user_id"]) != str(user.user_id):
+        raise HTTPException(status_code=403, detail="DRAFT_NOT_OWNED")
+    if row["expires_at"] and row["expires_at"] < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="DRAFT_EXPIRED")
+    if row["status"] == "consumed":
+        raise HTTPException(status_code=400, detail="DRAFT_ALREADY_CONSUMED")
+    if row["status"] == "open":
+        return AIDraftAnalysisStartResponse(draft_id=draft_id, status="ready")
+    if row["status"] == "processing":
+        return AIDraftAnalysisStartResponse(draft_id=draft_id, status="processing")
+    if row["status"] == "failed":
+        raw_ai = row["ai_response"] if isinstance(row["ai_response"], dict) else {}
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": raw_ai.get("error") or "ANALYSIS_FAILED",
+                "message": raw_ai.get("message") or "We could not analyse these photos. Please try again.",
+            },
+        )
+
+    photo_keys = list(row["photo_urls"] or [])
+    if not photo_keys:
+        raise HTTPException(status_code=400, detail="NO_IMAGES")
+    for idx, key in enumerate(photo_keys):
+        expected_prefix = f"ai-drafts/{user.user_id}/{draft_id}_{idx}."
+        if not str(key).startswith(expected_prefix):
+            raise HTTPException(status_code=400, detail="INVALID_DRAFT_IMAGE_KEY")
+
+    queued = await enqueue_ai_draft_analysis(
+        draft_id=draft_id,
+        user_id=user.user_id,
+        photo_keys=photo_keys,
+    )
+    if not queued:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "ANALYSIS_QUEUE_UNAVAILABLE",
+                "message": "Photo analysis is temporarily busy. Please try again in a moment.",
+            },
+        )
+
+    await db.execute(
+        text("""
+            UPDATE listing_drafts
+            SET status = 'processing',
+                ai_response = CAST(:ai_response AS JSONB)
+            WHERE id = :id
+        """),
+        {
+            "id": draft_id,
+            "ai_response": json.dumps({"async_status": "processing"}),
+        },
+    )
+    await db.commit()
+    return AIDraftAnalysisStartResponse(draft_id=draft_id, status="processing")
+
+
+@router.get("/draft/{draft_id}/analysis/status", response_model=AIDraftAnalysisStatusResponse)
+async def get_ai_draft_analysis_status(
+    draft_id: UUID,
+    user: AuthUser,
+    db: DBSession,
+):
+    row = (
+        await db.execute(
+            text("""
+                SELECT user_id, photo_urls, ai_response, suggested_price,
+                       comparables_count, status, expires_at
+                FROM listing_drafts
+                WHERE id = :id
+            """),
+            {"id": draft_id},
+        )
+    ).mappings().first()
+    if not row:
+        raise HTTPException(status_code=404, detail="DRAFT_NOT_FOUND")
+    if str(row["user_id"]) != str(user.user_id):
+        raise HTTPException(status_code=403, detail="DRAFT_NOT_OWNED")
+    if row["expires_at"] and row["expires_at"] < datetime.now(timezone.utc):
+        return AIDraftAnalysisStatusResponse(
+            draft_id=draft_id,
+            status="expired",
+            error="DRAFT_EXPIRED",
+            message="This draft expired. Please analyse the photos again.",
+        )
+
+    status_value = row["status"]
+    if status_value == "open":
+        raw_ai = row["ai_response"] if isinstance(row["ai_response"], dict) else {}
+        detected = AIDetected(**raw_ai)
+        photo_urls = list(row["photo_urls"] or [])
+        fallback_reason = next(
+            (f.split(":", 1)[1] for f in detected.flags if f.startswith("ai_failed:")),
+            None,
+        )
+        draft = DraftFromImageResponse(
+            draft_id=draft_id,
+            photo_url=_client_photo_url(photo_urls[0] if photo_urls else None),
+            detected=detected,
+            suggested_price=float(row["suggested_price"]) if row["suggested_price"] is not None else None,
+            price_source="vision" if row["suggested_price"] is not None else "none",
+            comparables=[],
+            expires_at=row["expires_at"] or datetime.now(timezone.utc),
+            needs_identifier=_category_needs_identifier(detected.category_slug),
+            fallback_reason=fallback_reason,
+        )
+        return AIDraftAnalysisStatusResponse(draft_id=draft_id, status="ready", draft=draft)
+
+    if status_value == "failed":
+        raw_ai = row["ai_response"] if isinstance(row["ai_response"], dict) else {}
+        return AIDraftAnalysisStatusResponse(
+            draft_id=draft_id,
+            status="failed",
+            error=raw_ai.get("error") or "ANALYSIS_FAILED",
+            message=raw_ai.get("message") or "We could not analyse these photos. Please try again.",
+        )
+
+    return AIDraftAnalysisStatusResponse(
+        draft_id=draft_id,
+        status=status_value or "processing",
+        retry_after_seconds=2,
+    )
 
 
 @router.post("/draft/{draft_id}/extract-identifier", response_model=ExtractIMEIResponse)

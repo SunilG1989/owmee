@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     hero_cleanup_retry_max_attempts: int = 4
     hero_cleanup_pending_idle_seconds: int = 180
     hero_cleanup_read_block_ms: int = 2000
+    ai_draft_analysis_worker_concurrency: int = 1
+    ai_draft_analysis_stream_maxlen: int = 50000
+    ai_draft_analysis_retry_max_attempts: int = 3
+    ai_draft_analysis_read_block_ms: int = 2000
 
     # ── Temporal ───────────────────────────────────────────────────────────
     temporal_host: str = "localhost:7233"

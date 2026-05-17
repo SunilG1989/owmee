@@ -127,6 +127,14 @@ def download_bytes(object_key: str, bucket: str | None = None) -> bytes:
     return obj["Body"].read()
 
 
+def object_size_bytes(object_key: str, bucket: str | None = None) -> int:
+    """Return object size without downloading the body."""
+    client = _r2_client()
+    bucket = bucket or settings.r2_bucket
+    obj = client.head_object(Bucket=bucket, Key=object_key)
+    return int(obj.get("ContentLength") or 0)
+
+
 def _normalise_catalog_image(raw: bytes, *, polish: bool = True):
     """Open, orient, and lightly polish a seller photo for marketplace display.
 

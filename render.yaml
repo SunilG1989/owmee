@@ -164,6 +164,14 @@ services:
         value: "180"
       - key: HERO_CLEANUP_READ_BLOCK_MS
         value: "2000"
+      - key: AI_DRAFT_ANALYSIS_WORKER_CONCURRENCY
+        value: "1"
+      - key: AI_DRAFT_ANALYSIS_STREAM_MAXLEN
+        value: "50000"
+      - key: AI_DRAFT_ANALYSIS_RETRY_MAX_ATTEMPTS
+        value: "3"
+      - key: AI_DRAFT_ANALYSIS_READ_BLOCK_MS
+        value: "2000"
       - key: SECRET_KEY
         fromService:
           type: web

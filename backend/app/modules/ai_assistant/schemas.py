@@ -132,6 +132,43 @@ class DraftFromImageResponse(BaseModel):
     fallback_reason: str | None = None       # set if vision/price failed
 
 
+class AIDraftUploadImageRequest(BaseModel):
+    content_type: str = "image/jpeg"
+
+
+class AIDraftUploadSessionRequest(BaseModel):
+    images: list[AIDraftUploadImageRequest] = Field(min_length=1, max_length=6)
+
+
+class AIDraftUploadSlot(BaseModel):
+    index: int
+    upload_url: str
+    r2_key: str
+    content_type: str
+    expires_in_seconds: int
+
+
+class AIDraftUploadSessionResponse(BaseModel):
+    draft_id: UUID
+    uploads: list[AIDraftUploadSlot]
+    status: str = "uploading"
+    expires_at: datetime
+
+
+class AIDraftAnalysisStartResponse(BaseModel):
+    draft_id: UUID
+    status: str
+
+
+class AIDraftAnalysisStatusResponse(BaseModel):
+    draft_id: UUID
+    status: str
+    draft: DraftFromImageResponse | None = None
+    error: str | None = None
+    message: str | None = None
+    retry_after_seconds: int | None = None
+
+
 # ── IMEI extraction ───────────────────────────────────────────────────────
 
 

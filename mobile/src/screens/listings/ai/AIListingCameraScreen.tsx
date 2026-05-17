@@ -16,8 +16,8 @@
  *     text below if <4.
  *   - Real X back button in the header pops out of the flow entirely
  *     (back to the previous tab, not back to SellTabRedirect).
- *   - On submit: uploads all photos in one multipart call to the new
- *     /v1/listings/draft/from-images endpoint.
+ *   - On submit: uploads photos directly to R2, starts async AI analysis,
+ *     then polls until the draft is ready.
  *   - On AI failure (ai_failed flag): still navigates forward with the
  *     draft so the seller can fill manually. No more dead-end alerts.
  *
@@ -324,8 +324,8 @@ export default function AIListingCameraScreen({ navigation }: RootScreen<'AIList
       {uploading && (
         <View style={st.uploadingOverlay}>
           <ActivityIndicator size="large" color={C.petrol} />
-          <Text style={st.uploadingText}>Analysing your photos...</Text>
-          <Text style={st.uploadingSub}>This usually takes a few seconds.</Text>
+          <Text style={st.uploadingText}>Uploading and analysing photos...</Text>
+          <Text style={st.uploadingSub}>Preparing your listing draft.</Text>
         </View>
       )}
     </SafeAreaView>

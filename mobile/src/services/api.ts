@@ -1084,6 +1084,30 @@ export interface AIDraftResponse {
   fallback_reason: string | null;
 }
 
+export interface AIDraftUploadSlot {
+  index: number;
+  upload_url: string;
+  r2_key: string;
+  content_type: string;
+  expires_in_seconds: number;
+}
+
+export interface AIDraftUploadSessionResponse {
+  draft_id: string;
+  uploads: AIDraftUploadSlot[];
+  status: 'uploading';
+  expires_at: string;
+}
+
+export interface AIDraftAnalysisStatusResponse {
+  draft_id: string;
+  status: 'uploading' | 'processing' | 'ready' | 'failed' | 'expired' | string;
+  draft: AIDraftResponse | null;
+  error: string | null;
+  message: string | null;
+  retry_after_seconds: number | null;
+}
+
 export interface AIExtractIMEIResponse {
   identifier_kind: 'imei' | 'serial' | null;
   identifier_value: string | null;
@@ -1162,10 +1186,77 @@ function postIdentifierOCR(draftId: string, imageUri: string, categorySlug?: str
   );
 }
 
+function uploadAiDraftPhoto(upload: AIDraftUploadSlot, imageUri: string): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', upload.upload_url);
+    xhr.setRequestHeader('Content-Type', upload.content_type || 'image/jpeg');
+    xhr.timeout = UPLOAD_TIMEOUT;
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else reject(new Error(`Photo ${upload.index + 1} upload failed with status code ${xhr.status}`));
+    };
+    xhr.onerror = () => reject(new Error(`Photo ${upload.index + 1} upload network error`));
+    xhr.ontimeout = () => reject(new Error(`Photo ${upload.index + 1} upload timed out`));
+    xhr.send({
+      uri: imageUri,
+      type: upload.content_type || 'image/jpeg',
+      name: `ai_draft_${upload.index}.jpg`,
+    } as any);
+  });
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export const AIListing = {
   // SPRINT8_PHASE2_GEMINI_V2 — multi-image upload (1-6 photos)
-  /** Upload multiple photos. AI sees all angles in one Gemini call. */
-  draftFromImages: (imageUris: string[]) => {
+  /** Upload photos directly to R2, queue AI analysis, then poll until ready. */
+  draftFromImages: async (imageUris: string[]): Promise<AxiosResponse<AIDraftResponse>> => {
+    const session = await api.post<AIDraftUploadSessionResponse>(
+      '/v1/listings/draft/uploads/request',
+      { images: imageUris.map(() => ({ content_type: 'image/jpeg' })) },
+      { timeout: REQUEST_TIMEOUT },
+    );
+
+    const uploads = [...session.data.uploads].sort((a, b) => a.index - b.index);
+    for (const upload of uploads) {
+      const uri = imageUris[upload.index];
+      if (!uri) throw new Error(`Missing photo ${upload.index + 1}`);
+      await uploadAiDraftPhoto(upload, uri);
+    }
+
+    await api.post(
+      `/v1/listings/draft/${session.data.draft_id}/analysis/start`,
+      {},
+      { timeout: REQUEST_TIMEOUT },
+    );
+
+    let lastStatus: AIDraftAnalysisStatusResponse | null = null;
+    for (let attempt = 0; attempt < 45; attempt++) {
+      const statusRes = await api.get<AIDraftAnalysisStatusResponse>(
+        `/v1/listings/draft/${session.data.draft_id}/analysis/status`,
+        { timeout: REQUEST_TIMEOUT },
+      );
+      lastStatus = statusRes.data;
+      if (statusRes.data.status === 'ready' && statusRes.data.draft) {
+        return { ...statusRes, data: statusRes.data.draft };
+      }
+      if (statusRes.data.status === 'failed' || statusRes.data.status === 'expired') {
+        throw new Error(statusRes.data.message || statusRes.data.error || 'Photo analysis failed');
+      }
+      await sleep((statusRes.data.retry_after_seconds || 2) * 1000);
+    }
+
+    throw new Error(
+      lastStatus?.message ||
+      'Photo analysis is taking longer than expected. Please try again in a moment.',
+    );
+  },
+
+  /** Legacy multipart analysis fallback for older dev tools only. */
+  draftFromImagesMultipart: (imageUris: string[]) => {
     const form = new FormData();
     imageUris.forEach((uri, i) => {
       const name = uri.split('/').pop() || `photo_${i}.jpg`;
