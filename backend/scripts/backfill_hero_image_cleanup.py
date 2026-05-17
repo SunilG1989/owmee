@@ -64,10 +64,12 @@ def _stored_value_to_key(value: str | None) -> str | None:
     return value
 
 
-def _original_key_for_cleanup(key: str | None) -> str | None:
+def _original_key_for_cleanup(key: str | None, *, force_regenerate: bool = False) -> str | None:
     if not key:
         return None
     if _CLEANED_MARKER in key:
+        if force_regenerate:
+            return key.split(_CLEANED_MARKER, 1)[0]
         return None
     if key.endswith(_DISPLAY_SUFFIX):
         return key[: -len(_DISPLAY_SUFFIX)]
@@ -91,13 +93,14 @@ async def _backfill_photo_set(
     category_slug: str | None,
     label: str,
     apply: bool,
+    force_regenerate: bool,
 ) -> PhotoSetResult:
     if not values:
         return PhotoSetResult(status="skipped", reason="no_images")
 
     normalized_values = [_stored_value_to_key(value) or value for value in values]
     hero_key = _stored_value_to_key(values[0])
-    original_key = _original_key_for_cleanup(hero_key)
+    original_key = _original_key_for_cleanup(hero_key, force_regenerate=force_regenerate)
     if not original_key:
         status = "already_cleaned" if hero_key and _CLEANED_MARKER in hero_key else "skipped"
         return PhotoSetResult(
@@ -119,19 +122,20 @@ async def _backfill_photo_set(
             new_values=[display_key, *normalized_values[1:]],
         )
 
-    try:
-        download_bytes(display_key)
-        if thumbnail_key:
-            download_bytes(thumbnail_key)
-        return PhotoSetResult(
-            status="cleaned_existing",
-            original_key=original_key,
-            display_key=display_key,
-            thumbnail_key=thumbnail_key,
-            new_values=[display_key, *normalized_values[1:]],
-        )
-    except Exception:
-        pass
+    if not force_regenerate:
+        try:
+            download_bytes(display_key)
+            if thumbnail_key:
+                download_bytes(thumbnail_key)
+            return PhotoSetResult(
+                status="cleaned_existing",
+                original_key=original_key,
+                display_key=display_key,
+                thumbnail_key=thumbnail_key,
+                new_values=[display_key, *normalized_values[1:]],
+            )
+        except Exception:
+            pass
 
     print(f"{label}: cleaning {original_key}")
     try:
@@ -207,6 +211,7 @@ async def _backfill_listings(args) -> dict[str, int]:
                 category_slug=getattr(getattr(listing, "category", None), "slug", None),
                 label=f"listing:{listing.id} {listing.title!r}",
                 apply=args.apply,
+                force_regenerate=args.force_regenerate,
             )
             if result.status == "cleaned":
                 summary["cleaned"] += 1
@@ -285,6 +290,7 @@ async def _backfill_drafts(args) -> dict[str, int]:
                 category_slug=category_slug,
                 label=f"draft:{row['id']} {row['status']}",
                 apply=args.apply,
+                force_regenerate=args.force_regenerate,
             )
             if result.status == "cleaned":
                 summary["cleaned"] += 1
@@ -330,6 +336,11 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--all-listing-statuses", action="store_true", help="Process listings in every status.")
     parser.add_argument("--listing-status", action="append", help="Listing status to include. Defaults to active.")
     parser.add_argument("--listing-id", action="append", help="Specific listing UUID to process. Can be repeated.")
+    parser.add_argument(
+        "--force-regenerate",
+        action="store_true",
+        help="Regenerate even if a .hero-cleaned image already exists, overwriting the cleaned variants.",
+    )
     parser.add_argument("--all-draft-statuses", action="store_true", help="Process drafts in every status.")
     parser.add_argument("--draft-status", action="append", help="Draft status to include. Defaults to open.")
     parser.add_argument("--limit", type=int, default=0, help="Max records per target type.")
