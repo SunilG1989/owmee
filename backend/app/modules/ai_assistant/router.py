@@ -76,9 +76,9 @@ log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1/listings", tags=["ai-assistant"])
 
-VISION_TIMEOUT_SECONDS = 32
+VISION_TIMEOUT_SECONDS = 45
 HERO_CLEANUP_TIMEOUT_SECONDS = 18
-PRICE_TIMEOUT_SECONDS = 8
+PRICE_TIMEOUT_SECONDS = 15
 MAX_ANALYSIS_UPLOAD_BYTES = 8 * 1024 * 1024
 MAX_ANALYSIS_IMAGE_DIMENSION = 1280
 ANALYSIS_IMAGE_JPEG_QUALITY = 82
@@ -653,6 +653,105 @@ def _draft_ai_response_json(detected: AIDetected, price_result: dict | None = No
     return json.dumps(payload)
 
 
+def _round_resale_price(value: float) -> float:
+    if value < 500:
+        return float(round(value / 10) * 10)
+    if value < 5000:
+        return float(round(value / 50) * 50)
+    return float(round(value / 100) * 100)
+
+
+def _mrp_anchor_price_result(detected: AIDetected, existing: dict | None = None) -> dict | None:
+    """Conservative resale price from validated MRP when other pricing is absent.
+
+    This is intentionally a fallback. Comparables, vision price, and text AI
+    can use richer context. MRP alone is only allowed to rescue otherwise-null
+    pricing when Gemini already returned a post-processed MRP and enough visible
+    condition signal to avoid a fake discount.
+    """
+    mrp = detected.mrp_inr
+    if not mrp or mrp <= 0:
+        return None
+    flags = set(detected.flags or [])
+    if flags.intersection({"multiple_items", "no_product", "blurry", "screenshot_only", "stock_or_catalog_suspected"}):
+        return None
+    condition = (detected.condition_guess or "").strip().lower()
+    if condition not in {"like_new", "good", "fair"}:
+        return None
+
+    factor = {"like_new": 0.62, "good": 0.50, "fair": 0.35}[condition]
+    if detected.purchase_year:
+        age = max(0, datetime.now(timezone.utc).year - int(detected.purchase_year))
+        if age <= 1:
+            factor += 0.08
+        elif age >= 4:
+            factor -= 0.08
+    if detected.defects:
+        factor -= min(0.10, 0.03 * len(detected.defects))
+    factor = max(0.25, min(0.70, factor))
+
+    price = _round_resale_price(float(mrp) * factor)
+    if not price_estimator._sanity_check(price, detected.category_slug):  # noqa: SLF001 - shared guardrail
+        return None
+    if price >= float(mrp):
+        return None
+
+    return {
+        "price": price,
+        "source": "mrp_anchor",
+        "reasoning": "Conservative resale estimate from validated MRP and visible condition.",
+        "comparables": (existing or {}).get("comparables", []),
+        "comparables_count": (existing or {}).get("comparables_count", 0),
+    }
+
+
+def _apply_price_fallbacks(price_result: dict, detected: AIDetected) -> dict:
+    if price_result["source"] in ("none", "ai") and detected.suggested_price_inr:
+        return {
+            "price": float(detected.suggested_price_inr),
+            "source": "vision",
+            "reasoning": detected.price_reasoning or "Inferred from photos",
+            "comparables": price_result.get("comparables", []),
+            "comparables_count": price_result.get("comparables_count", 0),
+        }
+    if price_result["source"] == "none":
+        mrp_anchor = _mrp_anchor_price_result(detected, price_result)
+        if mrp_anchor:
+            return mrp_anchor
+    return price_result
+
+
+def _clean_original_price_for_listing(
+    *,
+    asking_price: float,
+    payload_original_price: float | None,
+    draft_ai_response: dict | None,
+) -> float | None:
+    """Choose the MRP/original price to save on a published AI listing.
+
+    Mobile sends `original_price` when it has the latest app build. The draft
+    JSON fallback keeps older builds from losing AI-extracted MRP. In both
+    cases we only persist a value that can produce a truthful buyer-facing
+    discount.
+    """
+    raw_value = payload_original_price
+    if raw_value is None and isinstance(draft_ai_response, dict):
+        raw_value = draft_ai_response.get("mrp_inr")
+
+    if raw_value is None:
+        return None
+    try:
+        value = float(raw_value)
+    except (TypeError, ValueError):
+        return None
+
+    if value <= 0 or value > 10_000_000:
+        return None
+    if value <= float(asking_price):
+        return None
+    return round(value, 2)
+
+
 # ── 1. POST /v1/listings/draft/from-image ─────────────────────────────────
 
 
@@ -748,17 +847,11 @@ async def draft_from_image(
     )
     timings["price_ms"] = _ms_since(step_started)
 
-    # If comparables didn't yield a price but vision did, use vision's
-    # number (it factored in the actual photos, including defects we
-    # don't otherwise transmit to the text price estimator).
-    if price_result["source"] in ("none", "ai") and detected.suggested_price_inr:
-        price_result = {
-            "price": float(detected.suggested_price_inr),
-            "source": "vision",
-            "reasoning": detected.price_reasoning or "Inferred from photos",
-            "comparables": price_result.get("comparables", []),
-        }
-    elif price_result["source"] == "none":
+    # If comparables did not yield a price, prefer vision's photo-aware price;
+    # if vision also withheld a price, a validated MRP can still provide a
+    # conservative resale anchor instead of returning a fake-looking zero.
+    price_result = _apply_price_fallbacks(price_result, detected)
+    if price_result["source"] == "none":
         fallback_reason = price_result.get("reasoning")
 
     # Persist the draft. ai_response is JSONB; pass JSON string and CAST.
@@ -1127,7 +1220,7 @@ async def create_from_draft(
     # Verify draft ownership and freshness
     drow = await db.execute(
         text("""
-            SELECT user_id, photo_urls, expires_at, status
+            SELECT user_id, photo_urls, expires_at, status, ai_response
             FROM listing_drafts
             WHERE id = :id
         """),
@@ -1250,6 +1343,12 @@ async def create_from_draft(
             if u not in photo_urls:
                 photo_urls.append(u)
 
+    draft_ai_response = rec.ai_response if isinstance(rec.ai_response, dict) else {}
+    original_price = _clean_original_price_for_listing(
+        asking_price=payload.price,
+        payload_original_price=payload.original_price,
+        draft_ai_response=draft_ai_response,
+    )
     listing_id = uuid4()
 
     # bindparam declares image_urls as TEXT[] so asyncpg sends a real
@@ -1263,7 +1362,7 @@ async def create_from_draft(
             age_suitability, hygiene_status,
             has_box, has_bill, has_charger, has_earphones,
             water_damage_history, seller_functional_attestation,
-            serial_number,
+            serial_number, original_price,
             imei_1, imei_2, listing_state, verification_status, video_url,
             ai_draft_id, city, state, listing_source, reviewed_by,
             published_at
@@ -1276,7 +1375,7 @@ async def create_from_draft(
             :age_suitability, :hygiene_status,
             :has_box, :has_bill, :has_charger, :has_earphones,
             :water_damage_history, :seller_functional_attestation,
-            :serial,
+            :serial, :original_price,
             :imei_1, :imei_2, 'pending_buyer', :verif, :video,
             :draft_id, :city, :state, 'self_prep', 'none',
             NOW()
@@ -1319,6 +1418,7 @@ async def create_from_draft(
             "water_damage_history": payload.water_damage_history,
             "seller_functional_attestation": payload.seller_functional_attestation,
             "serial": serial_number,
+            "original_price": original_price,
             "imei_1": payload.imei_1,
             "imei_2": payload.imei_2,
             "verif": verification_status,
@@ -1357,6 +1457,7 @@ async def create_from_draft(
         status="active",
         title=payload.title,
         price=payload.price,
+        original_price=original_price,
     )
 
 
@@ -1713,14 +1814,8 @@ async def draft_from_images(
             "unknown",
         )
 
-    if price_result["source"] in ("none", "ai") and detected.suggested_price_inr:
-        price_result = {
-            "price": float(detected.suggested_price_inr),
-            "source": "vision",
-            "reasoning": detected.price_reasoning or "Inferred from photos",
-            "comparables": price_result.get("comparables", []),
-        }
-    elif price_result["source"] == "none" and fallback_reason is None:
+    price_result = _apply_price_fallbacks(price_result, detected)
+    if price_result["source"] == "none" and fallback_reason is None:
         fallback_reason = price_result.get("reasoning")
 
     # Persist draft

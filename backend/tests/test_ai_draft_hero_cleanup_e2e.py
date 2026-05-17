@@ -113,6 +113,61 @@ def test_phone_hero_keeps_ai_choice_when_front_face_metadata_missing():
     assert router._front_face_hero_override(detected, 2, 4) == 2
 
 
+def test_mrp_anchor_price_fallback_uses_valid_mrp_and_condition():
+    detected = AIDetected(
+        category_slug="smartphones",
+        brand="Apple",
+        model="iPhone 13",
+        condition_guess="good",
+        mrp_inr=60000,
+        mrp_confidence=0.7,
+        mrp_source="market_anchor",
+        flags=[],
+    )
+
+    result = router._apply_price_fallbacks(
+        {
+            "price": None,
+            "source": "none",
+            "reasoning": "no price",
+            "comparables": [],
+            "comparables_count": 0,
+        },
+        detected,
+    )
+
+    assert result["source"] == "mrp_anchor"
+    assert result["price"] == 30000
+    assert result["reasoning"] == "Conservative resale estimate from validated MRP and visible condition."
+
+
+def test_mrp_anchor_price_fallback_rejects_unclear_condition():
+    detected = AIDetected(
+        category_slug="smartphones",
+        brand="Apple",
+        model="iPhone 13",
+        condition_guess=None,
+        mrp_inr=60000,
+        mrp_confidence=0.7,
+        mrp_source="market_anchor",
+        flags=[],
+    )
+
+    result = router._apply_price_fallbacks(
+        {
+            "price": None,
+            "source": "none",
+            "reasoning": "no price",
+            "comparables": [],
+            "comparables_count": 0,
+        },
+        detected,
+    )
+
+    assert result["source"] == "none"
+    assert result["price"] is None
+
+
 @pytest.mark.asyncio
 async def test_hero_cleanup_marks_retake_when_product_is_modified(monkeypatch):
     detected = AIDetected(
@@ -430,6 +485,7 @@ async def test_create_from_draft_enqueues_hero_cleanup_after_commit(monkeypatch)
                         photo_urls=["ai-drafts/u/draft_0.jpg.display.webp"],
                         expires_at=datetime(2099, 5, 17, tzinfo=timezone.utc),
                         status="open",
+                        ai_response={"mrp_inr": 650, "mrp_source": "market_anchor"},
                     )
                 )
             if "SELECT id FROM categories" in sql:
@@ -464,6 +520,7 @@ async def test_create_from_draft_enqueues_hero_cleanup_after_commit(monkeypatch)
             draft_id=draft_id,
             title="Kids water bottle",
             price=350,
+            original_price=700,
             condition="good",
             category_slug="kids-utility",
             brand="Milton",
@@ -474,8 +531,10 @@ async def test_create_from_draft_enqueues_hero_cleanup_after_commit(monkeypatch)
     )
 
     assert response.status == "active"
+    assert response.original_price == 700
     assert db.commits == 1
     assert db.insert_params is not None
+    assert db.insert_params["original_price"] == 700
     assert enqueued == [
         {
             "listing_id": response.listing_id,
@@ -483,3 +542,128 @@ async def test_create_from_draft_enqueues_hero_cleanup_after_commit(monkeypatch)
             "category_slug": "kids-utility",
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_create_from_draft_uses_draft_mrp_for_older_clients(monkeypatch):
+    user_id = uuid4()
+    draft_id = uuid4()
+    category_id = uuid4()
+
+    class _CreateDB:
+        def __init__(self) -> None:
+            self.insert_params = None
+
+        async def execute(self, stmt, params=None):
+            sql = str(stmt)
+            if "SELECT user_id, photo_urls, expires_at, status, ai_response" in sql:
+                return _Result(
+                    row=SimpleNamespace(
+                        user_id=user_id,
+                        photo_urls=["ai-drafts/u/draft_0.jpg.display.webp"],
+                        expires_at=datetime(2099, 5, 17, tzinfo=timezone.utc),
+                        status="open",
+                        ai_response={"mrp_inr": 1200, "mrp_source": "market_anchor"},
+                    )
+                )
+            if "SELECT id FROM categories" in sql:
+                return _Result(category_id)
+            if "INSERT INTO listings" in sql:
+                self.insert_params = params
+            return _Result(None)
+
+        async def commit(self) -> None:
+            pass
+
+    async def fake_get_user_location(db, user_id):
+        return (12.9, 77.6, "Bengaluru", "Karnataka")
+
+    async def fake_enqueue_listing_hero_cleanup(**kwargs):
+        return True
+
+    import app.core.zones as zones
+    import app.modules.identity_auth.user_location as user_location
+
+    monkeypatch.setattr(user_location, "get_user_location", fake_get_user_location)
+    monkeypatch.setattr(zones, "is_in_service_area", lambda lat, lng: True)
+    monkeypatch.setattr(router, "enqueue_listing_hero_cleanup", fake_enqueue_listing_hero_cleanup)
+
+    db = _CreateDB()
+    response = await router.create_from_draft(
+        payload=CreateFromDraftRequest(
+            draft_id=draft_id,
+            title="Kids puzzle set",
+            price=450,
+            condition="good",
+            category_slug="kids-utility",
+            model="Puzzle",
+        ),
+        user=SimpleNamespace(user_id=user_id),
+        db=db,
+    )
+
+    assert response.original_price == 1200
+    assert db.insert_params["original_price"] == 1200
+
+
+@pytest.mark.asyncio
+async def test_create_from_draft_drops_mrp_that_cannot_discount(monkeypatch):
+    user_id = uuid4()
+    draft_id = uuid4()
+    category_id = uuid4()
+
+    class _CreateDB:
+        def __init__(self) -> None:
+            self.insert_params = None
+
+        async def execute(self, stmt, params=None):
+            sql = str(stmt)
+            if "SELECT user_id, photo_urls, expires_at, status, ai_response" in sql:
+                return _Result(
+                    row=SimpleNamespace(
+                        user_id=user_id,
+                        photo_urls=["ai-drafts/u/draft_0.jpg.display.webp"],
+                        expires_at=datetime(2099, 5, 17, tzinfo=timezone.utc),
+                        status="open",
+                        ai_response={"mrp_inr": 300},
+                    )
+                )
+            if "SELECT id FROM categories" in sql:
+                return _Result(category_id)
+            if "INSERT INTO listings" in sql:
+                self.insert_params = params
+            return _Result(None)
+
+        async def commit(self) -> None:
+            pass
+
+    async def fake_get_user_location(db, user_id):
+        return (12.9, 77.6, "Bengaluru", "Karnataka")
+
+    async def fake_enqueue_listing_hero_cleanup(**kwargs):
+        return True
+
+    import app.core.zones as zones
+    import app.modules.identity_auth.user_location as user_location
+
+    monkeypatch.setattr(user_location, "get_user_location", fake_get_user_location)
+    monkeypatch.setattr(zones, "is_in_service_area", lambda lat, lng: True)
+    monkeypatch.setattr(router, "enqueue_listing_hero_cleanup", fake_enqueue_listing_hero_cleanup)
+
+    db = _CreateDB()
+    response = await router.create_from_draft(
+        payload=CreateFromDraftRequest(
+            draft_id=draft_id,
+            title="Kids puzzle set",
+            price=450,
+            original_price=400,
+            condition="good",
+            category_slug="kids-utility",
+            model="Puzzle",
+        ),
+        user=SimpleNamespace(user_id=user_id),
+        db=db,
+    )
+
+    assert response.original_price is None
+    assert db.insert_params["original_price"] is None

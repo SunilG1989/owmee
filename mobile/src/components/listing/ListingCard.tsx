@@ -157,7 +157,7 @@ export const ListingCard = memo(function ListingCard({
         >
           <View style={s.priceRow}>
             <Text style={s.price}>{formatPrice(listing.price)}</Text>
-            {listing.original_price ? <Text style={s.mrp}>{formatPrice(listing.original_price)}</Text> : null}
+            {listing.original_price ? <Text style={s.mrp}>MRP {formatPrice(listing.original_price)}</Text> : null}
           </View>
           <Text style={s.title} numberOfLines={2}>{listing.title}</Text>
 
@@ -309,9 +309,9 @@ const s = StyleSheet.create({
     fontWeight: T.weight.heavy,
   },
   info: { padding: S.sm + 2, paddingBottom: S.sm },
-  priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 5, marginBottom: 3 },
+  priceRow: { flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', gap: 5, marginBottom: 3 },
   price: { fontSize: T.size.lg, fontWeight: T.weight.heavy, color: C.ink, letterSpacing: 0 },
-  mrp: { fontSize: T.size.xs, color: C.text4, textDecorationLine: 'line-through' },
+  mrp: { flexShrink: 1, fontSize: T.size.xs, color: C.text4, textDecorationLine: 'line-through' },
   title: { fontSize: T.size.base - 1, fontWeight: T.weight.medium, color: C.text2, lineHeight: 17, marginBottom: 5 },
   ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginBottom: 5 },
   stars: { fontSize: T.size.xs, color: C.petrol, letterSpacing: 0 },

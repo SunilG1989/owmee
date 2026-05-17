@@ -209,7 +209,7 @@ export function DealCard({ listing, onPress, index = 0 }: Props) {
         <View style={s.dealPriceRow}>
           <Text style={s.dealPrice}>{formatPriceFull(listing.price)}</Text>
           {listing.original_price != null && (
-            <Text style={s.dealStrike}>{formatPrice(listing.original_price)}</Text>
+            <Text style={s.dealStrike}>MRP {formatPrice(listing.original_price)}</Text>
           )}
         </View>
         {savingsAmount != null && (
@@ -326,7 +326,7 @@ export function FeedCard({
               <Text style={s.dealSignal} numberOfLines={1}>{signal}</Text>
             )}
             {showOriginal && (
-              <Text style={s.feedStrike}>{formatPriceFull(listing.original_price)}</Text>
+              <Text style={s.feedStrike}>MRP {formatPriceFull(listing.original_price)}</Text>
             )}
           </View>
 
@@ -479,6 +479,7 @@ const s = StyleSheet.create({
   dealPriceRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
+    flexWrap: 'wrap',
     gap: 5,
     marginBottom: S.xs,
   },
@@ -488,6 +489,7 @@ const s = StyleSheet.create({
     color: C.ink,
   },
   dealStrike: {
+    flexShrink: 1,
     fontSize: T.size.sm,
     color: C.text3,
     textDecorationLine: 'line-through',
@@ -611,6 +613,7 @@ const s = StyleSheet.create({
     letterSpacing: 0,
   },
   feedStrike: {
+    flexShrink: 1,
     fontSize: T.size.xs,
     fontWeight: T.weight.semi,
     color: C.text3,

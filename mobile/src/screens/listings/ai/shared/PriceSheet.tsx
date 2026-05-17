@@ -20,9 +20,11 @@ import { Button } from '../../../../components/ui';
 import type { AIComparable } from '../../../../services/api';
 
 interface Props {
-  suggested: number;
+  suggested?: number | null;
+  mrp?: number | null;
+  discountPct?: number | null;
   comparables: AIComparable[];
-  initial: number;
+  initial?: number | null;
   onSave: (price: number) => void;
   onUseSuggested: () => void;
   onClose: () => void;
@@ -30,13 +32,15 @@ interface Props {
 
 export default function PriceSheet({
   suggested,
+  mrp,
+  discountPct,
   comparables,
   initial,
   onSave,
   onUseSuggested,
   onClose,
 }: Props) {
-  const [text, setText] = useState(String(Math.round(initial)));
+  const [text, setText] = useState(initial ? String(Math.round(initial)) : '');
 
   const num = parseInt(text.replace(/[^0-9]/g, ''), 10);
   const valid = !isNaN(num) && num > 0;
@@ -54,7 +58,13 @@ export default function PriceSheet({
           {/* Suggested context */}
           <View style={st.suggestBox}>
             <Text style={st.suggestLabel}>Owmee guidance</Text>
-            <Text style={st.suggestPrice}>{formatPrice(suggested)}</Text>
+            <Text style={st.suggestPrice}>{suggested ? formatPrice(suggested) : 'Set manually'}</Text>
+            {mrp && discountPct ? (
+              <View style={st.mrpLine}>
+                <Text style={st.mrpStrike}>MRP {formatPrice(mrp)}</Text>
+                <Text style={st.mrpDiscount}>{discountPct}% off</Text>
+              </View>
+            ) : null}
           </View>
 
           {/* Custom input */}
@@ -92,13 +102,15 @@ export default function PriceSheet({
           )}
 
           {/* Actions */}
-          <Button
-            label="Use suggested price"
-            variant="ghost"
-            size="sm"
-            onPress={onUseSuggested}
-            style={st.useSuggestedBtn}
-          />
+          {suggested ? (
+            <Button
+              label="Use suggested price"
+              variant="ghost"
+              size="sm"
+              onPress={onUseSuggested}
+              style={st.useSuggestedBtn}
+            />
+          ) : null}
 
           <View style={st.ctaRow}>
             <Button
@@ -151,6 +163,9 @@ const st = StyleSheet.create({
   },
   suggestLabel: { fontSize: T.size.sm, color: C.petrolText, marginBottom: 2 },
   suggestPrice: { fontSize: T.size.xxl, fontWeight: T.weight.bold, color: C.petrolText },
+  mrpLine: { marginTop: 4, flexDirection: 'row', alignItems: 'center', gap: S.sm },
+  mrpStrike: { fontSize: T.size.sm, color: C.text3, textDecorationLine: 'line-through' },
+  mrpDiscount: { fontSize: T.size.sm, color: C.green, fontWeight: T.weight.bold },
 
   label: {
     fontSize: T.size.sm,

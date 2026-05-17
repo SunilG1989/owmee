@@ -7,6 +7,7 @@ from app.modules.ai_assistant.prompts import (
     PROMPT_SERIAL_OCR,
     PROMPT_VISION_DETECT,
 )
+from app.modules.ai_assistant.schemas import AIDetected
 from app.modules.media.providers.google_gemini import (
     GoogleGeminiBackgroundCleanupProvider,
     _DEFAULT_STYLE,
@@ -41,6 +42,8 @@ def test_vision_prompt_mentions_fields_supported_by_schema():
         "screen_size",
         "condition_guess",
         "suggested_price_inr",
+        "mrp_inr",
+        "mrp_source",
         "seller_edit_fields",
         "field_evidence",
     }
@@ -57,6 +60,52 @@ def test_vision_prompt_forces_phone_front_face_hero_metadata():
     assert "Phone/tablet hero rule" in PROMPT_VISION_DETECT
     assert "front/screen/face side" in PROMPT_VISION_DETECT
     assert "Do not choose the back panel as hero" in PROMPT_VISION_DETECT
+
+
+def test_vision_prompt_requires_responsible_mrp_extraction():
+    assert "Never confuse resale price with MRP" in PROMPT_VISION_DETECT
+    assert "visible_mrp" in PROMPT_VISION_DETECT
+    assert "receipt_or_bill" in PROMPT_VISION_DETECT
+    assert "market_anchor" in PROMPT_VISION_DETECT
+    assert "field_evidence.mrp_inr = \"direct_visible\"" in PROMPT_VISION_DETECT
+    assert "Never back-calculate MRP from the resale price" in PROMPT_VISION_DETECT
+
+
+def test_mrp_guardrails_suppress_bad_discount_inputs():
+    detected = AIDetected(
+        category_slug="smartphones",
+        condition_guess="good",
+        suggested_price_inr=30000,
+        price_confidence=0.8,
+        mrp_inr=25000,
+        mrp_confidence=0.9,
+        mrp_source="market_anchor",
+    )
+
+    cleaned = gemini_client._apply_post_processing_guardrails(detected)
+
+    assert cleaned.suggested_price_inr == 30000
+    assert cleaned.mrp_inr is None
+    assert cleaned.mrp_source is None
+
+
+def test_mrp_guardrails_require_direct_evidence_for_visible_mrp():
+    detected = AIDetected(
+        category_slug="smartphones",
+        condition_guess="good",
+        suggested_price_inr=30000,
+        price_confidence=0.8,
+        mrp_inr=60000,
+        mrp_confidence=0.9,
+        mrp_source="visible_mrp",
+        field_evidence={},
+    )
+
+    cleaned = gemini_client._apply_post_processing_guardrails(detected)
+
+    assert cleaned.suggested_price_inr == 30000
+    assert cleaned.mrp_inr is None
+    assert cleaned.mrp_source is None
 
 
 def test_imei_prompt_rejects_common_non_imei_numbers():
@@ -87,6 +136,9 @@ def test_price_prompt_allows_responsible_no_price_output():
     assert "return price_inr = 0" in PROMPT_PRICE_ESTIMATE
     assert "confidence <= 0.49" in PROMPT_PRICE_ESTIMATE
     assert "everyday lower-value items" in PROMPT_PRICE_ESTIMATE
+    assert "base-variant estimate" in PROMPT_PRICE_ESTIMATE
+    assert "Missing storage should lower confidence" in PROMPT_PRICE_ESTIMATE
+    assert "do not return\n  null only because storage is missing" in PROMPT_VISION_DETECT
 
 
 def test_deprecated_gemini_model_aliases_fail_forward():

@@ -68,6 +68,10 @@ class AIDetected(BaseModel):
     suggested_price_inr: int | None = None
     price_confidence: float = 0.0
     price_reasoning: str | None = None
+    mrp_inr: int | None = None              # original MRP / new-price anchor for discount display
+    mrp_confidence: float = 0.0
+    mrp_source: str | None = None           # visible_mrp | receipt_or_bill | market_anchor | none
+    mrp_reasoning: str | None = None
 
     # Authoring
     title_suggestion: str | None = None
@@ -125,7 +129,7 @@ class DraftFromImageResponse(BaseModel):
     photo_url: str
     detected: AIDetected
     suggested_price: float | None = None
-    price_source: str = "none"               # comparables | vision | category_anchor | ai | none
+    price_source: str = "none"               # comparables | vision | mrp_anchor | category_anchor | ai | none
     comparables: list[Comparable] = Field(default_factory=list)
     expires_at: datetime
     needs_identifier: bool = False           # True for smartphones/laptops/tablets
@@ -191,6 +195,7 @@ class CreateFromDraftRequest(BaseModel):
     draft_id: UUID
     title: str = Field(min_length=4, max_length=200)
     price: float = Field(gt=0)
+    original_price: float | None = Field(None, gt=0, le=10000000)
     condition: str
     category_slug: str
     brand: str | None = None
@@ -226,6 +231,7 @@ class CreateFromDraftResponse(BaseModel):
     status: str                               # mirror of legacy field
     title: str
     price: float
+    original_price: float | None = None
 
 
 # ── Seller info (progressive collection) ──────────────────────────────────

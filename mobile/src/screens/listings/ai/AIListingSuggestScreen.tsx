@@ -367,12 +367,31 @@ export default function AIListingSuggestScreen({
     setInlineField(null);
   }, [applyOverrides]);
 
+  const suggestedPrice = useMemo(() => {
+    const raw = draft.suggested_price;
+    const rounded = raw == null ? NaN : Math.round(Number(raw));
+    return Number.isFinite(rounded) && rounded > 0 ? rounded : null;
+  }, [draft.suggested_price]);
+
   // The seller owns the asking price. Owmee gives guidance, but changing
   // condition must not silently move the number under their feet.
-  const effectivePrice = useMemo(() => {
+  const effectivePrice = useMemo<number | null>(() => {
     if (customPrice != null) return customPrice;
-    return draft.suggested_price ?? 0;
-  }, [customPrice, draft.suggested_price]);
+    return suggestedPrice;
+  }, [customPrice, suggestedPrice]);
+
+  const originalPrice = useMemo(() => {
+    const rawMrp = draft.detected.mrp_inr;
+    const roundedMrp = rawMrp == null ? NaN : Math.round(Number(rawMrp));
+    if (effectivePrice == null || !Number.isFinite(roundedMrp) || roundedMrp <= effectivePrice) return null;
+    return roundedMrp;
+  }, [draft.detected.mrp_inr, effectivePrice]);
+
+  const discountPct = useMemo(() => {
+    if (!originalPrice || effectivePrice == null) return null;
+    const pct = Math.round((1 - effectivePrice / originalPrice) * 100);
+    return pct > 0 ? pct : null;
+  }, [effectivePrice, originalPrice]);
 
   const titleGuess = useMemo(() => {
     if (overrides.title?.trim()) return overrides.title.trim();
@@ -412,6 +431,7 @@ export default function AIListingSuggestScreen({
     has_earphones: categoryKind === 'phone' ? hasEarphones : null,
     water_damage_history: waterDamageHistory,
     seller_functional_attestation: sellerFunctionalAttestation,
+    original_price: originalPrice,
   }), [
     accessories,
     ageSuitability,
@@ -424,6 +444,7 @@ export default function AIListingSuggestScreen({
     hasEarphones,
     hygieneStatus,
     model,
+    originalPrice,
     processor,
     purchaseYear,
     ram,
@@ -440,7 +461,8 @@ export default function AIListingSuggestScreen({
 
   const submit = useCallback(async () => {
     if (submitting) return;
-    if (!effectivePrice || effectivePrice <= 0) {
+    const priceToList = effectivePrice;
+    if (!priceToList || priceToList <= 0) {
       Alert.alert('Set a price', 'Please set a price before listing.');
       return;
     }
@@ -468,7 +490,7 @@ export default function AIListingSuggestScreen({
         draft,
         finalFields: {
           title: titleGuess,
-          price: effectivePrice,
+          price: priceToList,
           condition,
           category_slug: categorySlug,
           ...finalDetails,
@@ -484,7 +506,7 @@ export default function AIListingSuggestScreen({
       const { data } = await AIListing.createFromDraft({
         draft_id: draft.draft_id,
         title: titleGuess,
-        price: effectivePrice,
+        price: priceToList,
         condition,
         category_slug: categorySlug,
         ...finalDetails,
@@ -751,7 +773,7 @@ export default function AIListingSuggestScreen({
             {subtitleSpecifics ? (
               <Text style={st.itemSubtitle} numberOfLines={1}>{subtitleSpecifics}</Text>
             ) : null}
-            <Text style={st.itemPrice}>{formatPrice(effectivePrice)}</Text>
+            <Text style={st.itemPrice}>{effectivePrice ? formatPrice(effectivePrice) : 'Set price'}</Text>
           </View>
           <TouchableOpacity onPress={() => setEditSheet(true)} style={st.itemEditBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Text style={st.itemEditGlyph}>✎</Text>
@@ -911,18 +933,30 @@ export default function AIListingSuggestScreen({
                 ? 'Owmee guidance uses your photos and item condition.'
                 : draft.price_source === 'category_anchor'
                   ? 'Owmee guidance uses the item type and condition.'
-                  : draft.price_source === 'ai'
-                    ? 'Owmee guidance uses Indian market estimates.'
-                    : 'Choose the asking price buyers will see.'}
+                  : draft.price_source === 'mrp_anchor'
+                    ? 'Owmee guidance uses MRP and visible condition.'
+                    : draft.price_source === 'ai'
+                      ? 'Owmee guidance uses Indian market estimates.'
+                      : 'Choose the asking price buyers will see.'}
           </Text>
 
           <TouchableOpacity style={st.priceBtn} onPress={() => setPriceSheet(true)}>
-            <Text style={st.priceBtnTitle}>Your asking price</Text>
+            <Text style={st.priceBtnTitle}>{originalPrice ? 'Discounted price' : 'Your asking price'}</Text>
             <Text style={st.priceBtnHint}>
-              {customPrice != null ? 'You set this price.' : 'Starts from Owmee guidance. Change anytime.'}
+              {customPrice != null
+                ? `${formatPrice(customPrice)} · you set this price.`
+                : effectivePrice
+                  ? `${formatPrice(effectivePrice)} · starts from Owmee guidance.`
+                  : 'No reliable guidance yet. Enter the amount you want.'}
             </Text>
             <Text style={st.priceBtnArrow}>›</Text>
           </TouchableOpacity>
+          {originalPrice && discountPct ? (
+            <View style={st.mrpDealRow}>
+              <Text style={st.mrpText}>MRP {formatPrice(originalPrice)}</Text>
+              <Text style={st.discountBadge}>{discountPct}% off</Text>
+            </View>
+          ) : null}
           <Text style={st.priceNote}>
             Owmee suggests a range; you choose the final asking price.
           </Text>
@@ -930,7 +964,9 @@ export default function AIListingSuggestScreen({
           {draft.comparables.length > 0 && (
             <TouchableOpacity style={st.priceBtn} onPress={() => setCompsSheet(true)}>
               <Text style={st.priceBtnTitle}>See Owmee price guidance</Text>
-              <Text style={st.priceBtnHint}>{formatPrice(draft.suggested_price ?? effectivePrice)} · based on similar sales</Text>
+              <Text style={st.priceBtnHint}>
+                {suggestedPrice ? `${formatPrice(suggestedPrice)} · based on similar sales` : 'Recent sales available for context'}
+              </Text>
               <Text style={st.priceBtnArrow}>›</Text>
             </TouchableOpacity>
           )}
@@ -1042,7 +1078,9 @@ export default function AIListingSuggestScreen({
       )}
       {priceSheet && (
         <PriceSheet
-          suggested={draft.suggested_price ?? effectivePrice}
+          suggested={suggestedPrice}
+          mrp={originalPrice}
+          discountPct={discountPct}
           comparables={draft.comparables}
           initial={customPrice ?? effectivePrice}
           onSave={(p) => {
@@ -1497,6 +1535,27 @@ const st = StyleSheet.create({
     marginTop: 2,
     fontSize: T.size.sm,
     color: C.text3,
+  },
+  mrpDealRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: S.sm,
+    marginTop: -2,
+    marginBottom: S.sm,
+  },
+  mrpText: {
+    fontSize: T.size.sm,
+    color: C.text4,
+    textDecorationLine: 'line-through',
+  },
+  discountBadge: {
+    paddingHorizontal: S.sm,
+    paddingVertical: 3,
+    borderRadius: R.pill,
+    backgroundColor: C.greenLight,
+    color: C.green,
+    fontSize: T.size.xs,
+    fontWeight: T.weight.bold,
   },
   priceNote: {
     marginTop: -2,

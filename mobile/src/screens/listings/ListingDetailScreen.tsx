@@ -334,7 +334,7 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
           <View style={s.priceRow}>
             <Text style={s.price}>{formatPrice(listing.price)}</Text>
             {listing.original_price ? (
-              <Text style={s.mrp}>{formatPrice(listing.original_price)}</Text>
+              <Text style={s.mrp}>MRP {formatPrice(listing.original_price)}</Text>
             ) : null}
             {off ? <Text style={s.off}>{off}% off</Text> : null}
           </View>
@@ -345,7 +345,7 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
           {fairPriceOff != null && (
             <View style={s.fairPriceRow}>
               <Text style={s.fairPriceLabel}>✓ {detailDealSignal}</Text>
-              <Text style={s.fairPriceMrp}>{formatPrice(listing.original_price!)}</Text>
+              <Text style={s.fairPriceMrp}>MRP {formatPrice(listing.original_price!)}</Text>
               <Text style={s.fairPriceOff}>{fairPriceOff}% off</Text>
             </View>
           )}
@@ -624,14 +624,14 @@ const s = StyleSheet.create({
     lineHeight: 25,
     letterSpacing: -0.3,
   },
-  priceRow: { flexDirection: 'row', alignItems: 'center', gap: S.sm, marginTop: S.sm },
+  priceRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: S.sm, marginTop: S.sm },
   price: {
     fontSize: T.size.display - 4,                                 // 26
     fontWeight: T.weight.heavy,
     color: C.ink,
     letterSpacing: -0.5,
   },
-  mrp: { fontSize: T.size.base, color: C.text4, textDecorationLine: 'line-through' },
+  mrp: { flexShrink: 1, fontSize: T.size.base, color: C.text4, textDecorationLine: 'line-through' },
   off: { fontSize: T.size.sm, fontWeight: T.weight.heavy, color: C.petrolMid },
 
   imeiVerified: {
@@ -640,7 +640,7 @@ const s = StyleSheet.create({
     fontWeight: T.weight.semi,
     marginTop: 3,
   },
-  fairPriceRow: { flexDirection: 'row', alignItems: 'center', gap: S.xs + 2, marginTop: S.xs },
+  fairPriceRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: S.xs + 2, marginTop: S.xs },
   fairPriceLabel: { fontSize: T.size.sm, color: C.green, fontWeight: T.weight.bold },
   fairPriceMrp: { fontSize: T.size.sm, color: C.text4, textDecorationLine: 'line-through' },
   fairPriceOff: { fontSize: T.size.sm, color: C.green, fontWeight: T.weight.semi },

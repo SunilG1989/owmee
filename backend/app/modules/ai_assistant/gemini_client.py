@@ -122,6 +122,7 @@ class _FieldConfidence(BaseModel):
     processor: float | None = None
     condition_guess: float | None = None
     suggested_price_inr: float | None = None
+    mrp_inr: float | None = None
 
 
 class _FieldEvidence(BaseModel):
@@ -146,6 +147,7 @@ class _FieldEvidence(BaseModel):
     accessories: str | None = None
     warranty_status: str | None = None
     condition_guess: str | None = None
+    mrp_inr: str | None = None
 
 
 class _GeminiVisionOut(BaseModel):
@@ -187,6 +189,10 @@ class _GeminiVisionOut(BaseModel):
     suggested_price_inr: int | None = None
     price_confidence: float = 0.0
     price_reasoning: str | None = None
+    mrp_inr: int | None = None
+    mrp_confidence: float = 0.0
+    mrp_source: str | None = None
+    mrp_reasoning: str | None = None
     # Authoring
     title_suggestion: str | None = None
     description_suggestion: str | None = None
@@ -408,7 +414,7 @@ async def detect_from_images(
         response_mime_type="application/json",
         response_schema=_GeminiVisionOut,
         temperature=0.2,
-        max_output_tokens=2048,
+        max_output_tokens=4096,
         thinking_config=_thinking_config(types, model, "vision"),
     )
 
@@ -507,6 +513,10 @@ def _translate_vision_response(parsed: "_GeminiVisionOut") -> AIDetected:
         suggested_price_inr=int(parsed.suggested_price_inr) if parsed.suggested_price_inr else None,
         price_confidence=float(parsed.price_confidence or 0.0),
         price_reasoning=parsed.price_reasoning,
+        mrp_inr=int(parsed.mrp_inr) if parsed.mrp_inr else None,
+        mrp_confidence=float(parsed.mrp_confidence or 0.0),
+        mrp_source=parsed.mrp_source,
+        mrp_reasoning=parsed.mrp_reasoning,
         title_suggestion=parsed.title_suggestion,
         description_suggestion=parsed.description_suggestion,
         flags=[str(f) for f in flags_in],
@@ -551,6 +561,20 @@ _PRICE_BLOCKING_FLAGS = (
     "stock_or_catalog_suspected",
 )
 
+_MRP_BLOCKING_FLAGS = (
+    "multiple_items",
+    "no_product",
+    "blurry",
+    "screenshot_only",
+    "stock_or_catalog_suspected",
+)
+
+_VALID_MRP_SOURCES = {
+    "visible_mrp",
+    "receipt_or_bill",
+    "market_anchor",
+}
+
 # Substrings in seller_photo_feedback that signal kids-set completeness
 # is unclear — we null pricing and force review for kids categories.
 _KIDS_COMPLETENESS_HINTS = ("all toy parts", "completeness", "all parts")
@@ -571,8 +595,10 @@ def _apply_post_processing_guardrails(detected: AIDetected) -> AIDetected:
          screenshot_only / stock_or_catalog_suspected in flags → null pricing.
       3. spec fields without direct_visible field_evidence → null.
       4. price_confidence < 0.5 → suggested_price_inr null.
-      5. manual_review_required True → auto_publish_candidate False.
-      6. kids-utility with completeness-unclear feedback
+      5. MRP must have a trusted source, enough confidence, and be above
+         the resale price before it can power discount display.
+      6. manual_review_required True → auto_publish_candidate False.
+      7. kids-utility with completeness-unclear feedback
          → null pricing + force manual review.
     """
     flags = set(detected.flags or [])
@@ -608,6 +634,10 @@ def _apply_post_processing_guardrails(detected: AIDetected) -> AIDetected:
             suggested_price_inr=None,
             price_confidence=0.0,
             price_reasoning=None,
+            mrp_inr=None,
+            mrp_confidence=0.0,
+            mrp_source=None,
+            mrp_reasoning=None,
             title_suggestion=None,
             description_suggestion=None,
             flags=detected.flags,
@@ -624,9 +654,14 @@ def _apply_post_processing_guardrails(detected: AIDetected) -> AIDetected:
         )
 
     # Rule 2: flags that block pricing.
+    fe = detected.field_evidence or {}
     suggested_price_inr = detected.suggested_price_inr
     price_confidence = detected.price_confidence
     price_reasoning = detected.price_reasoning
+    mrp_inr = detected.mrp_inr
+    mrp_confidence = detected.mrp_confidence
+    mrp_source = (detected.mrp_source or "").strip().lower() or None
+    mrp_reasoning = detected.mrp_reasoning
     for flag in _PRICE_BLOCKING_FLAGS:
         if flag in flags:
             if suggested_price_inr is not None:
@@ -636,8 +671,40 @@ def _apply_post_processing_guardrails(detected: AIDetected) -> AIDetected:
             if flag not in blocking_reasons:
                 blocking_reasons.append(flag)
 
+    # MRP powers discount display, so it gets its own stricter cleanup.
+    if mrp_inr is not None:
+        if any(flag in flags for flag in _MRP_BLOCKING_FLAGS):
+            mrp_reasoning = "MRP suppressed by post-processor: unusable or non-original photo set."
+            mrp_inr = None
+            mrp_confidence = 0.0
+            mrp_source = None
+        elif mrp_inr <= 0 or mrp_source not in _VALID_MRP_SOURCES:
+            mrp_reasoning = "MRP suppressed by post-processor: invalid source or value."
+            mrp_inr = None
+            mrp_confidence = 0.0
+            mrp_source = None
+        elif (mrp_confidence or 0.0) < 0.55:
+            mrp_reasoning = "MRP suppressed by post-processor: confidence below floor."
+            mrp_inr = None
+            mrp_confidence = 0.0
+            mrp_source = None
+        elif mrp_source == "market_anchor" and (mrp_confidence or 0.0) < 0.60:
+            mrp_reasoning = "MRP suppressed by post-processor: market anchor confidence below floor."
+            mrp_inr = None
+            mrp_confidence = 0.0
+            mrp_source = None
+        elif mrp_source in {"visible_mrp", "receipt_or_bill"} and fe.get("mrp_inr") != "direct_visible":
+            mrp_reasoning = "MRP suppressed by post-processor: visible price was not directly evidenced."
+            mrp_inr = None
+            mrp_confidence = 0.0
+            mrp_source = None
+        elif suggested_price_inr is not None and mrp_inr <= suggested_price_inr:
+            mrp_reasoning = "MRP suppressed by post-processor: not above suggested resale price."
+            mrp_inr = None
+            mrp_confidence = 0.0
+            mrp_source = None
+
     # Rule 3: spec fields without direct_visible evidence.
-    fe = detected.field_evidence or {}
     forced_specs: dict[str, None] = {}
     for spec_field in _SPEC_FIELDS_REQUIRING_DIRECT_VISIBLE:
         ev = fe.get(spec_field)
@@ -677,6 +744,10 @@ def _apply_post_processing_guardrails(detected: AIDetected) -> AIDetected:
         "suggested_price_inr": suggested_price_inr,
         "price_confidence": price_confidence,
         "price_reasoning": price_reasoning,
+        "mrp_inr": mrp_inr,
+        "mrp_confidence": mrp_confidence,
+        "mrp_source": mrp_source,
+        "mrp_reasoning": mrp_reasoning,
         "manual_review_required": manual_review_required,
         "auto_publish_candidate": auto_publish_candidate,
         "blocking_reasons": blocking_reasons,
@@ -969,7 +1040,7 @@ async def estimate_price(
         response_mime_type="application/json",
         response_schema=_GeminiPriceOut,
         temperature=0.3,
-        max_output_tokens=512,
+        max_output_tokens=768,
         thinking_config=_thinking_config(types, model, "text"),
     )
 

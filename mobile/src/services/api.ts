@@ -1050,6 +1050,10 @@ export interface AIDetectedFields {
   battery_health?: number | null;
   accessories?: string | null;
   warranty_status?: string | null;
+  mrp_inr?: number | null;
+  mrp_confidence?: number;
+  mrp_source?: 'visible_mrp' | 'receipt_or_bill' | 'market_anchor' | 'none' | string | null;
+  mrp_reasoning?: string | null;
   title_suggestion: string | null;
   description_suggestion: string | null;
   flags: string[];
@@ -1077,7 +1081,7 @@ export interface AIDraftResponse {
   photo_url: string;
   detected: AIDetectedFields;
   suggested_price: number | null;
-  price_source: 'comparables' | 'vision' | 'category_anchor' | 'ai' | 'none';
+  price_source: 'comparables' | 'vision' | 'mrp_anchor' | 'category_anchor' | 'ai' | 'none';
   comparables: AIComparable[];
   expires_at: string;
   needs_identifier: boolean;
@@ -1124,6 +1128,7 @@ export interface AICreateFromDraftRequest {
   draft_id: string;
   title: string;
   price: number;
+  original_price?: number | null;
   condition: string;
   category_slug: string;
   brand?: string | null;
@@ -1159,6 +1164,7 @@ export interface AICreateFromDraftResponse {
   status: string;
   title: string;
   price: number;
+  original_price?: number | null;
 }
 
 export interface AISellerInfoNeededResponse {

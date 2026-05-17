@@ -30,7 +30,7 @@ AI_DRAFT_ANALYSIS_DLQ_KEY = "owmee:ai:draft-analysis:dead:v1"
 AI_DRAFT_ANALYSIS_GROUP = "ai-draft-analysis-workers"
 AI_DRAFT_ANALYSIS_DEDUPE_PREFIX = "owmee:ai:draft-analysis:dedupe:"
 AI_DRAFT_ANALYSIS_DEDUPE_SECONDS = 24 * 60 * 60
-AI_DRAFT_ANALYSIS_JOB_TIMEOUT_SECONDS = 75
+AI_DRAFT_ANALYSIS_JOB_TIMEOUT_SECONDS = 110
 AI_DRAFT_ANALYSIS_RETRY_DELAYS_SECONDS = (30, 120, 300)
 AI_DRAFT_ANALYSIS_MAINTENANCE_SECONDS = 5
 
@@ -326,14 +326,7 @@ async def process_ai_draft_analysis(
                 allow_ai_fallback=not vision_price_available and not analysis_failed,
             )
         )
-        if price_result["source"] in ("none", "ai") and detected.suggested_price_inr:
-            price_result = {
-                "price": float(detected.suggested_price_inr),
-                "source": "vision",
-                "reasoning": detected.price_reasoning or "Inferred from photos",
-                "comparables": price_result.get("comparables", []),
-                "comparables_count": price_result.get("comparables_count", 0),
-            }
+        price_result = ai_router._apply_price_fallbacks(price_result, detected)
 
         photo_urls = move_hero_first(photo_urls, hero_index)
         await session.execute(
