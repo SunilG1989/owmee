@@ -152,6 +152,18 @@ services:
           type: keyvalue
           name: owmee-redis
           property: connectionString
+      - key: HERO_CLEANUP_WORKER_CONCURRENCY
+        value: "2"
+      - key: HERO_CLEANUP_ENQUEUE_TIMEOUT_SECONDS
+        value: "0.5"
+      - key: HERO_CLEANUP_STREAM_MAXLEN
+        value: "50000"
+      - key: HERO_CLEANUP_RETRY_MAX_ATTEMPTS
+        value: "4"
+      - key: HERO_CLEANUP_PENDING_IDLE_SECONDS
+        value: "180"
+      - key: HERO_CLEANUP_READ_BLOCK_MS
+        value: "2000"
       - key: SECRET_KEY
         fromService:
           type: web

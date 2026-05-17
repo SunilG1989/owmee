@@ -48,6 +48,17 @@ class Settings(BaseSettings):
     # ── Redis ──────────────────────────────────────────────────────────────
     redis_url: str
 
+    # ── Async media processing ─────────────────────────────────────────────
+    # Hero cleanup is post-listing and worker-driven. Keep concurrency low by
+    # default because image editing is provider-heavy and buyer-facing images
+    # are not on the critical request path.
+    hero_cleanup_worker_concurrency: int = 2
+    hero_cleanup_enqueue_timeout_seconds: float = 0.5
+    hero_cleanup_stream_maxlen: int = 50000
+    hero_cleanup_retry_max_attempts: int = 4
+    hero_cleanup_pending_idle_seconds: int = 180
+    hero_cleanup_read_block_ms: int = 2000
+
     # ── Temporal ───────────────────────────────────────────────────────────
     temporal_host: str = "localhost:7233"
     temporal_namespace: str = "default"

@@ -16,12 +16,15 @@ media job so photo analysis stays fast and resilient.
 
 The seller preview never waits for background cleanup. If the worker is delayed
 or the provider fails, the listing keeps the original processed photo and the
-listing flow still works. If Redis is briefly unavailable, the API schedules a
-best-effort in-process cleanup task after the listing transaction commits.
+listing flow still works. If Redis is briefly unavailable, the API does not run
+cleanup inline; it logs the queue failure and preserves publish performance.
 
 ## Queue Contract
 
-- Queue key: `owmee:media:hero-cleanup:v1`.
+- Stream key: `owmee:media:hero-cleanup:stream:v1`.
+- Consumer group: `hero-cleanup-workers`.
+- Retry set: `owmee:media:hero-cleanup:retry:v1`.
+- Dead-letter stream: `owmee:media:hero-cleanup:dead:v1`.
 - Enqueue point: `POST /v1/listings/from-draft`, after the listing commit.
 - Worker entrypoint: `python -m app.workers.main`.
 - When `TEMPORAL_HOST=disabled`, the existing Render worker runs the media queue.
@@ -30,6 +33,24 @@ best-effort in-process cleanup task after the listing transaction commits.
 - Jobs are deduped for 24 hours by listing ID and hero key.
 - Existing cleaned variants are reused when present to avoid unnecessary provider
   calls.
+
+## Scale And Concurrency
+
+- The API does not run provider-heavy cleanup work. It only writes one Redis
+  Stream event with a 0.5 second enqueue timeout, then returns.
+- Multiple worker instances can run in parallel. Redis Streams + consumer groups
+  distribute jobs across workers without two workers intentionally processing
+  the same stream entry.
+- Each worker has bounded internal concurrency via
+  `HERO_CLEANUP_WORKER_CONCURRENCY` (default `2`) so image editing cannot exhaust
+  DB connections, R2 bandwidth, or Gemini quota.
+- If a worker crashes after claiming a job, the entry stays pending. Other
+  workers reclaim it after `HERO_CLEANUP_PENDING_IDLE_SECONDS` (default `180`).
+- Retryable failures use delayed retries in Redis sorted sets. Defaults are
+  1 minute, 5 minutes, and 15 minutes, capped by
+  `HERO_CLEANUP_RETRY_MAX_ATTEMPTS` (default `4`).
+- Permanent failures move to the dead-letter stream for inspection instead of
+  blocking the main stream.
 
 ## Background Policy
 
@@ -64,5 +85,5 @@ moderation, and dispute review.
 - Multi-photo clients where the AI-selected hero is not the first uploaded
   image.
 - Old stored signed URLs expiring in production.
-- Redis queue outage, with best-effort post-commit fallback.
+- Redis queue outage without blocking listing publish.
 - Duplicate cleanup jobs for the same listing hero.
