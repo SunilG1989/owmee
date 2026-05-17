@@ -314,7 +314,7 @@ async def detect_from_images(
     parts: list[Any] = []
     text_intro = (
         "These photos show ONE product from multiple angles. "
-        "Combine signals from all photos. Be confident. "
+        "Combine signals from all photos, but stay evidence-led and avoid false precision. "
         "Photos are provided with zero-based indexes; use those indexes "
         "when setting hero_image_index."
     )
