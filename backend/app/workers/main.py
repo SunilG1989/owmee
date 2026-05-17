@@ -16,6 +16,7 @@ from temporalio.client import Client
 from temporalio.worker import Worker
 
 from app.core.settings import settings
+from app.modules.media.hero_cleanup_jobs import run_hero_cleanup_worker
 
 logger = structlog.get_logger()
 
@@ -26,9 +27,9 @@ async def main():
     logger.info("worker.starting", temporal_host=settings.temporal_host)
 
     if (settings.temporal_host or "").strip().lower() in {"", "disabled", "off", "none"}:
-        logger.warning("worker.temporal_disabled")
-        while True:
-            await asyncio.sleep(3600)
+        logger.warning("worker.temporal_disabled_running_media_queue")
+        await run_hero_cleanup_worker()
+        return
 
     # Connect — Temporal Cloud uses TLS + API key; local uses plain TCP
     if settings.temporal_api_key:
@@ -128,7 +129,15 @@ async def main():
 
     logger.info("worker.running", task_queue=TASK_QUEUE,
                 workflows=4, activities=21)
-    await worker.run()
+    media_cleanup_task = asyncio.create_task(run_hero_cleanup_worker())
+    try:
+        await worker.run()
+    finally:
+        media_cleanup_task.cancel()
+        try:
+            await media_cleanup_task
+        except asyncio.CancelledError:
+            pass
 
 
 if __name__ == "__main__":

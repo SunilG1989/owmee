@@ -9,7 +9,7 @@ import pytest
 
 from app.core.storage import ProcessedListingImage
 from app.modules.ai_assistant import router
-from app.modules.ai_assistant.schemas import AIDetected
+from app.modules.ai_assistant.schemas import AIDetected, CreateFromDraftRequest
 from app.modules.media.image_cleanup import HeroCleanupOutcome
 
 
@@ -23,11 +23,15 @@ class _Upload:
 
 
 class _Result:
-    def __init__(self, value=None) -> None:
+    def __init__(self, value=None, row=None) -> None:
         self._value = value
+        self._row = row
 
     def scalar(self):
         return self._value
+
+    def first(self):
+        return self._row
 
 
 class _FakeDB:
@@ -265,7 +269,7 @@ async def test_draft_from_images_vision_timeout_persists_manual_draft(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_single_image_draft_cleans_hero_for_legacy_clients(monkeypatch):
+async def test_single_image_draft_defers_hero_cleanup_for_legacy_clients(monkeypatch):
     db = _FakeDB()
     user = SimpleNamespace(user_id=uuid4())
 
@@ -286,19 +290,8 @@ async def test_single_image_draft_cleans_hero_for_legacy_clients(monkeypatch):
             thumbnail_key=f"{original_key}.thumb.webp",
         )
 
-    async def fake_clean_hero_background(image_bytes, content_type, *, original_key, selected_index, category_slug):
-        assert image_bytes == b"single"
-        assert content_type == "image/jpeg"
-        assert selected_index == 0
-        assert category_slug == "kids-utility"
-        return HeroCleanupOutcome(
-            selected_index=selected_index,
-            cleaned=True,
-            display_key=f"{original_key}.hero-cleaned.png.display.webp",
-            thumbnail_key=f"{original_key}.hero-cleaned.png.thumb.webp",
-            provider="test-cleaner",
-            model="test-model",
-        )
+    async def fail_if_cleanup_runs(*args, **kwargs):
+        raise AssertionError("cleanup should run after listing creation, not during analysis")
 
     async def fake_estimate_price(*args, **kwargs):
         return {
@@ -315,7 +308,7 @@ async def test_single_image_draft_cleans_hero_for_legacy_clients(monkeypatch):
     monkeypatch.setattr(router.ai_provider, "detect_from_image", fake_detect_from_image)
     monkeypatch.setattr(router.price_estimator, "estimate_price", fake_estimate_price)
     monkeypatch.setattr(router, "process_listing_image_bytes", fake_process_listing_image_bytes)
-    monkeypatch.setattr(router, "clean_hero_background", fake_clean_hero_background)
+    monkeypatch.setattr(router, "clean_hero_background", fail_if_cleanup_runs)
     monkeypatch.setattr(router, "generate_presigned_download_url", lambda key, expires_in=0: f"https://cdn.test/{key}")
 
     import app.modules.identity_auth.user_location as user_location
@@ -328,19 +321,20 @@ async def test_single_image_draft_cleans_hero_for_legacy_clients(monkeypatch):
         image=_Upload(b"single"),
     )
 
-    assert response.photo_url.endswith(".jpg.hero-cleaned.png.display.webp")
+    assert response.photo_url.endswith(".jpg.display.webp")
     assert db.insert_params is not None
     saved_urls = db.insert_params["photo_urls"]
     assert len(saved_urls) == 1
-    assert saved_urls[0].endswith(".jpg.hero-cleaned.png.display.webp")
+    assert saved_urls[0].endswith(".jpg.display.webp")
     cleanup = response.detected.image_set_quality["hero_image_cleanup"]
-    assert cleanup["status"] == "ready"
-    assert cleanup["provider"] == "test-cleaner"
+    assert cleanup["status"] == "queued_after_listing"
+    assert cleanup["provider"] == "owmee-media-worker"
+    assert cleanup["reason"] == "runs_after_listing_created"
     assert db.commits == 1
 
 
 @pytest.mark.asyncio
-async def test_draft_from_images_selects_cleans_and_promotes_ai_hero(monkeypatch):
+async def test_draft_from_images_selects_and_promotes_ai_hero_without_inline_cleanup(monkeypatch):
     db = _FakeDB()
     user = SimpleNamespace(user_id=uuid4())
     seen_images: list[tuple[bytes, str]] = []
@@ -363,19 +357,8 @@ async def test_draft_from_images_selects_cleans_and_promotes_ai_hero(monkeypatch
             thumbnail_key=f"{original_key}.thumb.webp",
         )
 
-    async def fake_clean_hero_background(image_bytes, content_type, *, original_key, selected_index, category_slug):
-        assert image_bytes == b"hero"
-        assert content_type == "image/jpeg"
-        assert selected_index == 2
-        assert category_slug == "kids-utility"
-        return HeroCleanupOutcome(
-            selected_index=selected_index,
-            cleaned=True,
-            display_key=f"{original_key}.hero-cleaned.png.display.webp",
-            thumbnail_key=f"{original_key}.hero-cleaned.png.thumb.webp",
-            provider="test-cleaner",
-            model="test-model",
-        )
+    async def fail_if_cleanup_runs(*args, **kwargs):
+        raise AssertionError("cleanup should run after listing creation, not during analysis")
 
     async def fake_estimate_price(*args, **kwargs):
         return {
@@ -392,7 +375,7 @@ async def test_draft_from_images_selects_cleans_and_promotes_ai_hero(monkeypatch
     monkeypatch.setattr(router.ai_provider, "detect_from_images", fake_detect_from_images)
     monkeypatch.setattr(router.price_estimator, "estimate_price", fake_estimate_price)
     monkeypatch.setattr(router, "process_listing_image_bytes", fake_process_listing_image_bytes)
-    monkeypatch.setattr(router, "clean_hero_background", fake_clean_hero_background)
+    monkeypatch.setattr(router, "clean_hero_background", fail_if_cleanup_runs)
     monkeypatch.setattr(router, "generate_presigned_download_url", lambda key, expires_in=0: f"https://cdn.test/{key}")
 
     import app.modules.identity_auth.user_location as user_location
@@ -412,14 +395,91 @@ async def test_draft_from_images_selects_cleans_and_promotes_ai_hero(monkeypatch
 
     assert len(seen_images) == 4
     assert response.detected.hero_image_index == 2
-    assert response.photo_url.endswith("_2.jpg.hero-cleaned.png.display.webp")
+    assert response.photo_url.endswith("_2.jpg.display.webp")
     assert db.insert_params is not None
     saved_urls = db.insert_params["photo_urls"]
-    assert saved_urls[0].endswith("_2.jpg.hero-cleaned.png.display.webp")
+    assert saved_urls[0].endswith("_2.jpg.display.webp")
     assert saved_urls[1].endswith("_0.jpg.display.webp")
     assert saved_urls[2].endswith("_1.jpg.display.webp")
     assert saved_urls[3].endswith("_3.jpg.display.webp")
     cleanup = response.detected.image_set_quality["hero_image_cleanup"]
-    assert cleanup["status"] == "ready"
-    assert cleanup["provider"] == "test-cleaner"
+    assert cleanup["status"] == "queued_after_listing"
+    assert cleanup["provider"] == "owmee-media-worker"
+    assert cleanup["selected_index"] == 2
     assert db.commits == 1
+
+
+@pytest.mark.asyncio
+async def test_create_from_draft_enqueues_hero_cleanup_after_commit(monkeypatch):
+    user_id = uuid4()
+    draft_id = uuid4()
+    category_id = uuid4()
+    enqueued: list[dict] = []
+
+    class _CreateDB:
+        def __init__(self) -> None:
+            self.commits = 0
+            self.insert_params = None
+
+        async def execute(self, stmt, params=None):
+            sql = str(stmt)
+            if "SELECT user_id, photo_urls, expires_at, status" in sql:
+                return _Result(
+                    row=SimpleNamespace(
+                        user_id=user_id,
+                        photo_urls=["ai-drafts/u/draft_0.jpg.display.webp"],
+                        expires_at=datetime(2099, 5, 17, tzinfo=timezone.utc),
+                        status="open",
+                    )
+                )
+            if "SELECT id FROM categories" in sql:
+                return _Result(category_id)
+            if "SELECT id FROM listings" in sql:
+                return _Result(None)
+            if "INSERT INTO listings" in sql:
+                self.insert_params = params
+            return _Result()
+
+        async def commit(self) -> None:
+            self.commits += 1
+
+    async def fake_get_user_location(db, user_id):
+        return (12.9, 77.6, "Bengaluru", "Karnataka")
+
+    async def fake_enqueue_listing_hero_cleanup(**kwargs):
+        enqueued.append(kwargs)
+        return True
+
+    import app.core.zones as zones
+    import app.modules.identity_auth.user_location as user_location
+
+    monkeypatch.setattr(user_location, "get_user_location", fake_get_user_location)
+    monkeypatch.setattr(zones, "is_in_service_area", lambda lat, lng: True)
+    monkeypatch.setattr(router.ceir_client, "check", lambda *args, **kwargs: None)
+    monkeypatch.setattr(router, "enqueue_listing_hero_cleanup", fake_enqueue_listing_hero_cleanup)
+
+    db = _CreateDB()
+    response = await router.create_from_draft(
+        payload=CreateFromDraftRequest(
+            draft_id=draft_id,
+            title="Kids water bottle",
+            price=350,
+            condition="good",
+            category_slug="kids-utility",
+            brand="Milton",
+            model="School bottle",
+        ),
+        user=SimpleNamespace(user_id=user_id),
+        db=db,
+    )
+
+    assert response.status == "active"
+    assert db.commits == 1
+    assert db.insert_params is not None
+    assert enqueued == [
+        {
+            "listing_id": response.listing_id,
+            "hero_key": "ai-drafts/u/draft_0.jpg.display.webp",
+            "category_slug": "kids-utility",
+        }
+    ]

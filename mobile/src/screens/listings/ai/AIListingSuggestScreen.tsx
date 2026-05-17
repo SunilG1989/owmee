@@ -191,7 +191,10 @@ export default function AIListingSuggestScreen({
   const heroCleanup = (imageQuality.hero_image_cleanup || {}) as Record<string, any>;
   const heroCleanupStatus = typeof heroCleanup.status === 'string' ? heroCleanup.status : null;
   const heroCleanupNeedsRetake = heroCleanup.requires_retake === true || heroCleanupStatus === 'needs_retake';
-  const heroCleanupUnavailable = Boolean(heroCleanupStatus && heroCleanupStatus !== 'ready' && !heroCleanupNeedsRetake);
+  const heroCleanupDeferred = heroCleanupStatus === 'queued_after_listing';
+  const heroCleanupUnavailable = Boolean(
+    heroCleanupStatus && heroCleanupStatus !== 'ready' && !heroCleanupNeedsRetake && !heroCleanupDeferred,
+  );
   const hasBox = Object.prototype.hasOwnProperty.call(overrides, 'has_box')
     ? overrides.has_box ?? null
     : imageQuality.has_box_or_packaging === true

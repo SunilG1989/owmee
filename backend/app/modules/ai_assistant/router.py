@@ -61,6 +61,7 @@ from app.modules.media.image_cleanup import (
     move_hero_first,
     select_hero_image_index,
 )
+from app.modules.media.hero_cleanup_jobs import enqueue_listing_hero_cleanup
 
 log = logging.getLogger(__name__)
 
@@ -436,6 +437,34 @@ def _front_face_hero_override(detected: AIDetected, hero_index: int, image_count
     return hero_index
 
 
+def _mark_hero_cleanup_skipped(detected: AIDetected, *, selected_index: int, reason: str) -> AIDetected:
+    image_quality = dict(detected.image_set_quality or {})
+    image_quality["hero_image_cleanup"] = {
+        "status": "fallback_original",
+        "provider": "skipped",
+        "model": None,
+        "reason": reason,
+        "style": None,
+        "selected_index": selected_index,
+        "requires_retake": False,
+    }
+    return detected.model_copy(update={"image_set_quality": image_quality})
+
+
+def _mark_hero_cleanup_deferred(detected: AIDetected, *, selected_index: int) -> AIDetected:
+    image_quality = dict(detected.image_set_quality or {})
+    image_quality["hero_image_cleanup"] = {
+        "status": "queued_after_listing",
+        "provider": "owmee-media-worker",
+        "model": None,
+        "reason": "runs_after_listing_created",
+        "style": "owmee_catalog_background",
+        "selected_index": selected_index,
+        "requires_retake": False,
+    }
+    return detected.model_copy(update={"image_set_quality": image_quality})
+
+
 async def _clean_hero_and_mark_detected(
     *,
     detected: AIDetected,
@@ -570,7 +599,6 @@ async def draft_from_image(
     # Store photo first (so the URL is valid for the response)
     step_started = perf_counter()
     photo_url = await _store_photo(image_bytes, content_type, user.user_id, draft_id)
-    original_key = _photo_object_key(user.user_id, draft_id, _image_extension(content_type))
     timings["store_ms"] = _ms_since(step_started)
 
     # Vision detection
@@ -589,29 +617,11 @@ async def draft_from_image(
         )
 
     ai_failed = any(f.startswith("ai_failed:") for f in detected.flags)
-    step_started = perf_counter()
     if ai_failed:
-        image_quality = dict(detected.image_set_quality or {})
-        image_quality["hero_image_cleanup"] = {
-            "status": "fallback_original",
-            "provider": "skipped",
-            "model": None,
-            "reason": "vision_failed",
-            "style": None,
-            "selected_index": 0,
-            "requires_retake": False,
-        }
-        detected = detected.model_copy(update={"image_set_quality": image_quality})
+        detected = _mark_hero_cleanup_skipped(detected, selected_index=0, reason="vision_failed")
     else:
-        photo_url, detected = await _clean_hero_and_mark_detected(
-            detected=detected,
-            image_bytes=image_bytes,
-            content_type=content_type,
-            original_key=original_key,
-            selected_index=0,
-            fallback_key=photo_url,
-        )
-    timings["cleanup_ms"] = _ms_since(step_started)
+        detected = _mark_hero_cleanup_deferred(detected, selected_index=0)
+    timings["cleanup_ms"] = 0
 
     # Lookup user's state for region-aware comparables. Prefer
     # user_addresses (Address PRD), fall back to legacy user columns.
@@ -1033,6 +1043,13 @@ async def create_from_draft(
 
     await db.commit()
 
+    if photo_urls:
+        await enqueue_listing_hero_cleanup(
+            listing_id=listing_id,
+            hero_key=photo_urls[0],
+            category_slug=category_slug,
+        )
+
     return CreateFromDraftResponse(
         listing_id=listing_id,
         listing_state="pending_buyer",
@@ -1333,7 +1350,7 @@ async def draft_from_images(
     )
     vision_task = _timed_step(timings, "vision_ms", _detect_from_images_bounded(image_pairs))
     location_task = _timed_step(timings, "location_ms", get_user_location(db, user.user_id))
-    (photo_urls, original_keys), detected, (_, _, _, user_state) = await asyncio.gather(
+    (photo_urls, _original_keys_unused), detected, (_lat, _lng, _city, user_state) = await asyncio.gather(
         photo_task,
         vision_task,
         location_task,
@@ -1355,33 +1372,11 @@ async def draft_from_images(
     vision_price_available = bool(detected.suggested_price_inr)
     analysis_failed = any(f.startswith("ai_failed:") for f in detected.flags)
 
-    async def cleanup_step() -> tuple[list[str], AIDetected]:
-        next_photo_urls = list(photo_urls)
-        next_detected = detected
-        if analysis_failed:
-            image_quality = dict(next_detected.image_set_quality or {})
-            image_quality["hero_image_cleanup"] = {
-                "status": "fallback_original",
-                "provider": "skipped",
-                "model": None,
-                "reason": "vision_failed",
-                "style": None,
-                "selected_index": hero_index,
-                "requires_retake": False,
-            }
-            next_detected = next_detected.model_copy(update={"image_set_quality": image_quality})
-            return next_photo_urls, next_detected
-        if 0 <= hero_index < len(image_pairs) and 0 <= hero_index < len(original_keys):
-            hero_bytes, hero_content_type = image_pairs[hero_index]
-            next_photo_urls[hero_index], next_detected = await _clean_hero_and_mark_detected(
-                detected=detected,
-                image_bytes=hero_bytes,
-                content_type=hero_content_type,
-                original_key=original_keys[hero_index],
-                selected_index=hero_index,
-                fallback_key=photo_urls[hero_index],
-            )
-        return next_photo_urls, next_detected
+    if analysis_failed:
+        detected = _mark_hero_cleanup_skipped(detected, selected_index=hero_index, reason="vision_failed")
+    else:
+        detected = _mark_hero_cleanup_deferred(detected, selected_index=hero_index)
+    timings["cleanup_ms"] = 0
 
     async def price_step() -> dict:
         return await _estimate_price_bounded(
@@ -1397,13 +1392,7 @@ async def draft_from_images(
             )
         )
 
-    # Cleanup and pricing are independent after vision completes. Running them
-    # together preserves quality checks without making the seller wait for each
-    # network call in sequence.
-    (photo_urls, detected), price_result = await asyncio.gather(
-        _timed_step(timings, "cleanup_ms", cleanup_step()),
-        _timed_step(timings, "price_ms", price_step()),
-    )
+    price_result = await _timed_step(timings, "price_ms", price_step())
 
     photo_urls = move_hero_first(photo_urls, hero_index)
 
