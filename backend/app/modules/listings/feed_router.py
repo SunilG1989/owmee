@@ -12,33 +12,49 @@ import logging
 import math
 from datetime import datetime, timezone
 from time import monotonic
+from urllib.parse import unquote, urlparse
 
 from fastapi import APIRouter, Query
 from sqlalchemy import text
 
 from app.core.dependencies import DBSession, OptionalUser
 from app.core.redis import get_redis
+from app.core.settings import settings
 from app.core.storage import generate_presigned_download_url
 
 _IMG_URL_CACHE: dict[str, tuple[float, str | None]] = {}
 _IMG_URL_CACHE_TTL_SECONDS = 60 * 60 * 5
 
 
+def _object_key_from_url(value: str) -> str | None:
+    """Recover the R2 object key from legacy rows that stored signed URLs."""
+    path = unquote(urlparse(value).path).lstrip("/")
+    bucket = settings.r2_bucket.strip("/")
+    if bucket and path.startswith(f"{bucket}/"):
+        return path[len(bucket) + 1:]
+    if path.startswith(("ai-drafts/", "listings/", "fe-visits/")):
+        return path
+    return None
+
+
 def _img_url(key: str | None) -> str | None:
     """Turn an R2 object key into a phone-reachable URL.
 
-    Defensive: if the value already looks like a URL (legacy AI-flow
-    listings where _store_photo accidentally saved a presigned URL into
-    image_urls), pass it through unchanged rather than re-presigning the
-    URL as if it were a key — that produced double-prefixed URLs that
-    couldn't be loaded. Same logic in app.modules.listings.router._img_url.
+    Defensive cleanup: some legacy rows stored full presigned URLs instead
+    of bare object keys. If the URL belongs to our media bucket, recover the
+    key and issue a fresh signed URL so mobile never receives an expired hero.
+    Unknown external URLs pass through unchanged. Same logic in
+    app.modules.listings.router._img_url.
     """
     if not key:
         return None
-    if key.startswith(("http://", "https://", "r2://")):
-        # Legacy data: full URL or sentinel. r2:// strings won't load
-        # but at least the row doesn't blow up the response.
-        return key if not key.startswith("r2://") else None
+    if key.startswith(("http://", "https://")):
+        object_key = _object_key_from_url(key)
+        if not object_key:
+            return key
+        key = object_key
+    if key.startswith("r2://"):
+        return None
     now = monotonic()
     cached = _IMG_URL_CACHE.get(key)
     if cached and cached[0] > now:

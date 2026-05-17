@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from time import monotonic
 from typing import Optional
+from urllib.parse import unquote, urlparse
 """
 Listings router — Epic 3 + Epic 5 + UI v3 fixes + Sprint 4 Pass 3
 
@@ -31,6 +32,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.dependencies import BasicUser, DBSession, OptionalUser, VerifiedUser
 from app.core.rate_limit import LISTING_CREATE_PER_USER, limit_by_user
+from app.core.settings import settings
 from app.core.storage import (
     generate_presigned_download_url, generate_presigned_upload_url,
     object_key_for_listing_image, process_listing_image, public_url,
@@ -41,6 +43,17 @@ _IMG_URL_CACHE: dict[str, tuple[float, str | None]] = {}
 _IMG_URL_CACHE_TTL_SECONDS = 60 * 60 * 5
 
 
+def _object_key_from_url(value: str) -> str | None:
+    """Recover the R2 object key from legacy rows that stored signed URLs."""
+    path = unquote(urlparse(value).path).lstrip("/")
+    bucket = settings.r2_bucket.strip("/")
+    if bucket and path.startswith(f"{bucket}/"):
+        return path[len(bucket) + 1:]
+    if path.startswith(("ai-drafts/", "listings/", "fe-visits/")):
+        return path
+    return None
+
+
 def _img_url(key: str | None) -> str | None:
     """6h presigned download URL. Used by card/detail/my-listings format.
     Switched from public_url() because (a) it works on private MinIO buckets
@@ -48,16 +61,19 @@ def _img_url(key: str | None) -> str | None:
     hostname signing mismatch we hit on Android emulator, (c) feed_router
     started doing the same thing for consistency.
 
-    Defensive passthrough: if the stored value is already a URL (legacy
-    AI-flow listings where the draft saved a presigned URL into
-    image_urls instead of the bare key), don't re-presign — that
-    produced a double-prefixed broken URL. r2:// sentinel returns None
+    Defensive cleanup: some legacy rows stored full presigned URLs instead
+    of bare object keys. If the URL belongs to our media bucket, recover the
+    key and issue a fresh signed URL so mobile never receives an expired hero.
+    Unknown external URLs pass through unchanged. r2:// sentinel returns None
     so the response stays clean.
     """
     if not key:
         return None
     if key.startswith(("http://", "https://")):
-        return key
+        object_key = _object_key_from_url(key)
+        if not object_key:
+            return key
+        key = object_key
     if key.startswith("r2://"):
         return None
     now = monotonic()
@@ -97,6 +113,48 @@ def _card_image_urls(listing: Listing) -> list[str]:
     first_key = listing.thumbnail_url or next(iter(listing.image_urls or []), None)
     first_url = _img_url(first_key)
     return [first_url] if first_url else []
+
+
+def _image_identity(key: str | None) -> str | None:
+    if not key:
+        return None
+    if key.startswith(("http://", "https://")):
+        key = _object_key_from_url(key) or key
+    return (
+        key.split("?", 1)[0]
+        .removesuffix(".thumb.webp")
+        .removesuffix(".display.webp")
+    )
+
+
+def _detail_image_urls(listing: Listing) -> list[str]:
+    """Return the full gallery with the primary/cleaned hero first."""
+    stored_keys = list(listing.image_urls or [])
+    ordered_keys: list[str] = []
+    if listing.thumbnail_url:
+        thumb_identity = _image_identity(listing.thumbnail_url)
+        primary_match = next(
+            (
+                key
+                for key in stored_keys
+                if key != listing.thumbnail_url and _image_identity(key) == thumb_identity
+            ),
+            None,
+        )
+        ordered_keys.append(primary_match or listing.thumbnail_url)
+    ordered_keys.extend(stored_keys)
+
+    seen: set[str] = set()
+    urls: list[str] = []
+    for key in ordered_keys:
+        identity = _image_identity(key) or key
+        if identity in seen:
+            continue
+        seen.add(identity)
+        url = _img_url(key)
+        if url:
+            urls.append(url)
+    return urls
 
 
 def _category_slug(listing: Listing) -> str | None:
@@ -247,7 +305,7 @@ def _fmt_detail(listing: Listing, seller: User | None, avg_rating: float | None,
     base = _fmt_card(listing, seller_verified=verified)
     base.update({
         "description": listing.description,
-        "image_urls": [u for u in (_img_url(k) for k in (listing.image_urls or [])) if u],
+        "image_urls": _detail_image_urls(listing),
         "state": listing.state,
         "moderation_status": listing.moderation_status,
         # UI v3 metadata

@@ -39,6 +39,28 @@ function PremiumGalleryImage({ uri, width, height }: { uri: string; width: numbe
   );
 }
 
+function imageIdentity(uri?: string | null): string | null {
+  if (!uri) return null;
+  const clean = uri.split('?')[0];
+  return clean
+    .replace(/\.thumb\.webp$/i, '')
+    .replace(/\.display\.webp$/i, '');
+}
+
+function buildGalleryImages(listing: Listing): string[] {
+  const candidates = [
+    listing.thumbnail_url,
+    ...((listing.image_urls?.length ? listing.image_urls : listing.images) || []),
+  ].filter(Boolean) as string[];
+  const seen = new Set<string>();
+  return candidates.filter((uri) => {
+    const key = imageIdentity(uri) || uri;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export default function ListingDetailScreen({ navigation, route }: RootScreen<'ListingDetail'>) {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -136,11 +158,7 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
     );
   }
 
-  const images = listing.image_urls?.length
-    ? listing.image_urls
-    : listing.images?.length
-      ? listing.images
-      : [];
+  const images = buildGalleryImages(listing);
   const isOwn = listing.seller_id === userId;
   const off = percentOff(listing.price, listing.original_price);
   const cs = condStyle(listing.condition);
