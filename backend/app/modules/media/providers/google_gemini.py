@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 from base64 import b64decode
 from colorsys import rgb_to_hls
 from dataclasses import dataclass
 from io import BytesIO
+from typing import Any
+
+from pydantic import BaseModel
 
 from app.core.settings import settings
 from app.modules.media.providers.base import BackgroundCleanupResult
@@ -17,6 +21,12 @@ log = logging.getLogger(__name__)
 class _BackgroundStyle:
     name: str
     description: str
+
+
+class _CleanupHumanAudit(BaseModel):
+    has_human_artifact: bool = False
+    confidence: float | None = None
+    reason: str | None = None
 
 
 _DEFAULT_STYLE = _BackgroundStyle(
@@ -115,37 +125,75 @@ class GoogleGeminiBackgroundCleanupProvider:
         prompt = self._build_cleanup_prompt(category_hint, style)
 
         client = Client(api_key=api_key)
-        try:
-            response = await client.aio.models.generate_content(
-                model=settings.gemini_image_model,
-                contents=[prompt, source],
-                config=types.GenerateContentConfig(
-                    response_modalities=["TEXT", "IMAGE"],
-                    temperature=0.08,
-                ),
-            )
-        except Exception as e:
-            log.warning(
-                "media.cleanup.google_failed",
-                extra={"error": f"{type(e).__name__}: {str(e)[:240]}"},
-            )
-            return BackgroundCleanupResult(
-                ok=False,
-                provider=self.provider_name,
-                model=settings.gemini_image_model,
-                reason="api_error",
-                style=style.name,
-            )
-
-        output_bytes = self._extract_image_bytes(response)
+        output_bytes, reason = await self._generate_cleanup_image(
+            client,
+            types,
+            prompt,
+            source,
+            log_event="media.cleanup.google_failed",
+        )
         if output_bytes is None:
             return BackgroundCleanupResult(
                 ok=False,
                 provider=self.provider_name,
                 model=settings.gemini_image_model,
-                reason="no_image_output",
+                reason=reason or "no_image_output",
                 style=style.name,
             )
+
+        audit = await self._audit_human_artifacts(client, types, output_bytes)
+        if self._audit_requires_retry(audit):
+            log.warning(
+                "media.cleanup.human_artifact_detected",
+                extra={
+                    "provider": self.provider_name,
+                    "model": settings.gemini_image_model,
+                    "audit_confidence": audit.confidence,
+                    "audit_reason": (audit.reason or "")[:180],
+                    "style": style.name,
+                },
+            )
+            strict_prompt = self._build_cleanup_prompt(
+                category_hint,
+                style,
+                strict_human_removal=True,
+            )
+            retry_bytes, retry_reason = await self._generate_cleanup_image(
+                client,
+                types,
+                strict_prompt,
+                source,
+                log_event="media.cleanup.google_retry_failed",
+            )
+            if retry_bytes is None:
+                return BackgroundCleanupResult(
+                    ok=False,
+                    provider=self.provider_name,
+                    model=settings.gemini_image_model,
+                    reason=f"human_artifact_retry_failed:{retry_reason or 'unknown'}",
+                    style=style.name,
+                )
+
+            retry_audit = await self._audit_human_artifacts(client, types, retry_bytes)
+            if self._audit_requires_retry(retry_audit):
+                log.warning(
+                    "media.cleanup.human_artifact_remaining",
+                    extra={
+                        "provider": self.provider_name,
+                        "model": settings.gemini_image_model,
+                        "audit_confidence": retry_audit.confidence,
+                        "audit_reason": (retry_audit.reason or "")[:180],
+                        "style": style.name,
+                    },
+                )
+                return BackgroundCleanupResult(
+                    ok=False,
+                    provider=self.provider_name,
+                    model=settings.gemini_image_model,
+                    reason="human_artifact_remaining",
+                    style=style.name,
+                )
+            output_bytes = retry_bytes
 
         return BackgroundCleanupResult(
             ok=True,
@@ -157,10 +205,25 @@ class GoogleGeminiBackgroundCleanupProvider:
         )
 
     @staticmethod
-    def _build_cleanup_prompt(category_hint: str, style: _BackgroundStyle) -> str:
+    def _build_cleanup_prompt(
+        category_hint: str,
+        style: _BackgroundStyle,
+        *,
+        strict_human_removal: bool = False,
+    ) -> str:
+        strict_block = (
+            "STRICT CORRECTION MODE: a previous cleanup may have left a visible "
+            "hand, finger, skin patch, sleeve edge, or body shadow. Prioritize a "
+            "product-only hero result over preserving empty surrounding space. "
+            "If needed, crop, zoom, or recompose slightly to remove all human "
+            "pixels while keeping the actual product fully visible and centered.\n\n"
+            if strict_human_removal
+            else ""
+        )
         return (
             "Create one marketplace hero photo for Owmee from this seller-uploaded "
             f"{category_hint} image.\n\n"
+            f"{strict_block}"
             "TASK SCOPE: only replace/clean the background. The product must remain "
             "the real seller item.\n\n"
             "PRODUCT PRESERVATION RULES: preserve the product exactly: same shape, "
@@ -185,7 +248,10 @@ class GoogleGeminiBackgroundCleanupProvider:
             "hand shadows, or cutout halos. Do not invent hidden labels, serial "
             "numbers, condition marks, ports, buttons, accessories, or defects that "
             "were covered by the hand; only make the minimal neutral edge/background "
-            "fill needed so the image looks clean and not broken.\n\n"
+            "fill needed so the image looks clean and not broken. If any human pixels "
+            "cannot be removed cleanly, crop, zoom, or recompose slightly to exclude "
+            "the human artifact while keeping the product fully visible, centered, "
+            "and true to the source.\n\n"
             f"BACKGROUND STYLE: use exactly this Owmee catalog style: {style.description} "
             "Use this same style consistently across listings. Adjust only the "
             "background shade within this style if needed for edge separation; never "
@@ -199,9 +265,109 @@ class GoogleGeminiBackgroundCleanupProvider:
             "reflections, no glow, no logo watermark.\n\n"
             "FINAL QUALITY GATE: before returning, inspect the final image. If any "
             "human body part, skin patch, finger edge, sleeve, face, hair, or person "
-            "reflection remains visible, fix it before returning. Return only the "
-            "cleaned image."
+            "reflection remains visible, fix it before returning. This image will be "
+            "rejected by an automatic audit if any hand, finger, skin, clothing, or "
+            "person reflection remains. Return only the cleaned image."
         )
+
+    async def _generate_cleanup_image(
+        self,
+        client: Any,
+        types: Any,
+        prompt: str,
+        source: Any,
+        *,
+        log_event: str,
+    ) -> tuple[bytes | None, str | None]:
+        try:
+            response = await client.aio.models.generate_content(
+                model=settings.gemini_image_model,
+                contents=[prompt, source],
+                config=types.GenerateContentConfig(
+                    response_modalities=["TEXT", "IMAGE"],
+                    temperature=0.08,
+                ),
+            )
+        except Exception as e:
+            log.warning(
+                log_event,
+                extra={"error": f"{type(e).__name__}: {str(e)[:240]}"},
+            )
+            return None, "api_error"
+
+        output_bytes = self._extract_image_bytes(response)
+        if output_bytes is None:
+            return None, "no_image_output"
+        return output_bytes, None
+
+    async def _audit_human_artifacts(
+        self,
+        client: Any,
+        types: Any,
+        image_bytes: bytes,
+    ) -> _CleanupHumanAudit | None:
+        try:
+            from PIL import Image, ImageOps  # type: ignore
+
+            audit_image = Image.open(BytesIO(image_bytes))
+            audit_image = ImageOps.exif_transpose(audit_image)
+        except Exception as e:
+            log.warning("media.cleanup.audit_image_invalid", extra={"error": str(e)[:160]})
+            return None
+
+        prompt = (
+            "Inspect this final marketplace hero image for Owmee. Return JSON only. "
+            "Set has_human_artifact=true if any human hand, finger, thumb, arm, wrist, "
+            "skin patch, nail, sleeve/clothing edge, face, hair, person reflection, or "
+            "human-shaped shadow remains visible anywhere in the image. Do not mark "
+            "a product's normal material, label, printed graphic, or warm product color "
+            "as human unless it is visibly part of a person. confidence must be 0 to 1. "
+            "reason should be a short visual note."
+        )
+        try:
+            response = await client.aio.models.generate_content(
+                model=settings.gemini_vision_model,
+                contents=[prompt, audit_image],
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=_CleanupHumanAudit,
+                    temperature=0.0,
+                    max_output_tokens=160,
+                ),
+            )
+        except Exception as e:
+            log.warning(
+                "media.cleanup.audit_failed",
+                extra={"error": f"{type(e).__name__}: {str(e)[:200]}"},
+            )
+            return None
+
+        parsed = getattr(response, "parsed", None)
+        if isinstance(parsed, _CleanupHumanAudit):
+            return parsed
+        if isinstance(parsed, dict):
+            try:
+                return _CleanupHumanAudit(**parsed)
+            except Exception:
+                return None
+
+        raw = (getattr(response, "text", "") or "").strip()
+        if not raw:
+            return None
+        try:
+            return _CleanupHumanAudit(**json.loads(raw))
+        except Exception as e:
+            log.warning(
+                "media.cleanup.audit_parse_failed",
+                extra={"error": str(e)[:160], "raw": raw[:240]},
+            )
+            return None
+
+    @staticmethod
+    def _audit_requires_retry(audit: _CleanupHumanAudit | None) -> bool:
+        if audit is None or not audit.has_human_artifact:
+            return False
+        return audit.confidence is None or audit.confidence >= 0.35
 
     @staticmethod
     def _choose_background_style(source) -> _BackgroundStyle:

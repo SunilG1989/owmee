@@ -97,4 +97,6 @@ def test_cleanup_prompt_removes_human_body_parts():
     assert "Remove all visible hands, fingers, thumbs, arms" in prompt
     assert "reflections of people" in prompt
     assert "Do not invent hidden labels" in prompt
+    assert "crop, zoom, or recompose slightly" in prompt
+    assert "rejected by an automatic audit" in prompt
     assert "If any human body part, skin patch, finger edge" in prompt

@@ -311,13 +311,31 @@ async def _clean_hero_and_mark_detected(
         category_slug=detected.category_slug,
     )
     image_quality = dict(detected.image_set_quality or {})
+    status = "ready" if cleanup.cleaned else "fallback_original"
+    if not cleanup.cleaned and (cleanup.reason or "").startswith("human_artifact"):
+        status = "needs_retake"
     image_quality["hero_image_cleanup"] = {
-        "status": "ready" if cleanup.cleaned else "fallback_original",
+        "status": status,
         "provider": cleanup.provider,
         "model": cleanup.model,
         "reason": cleanup.reason,
         "style": cleanup.style,
+        "selected_index": selected_index,
+        "requires_retake": status == "needs_retake",
     }
+    log.info(
+        "ai_assistant.hero_cleanup_result",
+        extra={
+            "status": status,
+            "provider": cleanup.provider,
+            "model": cleanup.model,
+            "reason": cleanup.reason,
+            "style": cleanup.style,
+            "selected_index": selected_index,
+            "category_slug": detected.category_slug,
+            "cleaned": cleanup.cleaned,
+        },
+    )
     updated_detected = detected.model_copy(update={"image_set_quality": image_quality})
     if cleanup.cleaned and cleanup.display_key:
         return cleanup.display_key, updated_detected

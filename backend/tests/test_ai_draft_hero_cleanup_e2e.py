@@ -48,6 +48,47 @@ class _FakeDB:
 
 
 @pytest.mark.asyncio
+async def test_hero_cleanup_marks_retake_when_human_artifacts_remain(monkeypatch):
+    detected = AIDetected(
+        category_slug="kids-utility",
+        image_set_quality={"overall_photo_quality": "good"},
+    )
+
+    async def fake_clean_hero_background(image_bytes, content_type, *, original_key, selected_index, category_slug):
+        assert image_bytes == b"held-product"
+        assert content_type == "image/jpeg"
+        assert original_key == "ai-drafts/u/d_0.jpg"
+        assert selected_index == 0
+        assert category_slug == "kids-utility"
+        return HeroCleanupOutcome(
+            selected_index=selected_index,
+            cleaned=False,
+            provider="test-cleaner",
+            model="test-model",
+            reason="human_artifact_remaining",
+            style="owmee_warm_ivory",
+        )
+
+    monkeypatch.setattr(router, "clean_hero_background", fake_clean_hero_background)
+
+    key, updated = await router._clean_hero_and_mark_detected(
+        detected=detected,
+        image_bytes=b"held-product",
+        content_type="image/jpeg",
+        original_key="ai-drafts/u/d_0.jpg",
+        selected_index=0,
+        fallback_key="ai-drafts/u/d_0.jpg.display.webp",
+    )
+
+    assert key == "ai-drafts/u/d_0.jpg.display.webp"
+    cleanup = updated.image_set_quality["hero_image_cleanup"]
+    assert cleanup["status"] == "needs_retake"
+    assert cleanup["requires_retake"] is True
+    assert cleanup["reason"] == "human_artifact_remaining"
+    assert cleanup["selected_index"] == 0
+
+
+@pytest.mark.asyncio
 async def test_single_image_draft_cleans_hero_for_legacy_clients(monkeypatch):
     db = _FakeDB()
     user = SimpleNamespace(user_id=uuid4())

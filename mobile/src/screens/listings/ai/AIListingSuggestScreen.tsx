@@ -188,6 +188,10 @@ export default function AIListingSuggestScreen({
   const ageSuitability = overrides.age_suitability ?? '';
   const hygieneStatus = overrides.hygiene_status ?? '';
   const imageQuality = draft.detected.image_set_quality || {};
+  const heroCleanup = (imageQuality.hero_image_cleanup || {}) as Record<string, any>;
+  const heroCleanupStatus = typeof heroCleanup.status === 'string' ? heroCleanup.status : null;
+  const heroCleanupNeedsRetake = heroCleanup.requires_retake === true || heroCleanupStatus === 'needs_retake';
+  const heroCleanupUnavailable = Boolean(heroCleanupStatus && heroCleanupStatus !== 'ready' && !heroCleanupNeedsRetake);
   const hasBox = Object.prototype.hasOwnProperty.call(overrides, 'has_box')
     ? overrides.has_box ?? null
     : imageQuality.has_box_or_packaging === true
@@ -427,6 +431,10 @@ export default function AIListingSuggestScreen({
     waterDamageHistory,
   ]);
 
+  const retakeHeroPhoto = useCallback(() => {
+    navigation.replace('AIListingCamera' as never, undefined as never);
+  }, [navigation]);
+
   const submit = useCallback(async () => {
     if (submitting) return;
     if (!effectivePrice || effectivePrice <= 0) {
@@ -440,6 +448,14 @@ export default function AIListingSuggestScreen({
     }
     if (needsDetailsReview) {
       openFirstRequiredField();
+      return;
+    }
+    if (heroCleanupNeedsRetake) {
+      Alert.alert(
+        'Retake hero photo',
+        'Owmee still detected a hand or body part in the hero image. Retake with only the product visible.',
+        [{ text: 'Retake', onPress: retakeHeroPhoto }],
+      );
       return;
     }
 
@@ -491,7 +507,20 @@ export default function AIListingSuggestScreen({
     submitting,
     finalDetails,
     openFirstRequiredField,
+    heroCleanupNeedsRetake,
+    retakeHeroPhoto,
   ]);
+
+  const ctaLabel = heroCleanupNeedsRetake
+    ? 'Retake hero photo'
+    : needsDetailsReview
+      ? 'Complete required details'
+      : 'Continue to list';
+  const ctaOnPress = heroCleanupNeedsRetake
+    ? retakeHeroPhoto
+    : needsDetailsReview
+      ? openFirstRequiredField
+      : submit;
 
   const renderInlinePicker = () => {
     if (!inlineField) return null;
@@ -725,6 +754,21 @@ export default function AIListingSuggestScreen({
             <Text style={st.itemEditGlyph}>✎</Text>
           </TouchableOpacity>
         </View>
+        {heroCleanupNeedsRetake ? (
+          <View style={[st.photoNotice, st.photoNoticeCritical]}>
+            <Text style={[st.photoNoticeTitle, st.photoNoticeCriticalText]}>Retake hero photo</Text>
+            <Text style={st.photoNoticeText}>
+              Owmee still detected a hand or body part. Use a product-only photo for a cleaner listing.
+            </Text>
+          </View>
+        ) : heroCleanupUnavailable ? (
+          <View style={[st.photoNotice, st.photoNoticeMuted]}>
+            <Text style={st.photoNoticeTitle}>Background cleanup did not finish</Text>
+            <Text style={st.photoNoticeText}>
+              You can continue, but a photo without hands will look more professional.
+            </Text>
+          </View>
+        ) : null}
 
         <View style={st.detailCard}>
             <View style={st.detailHeader}>
@@ -943,12 +987,12 @@ export default function AIListingSuggestScreen({
       {/* Sticky CTA */}
       <View style={st.ctaBar}>
         <Button
-          label={needsDetailsReview ? 'Complete required details' : 'Continue to list'}
+          label={ctaLabel}
           variant="primary"
           size="lg"
           loading={submitting}
           disabled={submitting}
-          onPress={needsDetailsReview ? openFirstRequiredField : submit}
+          onPress={ctaOnPress}
           fullWidth
           style={st.primaryBtn}
         />
@@ -1195,6 +1239,36 @@ const st = StyleSheet.create({
     justifyContent: 'center',
   },
   itemEditGlyph: { fontSize: T.size.md, color: C.ctaPrimary, fontWeight: T.weight.semi },
+  photoNotice: {
+    marginHorizontal: S.lg,
+    marginTop: S.sm,
+    paddingHorizontal: S.md,
+    paddingVertical: S.md,
+    borderRadius: R.md,
+    borderWidth: 1,
+  },
+  photoNoticeCritical: {
+    backgroundColor: C.redLight,
+    borderColor: '#F1C7C1',
+  },
+  photoNoticeMuted: {
+    backgroundColor: C.amberSoft,
+    borderColor: C.amberBorder,
+  },
+  photoNoticeTitle: {
+    fontSize: T.size.sm,
+    fontWeight: T.weight.bold,
+    color: C.ctaPrimary,
+  },
+  photoNoticeCriticalText: {
+    color: C.red,
+  },
+  photoNoticeText: {
+    marginTop: 3,
+    fontSize: T.size.sm,
+    lineHeight: T.size.sm + 5,
+    color: C.text2,
+  },
 
   detailCard: {
     backgroundColor: C.surface,

@@ -7,7 +7,10 @@ from PIL import Image
 from app.core.storage import ProcessedListingImage
 from app.modules.media import image_cleanup
 from app.modules.media.providers.base import BackgroundCleanupResult
-from app.modules.media.providers.google_gemini import GoogleGeminiBackgroundCleanupProvider
+from app.modules.media.providers.google_gemini import (
+    _CleanupHumanAudit,
+    GoogleGeminiBackgroundCleanupProvider,
+)
 
 
 def test_select_hero_image_index_uses_ai_choice_when_valid():
@@ -126,8 +129,41 @@ def test_google_gemini_cleanup_prompt_locks_product_preservation():
     assert "Treat every human body part as background/occlusion" in prompt
     assert "Remove all visible hands, fingers, thumbs, arms" in prompt
     assert "Do not leave skin-colored fragments" in prompt
+    assert "crop, zoom, or recompose slightly" in prompt
+    assert "rejected by an automatic audit" in prompt
     assert "If any human body part, skin patch, finger edge" in prompt
     assert "soft desaturated burnt-orange/coral wash" in prompt
+
+
+def test_google_gemini_cleanup_prompt_has_strict_human_retry_mode():
+    style = GoogleGeminiBackgroundCleanupProvider._choose_background_style(
+        Image.new("RGB", (120, 120), "#7d7d7d")
+    )
+
+    prompt = GoogleGeminiBackgroundCleanupProvider._build_cleanup_prompt(
+        "kids-utility",
+        style,
+        strict_human_removal=True,
+    )
+
+    assert "STRICT CORRECTION MODE" in prompt
+    assert "previous cleanup may have left a visible hand" in prompt
+    assert "crop, zoom, or recompose slightly" in prompt
+
+
+def test_google_gemini_cleanup_retries_only_confident_human_audit():
+    assert GoogleGeminiBackgroundCleanupProvider._audit_requires_retry(
+        _CleanupHumanAudit(has_human_artifact=True, confidence=0.8)
+    )
+    assert GoogleGeminiBackgroundCleanupProvider._audit_requires_retry(
+        _CleanupHumanAudit(has_human_artifact=True, confidence=None)
+    )
+    assert not GoogleGeminiBackgroundCleanupProvider._audit_requires_retry(
+        _CleanupHumanAudit(has_human_artifact=True, confidence=0.2)
+    )
+    assert not GoogleGeminiBackgroundCleanupProvider._audit_requires_retry(
+        _CleanupHumanAudit(has_human_artifact=False, confidence=0.95)
+    )
 
 
 def test_google_gemini_provider_extracts_inline_image_bytes_before_sdk_image_object():
