@@ -3,7 +3,37 @@ from types import SimpleNamespace
 from app.modules.listings import feed_router, router as listings_router
 
 
-def test_detail_gallery_promotes_current_thumbnail_identity(monkeypatch):
+def test_detail_gallery_preserves_cleaned_display_hero(monkeypatch):
+    listings_router._IMG_URL_CACHE.clear()
+    monkeypatch.setattr(
+        listings_router,
+        "generate_presigned_download_url",
+        lambda key, expires_in=0: f"https://fresh.test/{key}?sig=new",
+    )
+    listing = SimpleNamespace(
+        thumbnail_url="listings/listing-1/original-phone-back.jpg.thumb.webp",
+        image_urls=[
+            "listings/listing-1/phone-front.hero-cleaned.png.display.webp",
+            "https://old.test/owmee-media/ai-drafts/user/expired.jpg?X-Amz-Date=old",
+            "listings/listing-1/side.jpg.display.webp",
+        ],
+    )
+
+    urls = listings_router._detail_image_urls(listing)
+
+    assert (
+        urls[0]
+        == "https://fresh.test/listings/listing-1/phone-front.hero-cleaned.png.display.webp?sig=new"
+    )
+    assert "X-Amz-Date=old" not in "\n".join(urls)
+    assert "https://fresh.test/ai-drafts/user/expired.jpg?sig=new" in urls
+    assert (
+        "https://fresh.test/listings/listing-1/original-phone-back.jpg.thumb.webp?sig=new"
+        in urls
+    )
+
+
+def test_detail_gallery_uses_thumbnail_for_legacy_rows(monkeypatch):
     listings_router._IMG_URL_CACHE.clear()
     monkeypatch.setattr(
         listings_router,
@@ -12,18 +42,12 @@ def test_detail_gallery_promotes_current_thumbnail_identity(monkeypatch):
     )
     listing = SimpleNamespace(
         thumbnail_url="listings/listing-1/hero.jpg.thumb.webp",
-        image_urls=[
-            "https://old.test/owmee-media/ai-drafts/user/expired.jpg?X-Amz-Date=old",
-            "listings/listing-1/hero.jpg",
-            "listings/listing-1/side.jpg.display.webp",
-        ],
+        image_urls=[],
     )
 
     urls = listings_router._detail_image_urls(listing)
 
-    assert urls[0] == "https://fresh.test/listings/listing-1/hero.jpg?sig=new"
-    assert "X-Amz-Date=old" not in "\n".join(urls)
-    assert "https://fresh.test/ai-drafts/user/expired.jpg?sig=new" in urls
+    assert urls == ["https://fresh.test/listings/listing-1/hero.jpg.thumb.webp?sig=new"]
 
 
 def test_feed_resigns_legacy_owmee_media_urls(monkeypatch):

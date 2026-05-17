@@ -134,21 +134,22 @@ def _image_identity(key: str | None) -> str | None:
 
 
 def _detail_image_urls(listing: Listing) -> list[str]:
-    """Return the full gallery with the primary/cleaned hero first."""
+    """Return the gallery with the stored display hero first.
+
+    `thumbnail_url` is a fallback for legacy rows. It must not jump ahead of
+    `image_urls[0]`, because AI listings store the background-cleaned hero
+    there while thumbnail_url may still point at an older/original derivative.
+    """
     stored_keys = list(listing.image_urls or [])
-    ordered_keys: list[str] = []
+    ordered_keys: list[str] = list(stored_keys)
     if listing.thumbnail_url:
         thumb_identity = _image_identity(listing.thumbnail_url)
-        primary_match = next(
-            (
-                key
-                for key in stored_keys
-                if key != listing.thumbnail_url and _image_identity(key) == thumb_identity
-            ),
-            None,
+        has_matching_display = any(
+            key != listing.thumbnail_url and _image_identity(key) == thumb_identity
+            for key in stored_keys
         )
-        ordered_keys.append(primary_match or listing.thumbnail_url)
-    ordered_keys.extend(stored_keys)
+        if not has_matching_display:
+            ordered_keys.append(listing.thumbnail_url)
 
     seen: set[str] = set()
     urls: list[str] = []

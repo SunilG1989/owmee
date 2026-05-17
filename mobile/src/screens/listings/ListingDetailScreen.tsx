@@ -48,9 +48,12 @@ function imageIdentity(uri?: string | null): string | null {
 }
 
 function buildGalleryImages(listing: Listing): string[] {
+  const gallery = (
+    (listing.image_urls?.length ? listing.image_urls : listing.images) || []
+  );
   const candidates = [
+    ...gallery,
     listing.thumbnail_url,
-    ...((listing.image_urls?.length ? listing.image_urls : listing.images) || []),
   ].filter(Boolean) as string[];
   const seen = new Set<string>();
   return candidates.filter((uri) => {
