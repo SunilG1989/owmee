@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from uuid import uuid4
@@ -171,6 +172,96 @@ async def test_hero_cleanup_marks_retake_when_ai_saw_hand_and_cleanup_fallback(m
     cleanup = updated.image_set_quality["hero_image_cleanup"]
     assert cleanup["status"] == "needs_retake"
     assert cleanup["requires_retake"] is True
+
+
+@pytest.mark.asyncio
+async def test_hero_cleanup_timeout_falls_back_without_failing_analysis(monkeypatch):
+    detected = AIDetected(
+        category_slug="kids-utility",
+        image_set_quality={"overall_photo_quality": "good"},
+    )
+
+    async def slow_clean_hero_background(*args, **kwargs):
+        await asyncio.sleep(0.05)
+
+    monkeypatch.setattr(router, "HERO_CLEANUP_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr(router, "clean_hero_background", slow_clean_hero_background)
+
+    key, updated = await router._clean_hero_and_mark_detected(
+        detected=detected,
+        image_bytes=b"product",
+        content_type="image/jpeg",
+        original_key="ai-drafts/u/d_0.jpg",
+        selected_index=0,
+        fallback_key="ai-drafts/u/d_0.jpg.display.webp",
+    )
+
+    assert key == "ai-drafts/u/d_0.jpg.display.webp"
+    cleanup = updated.image_set_quality["hero_image_cleanup"]
+    assert cleanup["status"] == "fallback_original"
+    assert cleanup["provider"] == "timeout"
+    assert cleanup["reason"] == "cleanup_timeout"
+
+
+@pytest.mark.asyncio
+async def test_draft_from_images_vision_timeout_persists_manual_draft(monkeypatch):
+    db = _FakeDB()
+    user = SimpleNamespace(user_id=uuid4())
+
+    async def slow_detect_from_images(images):
+        await asyncio.sleep(0.05)
+
+    def fake_process_listing_image_bytes(raw, *, original_key, content_type, **kwargs):
+        return ProcessedListingImage(
+            original_key=original_key,
+            display_key=f"{original_key}.display.webp",
+            thumbnail_key=f"{original_key}.thumb.webp",
+        )
+
+    async def fail_if_cleanup_runs(*args, **kwargs):
+        raise AssertionError("cleanup should be skipped when vision times out")
+
+    async def fake_estimate_price(*args, **kwargs):
+        assert kwargs["allow_ai_fallback"] is False
+        return {
+            "price": None,
+            "source": "none",
+            "reasoning": "manual price",
+            "comparables": [],
+            "comparables_count": 0,
+        }
+
+    async def fake_get_user_location(db, user_id):
+        return (12.9, 77.6, "Bengaluru", "Karnataka")
+
+    monkeypatch.setattr(router, "VISION_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr(router.ai_provider, "detect_from_images", slow_detect_from_images)
+    monkeypatch.setattr(router.price_estimator, "estimate_price", fake_estimate_price)
+    monkeypatch.setattr(router, "process_listing_image_bytes", fake_process_listing_image_bytes)
+    monkeypatch.setattr(router, "clean_hero_background", fail_if_cleanup_runs)
+    monkeypatch.setattr(router, "generate_presigned_download_url", lambda key, expires_in=0: f"https://cdn.test/{key}")
+
+    import app.modules.identity_auth.user_location as user_location
+
+    monkeypatch.setattr(user_location, "get_user_location", fake_get_user_location)
+
+    response = await router.draft_from_images(
+        user=user,
+        db=db,
+        images=[
+            _Upload(b"front"),
+            _Upload(b"side"),
+            _Upload(b"back"),
+        ],
+    )
+
+    assert response.fallback_reason == "vision_timeout"
+    assert db.insert_params is not None
+    saved_urls = db.insert_params["photo_urls"]
+    assert saved_urls[0].endswith("_0.jpg.display.webp")
+    cleanup = response.detected.image_set_quality["hero_image_cleanup"]
+    assert cleanup["provider"] == "skipped"
+    assert cleanup["reason"] == "vision_failed"
 
 
 @pytest.mark.asyncio

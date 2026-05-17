@@ -57,8 +57,8 @@ import type { RootScreen } from '../../../navigation/types';
 
 const MIN_PHOTOS = 3;
 const MAX_PHOTOS = 6;
-const ANALYSIS_IMAGE_QUALITY = 0.86 as const;
-const ANALYSIS_IMAGE_MAX_EDGE = 1600;
+const ANALYSIS_IMAGE_QUALITY = 0.78 as const;
+const ANALYSIS_IMAGE_MAX_EDGE = 1280;
 
 type Photo = { uri: string; localId: string };
 

@@ -66,6 +66,10 @@ log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1/listings", tags=["ai-assistant"])
 
+VISION_TIMEOUT_SECONDS = 32
+HERO_CLEANUP_TIMEOUT_SECONDS = 18
+PRICE_TIMEOUT_SECONDS = 8
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -349,6 +353,75 @@ async def _timed_step(timings: dict[str, int], key: str, coro):
         timings[key] = _ms_since(started)
 
 
+async def _detect_from_images_bounded(image_pairs: list[tuple[bytes, str]]) -> AIDetected:
+    try:
+        return await asyncio.wait_for(
+            ai_provider.detect_from_images(image_pairs),
+            timeout=VISION_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        log.warning(
+            "ai_assistant.vision_timeout",
+            extra={"timeout_seconds": VISION_TIMEOUT_SECONDS, "image_count": len(image_pairs)},
+        )
+        return AIDetected(flags=["ai_failed:vision_timeout"])
+    except Exception as e:
+        log.warning(
+            "ai_assistant.vision_unhandled_error",
+            extra={"error": f"{type(e).__name__}: {str(e)[:240]}"},
+        )
+        return AIDetected(flags=["ai_failed:vision_error"])
+
+
+async def _detect_from_image_bounded(image_bytes: bytes, content_type: str) -> AIDetected:
+    try:
+        return await asyncio.wait_for(
+            ai_provider.detect_from_image(image_bytes, content_type),
+            timeout=VISION_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        log.warning(
+            "ai_assistant.vision_timeout",
+            extra={"timeout_seconds": VISION_TIMEOUT_SECONDS, "image_count": 1},
+        )
+        return AIDetected(flags=["ai_failed:vision_timeout"])
+    except Exception as e:
+        log.warning(
+            "ai_assistant.vision_unhandled_error",
+            extra={"error": f"{type(e).__name__}: {str(e)[:240]}"},
+        )
+        return AIDetected(flags=["ai_failed:vision_error"])
+
+
+async def _estimate_price_bounded(coro) -> dict:
+    try:
+        return await asyncio.wait_for(coro, timeout=PRICE_TIMEOUT_SECONDS)
+    except asyncio.TimeoutError:
+        log.warning(
+            "ai_assistant.price_timeout",
+            extra={"timeout_seconds": PRICE_TIMEOUT_SECONDS},
+        )
+        return {
+            "price": None,
+            "source": "none",
+            "reasoning": "Price estimate timed out. Seller can set the price manually.",
+            "comparables": [],
+            "comparables_count": 0,
+        }
+    except Exception as e:
+        log.warning(
+            "ai_assistant.price_unhandled_error",
+            extra={"error": f"{type(e).__name__}: {str(e)[:240]}"},
+        )
+        return {
+            "price": None,
+            "source": "none",
+            "reasoning": "Price estimate failed. Seller can set the price manually.",
+            "comparables": [],
+            "comparables_count": 0,
+        }
+
+
 def _front_face_hero_override(detected: AIDetected, hero_index: int, image_count: int) -> int:
     if image_count <= 0 or detected.category_slug not in {"smartphones", "tablets"}:
         return hero_index
@@ -372,27 +445,68 @@ async def _clean_hero_and_mark_detected(
     selected_index: int,
     fallback_key: str,
 ) -> tuple[str, AIDetected]:
-    cleanup = await clean_hero_background(
-        image_bytes,
-        content_type,
-        original_key=original_key,
-        selected_index=selected_index,
-        category_slug=detected.category_slug,
-    )
+    try:
+        cleanup = await asyncio.wait_for(
+            clean_hero_background(
+                image_bytes,
+                content_type,
+                original_key=original_key,
+                selected_index=selected_index,
+                category_slug=detected.category_slug,
+            ),
+            timeout=HERO_CLEANUP_TIMEOUT_SECONDS,
+        )
+        cleaned = cleanup.cleaned
+        provider = cleanup.provider
+        model = cleanup.model
+        reason = cleanup.reason
+        style = cleanup.style
+        display_key = cleanup.display_key
+    except asyncio.TimeoutError:
+        log.warning(
+            "ai_assistant.hero_cleanup_timeout",
+            extra={
+                "timeout_seconds": HERO_CLEANUP_TIMEOUT_SECONDS,
+                "selected_index": selected_index,
+                "category_slug": detected.category_slug,
+            },
+        )
+        cleaned = False
+        provider = "timeout"
+        model = None
+        reason = "cleanup_timeout"
+        style = None
+        display_key = None
+    except Exception as e:
+        log.warning(
+            "ai_assistant.hero_cleanup_unhandled_error",
+            extra={
+                "error": f"{type(e).__name__}: {str(e)[:240]}",
+                "selected_index": selected_index,
+                "category_slug": detected.category_slug,
+            },
+        )
+        cleaned = False
+        provider = "error"
+        model = None
+        reason = "cleanup_error"
+        style = None
+        display_key = None
+
     image_quality = dict(detected.image_set_quality or {})
-    status = "ready" if cleanup.cleaned else "fallback_original"
+    status = "ready" if cleaned else "fallback_original"
     hero_has_human_artifact = image_quality.get("hero_image_has_human_artifact") is True
-    if not cleanup.cleaned and (
+    if not cleaned and (
         hero_has_human_artifact
-        or (cleanup.reason or "").startswith(("human_artifact", "product_modified"))
+        or (reason or "").startswith(("human_artifact", "product_modified"))
     ):
         status = "needs_retake"
     image_quality["hero_image_cleanup"] = {
         "status": status,
-        "provider": cleanup.provider,
-        "model": cleanup.model,
-        "reason": cleanup.reason,
-        "style": cleanup.style,
+        "provider": provider,
+        "model": model,
+        "reason": reason,
+        "style": style,
         "selected_index": selected_index,
         "requires_retake": status == "needs_retake",
     }
@@ -400,18 +514,18 @@ async def _clean_hero_and_mark_detected(
         "ai_assistant.hero_cleanup_result",
         extra={
             "status": status,
-            "provider": cleanup.provider,
-            "model": cleanup.model,
-            "reason": cleanup.reason,
-            "style": cleanup.style,
+            "provider": provider,
+            "model": model,
+            "reason": reason,
+            "style": style,
             "selected_index": selected_index,
             "category_slug": detected.category_slug,
-            "cleaned": cleanup.cleaned,
+            "cleaned": cleaned,
         },
     )
     updated_detected = detected.model_copy(update={"image_set_quality": image_quality})
-    if cleanup.cleaned and cleanup.display_key:
-        return cleanup.display_key, updated_detected
+    if cleaned and display_key:
+        return display_key, updated_detected
     return fallback_key, updated_detected
 
 
@@ -461,7 +575,7 @@ async def draft_from_image(
 
     # Vision detection
     step_started = perf_counter()
-    detected = await ai_provider.detect_from_image(image_bytes, content_type)
+    detected = await _detect_from_image_bounded(image_bytes, content_type)
     detected = _with_canonical_category(detected)
     timings["vision_ms"] = _ms_since(step_started)
 
@@ -474,15 +588,29 @@ async def draft_from_image(
             detail=rejection,
         )
 
+    ai_failed = any(f.startswith("ai_failed:") for f in detected.flags)
     step_started = perf_counter()
-    photo_url, detected = await _clean_hero_and_mark_detected(
-        detected=detected,
-        image_bytes=image_bytes,
-        content_type=content_type,
-        original_key=original_key,
-        selected_index=0,
-        fallback_key=photo_url,
-    )
+    if ai_failed:
+        image_quality = dict(detected.image_set_quality or {})
+        image_quality["hero_image_cleanup"] = {
+            "status": "fallback_original",
+            "provider": "skipped",
+            "model": None,
+            "reason": "vision_failed",
+            "style": None,
+            "selected_index": 0,
+            "requires_retake": False,
+        }
+        detected = detected.model_copy(update={"image_set_quality": image_quality})
+    else:
+        photo_url, detected = await _clean_hero_and_mark_detected(
+            detected=detected,
+            image_bytes=image_bytes,
+            content_type=content_type,
+            original_key=original_key,
+            selected_index=0,
+            fallback_key=photo_url,
+        )
     timings["cleanup_ms"] = _ms_since(step_started)
 
     # Lookup user's state for region-aware comparables. Prefer
@@ -497,17 +625,24 @@ async def draft_from_image(
     #   2. Vision-suggested price (model saw the photos + condition + defects)
     #   3. Text-only AI price (degenerate fallback, no photo signal)
     fallback_reason = None
+    if ai_failed:
+        fallback_reason = next(
+            (f.split(":", 1)[1] for f in detected.flags if f.startswith("ai_failed:")),
+            "unknown",
+        )
     step_started = perf_counter()
     vision_price_available = bool(detected.suggested_price_inr)
-    price_result = await price_estimator.estimate_price(
-        db,
-        brand=detected.brand,
-        model=detected.model,
-        storage=detected.storage,
-        condition=detected.condition_guess or "good",
-        state=user_state,
-        category_slug=detected.category_slug,
-        allow_ai_fallback=not vision_price_available,
+    price_result = await _estimate_price_bounded(
+        price_estimator.estimate_price(
+            db,
+            brand=detected.brand,
+            model=detected.model,
+            storage=detected.storage,
+            condition=detected.condition_guess or "good",
+            state=user_state,
+            category_slug=detected.category_slug,
+            allow_ai_fallback=not vision_price_available and not ai_failed,
+        )
     )
     timings["price_ms"] = _ms_since(step_started)
 
@@ -1196,7 +1331,7 @@ async def draft_from_images(
         "store_ms",
         _store_draft_photos(image_pairs, user_id=user.user_id, draft_id=draft_id),
     )
-    vision_task = _timed_step(timings, "vision_ms", ai_provider.detect_from_images(image_pairs))
+    vision_task = _timed_step(timings, "vision_ms", _detect_from_images_bounded(image_pairs))
     location_task = _timed_step(timings, "location_ms", get_user_location(db, user.user_id))
     (photo_urls, original_keys), detected, (_, _, _, user_state) = await asyncio.gather(
         photo_task,
@@ -1218,10 +1353,24 @@ async def draft_from_images(
         )
 
     vision_price_available = bool(detected.suggested_price_inr)
+    analysis_failed = any(f.startswith("ai_failed:") for f in detected.flags)
 
     async def cleanup_step() -> tuple[list[str], AIDetected]:
         next_photo_urls = list(photo_urls)
         next_detected = detected
+        if analysis_failed:
+            image_quality = dict(next_detected.image_set_quality or {})
+            image_quality["hero_image_cleanup"] = {
+                "status": "fallback_original",
+                "provider": "skipped",
+                "model": None,
+                "reason": "vision_failed",
+                "style": None,
+                "selected_index": hero_index,
+                "requires_retake": False,
+            }
+            next_detected = next_detected.model_copy(update={"image_set_quality": image_quality})
+            return next_photo_urls, next_detected
         if 0 <= hero_index < len(image_pairs) and 0 <= hero_index < len(original_keys):
             hero_bytes, hero_content_type = image_pairs[hero_index]
             next_photo_urls[hero_index], next_detected = await _clean_hero_and_mark_detected(
@@ -1235,15 +1384,17 @@ async def draft_from_images(
         return next_photo_urls, next_detected
 
     async def price_step() -> dict:
-        return await price_estimator.estimate_price(
-            db,
-            brand=detected.brand,
-            model=detected.model,
-            storage=detected.storage,
-            condition=detected.condition_guess or "good",
-            state=user_state,
-            category_slug=detected.category_slug,
-            allow_ai_fallback=not vision_price_available,
+        return await _estimate_price_bounded(
+            price_estimator.estimate_price(
+                db,
+                brand=detected.brand,
+                model=detected.model,
+                storage=detected.storage,
+                condition=detected.condition_guess or "good",
+                state=user_state,
+                category_slug=detected.category_slug,
+                allow_ai_fallback=not vision_price_available and not analysis_failed,
+            )
         )
 
     # Cleanup and pricing are independent after vision completes. Running them
