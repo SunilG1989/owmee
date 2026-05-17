@@ -12,7 +12,7 @@
  *     strip below the live preview / latest photo.
  *   - Each thumbnail has an X overlay to delete it.
  *   - "Add another" CTA opens the camera again. Hidden once 6 reached.
- *   - "Done — analyse" CTA enabled at >=4 photos. Disabled with helper
+ *   - "Done — analyse" CTA enabled at >=3 photos. Disabled with helper
  *     text below if <4.
  *   - Real X back button in the header pops out of the flow entirely
  *     (back to the previous tab, not back to SellTabRedirect).
@@ -55,8 +55,10 @@ import { AIListing } from '../../../services/api';
 import { parseApiError } from '../../../utils/errors';
 import type { RootScreen } from '../../../navigation/types';
 
-const MIN_PHOTOS = 4;
+const MIN_PHOTOS = 3;
 const MAX_PHOTOS = 6;
+const ANALYSIS_IMAGE_QUALITY = 0.86 as const;
+const ANALYSIS_IMAGE_MAX_EDGE = 1600;
 
 type Photo = { uri: string; localId: string };
 
@@ -109,9 +111,9 @@ export default function AIListingCameraScreen({ navigation }: RootScreen<'AIList
     launchCamera(
       {
         mediaType: 'photo',
-        quality: 0.94 as any,
-        maxWidth: 2200,
-        maxHeight: 2200,
+        quality: ANALYSIS_IMAGE_QUALITY as any,
+        maxWidth: ANALYSIS_IMAGE_MAX_EDGE,
+        maxHeight: ANALYSIS_IMAGE_MAX_EDGE,
         saveToPhotos: false,
         cameraType: 'back',
       },
@@ -134,9 +136,9 @@ export default function AIListingCameraScreen({ navigation }: RootScreen<'AIList
     launchImageLibrary(
       {
         mediaType: 'photo',
-        quality: 0.94 as any,
-        maxWidth: 2200,
-        maxHeight: 2200,
+        quality: ANALYSIS_IMAGE_QUALITY as any,
+        maxWidth: ANALYSIS_IMAGE_MAX_EDGE,
+        maxHeight: ANALYSIS_IMAGE_MAX_EDGE,
         selectionLimit: remaining,
       },
       (r) => {

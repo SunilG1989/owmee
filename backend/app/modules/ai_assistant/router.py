@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
+from time import perf_counter
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
@@ -328,6 +329,10 @@ def _category_needs_identifier(slug: str | None) -> bool:
     return bool(canonical and canonical in IDENTIFIER_CATEGORIES)
 
 
+def _ms_since(start: float) -> int:
+    return int((perf_counter() - start) * 1000)
+
+
 # ── 1. POST /v1/listings/draft/from-image ─────────────────────────────────
 
 
@@ -343,7 +348,12 @@ async def draft_from_image(
     The mobile client follows up with `POST /v1/listings/from-draft` once
     the seller confirms.
     """
+    total_started = perf_counter()
+    step_started = total_started
+    timings: dict[str, int] = {}
+
     image_bytes = await image.read()
+    timings["read_ms"] = _ms_since(step_started)
     if not image_bytes:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="EMPTY_IMAGE")
     if len(image_bytes) > 10 * 1024 * 1024:
@@ -353,12 +363,16 @@ async def draft_from_image(
     draft_id = uuid4()
 
     # Store photo first (so the URL is valid for the response)
+    step_started = perf_counter()
     photo_url = await _store_photo(image_bytes, content_type, user.user_id, draft_id)
     original_key = _photo_object_key(user.user_id, draft_id, _image_extension(content_type))
+    timings["store_ms"] = _ms_since(step_started)
 
     # Vision detection
+    step_started = perf_counter()
     detected = await ai_provider.detect_from_image(image_bytes, content_type)
     detected = _with_canonical_category(detected)
+    timings["vision_ms"] = _ms_since(step_started)
 
     # Hard reject unsafe or unusable photos — "Other" is only for visible
     # sellable products outside the launch taxonomy.
@@ -369,6 +383,7 @@ async def draft_from_image(
             detail=rejection,
         )
 
+    step_started = perf_counter()
     photo_url, detected = await _clean_hero_and_mark_detected(
         detected=detected,
         image_bytes=image_bytes,
@@ -377,17 +392,22 @@ async def draft_from_image(
         selected_index=0,
         fallback_key=photo_url,
     )
+    timings["cleanup_ms"] = _ms_since(step_started)
 
     # Lookup user's state for region-aware comparables. Prefer
     # user_addresses (Address PRD), fall back to legacy user columns.
     from app.modules.identity_auth.user_location import get_user_location
+    step_started = perf_counter()
     _, _, _, user_state = await get_user_location(db, user.user_id)
+    timings["location_ms"] = _ms_since(step_started)
 
     # Price estimate priority order (best signal first):
     #   1. Comparables (real recent sales in the seller's region) — gold standard
     #   2. Vision-suggested price (model saw the photos + condition + defects)
     #   3. Text-only AI price (degenerate fallback, no photo signal)
     fallback_reason = None
+    step_started = perf_counter()
+    vision_price_available = bool(detected.suggested_price_inr)
     price_result = await price_estimator.estimate_price(
         db,
         brand=detected.brand,
@@ -396,7 +416,9 @@ async def draft_from_image(
         condition=detected.condition_guess or "good",
         state=user_state,
         category_slug=detected.category_slug,
+        allow_ai_fallback=not vision_price_available,
     )
+    timings["price_ms"] = _ms_since(step_started)
 
     # If comparables didn't yield a price but vision did, use vision's
     # number (it factored in the actual photos, including defects we
@@ -412,6 +434,7 @@ async def draft_from_image(
         fallback_reason = price_result.get("reasoning")
 
     # Persist the draft. ai_response is JSONB; pass JSON string and CAST.
+    step_started = perf_counter()
     await db.execute(
         text("""
             INSERT INTO listing_drafts (
@@ -434,6 +457,7 @@ async def draft_from_image(
         },
     )
     await db.commit()
+    timings["persist_ms"] = _ms_since(step_started)
 
     # Pull the row back for the response (specifically expires_at)
     drow = await db.execute(
@@ -441,6 +465,18 @@ async def draft_from_image(
         {"id": draft_id},
     )
     expires_at = drow.scalar() or datetime.now(timezone.utc)
+
+    log.info(
+        "ai_assistant.draft_from_image_timing",
+        extra={
+            **timings,
+            "total_ms": _ms_since(total_started),
+            "bytes_total": len(image_bytes),
+            "category_slug": detected.category_slug,
+            "price_source": price_result["source"],
+            "vision_price_available": vision_price_available,
+        },
+    )
 
     return DraftFromImageResponse(
         draft_id=draft_id,
@@ -1031,13 +1067,17 @@ async def draft_from_images(
     """Multipart upload of 1-6 photos. Runs one AI vision call across
     all images, computes a price, and stores a draft for 24 hours.
 
-    The mobile client should send between 4 and 6 photos for best results,
+    The mobile client should send between 3 and 6 photos for best results,
     but the endpoint accepts 1-6 to keep the API simple.
     """
     if not images:
         raise HTTPException(status_code=400, detail="NO_IMAGES")
     if len(images) > 6:
         raise HTTPException(status_code=400, detail="TOO_MANY_IMAGES")
+
+    total_started = perf_counter()
+    step_started = total_started
+    timings: dict[str, int] = {}
 
     # Read every uploaded file
     image_pairs: list[tuple[bytes, str]] = []
@@ -1048,6 +1088,7 @@ async def draft_from_images(
         if len(b) > 10 * 1024 * 1024:
             raise HTTPException(status_code=400, detail="IMAGE_TOO_LARGE")
         image_pairs.append((b, img.content_type or "image/jpeg"))
+    timings["read_ms"] = _ms_since(step_started)
 
     if not image_pairs:
         raise HTTPException(status_code=400, detail="EMPTY_IMAGES")
@@ -1056,6 +1097,7 @@ async def draft_from_images(
 
     # Store every photo and collect display keys. The AI-selected hero may be
     # reordered/cleaned below, but all originals stay in R2 under these keys.
+    step_started = perf_counter()
     photo_urls: list[str] = []
     original_keys: list[str] = []
     for idx, (image_bytes, content_type) in enumerate(image_pairs):
@@ -1075,12 +1117,15 @@ async def draft_from_images(
         except Exception as e:
             log.warning("ai_assistant.photo_upload_failed", extra={"error": str(e), "key": key})
             photo_urls.append(f"r2://{key}")
+    timings["store_ms"] = _ms_since(step_started)
 
     # ONE multi-image vision call — see all angles at once
+    step_started = perf_counter()
     detected = await ai_provider.detect_from_images(image_pairs)
     detected = _with_canonical_category(detected)
     hero_index = select_hero_image_index(detected, len(photo_urls))
     detected = detected.model_copy(update={"hero_image_index": hero_index})
+    timings["vision_ms"] = _ms_since(step_started)
 
     # Hard reject unsafe or unusable photos — "Other" is only for visible
     # sellable products outside the launch taxonomy.
@@ -1094,6 +1139,7 @@ async def draft_from_images(
     # One-image AI cleanup: only the AI-selected hero gets background cleanup.
     # This keeps analysis-time latency bounded and preserves all other photos
     # as seller originals for buyer trust/disputes.
+    step_started = perf_counter()
     if 0 <= hero_index < len(image_pairs) and 0 <= hero_index < len(original_keys):
         hero_bytes, hero_content_type = image_pairs[hero_index]
         photo_urls[hero_index], detected = await _clean_hero_and_mark_detected(
@@ -1104,6 +1150,7 @@ async def draft_from_images(
             selected_index=hero_index,
             fallback_key=photo_urls[hero_index],
         )
+    timings["cleanup_ms"] = _ms_since(step_started)
 
     photo_urls = move_hero_first(photo_urls, hero_index)
 
@@ -1121,10 +1168,14 @@ async def draft_from_images(
     # Lookup user state for region-aware comparables (Address PRD — prefer
     # user_addresses, fall back to legacy user columns).
     from app.modules.identity_auth.user_location import get_user_location
+    step_started = perf_counter()
     _, _, _, user_state = await get_user_location(db, user.user_id)
+    timings["location_ms"] = _ms_since(step_started)
 
     # Price estimate (same priority order as the single-image draft path:
     # comparables > vision > text-only AI fallback)
+    step_started = perf_counter()
+    vision_price_available = bool(detected.suggested_price_inr)
     price_result = await price_estimator.estimate_price(
         db,
         brand=detected.brand,
@@ -1133,7 +1184,9 @@ async def draft_from_images(
         condition=detected.condition_guess or "good",
         state=user_state,
         category_slug=detected.category_slug,
+        allow_ai_fallback=not vision_price_available,
     )
+    timings["price_ms"] = _ms_since(step_started)
 
     if price_result["source"] in ("none", "ai") and detected.suggested_price_inr:
         price_result = {
@@ -1146,6 +1199,7 @@ async def draft_from_images(
         fallback_reason = price_result.get("reasoning")
 
     # Persist draft
+    step_started = perf_counter()
     await db.execute(
         text("""
             INSERT INTO listing_drafts (
@@ -1168,12 +1222,27 @@ async def draft_from_images(
         },
     )
     await db.commit()
+    timings["persist_ms"] = _ms_since(step_started)
 
     drow = await db.execute(
         text("SELECT expires_at FROM listing_drafts WHERE id = :id"),
         {"id": draft_id},
     )
     expires_at = drow.scalar() or datetime.now(timezone.utc)
+
+    log.info(
+        "ai_assistant.draft_from_images_timing",
+        extra={
+            **timings,
+            "total_ms": _ms_since(total_started),
+            "image_count": len(image_pairs),
+            "bytes_total": sum(len(b) for b, _ in image_pairs),
+            "hero_index": hero_index,
+            "category_slug": detected.category_slug,
+            "price_source": price_result["source"],
+            "vision_price_available": vision_price_available,
+        },
+    )
 
     return DraftFromImageResponse(
         draft_id=draft_id,

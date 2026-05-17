@@ -9,7 +9,9 @@ Sanity check: if AI returns a price >10x or <0.1x of category baseline,
               reject and let the seller set their own price.
 
 Public API:
-    async def estimate_price(db, brand, model, storage, condition, state) -> dict
+    async def estimate_price(
+        db, brand, model, storage, condition, state, allow_ai_fallback=True,
+    ) -> dict
         Returns: {
             "price": float | None,
             "source": "comparables" | "ai" | "none",
@@ -124,6 +126,7 @@ async def estimate_price(
     condition: str | None = "good",
     state: str | None = None,
     category_slug: str | None = None,
+    allow_ai_fallback: bool = True,
 ) -> dict[str, Any]:
     """Two-phase price estimate. Always returns a dict."""
 
@@ -150,6 +153,15 @@ async def estimate_price(
                     "comparables_count": len(rows),
                     "reasoning": f"Median of {len(rows)} similar listings sold in last 90 days.",
                 }
+
+    if not allow_ai_fallback:
+        return {
+            "price": None,
+            "source": "none",
+            "comparables": comparables_objs[:5],
+            "comparables_count": len(rows),
+            "reasoning": "Not enough comparables. Vision price is available, so text price fallback was skipped.",
+        }
 
     # ── Phase 2: AI fallback ───────────────────────────────────────────────
     ai = await ai_provider.estimate_price(
