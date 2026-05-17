@@ -4,6 +4,7 @@ import argparse
 import asyncio
 from dataclasses import dataclass
 from urllib.parse import unquote, urlparse
+from uuid import UUID
 
 from sqlalchemy import String as SAString
 from sqlalchemy import bindparam, select, text
@@ -186,6 +187,8 @@ async def _backfill_listings(args) -> dict[str, int]:
             .options(selectinload(Listing.category))
             .order_by(Listing.created_at.desc())
         )
+        if args.listing_id:
+            stmt = stmt.where(Listing.id.in_([UUID(value) for value in args.listing_id]))
         if not args.all_listing_statuses:
             stmt = stmt.where(Listing.status.in_(statuses or {"active"}))
         if args.limit:
@@ -326,6 +329,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--include-drafts", action="store_true", help="Also process listing_drafts.")
     parser.add_argument("--all-listing-statuses", action="store_true", help="Process listings in every status.")
     parser.add_argument("--listing-status", action="append", help="Listing status to include. Defaults to active.")
+    parser.add_argument("--listing-id", action="append", help="Specific listing UUID to process. Can be repeated.")
     parser.add_argument("--all-draft-statuses", action="store_true", help="Process drafts in every status.")
     parser.add_argument("--draft-status", action="append", help="Draft status to include. Defaults to open.")
     parser.add_argument("--limit", type=int, default=0, help="Max records per target type.")
