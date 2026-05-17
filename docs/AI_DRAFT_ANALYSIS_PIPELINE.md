@@ -27,6 +27,9 @@ multiple original photos in memory.
 - Oversized uploads are rejected by the worker before downloading the body.
 - Final retry exhaustion marks the draft `failed`, so the app does not poll
   forever.
+- Mobile falls back to the bounded multipart endpoint when an older API build
+  does not expose async routes yet, or when the phone cannot reach the
+  presigned R2 PUT URL because of storage endpoint configuration.
 
 ## Operational Notes
 
@@ -35,3 +38,6 @@ multiple original photos in memory.
 - Increase worker count or concurrency only when memory metrics are healthy.
 - The legacy multipart endpoint remains for development fallback, but new app
   builds should use direct R2 upload plus async analysis.
+- `R2_PUBLIC_ENDPOINT` must be the S3 API endpoint, for example
+  `https://<account_id>.r2.cloudflarestorage.com`. Do not set it to the public
+  CDN/custom domain; that value belongs in `R2_PUBLIC_URL`.

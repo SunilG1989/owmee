@@ -1186,6 +1186,57 @@ function postIdentifierOCR(draftId: string, imageUri: string, categorySlug?: str
   );
 }
 
+type AIDraftUploadPhase = 'async-session' | 'direct-r2' | 'analysis-start' | 'analysis-status';
+
+function markAIDraftPhase<T extends any>(error: T, phase: AIDraftUploadPhase): T {
+  if (error && typeof error === 'object') {
+    (error as any).owmeePhase = phase;
+  }
+  return error;
+}
+
+function apiErrorStatus(error: any): number | null {
+  const status = error?.response?.status ?? error?.status;
+  return typeof status === 'number' ? status : null;
+}
+
+function apiErrorDetail(error: any): any {
+  return error?.response?.data?.detail;
+}
+
+function isDefaultRouteNotFound(error: any): boolean {
+  if (apiErrorStatus(error) !== 404) return false;
+  const detail = apiErrorDetail(error);
+  return !detail || detail === 'Not Found';
+}
+
+function shouldFallbackToMultipartDraft(error: any): boolean {
+  const phase = error?.owmeePhase as AIDraftUploadPhase | undefined;
+  const status = apiErrorStatus(error);
+  if (phase === 'direct-r2') return true;
+  if ((phase === 'async-session' || phase === 'analysis-start' || phase === 'analysis-status') &&
+      (isDefaultRouteNotFound(error) || status === 405)) {
+    return true;
+  }
+  return false;
+}
+
+function draftFromImagesMultipartRequest(imageUris: string[]): Promise<AxiosResponse<AIDraftResponse>> {
+  const form = new FormData();
+  imageUris.forEach((uri, i) => {
+    const name = uri.split('/').pop() || `photo_${i}.jpg`;
+    form.append('images', {
+      uri,
+      type: 'image/jpeg',
+      name,
+    } as any);
+  });
+  return api.post<AIDraftResponse>('/v1/listings/draft/from-images', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: UPLOAD_TIMEOUT,
+  });
+}
+
 function uploadAiDraftPhoto(upload: AIDraftUploadSlot, imageUri: string): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -1194,10 +1245,15 @@ function uploadAiDraftPhoto(upload: AIDraftUploadSlot, imageUri: string): Promis
     xhr.timeout = UPLOAD_TIMEOUT;
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) resolve();
-      else reject(new Error(`Photo ${upload.index + 1} upload failed with status code ${xhr.status}`));
+      else {
+        const err = new Error(`Photo ${upload.index + 1} direct upload failed with status code ${xhr.status}`);
+        (err as any).status = xhr.status;
+        (err as any).r2Key = upload.r2_key;
+        reject(markAIDraftPhase(err, 'direct-r2'));
+      }
     };
-    xhr.onerror = () => reject(new Error(`Photo ${upload.index + 1} upload network error`));
-    xhr.ontimeout = () => reject(new Error(`Photo ${upload.index + 1} upload timed out`));
+    xhr.onerror = () => reject(markAIDraftPhase(new Error(`Photo ${upload.index + 1} direct upload network error`), 'direct-r2'));
+    xhr.ontimeout = () => reject(markAIDraftPhase(new Error(`Photo ${upload.index + 1} direct upload timed out`), 'direct-r2'));
     xhr.send({
       uri: imageUri,
       type: upload.content_type || 'image/jpeg',
@@ -1214,63 +1270,67 @@ export const AIListing = {
   // SPRINT8_PHASE2_GEMINI_V2 — multi-image upload (1-6 photos)
   /** Upload photos directly to R2, queue AI analysis, then poll until ready. */
   draftFromImages: async (imageUris: string[]): Promise<AxiosResponse<AIDraftResponse>> => {
-    const session = await api.post<AIDraftUploadSessionResponse>(
-      '/v1/listings/draft/uploads/request',
-      { images: imageUris.map(() => ({ content_type: 'image/jpeg' })) },
-      { timeout: REQUEST_TIMEOUT },
-    );
-
-    const uploads = [...session.data.uploads].sort((a, b) => a.index - b.index);
-    for (const upload of uploads) {
-      const uri = imageUris[upload.index];
-      if (!uri) throw new Error(`Missing photo ${upload.index + 1}`);
-      await uploadAiDraftPhoto(upload, uri);
-    }
-
-    await api.post(
-      `/v1/listings/draft/${session.data.draft_id}/analysis/start`,
-      {},
-      { timeout: REQUEST_TIMEOUT },
-    );
-
-    let lastStatus: AIDraftAnalysisStatusResponse | null = null;
-    for (let attempt = 0; attempt < 45; attempt++) {
-      const statusRes = await api.get<AIDraftAnalysisStatusResponse>(
-        `/v1/listings/draft/${session.data.draft_id}/analysis/status`,
+    try {
+      const session = await api.post<AIDraftUploadSessionResponse>(
+        '/v1/listings/draft/uploads/request',
+        { images: imageUris.map(() => ({ content_type: 'image/jpeg' })) },
         { timeout: REQUEST_TIMEOUT },
+      ).catch((error) => {
+        throw markAIDraftPhase(error, 'async-session');
+      });
+
+      const uploads = [...session.data.uploads].sort((a, b) => a.index - b.index);
+      for (const upload of uploads) {
+        const uri = imageUris[upload.index];
+        if (!uri) throw new Error(`Missing photo ${upload.index + 1}`);
+        await uploadAiDraftPhoto(upload, uri);
+      }
+
+      await api.post(
+        `/v1/listings/draft/${session.data.draft_id}/analysis/start`,
+        {},
+        { timeout: REQUEST_TIMEOUT },
+      ).catch((error) => {
+        throw markAIDraftPhase(error, 'analysis-start');
+      });
+
+      let lastStatus: AIDraftAnalysisStatusResponse | null = null;
+      for (let attempt = 0; attempt < 45; attempt++) {
+        const statusRes = await api.get<AIDraftAnalysisStatusResponse>(
+          `/v1/listings/draft/${session.data.draft_id}/analysis/status`,
+          { timeout: REQUEST_TIMEOUT },
+        ).catch((error) => {
+          throw markAIDraftPhase(error, 'analysis-status');
+        });
+        lastStatus = statusRes.data;
+        if (statusRes.data.status === 'ready' && statusRes.data.draft) {
+          return { ...statusRes, data: statusRes.data.draft };
+        }
+        if (statusRes.data.status === 'failed' || statusRes.data.status === 'expired') {
+          throw new Error(statusRes.data.message || statusRes.data.error || 'Photo analysis failed');
+        }
+        await sleep((statusRes.data.retry_after_seconds || 2) * 1000);
+      }
+
+      throw new Error(
+        lastStatus?.message ||
+        'Photo analysis is taking longer than expected. Please try again in a moment.',
       );
-      lastStatus = statusRes.data;
-      if (statusRes.data.status === 'ready' && statusRes.data.draft) {
-        return { ...statusRes, data: statusRes.data.draft };
+    } catch (error) {
+      if (shouldFallbackToMultipartDraft(error)) {
+        console.warn('AI draft async upload unavailable; using multipart fallback', {
+          phase: (error as any)?.owmeePhase,
+          status: apiErrorStatus(error),
+          message: (error as any)?.message,
+        });
+        return draftFromImagesMultipartRequest(imageUris);
       }
-      if (statusRes.data.status === 'failed' || statusRes.data.status === 'expired') {
-        throw new Error(statusRes.data.message || statusRes.data.error || 'Photo analysis failed');
-      }
-      await sleep((statusRes.data.retry_after_seconds || 2) * 1000);
+      throw error;
     }
-
-    throw new Error(
-      lastStatus?.message ||
-      'Photo analysis is taking longer than expected. Please try again in a moment.',
-    );
   },
 
-  /** Legacy multipart analysis fallback for older dev tools only. */
-  draftFromImagesMultipart: (imageUris: string[]) => {
-    const form = new FormData();
-    imageUris.forEach((uri, i) => {
-      const name = uri.split('/').pop() || `photo_${i}.jpg`;
-      form.append('images', {
-        uri,
-        type: 'image/jpeg',
-        name,
-      } as any);
-    });
-    return api.post<AIDraftResponse>('/v1/listings/draft/from-images', form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: UPLOAD_TIMEOUT,
-    });
-  },
+  /** Multipart analysis fallback for older backend builds or unreachable direct storage PUTs. */
+  draftFromImagesMultipart: draftFromImagesMultipartRequest,
 
   /** Upload a photo to create a draft. AI returns category/brand/model/price. */
   draftFromImage: (imageUri: string, fileName: string = 'photo.jpg') => {
