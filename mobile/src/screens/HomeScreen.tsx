@@ -57,8 +57,9 @@ const RECENT_FALLBACK_IMAGES: Record<string, ImageSourcePropType> = {
 };
 
 function recentImageSource(item: FeedListing): ImageSourcePropType {
-  const url = item.thumbnail_url || item.image_urls?.[0];
-  if (url?.startsWith('https://')) return { uri: url };
+  const url = [...(item.image_urls || []), item.thumbnail_url]
+    .find(u => !!u && u.startsWith('https://') && !/(localhost|127\.0\.0\.1|192\.168\.|10\.0\.|file:\/\/)/i.test(u));
+  if (url) return { uri: url };
   return (item.category_slug && RECENT_FALLBACK_IMAGES[item.category_slug])
     ? RECENT_FALLBACK_IMAGES[item.category_slug]
     : RECENT_FALLBACK_IMAGES.smartphones;
@@ -589,7 +590,7 @@ function RecentListingsSection({
               accessibilityRole="button"
               accessibilityLabel={`Open recently listed ${item.title}`}
             >
-              <Image source={recentImageSource(item)} style={s.recentImage} resizeMode="cover" />
+              <Image source={recentImageSource(item)} style={s.recentImage} resizeMode="contain" />
               <View style={s.recentCopy}>
                 <Text style={s.recentCardTitle} numberOfLines={2}>
                   {item.title}
@@ -812,7 +813,7 @@ const s = StyleSheet.create({
   },
   recentCard: {
     width: 154,
-    minHeight: 162,
+    minHeight: 176,
     borderRadius: R.md,
     overflow: 'hidden',
     backgroundColor: 'rgba(255,253,248,0.96)',
@@ -822,7 +823,7 @@ const s = StyleSheet.create({
   },
   recentImage: {
     width: '100%',
-    height: 82,
+    height: 96,
     backgroundColor: '#F7EFE7',
   },
   recentCopy: {

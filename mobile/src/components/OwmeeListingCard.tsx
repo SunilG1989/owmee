@@ -70,7 +70,7 @@ function isTrustedImageUrl(u: string | null | undefined): boolean {
 }
 
 function firstImage(listing: FeedListing): string | null {
-  const candidates = [listing.thumbnail_url, ...(listing.image_urls || [])];
+  const candidates = [...(listing.image_urls || []), listing.thumbnail_url];
   for (const url of candidates) {
     if (isTrustedImageUrl(url || null)) return url as string;
   }
@@ -274,9 +274,9 @@ export function FeedCard({
         >
           <View style={s.imageStage}>
             {img ? (
-              <Image source={{ uri: img }} style={s.feedImage} resizeMode="cover" resizeMethod="resize" />
+              <Image source={{ uri: img }} style={s.feedImage} resizeMode="contain" resizeMethod="resize" />
             ) : (
-              <Image source={fallbackImage} style={s.feedImage} resizeMode="cover" resizeMethod="resize" />
+              <Image source={fallbackImage} style={s.feedImage} resizeMode="contain" resizeMethod="resize" />
             )}
             <View pointerEvents="none" style={s.imageWash} />
           </View>

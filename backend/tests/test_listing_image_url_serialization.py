@@ -39,3 +39,41 @@ def test_feed_resigns_legacy_owmee_media_urls(monkeypatch):
     )
 
     assert url == "https://fresh.test/listings/listing-1/photo.jpg?sig=new"
+
+
+def test_feed_cards_use_display_hero_not_thumbnail(monkeypatch):
+    feed_router._IMG_URL_CACHE.clear()
+    monkeypatch.setattr(
+        feed_router,
+        "generate_presigned_download_url",
+        lambda key, expires_in=0: f"https://fresh.test/{key}?sig=new",
+    )
+
+    hero = feed_router._first_display_image_url(
+        "listings/listing-1/hero.jpg.thumb.webp",
+        ["listings/listing-1/hero.jpg.display.webp"],
+    )
+    thumb = feed_router._thumbnail_image_url(
+        "listings/listing-1/hero.jpg.thumb.webp",
+        ["listings/listing-1/hero.jpg.display.webp"],
+    )
+
+    assert hero == "https://fresh.test/listings/listing-1/hero.jpg.display.webp?sig=new"
+    assert thumb == "https://fresh.test/listings/listing-1/hero.jpg.thumb.webp?sig=new"
+
+
+def test_listing_card_urls_prefer_display_hero(monkeypatch):
+    listings_router._IMG_URL_CACHE.clear()
+    monkeypatch.setattr(
+        listings_router,
+        "generate_presigned_download_url",
+        lambda key, expires_in=0: f"https://fresh.test/{key}?sig=new",
+    )
+    listing = SimpleNamespace(
+        thumbnail_url="listings/listing-1/hero.jpg.thumb.webp",
+        image_urls=["listings/listing-1/hero.jpg.display.webp"],
+    )
+
+    urls = listings_router._card_image_urls(listing)
+
+    assert urls == ["https://fresh.test/listings/listing-1/hero.jpg.display.webp?sig=new"]

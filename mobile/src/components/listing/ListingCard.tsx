@@ -70,7 +70,7 @@ export const ListingCard = memo(function ListingCard({
 }: Props) {
   const cardW = cardWidth || 170; // fallback only
   const imgH = Math.round(cardW * 0.76);
-  const rawUri = listing.thumbnail_url || listing.image_urls?.[0] || listing.images?.[0];
+  const rawUri = listing.image_urls?.[0] || listing.images?.[0] || listing.thumbnail_url;
   const uri = isDisplayableImageUrl(rawUri) ? rawUri : null;
   const fallbackImage = fallbackImageForCategory(
     listing.category_slug || (listing.is_kids_item ? 'kids-utility' : null),
@@ -117,10 +117,10 @@ export const ListingCard = memo(function ListingCard({
           {uri ? (
             <Image
               source={{ uri }} // T4-19: immutable cache
-              style={s.img} resizeMode={"cover"}
+              style={s.img} resizeMode="contain"
             />
           ) : (
-            <Image source={fallbackImage} style={s.img} resizeMode="cover" />
+            <Image source={fallbackImage} style={s.img} resizeMode="contain" />
           )}
         </TouchableOpacity>
         {onWishlist && (

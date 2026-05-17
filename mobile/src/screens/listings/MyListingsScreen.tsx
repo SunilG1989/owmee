@@ -48,7 +48,7 @@ function listingsFromResponse(res: any): Listing[] {
 
 function prefetchThumbs(rows: Listing[]) {
   rows.slice(0, 6).forEach((item) => {
-    const img = item.thumbnail_url || (item.image_urls || item.images)?.[0];
+    const img = (item.image_urls || item.images)?.[0] || item.thumbnail_url;
     if (img) Image.prefetch(img).catch(() => {});
   });
 }
@@ -183,7 +183,7 @@ export default function MyListingsScreen({ navigation }: any) {
   const renderItem = ({ item }: { item: Listing | string }) => {
     if (typeof item === 'string') return <MyListingSkeleton />;
     const st = STATUS_MAP[item.status] || STATUS_MAP.draft;
-    const img = item.thumbnail_url || (item.image_urls || item.images)?.[0];
+    const img = (item.image_urls || item.images)?.[0] || item.thumbnail_url;
     const showKebab = EDITABLE_STATUSES.has(item.status) || DELETABLE_STATUSES.has(item.status);
     return (
       <View style={s.card}>
@@ -194,7 +194,7 @@ export default function MyListingsScreen({ navigation }: any) {
           activeOpacity={0.85}
         >
           {img ? (
-            <Image source={{ uri: img }} style={s.thumb} resizeMode="cover" />
+            <Image source={{ uri: img }} style={s.thumb} resizeMode="contain" />
           ) : (
             <View style={[s.thumb, s.noImg]}>
               <Text style={s.noImgIcon}>📦</Text>

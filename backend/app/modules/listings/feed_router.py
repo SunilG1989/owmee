@@ -68,7 +68,17 @@ def _img_url(key: str | None) -> str | None:
         return None
 
 
-def _first_image_url(thumbnail_key: str | None, image_keys: list[str] | None) -> str | None:
+def _first_display_image_url(thumbnail_key: str | None, image_keys: list[str] | None) -> str | None:
+    """Feed cards need the catalog display image, not the tiny thumbnail.
+
+    `listings.image_urls` stores the cleaned/display variant for current
+    listings. `thumbnail_url` is intentionally smaller and should be reserved
+    for tiny surfaces or used only as a legacy fallback.
+    """
+    return _img_url(next(iter(image_keys or []), None) or thumbnail_key)
+
+
+def _thumbnail_image_url(thumbnail_key: str | None, image_keys: list[str] | None) -> str | None:
     return _img_url(thumbnail_key or next(iter(image_keys or []), None))
 
 router = APIRouter(prefix="/v1/feed", tags=["feed"])
@@ -131,6 +141,8 @@ def _serialize_row(r, distance_km):
     )
     created_at = r.get("created_at")
     seller_created_at = r.get("seller_created_at")
+    hero_url = _first_display_image_url(r.get("thumbnail_url"), r.get("image_urls") or [])
+    thumb_url = _thumbnail_image_url(r.get("thumbnail_url"), r.get("image_urls") or [])
     return {
         "id": str(r["id"]),
         "title": r.get("title"),
@@ -140,8 +152,9 @@ def _serialize_row(r, distance_km):
         "original_price": float(r["original_price"]) if r.get("original_price") is not None else None,
         "discount_pct": float(r["discount_pct"]) if r.get("discount_pct") is not None else None,
         # Feed cards only render one image; detail fetches the full gallery.
-        "image_urls": [u] if (u := _first_image_url(r.get("thumbnail_url"), r.get("image_urls") or [])) else [],
-        "thumbnail_url": _first_image_url(r.get("thumbnail_url"), r.get("image_urls") or []),
+        # Use the display hero so horizontal cards do not stretch thumbnails.
+        "image_urls": [hero_url] if hero_url else [],
+        "thumbnail_url": thumb_url,
         "city": r.get("city"),
         "state": r.get("state"),
         "category_slug": r.get("category_slug"),

@@ -109,8 +109,14 @@ logger = structlog.get_logger()
 
 
 def _card_image_urls(listing: Listing) -> list[str]:
-    """Cards render one image; avoid presigning every gallery image on list APIs."""
-    first_key = listing.thumbnail_url or next(iter(listing.image_urls or []), None)
+    """Cards render one display-quality hero; avoid presigning the full gallery.
+
+    `thumbnail_url` is useful for tiny surfaces, but product cards are large
+    enough that stretching the thumbnail makes the hero look soft/cropped.
+    Prefer the first cleaned display image and fall back to the thumbnail for
+    legacy rows that do not have image_urls.
+    """
+    first_key = next(iter(listing.image_urls or []), None) or listing.thumbnail_url
     first_url = _img_url(first_key)
     return [first_url] if first_url else []
 
