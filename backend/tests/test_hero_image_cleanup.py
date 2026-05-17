@@ -126,9 +126,15 @@ def test_google_gemini_cleanup_prompt_locks_product_preservation():
     assert "never recolor the product" in prompt
     assert "human body parts must still be removed" in prompt
     assert "Never keep a hand or skin area merely because it touches the product" in prompt
+    assert "MANDATORY MASK-STYLE WORKFLOW" in prompt
+    assert "fingers wrapped around phone edges/corners" in prompt
+    assert "composite the original visible product pixels" in prompt
+    assert "Do not transform the seller item into a stock render" in prompt
     assert "Treat every human body part as background/occlusion" in prompt
     assert "Remove all visible hands, fingers, thumbs, arms" in prompt
     assert "Do not leave skin-colored fragments" in prompt
+    assert "thumb edges on the screen" in prompt
+    assert "A slightly tighter product crop is better" in prompt
     assert "crop, zoom, or recompose slightly" in prompt
     assert "rejected by an automatic audit" in prompt
     assert "If any human body part, skin patch, finger edge" in prompt
@@ -148,6 +154,7 @@ def test_google_gemini_cleanup_prompt_has_strict_human_retry_mode():
 
     assert "STRICT CORRECTION MODE" in prompt
     assert "previous cleanup may have left a visible hand" in prompt
+    assert "Repeat the cleanup internally" in prompt
     assert "Never recolor, restyle, repair, or beautify the product" in prompt
     assert "crop, zoom, or recompose slightly" in prompt
 

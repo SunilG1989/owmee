@@ -108,9 +108,14 @@ def test_cleanup_prompt_removes_human_body_parts():
     assert "PRIORITY ORDER: first remove human/body artifacts" in prompt
     assert "Never keep a hand or skin area merely because it touches the product" in prompt
     assert "Remove all visible hands, fingers, thumbs, arms" in prompt
+    assert "MANDATORY MASK-STYLE WORKFLOW" in prompt
+    assert "fingers wrapped around phone edges/corners" in prompt
+    assert "skin reflected in the glass" in prompt
+    assert "Do not transform the seller item into a stock render" in prompt
     assert "reflections of people" in prompt
     assert "Do not invent hidden labels" in prompt
     assert "crop, zoom, or recompose slightly" in prompt
     assert "rejected by an automatic audit" in prompt
     assert "product recoloring" in prompt
+    assert "fake stock-render look" in prompt
     assert "If any human body part, skin patch, finger edge" in prompt
