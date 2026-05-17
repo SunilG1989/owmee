@@ -313,6 +313,7 @@ async def _clean_hero_and_mark_detected(
         "provider": cleanup.provider,
         "model": cleanup.model,
         "reason": cleanup.reason,
+        "style": cleanup.style,
     }
     updated_detected = detected.model_copy(update={"image_set_quality": image_quality})
     if cleanup.cleaned and cleanup.display_key:

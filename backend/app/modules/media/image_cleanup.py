@@ -18,6 +18,7 @@ class HeroCleanupOutcome:
     provider: str = "none"
     model: str | None = None
     reason: str | None = None
+    style: str | None = None
 
 
 def select_hero_image_index(detected, image_count: int) -> int:
@@ -58,6 +59,7 @@ async def clean_hero_background(
             provider=result.provider,
             model=result.model,
             reason=result.reason,
+            style=result.style,
         )
 
     cleaned_key = f"{original_key}.hero-cleaned.png"
@@ -78,6 +80,7 @@ async def clean_hero_background(
             provider=result.provider,
             model=result.model,
             reason="persist_failed",
+            style=result.style,
         )
 
     return HeroCleanupOutcome(
@@ -88,4 +91,5 @@ async def clean_hero_background(
         provider=result.provider,
         model=result.model,
         reason=None if processed.display_key else "display_variant_failed",
+        style=result.style,
     )

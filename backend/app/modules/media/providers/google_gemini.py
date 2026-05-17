@@ -3,12 +3,58 @@ from __future__ import annotations
 import logging
 import os
 from base64 import b64decode
+from colorsys import rgb_to_hls
+from dataclasses import dataclass
 from io import BytesIO
 
 from app.core.settings import settings
 from app.modules.media.providers.base import BackgroundCleanupResult
 
 log = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class _BackgroundStyle:
+    name: str
+    description: str
+
+
+_DEFAULT_STYLE = _BackgroundStyle(
+    name="owmee_warm_ivory",
+    description=(
+        "Owmee standard warm ivory studio background (#FEFBF4) with a very "
+        "subtle soft eucalyptus green wash (#EAF4F1), matte finish, clean floor "
+        "curve, and a natural soft contact shadow."
+    ),
+)
+
+_WARM_CONTRAST_STYLE = _BackgroundStyle(
+    name="owmee_soft_burnt_orange_contrast",
+    description=(
+        "Owmee contrast background for green/teal/blue products: warm ivory "
+        "base (#FEFBF4) with a soft desaturated burnt-orange/coral wash "
+        "(#F1D7C8), matte finish, clean floor curve, and a natural soft "
+        "contact shadow."
+    ),
+)
+
+_EUCALYPTUS_CONTRAST_STYLE = _BackgroundStyle(
+    name="owmee_soft_eucalyptus_contrast",
+    description=(
+        "Owmee contrast background for orange/copper/brown products: soft "
+        "eucalyptus green studio background (#E3F0EB), matte finish, clean "
+        "floor curve, and a natural soft contact shadow."
+    ),
+)
+
+_SAGE_CONTRAST_STYLE = _BackgroundStyle(
+    name="owmee_soft_sage_contrast",
+    description=(
+        "Owmee contrast background for white/cream/silver products: slightly "
+        "deeper soft sage green-gray studio background (#D7E7E1), matte finish, "
+        "clean floor curve, and a natural soft contact shadow."
+    ),
+)
 
 
 class GoogleGeminiBackgroundCleanupProvider:
@@ -64,18 +110,9 @@ class GoogleGeminiBackgroundCleanupProvider:
                 reason=f"invalid_image:{type(e).__name__}",
             )
 
+        style = self._choose_background_style(source)
         category_hint = category_slug or "general resale item"
-        prompt = (
-            "Create one marketplace hero photo for Owmee from this seller-uploaded "
-            f"{category_hint} image. Only clean the background. Preserve the actual "
-            "product exactly: same shape, color, model text, scratches, dents, wear, "
-            "damage, stickers, labels, accessories, and perspective. Do not repair, "
-            "beautify, upscale details, add objects, remove product defects, or invent "
-            "missing parts. Remove messy room/background clutter and place the unchanged "
-            "product on a clean premium warm ivory background with a very subtle soft "
-            "green tint and natural contact shadow. Keep the product centered and fully "
-            "visible. Return only the cleaned image."
-        )
+        prompt = self._build_cleanup_prompt(category_hint, style)
 
         client = Client(api_key=api_key)
         try:
@@ -97,6 +134,7 @@ class GoogleGeminiBackgroundCleanupProvider:
                 provider=self.provider_name,
                 model=settings.gemini_image_model,
                 reason="api_error",
+                style=style.name,
             )
 
         output_bytes = self._extract_image_bytes(response)
@@ -106,6 +144,7 @@ class GoogleGeminiBackgroundCleanupProvider:
                 provider=self.provider_name,
                 model=settings.gemini_image_model,
                 reason="no_image_output",
+                style=style.name,
             )
 
         return BackgroundCleanupResult(
@@ -114,7 +153,94 @@ class GoogleGeminiBackgroundCleanupProvider:
             content_type="image/png",
             provider=self.provider_name,
             model=settings.gemini_image_model,
+            style=style.name,
         )
+
+    @staticmethod
+    def _build_cleanup_prompt(category_hint: str, style: _BackgroundStyle) -> str:
+        return (
+            "Create one marketplace hero photo for Owmee from this seller-uploaded "
+            f"{category_hint} image.\n\n"
+            "TASK SCOPE: only replace/clean the background. The product must remain "
+            "the real seller item.\n\n"
+            "PRODUCT PRESERVATION RULES: preserve the product exactly: same shape, "
+            "silhouette, dimensions, color, material, texture, printed text, labels, "
+            "logos, scratches, dents, wear, stains, cracks, stickers, accessories, "
+            "and perspective. Do not repair, beautify, recolor, repaint, sharpen into "
+            "new detail, remove defects, add missing parts, add accessories, change "
+            "screen contents, or hide damage. If preserving the product exactly is "
+            "not possible, return the original product unchanged and only soften the "
+            "background.\n\n"
+            f"BACKGROUND STYLE: use exactly this Owmee catalog style: {style.description} "
+            "Use this same style consistently across listings. Adjust only the "
+            "background shade within this style if needed for edge separation; never "
+            "recolor the product to create contrast.\n\n"
+            "COMPOSITION: keep the product centered, fully visible, upright when the "
+            "source is upright, and large enough for buyers to inspect. Add only a "
+            "natural soft contact shadow under the actual product. No props, no hands, "
+            "no extra objects, no decorative patterns, no text overlays, no artificial "
+            "reflections, no glow, no logo watermark. Return only the cleaned image."
+        )
+
+    @staticmethod
+    def _choose_background_style(source) -> _BackgroundStyle:
+        """Keep one catalog background, switching only when product contrast needs it.
+
+        We use the centered crop as a practical proxy because the AI capture flow
+        asks sellers for centered product photos and the selected hero image should
+        have the item centered. This is intentionally conservative: most products
+        stay on the standard Owmee warm ivory background.
+        """
+        try:
+            image = source.convert("RGB")
+            width, height = image.size
+            crop = image.crop((
+                int(width * 0.2),
+                int(height * 0.2),
+                int(width * 0.8),
+                int(height * 0.8),
+            ))
+            crop.thumbnail((72, 72))
+            pixels = list(crop.getdata())
+        except Exception:
+            return _DEFAULT_STYLE
+
+        if not pixels:
+            return _DEFAULT_STYLE
+
+        light_total = 0.0
+        sat_total = 0.0
+        hue_buckets = {
+            "warm": 0,
+            "green_blue": 0,
+        }
+        vivid_pixels = 0
+
+        for r, g, b in pixels:
+            hue, lightness, saturation = rgb_to_hls(r / 255.0, g / 255.0, b / 255.0)
+            degrees = hue * 360.0
+            light_total += lightness
+            sat_total += saturation
+            if saturation > 0.16 and 0.18 < lightness < 0.88:
+                vivid_pixels += 1
+                if 15 <= degrees <= 70 or degrees >= 335:
+                    hue_buckets["warm"] += 1
+                elif 80 <= degrees <= 230:
+                    hue_buckets["green_blue"] += 1
+
+        avg_light = light_total / len(pixels)
+        avg_sat = sat_total / len(pixels)
+        vivid_ratio = vivid_pixels / len(pixels)
+        warm_ratio = hue_buckets["warm"] / len(pixels)
+        green_blue_ratio = hue_buckets["green_blue"] / len(pixels)
+
+        if avg_light > 0.80 and (avg_sat < 0.45 or vivid_ratio < 0.08):
+            return _SAGE_CONTRAST_STYLE
+        if vivid_ratio > 0.12 and green_blue_ratio > 0.10:
+            return _WARM_CONTRAST_STYLE
+        if vivid_ratio > 0.12 and warm_ratio > 0.10:
+            return _EUCALYPTUS_CONTRAST_STYLE
+        return _DEFAULT_STYLE
 
     @staticmethod
     def _extract_image_bytes(response) -> bytes | None:

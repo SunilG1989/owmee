@@ -40,6 +40,7 @@ async def test_clean_hero_background_persists_provider_output(monkeypatch):
                 content_type="image/png",
                 provider="test-provider",
                 model="test-model",
+                style="owmee_warm_ivory",
             )
 
     monkeypatch.setattr(image_cleanup, "get_background_cleanup_provider", lambda: Provider())
@@ -71,7 +72,56 @@ async def test_clean_hero_background_persists_provider_output(monkeypatch):
     assert outcome.selected_index == 1
     assert outcome.cleaned is True
     assert outcome.provider == "test-provider"
+    assert outcome.style == "owmee_warm_ivory"
     assert outcome.display_key == "ai-drafts/u/d_1.jpg.hero-cleaned.png.display.webp"
+
+
+def test_google_gemini_provider_uses_standard_background_for_most_products():
+    image = Image.new("RGB", (120, 120), "#7d7d7d")
+
+    style = GoogleGeminiBackgroundCleanupProvider._choose_background_style(image)
+
+    assert style.name == "owmee_warm_ivory"
+
+
+def test_google_gemini_provider_switches_background_for_light_products():
+    image = Image.new("RGB", (120, 120), "#f3eee3")
+
+    style = GoogleGeminiBackgroundCleanupProvider._choose_background_style(image)
+
+    assert style.name == "owmee_soft_sage_contrast"
+
+
+def test_google_gemini_provider_switches_background_for_green_products():
+    image = Image.new("RGB", (120, 120), "#4f9b82")
+
+    style = GoogleGeminiBackgroundCleanupProvider._choose_background_style(image)
+
+    assert style.name == "owmee_soft_burnt_orange_contrast"
+
+
+def test_google_gemini_provider_switches_background_for_warm_products():
+    image = Image.new("RGB", (120, 120), "#b66b3d")
+
+    style = GoogleGeminiBackgroundCleanupProvider._choose_background_style(image)
+
+    assert style.name == "owmee_soft_eucalyptus_contrast"
+
+
+def test_google_gemini_cleanup_prompt_locks_product_preservation():
+    style = GoogleGeminiBackgroundCleanupProvider._choose_background_style(
+        Image.new("RGB", (120, 120), "#4f9b82")
+    )
+
+    prompt = GoogleGeminiBackgroundCleanupProvider._build_cleanup_prompt(
+        "kids-utility",
+        style,
+    )
+
+    assert "only replace/clean the background" in prompt
+    assert "preserve the product exactly" in prompt
+    assert "never recolor the product" in prompt
+    assert "soft desaturated burnt-orange/coral wash" in prompt
 
 
 def test_google_gemini_provider_extracts_inline_image_bytes_before_sdk_image_object():

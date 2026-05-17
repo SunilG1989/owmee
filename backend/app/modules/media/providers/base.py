@@ -12,6 +12,7 @@ class BackgroundCleanupResult:
     provider: str = "none"
     model: str | None = None
     reason: str | None = None
+    style: str | None = None
 
 
 class BackgroundCleanupProvider(Protocol):
