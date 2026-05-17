@@ -148,6 +148,11 @@ def test_deprecated_gemini_model_aliases_fail_forward():
     )
 
 
+def test_gemini_pricing_token_budgets_are_large_enough_for_mrp_payloads():
+    assert gemini_client.VISION_DETECT_MAX_OUTPUT_TOKENS >= 8192
+    assert gemini_client.PRICE_ESTIMATE_MAX_OUTPUT_TOKENS >= 1536
+
+
 def test_cleanup_prompt_preserves_reflective_or_same_color_products():
     prompt = GoogleGeminiBackgroundCleanupProvider._build_cleanup_prompt(
         "general resale item",

@@ -69,6 +69,8 @@ log = logging.getLogger(__name__)
 
 DEFAULT_GEMINI_VISION_MODEL = "gemini-3-flash-preview"
 DEFAULT_GEMINI_TEXT_MODEL = "gemini-3-flash-preview"
+VISION_DETECT_MAX_OUTPUT_TOKENS = 8192
+PRICE_ESTIMATE_MAX_OUTPUT_TOKENS = 1536
 
 _DEPRECATED_MODEL_ALIASES = {
     # Google shut down Gemini 3 Pro Preview on 2026-03-09. Some Render envs
@@ -414,7 +416,7 @@ async def detect_from_images(
         response_mime_type="application/json",
         response_schema=_GeminiVisionOut,
         temperature=0.2,
-        max_output_tokens=4096,
+        max_output_tokens=VISION_DETECT_MAX_OUTPUT_TOKENS,
         thinking_config=_thinking_config(types, model, "vision"),
     )
 
@@ -1040,7 +1042,7 @@ async def estimate_price(
         response_mime_type="application/json",
         response_schema=_GeminiPriceOut,
         temperature=0.3,
-        max_output_tokens=768,
+        max_output_tokens=PRICE_ESTIMATE_MAX_OUTPUT_TOKENS,
         thinking_config=_thinking_config(types, model, "text"),
     )
 
