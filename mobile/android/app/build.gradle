@@ -23,16 +23,23 @@ def missingGoogleMapsApiKeyValues = [
     "MISSING_GOOGLE_MAPS_API_KEY"
 ] as Set
 def hasGoogleMapsApiKey = !missingGoogleMapsApiKeyValues.contains(googleMapsApiKey)
+def requireGoogleMapsApiKey = readLocalOrEnvProperty("REQUIRE_GOOGLE_MAPS_API_KEY").equalsIgnoreCase("true")
 
 gradle.taskGraph.whenReady { taskGraph ->
     def buildsReleaseApk = taskGraph.allTasks.any {
         it.path == ":app:assembleRelease" || it.path == ":app:bundleRelease"
     }
-    if (buildsReleaseApk && !hasGoogleMapsApiKey) {
+    if (buildsReleaseApk && !hasGoogleMapsApiKey && requireGoogleMapsApiKey) {
         throw new GradleException(
-            "GOOGLE_MAPS_API_KEY is required for Android release builds. " +
-            "Add it to mobile/android/local.properties or pass -PGOOGLE_MAPS_API_KEY=... " +
-            "before running assembleRelease/bundleRelease."
+            "GOOGLE_MAPS_API_KEY is required because REQUIRE_GOOGLE_MAPS_API_KEY=true. " +
+            "Inject it through CI secrets, an environment variable, a Gradle property, " +
+            "or mobile/android/local.properties before running assembleRelease/bundleRelease."
+        )
+    }
+    if (buildsReleaseApk && !hasGoogleMapsApiKey && !requireGoogleMapsApiKey) {
+        logger.warn(
+            "GOOGLE_MAPS_API_KEY was not provided. Building release with Google Maps disabled. " +
+            "Set REQUIRE_GOOGLE_MAPS_API_KEY=true for production-gated builds."
         )
     }
 }
