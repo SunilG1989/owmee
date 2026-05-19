@@ -23,23 +23,42 @@ def missingGoogleMapsApiKeyValues = [
     "MISSING_GOOGLE_MAPS_API_KEY"
 ] as Set
 def hasGoogleMapsApiKey = !missingGoogleMapsApiKeyValues.contains(googleMapsApiKey)
-def requireGoogleMapsApiKey = readLocalOrEnvProperty("REQUIRE_GOOGLE_MAPS_API_KEY").equalsIgnoreCase("true")
+def allowMissingGoogleMapsApiKey = readLocalOrEnvProperty("ALLOW_MISSING_GOOGLE_MAPS_API_KEY").equalsIgnoreCase("true")
+def releaseStoreFilePath = readLocalOrEnvProperty("OWMEE_RELEASE_STORE_FILE")
+def releaseStorePassword = readLocalOrEnvProperty("OWMEE_RELEASE_STORE_PASSWORD")
+def releaseKeyAlias = readLocalOrEnvProperty("OWMEE_RELEASE_KEY_ALIAS")
+def releaseKeyPassword = readLocalOrEnvProperty("OWMEE_RELEASE_KEY_PASSWORD")
+def requireReleaseSigning = readLocalOrEnvProperty("REQUIRE_RELEASE_SIGNING").equalsIgnoreCase("true")
+def hasReleaseSigningConfig = (
+    releaseStoreFilePath &&
+    releaseStorePassword &&
+    releaseKeyAlias &&
+    releaseKeyPassword
+)
 
 gradle.taskGraph.whenReady { taskGraph ->
     def buildsReleaseApk = taskGraph.allTasks.any {
         it.path == ":app:assembleRelease" || it.path == ":app:bundleRelease"
     }
-    if (buildsReleaseApk && !hasGoogleMapsApiKey && requireGoogleMapsApiKey) {
+    if (buildsReleaseApk && !hasGoogleMapsApiKey && !allowMissingGoogleMapsApiKey) {
         throw new GradleException(
-            "GOOGLE_MAPS_API_KEY is required because REQUIRE_GOOGLE_MAPS_API_KEY=true. " +
+            "GOOGLE_MAPS_API_KEY is required for Android release builds. " +
             "Inject it through CI secrets, an environment variable, a Gradle property, " +
-            "or mobile/android/local.properties before running assembleRelease/bundleRelease."
+            "or mobile/android/local.properties before running assembleRelease/bundleRelease. " +
+            "Only set ALLOW_MISSING_GOOGLE_MAPS_API_KEY=true for non-production smoke builds."
         )
     }
-    if (buildsReleaseApk && !hasGoogleMapsApiKey && !requireGoogleMapsApiKey) {
+    if (buildsReleaseApk && !hasGoogleMapsApiKey && allowMissingGoogleMapsApiKey) {
         logger.warn(
             "GOOGLE_MAPS_API_KEY was not provided. Building release with Google Maps disabled. " +
-            "Set REQUIRE_GOOGLE_MAPS_API_KEY=true for production-gated builds."
+            "Do not ship this artifact to users."
+        )
+    }
+    if (buildsReleaseApk && requireReleaseSigning && !hasReleaseSigningConfig) {
+        throw new GradleException(
+            "Release signing is required because REQUIRE_RELEASE_SIGNING=true. " +
+            "Provide OWMEE_RELEASE_STORE_FILE, OWMEE_RELEASE_STORE_PASSWORD, " +
+            "OWMEE_RELEASE_KEY_ALIAS, and OWMEE_RELEASE_KEY_PASSWORD through CI secrets."
         )
     }
 }
@@ -138,15 +157,21 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        release {
+            if (hasReleaseSigningConfig) {
+                storeFile file(releaseStoreFilePath)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            signingConfig hasReleaseSigningConfig ? signingConfigs.release : signingConfigs.debug
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
