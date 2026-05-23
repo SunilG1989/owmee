@@ -45,6 +45,18 @@ def run_migrations_online() -> None:
     with connectable.connect() as connection:
         connection.exec_driver_sql('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"')
         connection.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS postgis")
+        # Alembic creates version_num as VARCHAR(32) by default. Owmee uses
+        # descriptive revision ids, so widen the column before any pending
+        # migration tries to record a longer revision string.
+        connection.exec_driver_sql("""
+            DO $$
+            BEGIN
+                IF to_regclass('alembic_version') IS NOT NULL THEN
+                    ALTER TABLE alembic_version
+                    ALTER COLUMN version_num TYPE VARCHAR(255);
+                END IF;
+            END $$;
+        """)
         connection.commit()
         context.configure(
             connection=connection, target_metadata=target_metadata, compare_type=True,
