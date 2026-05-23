@@ -72,6 +72,18 @@ async def test_msg91_adapter_fails_closed_without_template_id(monkeypatch):
     assert "SMS_TEMPLATE_ID" in result.error
 
 
+@pytest.mark.asyncio
+async def test_msg91_adapter_fails_closed_with_placeholder_template_id(monkeypatch):
+    monkeypatch.setattr(settings, "sms_api_key", "auth_key")
+    monkeypatch.setattr(settings, "sms_template_id", "REPLACE_WITH_MSG91_TEMPLATE_ID")
+
+    result = await sms_adapter._Msg91SMSAdapter().send_otp("+919876543210", "123456")
+
+    assert result.success is False
+    assert result.provider == "msg91"
+    assert "SMS_TEMPLATE_ID" in result.error
+
+
 def test_render_blueprint_declares_required_msg91_env_slots():
     render_yaml = Path(__file__).resolve().parents[2] / "render.yaml"
     text = render_yaml.read_text()
@@ -82,3 +94,4 @@ def test_render_blueprint_declares_required_msg91_env_slots():
     assert text.count("key: SMS_TEMPLATE_ID") == 2
     assert text.count("key: SMS_SENDER_ID") == 2
     assert text.count("key: SMS_DLT_ENTITY_ID") == 2
+    assert text.count("REPLACE_WITH_MSG91_TEMPLATE_ID") == 2

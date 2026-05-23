@@ -80,7 +80,7 @@ services:
       - key: SMS_API_KEY
         sync: false
       - key: SMS_TEMPLATE_ID
-        sync: false
+        value: REPLACE_WITH_MSG91_TEMPLATE_ID
       - key: SMS_SENDER_ID
         value: OWMEO
       - key: SMS_DLT_ENTITY_ID
@@ -234,7 +234,7 @@ services:
       - key: SMS_API_KEY
         sync: false
       - key: SMS_TEMPLATE_ID
-        sync: false
+        value: REPLACE_WITH_MSG91_TEMPLATE_ID
       - key: SMS_SENDER_ID
         value: OWMEO
       - key: SMS_DLT_ENTITY_ID

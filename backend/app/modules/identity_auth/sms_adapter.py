@@ -44,11 +44,11 @@ class _Msg91SMSAdapter:
     """
 
     async def send_otp(self, phone: str, otp: str) -> SMSDeliveryResult:
-        if not settings.sms_api_key or not settings.sms_template_id:
+        if _missing_msg91_value(settings.sms_api_key) or _missing_msg91_value(settings.sms_template_id):
             return SMSDeliveryResult(
                 success=False,
                 provider="msg91",
-                error="SMS_API_KEY and SMS_TEMPLATE_ID are required for MSG91",
+                error="Valid SMS_API_KEY and SMS_TEMPLATE_ID are required for MSG91",
             )
 
         mobile = phone.lstrip("+")
@@ -91,6 +91,11 @@ def _looks_successful_msg91_response(data: dict) -> bool:
     if status in {"success", "sent"}:
         return True
     return bool(data.get("request_id") or data.get("requestId"))
+
+
+def _missing_msg91_value(value: str | None) -> bool:
+    raw = str(value or "").strip()
+    return not raw or raw.startswith("REPLACE_WITH_")
 
 
 def sms_provider_is_mock() -> bool:
