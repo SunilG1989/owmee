@@ -17,22 +17,12 @@ Why these prompts changed (v2):
   claims, and clearer "return no price" behaviour when evidence is thin.
 """
 
-# Kept as the canonical category list for any other consumer of this
-# module. The vision prompt below has the taxonomy inlined for clarity;
-# keep these two in sync if you change either.
-CATEGORY_SLUGS = [
-    "smartphones",
-    "laptops",
-    "tablets",
-    "small-appliances",
-    "kids-utility",
-    "others",
-]
+from app.modules.ai_assistant.category_taxonomy import CATEGORY_SLUGS, CATEGORY_TAXONOMY_PROMPT
 
 CONDITION_VALUES = ["like_new", "good", "fair"]
 
 
-PROMPT_VISION_DETECT = """
+PROMPT_VISION_DETECT = f"""
 You are an expert resale listing extractor and second-hand product appraiser for the Indian resale market.
 
 You analyse photos for ONE proposed resale listing. The seller may upload multiple photos, but they should represent the SAME ITEM from different angles unless clearly inconsistent.
@@ -183,30 +173,8 @@ Do not infer these from model knowledge:
 - exact suffix like Pro/Max/Ultra/Plus unless visible
 
 ==================================================
-CATEGORY TAXONOMY
-==================================================
+{CATEGORY_TAXONOMY_PROMPT.strip()}
 
-category_slug must be one of:
-- "smartphones"
-- "laptops"
-- "tablets"
-- "small-appliances"
-- "kids-utility"
-- "others"
-- null
-
-Kids mapping:
-- toys, LEGO, dolls, puzzles, board games, ride-on toys -> "kids-utility"
-- books, flashcards, STEM kits, learning kits, school learning material -> "kids-utility"
-- stroller, carrier, booster, baby monitor, baby chair, sterilizer, kids bag -> "kids-utility"
-
-Other mapping:
-- If a real sellable product is visible but it does not fit smartphones,
-  laptops, tablets, small-appliances, or kids-utility, use "others".
-- Use null only when no sellable product is visible, the image is unsafe,
-  or the item cannot be identified enough to create a listing draft.
-
-==================================================
 IDENTIFICATION
 ==================================================
 
@@ -601,6 +569,8 @@ before listing. Use field keys only, for example:
 - "color"
 - "condition_guess"
 - "price"
+- "original_price"
+- "mrp_source"
 - "age_suitability"
 - "hygiene_status"
 - "has_box"
@@ -614,6 +584,8 @@ Rules:
 - For "others", include at least title and detected_item_type.
 - If category confidence is below 0.75, include category_slug.
 - If exact model is unclear, include model.
+- If mrp_inr is present, include original_price and mrp_source so the seller
+  reviews the buyer-facing discount before publish.
 - If kids set completeness, hygiene, age range, or working condition is unclear, include the nearest editable field and seller_photo_feedback.
 - If accessories, bill, box, charger, warranty, or visible defects are uncertain, include the relevant editable field.
 
@@ -769,8 +741,20 @@ Return ONLY the description text — no JSON, no quotes, no markdown.
 
 PROMPT_PRICE_ESTIMATE = """You are pricing a second-hand item for the Indian
 resale market. You will receive structured fields and must return a JSON
-object with price_inr (integer rupees), confidence (0.0-1.0), and reasoning
-(one sentence).
+object with:
+- price_inr (integer rupees): conservative resale asking-price guidance
+- confidence (0.0-1.0): confidence in price_inr
+- reasoning (one sentence)
+- mrp_inr (integer rupees or null): original MRP/new-price anchor
+- mrp_confidence (0.0-1.0)
+- mrp_source: "market_anchor" or null
+- mrp_reasoning (one sentence or null)
+
+MRP and resale price are different. Never back-calculate MRP from resale
+price. Never invent an exact-looking fake MRP. For this text-only pricing
+fallback, mrp_source must be "market_anchor" and only when the category, brand,
+model, and price-changing specs are specific enough for a conservative Indian
+new-price anchor. If the variant is unclear, return mrp_inr = null.
 
 Consider:
 - Current Indian retail price only as a coarse anchor; do not pretend to know
@@ -796,6 +780,10 @@ always edit the number upward, but an overpriced listing won't get offers.
 If the model, category, specs, condition, item type, or completeness are not
 specific enough to price responsibly, return price_inr = 0, confidence <= 0.49,
 and a reasoning sentence that says what detail is missing.
+
+When price_inr is positive and mrp_inr is available, mrp_inr must be higher
+than price_inr. If not, set mrp_inr = null. Keep market_anchor MRP rounded to
+clean Indian retail values, not precise numbers.
 
 Output INR only, no decimals, no currency symbol in the number.
 """

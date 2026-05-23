@@ -70,7 +70,7 @@ log = logging.getLogger(__name__)
 DEFAULT_GEMINI_VISION_MODEL = "gemini-3-flash-preview"
 DEFAULT_GEMINI_TEXT_MODEL = "gemini-3-flash-preview"
 VISION_DETECT_MAX_OUTPUT_TOKENS = 8192
-PRICE_ESTIMATE_MAX_OUTPUT_TOKENS = 1536
+PRICE_ESTIMATE_MAX_OUTPUT_TOKENS = 2048
 
 _DEPRECATED_MODEL_ALIASES = {
     # Google shut down Gemini 3 Pro Preview on 2026-03-09. Some Render envs
@@ -230,6 +230,10 @@ class _GeminiPriceOut(BaseModel):
     price_inr: int = 0
     confidence: float = 0.0
     reasoning: str = ""
+    mrp_inr: int | None = None
+    mrp_confidence: float = 0.0
+    mrp_source: str | None = None
+    mrp_reasoning: str | None = None
 
 
 _extract_imei_candidate = extract_imei_candidate
@@ -1071,11 +1075,15 @@ async def estimate_price(
         except Exception:
             return None
 
-    if parsed.price_inr <= 0:
+    if parsed.price_inr <= 0 and not parsed.mrp_inr:
         return None
 
     return {
-        "price_inr": int(parsed.price_inr),
+        "price_inr": int(parsed.price_inr or 0),
         "confidence": float(parsed.confidence or 0.0),
         "reasoning": str(parsed.reasoning or "")[:200],
+        "mrp_inr": int(parsed.mrp_inr) if parsed.mrp_inr else None,
+        "mrp_confidence": float(parsed.mrp_confidence or 0.0),
+        "mrp_source": parsed.mrp_source,
+        "mrp_reasoning": str(parsed.mrp_reasoning or "")[:200] if parsed.mrp_reasoning else None,
     }

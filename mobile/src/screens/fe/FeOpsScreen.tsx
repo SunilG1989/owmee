@@ -60,6 +60,15 @@ export default function FeOpsScreen({ navigation }: RootScreen<'FeOps'>) {
     : tab === 'deliveries'
       ? 'No deliveries assigned to you right now.'
       : 'No return collections assigned to you right now.';
+  const routeLineFor = (item: FePickup) => {
+    if (tab === 'pickups') {
+      return [item.seller_locality, item.seller_city, item.seller_pincode].filter(Boolean).join(' · ');
+    }
+    if (tab === 'deliveries') {
+      return [item.buyer_locality, item.buyer_city, item.buyer_pincode].filter(Boolean).join(' · ');
+    }
+    return '';
+  };
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
@@ -108,6 +117,9 @@ export default function FeOpsScreen({ navigation }: RootScreen<'FeOps'>) {
             <TouchableOpacity style={s.card} onPress={() => setActive({ kind: tab, item })}>
               <Text style={s.cardTitle} numberOfLines={1}>{item.listing_title || 'Item'}</Text>
               <Text style={s.cardMeta}>₹{item.gross_amount}</Text>
+              {routeLineFor(item) ? (
+                <Text style={s.cardRoute} numberOfLines={1}>{routeLineFor(item)}</Text>
+              ) : null}
               {tab === 'deliveries' && item.delivery_mode === 'courier' && (
                 <Text style={s.cardWarn}>Courier delivery — admin handles this</Text>
               )}
@@ -237,6 +249,20 @@ function PickupSheet({ item, onClose, onDone }: { item: FePickup; onClose: () =>
           <Text style={s.sheetTitle}>{item.listing_title || 'Collection'}</Text>
           <Text style={s.sheetSub}>₹{item.gross_amount}</Text>
 
+          {(item.seller_name || item.seller_phone || item.seller_full_address) ? (
+            <View style={s.recipientCard}>
+              {item.seller_name ? (
+                <Text style={s.recipientName}>Pickup from {item.seller_name}</Text>
+              ) : null}
+              {item.seller_phone ? (
+                <Text style={s.recipientPhone}>+91 {item.seller_phone}</Text>
+              ) : null}
+              {item.seller_full_address ? (
+                <Text style={s.recipientAddress}>{item.seller_full_address}</Text>
+              ) : null}
+            </View>
+          ) : null}
+
           <View style={s.row}>
             <Text style={s.rowLabel}>Inspection passed</Text>
             <Switch value={passed} onValueChange={setPassed} thumbColor={C.petrol} />
@@ -339,16 +365,19 @@ function DeliverySheet({ item, onClose, onDone }: { item: FePickup; onClose: () 
           {/* Recipient details — surface buyer name/phone + order notes so
              the FE agent knows whose name is on the package and any
              gate/parking instructions before they ring the bell. */}
-          {(item.buyer_name || item.buyer_phone || item.order_notes) ? (
+          {(item.buyer_name || item.buyer_phone || item.buyer_full_address || item.order_notes) ? (
             <View style={s.recipientCard}>
               {item.buyer_name ? (
-                <Text style={s.recipientName}>📦 Hand to: {item.buyer_name}</Text>
+                <Text style={s.recipientName}>Hand to {item.buyer_name}</Text>
               ) : null}
               {item.buyer_phone ? (
-                <Text style={s.recipientPhone}>📞 +91 {item.buyer_phone}</Text>
+                <Text style={s.recipientPhone}>+91 {item.buyer_phone}</Text>
+              ) : null}
+              {item.buyer_full_address ? (
+                <Text style={s.recipientAddress}>{item.buyer_full_address}</Text>
               ) : null}
               {item.order_notes ? (
-                <Text style={s.recipientNotes}>📝 {item.order_notes}</Text>
+                <Text style={s.recipientNotes}>{item.order_notes}</Text>
               ) : null}
             </View>
           ) : null}
@@ -417,6 +446,7 @@ const s = StyleSheet.create({
   },
   cardTitle: { fontSize: T.size.md, fontWeight: T.weight.semi, color: C.text },
   cardMeta: { fontSize: T.size.base, color: C.text3, marginTop: S.xs },
+  cardRoute: { fontSize: T.size.sm, color: C.text3, marginTop: S.xs, lineHeight: 17 },
   cardWarn: { fontSize: T.size.sm, color: C.petrol, marginTop: S.xs + 2, fontStyle: 'italic' },
 
   empty: { padding: S.xxxl + S.xxl, alignItems: 'center' },
@@ -440,6 +470,7 @@ const s = StyleSheet.create({
   },
   recipientName: { fontSize: T.size.md, fontWeight: T.weight.bold, color: C.petrolDeep },
   recipientPhone: { fontSize: T.size.base, color: C.petrolDeep, fontWeight: T.weight.semi },
+  recipientAddress: { fontSize: T.size.sm + 1, color: C.text2, lineHeight: 19 },
   recipientNotes: { fontSize: T.size.sm + 1, color: C.text2, marginTop: 4, fontStyle: 'italic' },
 
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginVertical: S.md },

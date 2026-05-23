@@ -1,6 +1,5 @@
 /**
- * PriceSheet — bottom sheet to set a custom price.
- * Shows comparables for context, with a "Use suggested" link to revert.
+ * PriceSheet — seller-owned asking price plus reviewed MRP source.
  */
 import React, { useState } from 'react';
 import {
@@ -21,19 +20,33 @@ import type { AIComparable } from '../../../../services/api';
 
 interface Props {
   suggested?: number | null;
-  mrp?: number | null;
-  discountPct?: number | null;
+  initialMrp?: number | null;
+  initialMrpSource?: string | null;
+  mrpConfidence?: number | null;
+  mrpReasoning?: string | null;
   comparables: AIComparable[];
   initial?: number | null;
-  onSave: (price: number) => void;
+  onSave: (price: number, originalPrice: number | null, mrpSource: string | null) => void;
   onUseSuggested: () => void;
   onClose: () => void;
 }
 
+const MRP_SOURCE_OPTIONS = [
+  { key: 'visible_mrp', label: 'Seen on box' },
+  { key: 'receipt_or_bill', label: 'From bill' },
+  { key: 'seller_entered', label: 'Seller entered' },
+  { key: 'market_anchor', label: 'Market estimate' },
+];
+
+const buyerFacingMrpSource = (source?: string | null) =>
+  source === 'visible_mrp' || source === 'receipt_or_bill' || source === 'seller_entered';
+
 export default function PriceSheet({
   suggested,
-  mrp,
-  discountPct,
+  initialMrp,
+  initialMrpSource,
+  mrpConfidence,
+  mrpReasoning,
   comparables,
   initial,
   onSave,
@@ -41,9 +54,18 @@ export default function PriceSheet({
   onClose,
 }: Props) {
   const [text, setText] = useState(initial ? String(Math.round(initial)) : '');
+  const [mrpText, setMrpText] = useState(initialMrp ? String(Math.round(initialMrp)) : '');
+  const [mrpSource, setMrpSource] = useState<string | null>(initialMrpSource || null);
 
   const num = parseInt(text.replace(/[^0-9]/g, ''), 10);
   const valid = !isNaN(num) && num > 0;
+  const mrpNum = parseInt(mrpText.replace(/[^0-9]/g, ''), 10);
+  const mrpEntered = mrpText.trim().length > 0;
+  const hasValidMrp = valid && !isNaN(mrpNum) && mrpNum > num;
+  const discountPct = hasValidMrp && buyerFacingMrpSource(mrpSource)
+    ? Math.round((1 - num / mrpNum) * 100)
+    : null;
+  const canSave = valid && (!mrpEntered || (hasValidMrp && !!mrpSource));
 
   return (
     <Modal transparent visible animationType="slide" onRequestClose={onClose}>
@@ -53,21 +75,23 @@ export default function PriceSheet({
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={st.sheet}>
           <View style={st.handle} />
-          <Text style={st.title}>Set asking price</Text>
+          <Text style={st.title}>Set price and MRP</Text>
 
-          {/* Suggested context */}
+          <ScrollView style={st.bodyScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={st.suggestBox}>
             <Text style={st.suggestLabel}>Owmee guidance</Text>
             <Text style={st.suggestPrice}>{suggested ? formatPrice(suggested) : 'Set manually'}</Text>
-            {mrp && discountPct ? (
+            {initialMrp ? (
               <View style={st.mrpLine}>
-                <Text style={st.mrpStrike}>MRP {formatPrice(mrp)}</Text>
-                <Text style={st.mrpDiscount}>{discountPct}% off</Text>
+                <Text style={st.mrpStrike}>MRP suggestion {formatPrice(initialMrp)}</Text>
+                <Text style={st.mrpDiscount}>
+                  {initialMrpSource === 'market_anchor' ? 'estimate' : 'review'}
+                </Text>
               </View>
             ) : null}
+            {mrpReasoning ? <Text style={st.mrpReasoning}>{mrpReasoning}</Text> : null}
           </View>
 
-          {/* Custom input */}
           <Text style={st.label}>Your asking price (₹)</Text>
           <TextInput
             style={st.input}
@@ -78,7 +102,56 @@ export default function PriceSheet({
             placeholderTextColor={C.text4}
           />
 
-          {/* Comparables */}
+          <Text style={st.label}>Original MRP (optional)</Text>
+          <TextInput
+            style={st.input}
+            value={mrpText}
+            onChangeText={setMrpText}
+            keyboardType="number-pad"
+            placeholder="Add only if you can stand behind it"
+            placeholderTextColor={C.text4}
+          />
+          <Text style={st.mrpHelper}>
+            Buyer discount is shown only when MRP is from box, bill/receipt, or a seller-confirmed original MRP.
+          </Text>
+
+          {mrpEntered ? (
+            <View style={st.sourceRow}>
+              {MRP_SOURCE_OPTIONS.map((source) => {
+                const active = mrpSource === source.key;
+                return (
+                  <TouchableOpacity
+                    key={source.key}
+                    onPress={() => setMrpSource(source.key)}
+                    activeOpacity={0.82}
+                    style={[st.sourceChip, active && st.sourceChipActive]}>
+                    <Text style={[st.sourceText, active && st.sourceTextActive]}>
+                      {source.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ) : null}
+
+          {mrpEntered && !hasValidMrp && valid ? (
+            <Text style={st.mrpError}>MRP must be higher than the asking price.</Text>
+          ) : null}
+          {hasValidMrp && !mrpSource ? (
+            <Text style={st.mrpError}>Choose where the MRP came from.</Text>
+          ) : null}
+          {hasValidMrp && mrpSource === 'market_anchor' ? (
+            <Text style={st.mrpMuted}>Market estimates are saved for support context, but not shown as a buyer discount.</Text>
+          ) : null}
+          {discountPct && discountPct > 0 ? (
+            <View style={st.discountPreview}>
+              <Text style={st.discountPreviewText}>Buyer tag: {discountPct}% off</Text>
+              {mrpConfidence != null ? (
+                <Text style={st.discountPreviewSub}>AI confidence {Math.round(mrpConfidence * 100)}%</Text>
+              ) : null}
+            </View>
+          ) : null}
+
           {comparables.length > 0 && (
             <>
               <Text style={st.compsLabel}>Recent similar sales</Text>
@@ -101,16 +174,19 @@ export default function PriceSheet({
             </>
           )}
 
-          {/* Actions */}
           {suggested ? (
             <Button
               label="Use suggested price"
               variant="ghost"
               size="sm"
-              onPress={onUseSuggested}
+              onPress={() => {
+                setText(String(Math.round(suggested)));
+                onUseSuggested();
+              }}
               style={st.useSuggestedBtn}
             />
           ) : null}
+          </ScrollView>
 
           <View style={st.ctaRow}>
             <Button
@@ -122,8 +198,8 @@ export default function PriceSheet({
             <Button
               label="Save"
               variant="primary"
-              disabled={!valid}
-              onPress={() => onSave(num)}
+              disabled={!canSave}
+              onPress={() => onSave(num, hasValidMrp ? mrpNum : null, hasValidMrp ? mrpSource : null)}
               style={st.saveBtn}
             />
           </View>
@@ -142,7 +218,7 @@ const st = StyleSheet.create({
     borderTopRightRadius: R.xl,
     padding: S.lg,
     paddingBottom: S.xxl,
-    maxHeight: '90%',
+    maxHeight: '92%',
   },
   handle: {
     alignSelf: 'center',
@@ -153,7 +229,7 @@ const st = StyleSheet.create({
     marginBottom: S.md,
   },
   title: { fontSize: T.size.xl, fontWeight: T.weight.bold, color: C.text, marginBottom: S.lg },
-
+  bodyScroll: { maxHeight: '82%' },
   suggestBox: {
     backgroundColor: C.petrolLight,
     padding: S.md,
@@ -164,9 +240,15 @@ const st = StyleSheet.create({
   suggestLabel: { fontSize: T.size.sm, color: C.petrolText, marginBottom: 2 },
   suggestPrice: { fontSize: T.size.xxl, fontWeight: T.weight.bold, color: C.petrolText },
   mrpLine: { marginTop: 4, flexDirection: 'row', alignItems: 'center', gap: S.sm },
-  mrpStrike: { fontSize: T.size.sm, color: C.text3, textDecorationLine: 'line-through' },
+  mrpStrike: { fontSize: T.size.sm, color: C.text3 },
   mrpDiscount: { fontSize: T.size.sm, color: C.green, fontWeight: T.weight.bold },
-
+  mrpReasoning: {
+    marginTop: S.xs,
+    fontSize: T.size.xs,
+    lineHeight: T.size.xs + 4,
+    color: C.petrolText,
+    textAlign: 'center',
+  },
   label: {
     fontSize: T.size.sm,
     fontWeight: T.weight.semi,
@@ -179,13 +261,59 @@ const st = StyleSheet.create({
     borderRadius: R.md,
     paddingHorizontal: S.md,
     paddingVertical: Platform.OS === 'ios' ? S.md : S.sm,
-    fontSize: T.size.xl,
+    fontSize: T.size.lg,
     fontWeight: T.weight.bold,
     color: C.text,
     backgroundColor: C.bone,
-    marginBottom: S.lg,
+    marginBottom: S.md,
   },
-
+  mrpHelper: {
+    marginTop: -S.xs,
+    marginBottom: S.sm,
+    fontSize: T.size.xs,
+    lineHeight: T.size.xs + 4,
+    color: C.text4,
+  },
+  sourceRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: S.sm,
+    marginBottom: S.sm,
+  },
+  sourceChip: {
+    paddingHorizontal: S.md,
+    paddingVertical: S.sm,
+    borderRadius: R.pill,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.bone,
+  },
+  sourceChipActive: {
+    borderColor: C.ctaPrimary,
+    backgroundColor: C.ctaPrimarySoft,
+  },
+  sourceText: { fontSize: T.size.sm, fontWeight: T.weight.semi, color: C.text2 },
+  sourceTextActive: { color: C.ctaPrimary },
+  mrpError: {
+    marginBottom: S.sm,
+    fontSize: T.size.sm,
+    color: C.red,
+    fontWeight: T.weight.semi,
+  },
+  mrpMuted: {
+    marginBottom: S.sm,
+    fontSize: T.size.sm,
+    color: C.text3,
+    lineHeight: T.size.sm + 5,
+  },
+  discountPreview: {
+    marginBottom: S.md,
+    padding: S.md,
+    borderRadius: R.md,
+    backgroundColor: C.greenLight,
+  },
+  discountPreviewText: { fontSize: T.size.sm, color: C.green, fontWeight: T.weight.bold },
+  discountPreviewSub: { marginTop: 2, fontSize: T.size.xs, color: C.text3 },
   compsLabel: {
     fontSize: T.size.sm,
     fontWeight: T.weight.semi,
@@ -206,10 +334,8 @@ const st = StyleSheet.create({
   compMeta: { alignItems: 'flex-end' },
   compPrice: { fontSize: T.size.md, fontWeight: T.weight.bold, color: C.text },
   compAge: { fontSize: T.size.xs, color: C.text3 },
-
-  compsScroll: { maxHeight: 220 },
+  compsScroll: { maxHeight: 180 },
   useSuggestedBtn: { marginTop: S.lg, alignSelf: 'center' },
-
   ctaRow: { flexDirection: 'row', gap: S.md, marginTop: S.lg },
   cancelBtn: { flex: 1 },
   saveBtn: { flex: 2 },

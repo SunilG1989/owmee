@@ -39,6 +39,7 @@ def _preload_all_models():  # noqa: D401
     import app.modules.payments.models  # noqa: F401
     import app.modules.risk.models  # noqa: F401
     import app.modules.transactions.models  # noqa: F401
+    import app.modules.verification.models  # noqa: F401
 
 
 _preload_all_models()

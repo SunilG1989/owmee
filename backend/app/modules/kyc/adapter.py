@@ -54,12 +54,16 @@ class PANVerifyResponse:
         success: bool,
         name: str | None = None,
         pan_aadhaar_linked: bool = False,
+        name_match_result: str | None = None,
+        name_match_score: float | None = None,
         error: str | None = None,
         error_code: str | None = None,
     ):
         self.success = success
         self.name = name
         self.pan_aadhaar_linked = pan_aadhaar_linked
+        self.name_match_result = name_match_result
+        self.name_match_score = name_match_score
         self.error = error
         self.error_code = error_code
 
@@ -130,6 +134,8 @@ class _DevKYCAdapter:
             success=True,
             name="Dev User",
             pan_aadhaar_linked=True,
+            name_match_result="pass",
+            name_match_score=1.0,
         )
 
     async def liveness_create_session(
@@ -235,6 +241,8 @@ class _DigioKYCAdapter:
                     success=True,
                     name=data.get("name_on_pan"),
                     pan_aadhaar_linked=data.get("aadhaar_linked", False),
+                    name_match_result=data.get("name_match_result"),
+                    name_match_score=data.get("name_match_score"),
                 )
             return PANVerifyResponse(
                 success=False,

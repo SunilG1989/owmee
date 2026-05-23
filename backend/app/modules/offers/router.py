@@ -36,13 +36,19 @@ from app.modules.offers.models import (
 )
 from app.modules.offers.service import (
     accept_offer, add_to_wishlist, buyer_confirm_deal,
-    counter_offer, make_offer,
+    confirm_seller_readiness, decline_seller_readiness,
+    counter_offer, delivery_fee_for, make_offer,
     notify_price_drop, process_payment_paid, reject_offer,
     remove_from_wishlist, submit_rating, update_offer_price, withdraw_offer,
 )
 from app.modules.listings.models import Listing
 from app.modules.listings.router import _fmt_card, _seller_verified
 from app.modules.identity_auth.models import User
+from app.modules.transactions.address_snapshots import (
+    snapshot_from_user_address,
+    snapshot_summary,
+)
+from app.modules.verification.service import ACTION_BUY, evaluate_user_action
 
 router = APIRouter()
 logger = structlog.get_logger()
@@ -72,6 +78,22 @@ class RateRequest(BaseModel):
     stars: int = Field(..., ge=1, le=5)
     comment: str | None = Field(None, max_length=500)
     item_as_described: str | None = Field(None, pattern="^(yes|mostly|no)$")
+
+
+class ConfirmSellerReadinessRequest(BaseModel):
+    pickup_address_id: UUID | None = None
+    pickup_slot_start: datetime | None = None
+    pickup_slot_end: datetime | None = None
+    item_available: bool = True
+    condition_unchanged: bool = True
+    accessories_confirmed: bool = True
+
+
+class DeclineSellerReadinessRequest(BaseModel):
+    reason: str = Field(
+        ...,
+        pattern="^(sold_elsewhere|item_damaged|changed_mind|cannot_pickup|other)$",
+    )
 
 
 class NotificationPreferencesRequest(BaseModel):
@@ -116,10 +138,16 @@ def _fmt_txn(t: Transaction) -> dict:
         "buyer_id": str(t.buyer_id),
         "seller_id": str(t.seller_id),
         "gross_amount": str(t.gross_amount),
+        "amount": str(t.gross_amount),
+        "delivery_fee": str(t.delivery_fee or 0),
         "net_payout": str(t.net_payout),
         "payment_method": t.payment_method,
         "status": t.status,
+        "seller_readiness_status": t.seller_readiness_status,
+        "seller_readiness_reason": t.seller_readiness_reason,
         "pickup_readiness_deadline": t.seller_response_deadline.isoformat() if t.seller_response_deadline else None,
+        "seller_responded_at": t.seller_responded_at.isoformat() if t.seller_responded_at else None,
+        "pickup_ready_at": t.pickup_ready_at.isoformat() if t.pickup_ready_at else None,
         "rate_available_at": t.rate_available_at.isoformat() if t.rate_available_at else None,
         "confirmation_deadline": t.confirmation_deadline.isoformat() if t.confirmation_deadline else None,
         "buyer_confirmed_at": t.buyer_confirmed_at.isoformat() if t.buyer_confirmed_at else None,
@@ -231,8 +259,17 @@ async def accept_offer_endpoint(offer_id: UUID, current_user: BasicUser, db: DBS
             "CANNOT_ACCEPT": "You cannot accept this offer.",
             "LISTING_NO_LONGER_AVAILABLE": "The listing is no longer available.",
             "PAYMENT_LINK_FAILED": "Could not create payment link. Please try again.",
+            "BUYER_VERIFICATION_REQUIRED": "Buyer verification is required before payment.",
         }
-        raise HTTPException(status_code=400, detail={"error": code, "message": msgs.get(code, code)})
+        status_code = 403 if code == "BUYER_VERIFICATION_REQUIRED" else 400
+        detail = {"error": code, "message": msgs.get(code, code)}
+        if code == "BUYER_VERIFICATION_REQUIRED":
+            parts = str(e).split(":")
+            if len(parts) > 1:
+                detail["reason_code"] = parts[1]
+            if len(parts) > 2:
+                detail["required_step"] = parts[2]
+        raise HTTPException(status_code=status_code, detail=detail)
     resp = {
         "offer": _fmt_offer(offer),
         "transaction_id": str(txn.id),
@@ -297,7 +334,66 @@ async def get_transaction(transaction_id: UUID, current_user: BasicUser, db: DBS
         data["payment_link"] = pl.short_url
         data["payment_link_status"] = pl.status
         data["payment_link_expires_at"] = pl.expires_at.isoformat() if pl.expires_at else None
+    if txn.seller_id == current_user.user_id:
+        data["seller_pickup_address"] = snapshot_summary(txn.seller_pickup_address_snapshot)
+    if txn.buyer_id == current_user.user_id:
+        data["buyer_delivery_address"] = snapshot_summary(txn.buyer_delivery_address_snapshot)
     return data
+
+
+@router.post("/transactions/{transaction_id}/seller-readiness/confirm")
+async def confirm_seller_readiness_endpoint(
+    transaction_id: UUID,
+    body: ConfirmSellerReadinessRequest,
+    current_user: BasicUser,
+    db: DBSession,
+):
+    try:
+        txn = await confirm_seller_readiness(
+            db,
+            transaction_id,
+            current_user.user_id,
+            pickup_address_id=body.pickup_address_id,
+            pickup_slot_start=body.pickup_slot_start,
+            pickup_slot_end=body.pickup_slot_end,
+            item_available=body.item_available,
+            condition_unchanged=body.condition_unchanged,
+            accessories_confirmed=body.accessories_confirmed,
+        )
+        await db.commit()
+    except ValueError as e:
+        code = str(e).split(":")[0]
+        msgs = {
+            "PICKUP_ADDRESS_REQUIRED": "Add or select a pickup address before confirming.",
+            "BUYER_DELIVERY_ADDRESS_REQUIRED": "Buyer delivery address is missing. Owmee support will review.",
+            "ITEM_NOT_AVAILABLE": "Use the unavailable option so Owmee can refund the buyer.",
+            "CONDITION_CHANGED": "Condition changes require Owmee support before pickup.",
+            "ACCESSORIES_NOT_CONFIRMED": "Confirm included accessories before pickup.",
+            "PICKUP_ALREADY_ASSIGNED": "Pickup has already been assigned.",
+        }
+        raise HTTPException(status_code=400, detail={"error": code, "message": msgs.get(code, code)})
+    return {"transaction": _fmt_txn(txn), "message": "Pickup readiness confirmed."}
+
+
+@router.post("/transactions/{transaction_id}/seller-readiness/decline")
+async def decline_seller_readiness_endpoint(
+    transaction_id: UUID,
+    body: DeclineSellerReadinessRequest,
+    current_user: BasicUser,
+    db: DBSession,
+):
+    try:
+        txn = await decline_seller_readiness(
+            db,
+            transaction_id,
+            current_user.user_id,
+            reason=body.reason,
+        )
+        await db.commit()
+    except ValueError as e:
+        code = str(e).split(":")[0]
+        raise HTTPException(status_code=400, detail={"error": code})
+    return {"transaction": _fmt_txn(txn), "message": "Order cancelled and buyer refund started."}
 
 
 @router.post("/transactions/{transaction_id}/confirm")
@@ -386,7 +482,7 @@ async def mark_sold(listing_id: UUID, body: MarkSoldRequest,
     listing = result.scalar_one_or_none()
     if not listing:
         raise HTTPException(status_code=404, detail={"error": "LISTING_NOT_FOUND"})
-    if listing.status not in ("active", "reserved"):
+    if listing.status != "active":
         raise HTTPException(status_code=400, detail={"error": "INVALID_STATUS"})
 
     new_status = "sold" if body.sold_where == "on_owmee" else "sold_elsewhere"
@@ -890,7 +986,7 @@ async def buy_now(body: BuyNowRequest, current_user: BasicUser, db: DBSession):
     """
     from uuid import UUID
     from sqlalchemy import select
-    from app.modules.listings.models import Listing
+    from app.modules.listings.models import Category, Listing
 
     try:
         listing_id = UUID(body.listing_id)
@@ -905,6 +1001,25 @@ async def buy_now(body: BuyNowRequest, current_user: BasicUser, db: DBSession):
     if listing.seller_id == current_user.user_id:
         raise HTTPException(status_code=400, detail={"error": "CANNOT_BUY_OWN_LISTING"})
 
+    cat_result = await db.execute(select(Category.slug).where(Category.id == listing.category_id))
+    category_slug = cat_result.scalar_one_or_none()
+    buyer_amount = Decimal(str(listing.price)) + delivery_fee_for(category_slug)
+    buyer_policy = await evaluate_user_action(
+        db,
+        user_id=current_user.user_id,
+        action=ACTION_BUY,
+        context={
+            "amount": buyer_amount,
+            "listing_id": str(listing.id),
+            "category_slug": category_slug,
+        },
+    )
+    if not buyer_policy.allowed:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=buyer_policy.to_error_detail(),
+        )
+
     # Sprint trust pillar: buyer must also be inside a launch zone for
     # FE-managed delivery to work. Use the checkout-selected saved address
     # when mobile sends one; otherwise fall back to the user's default saved
@@ -912,6 +1027,7 @@ async def buy_now(body: BuyNowRequest, current_user: BasicUser, db: DBSession):
     # backend serviceability checks on the same source of truth.
     from app.core.zones import is_in_service_area, out_of_service_message
     buyer_lat = buyer_lng = None
+    checkout_address_snapshot = None
     if body.address_id:
         try:
             address_id = UUID(body.address_id)
@@ -929,6 +1045,7 @@ async def buy_now(body: BuyNowRequest, current_user: BasicUser, db: DBSession):
             raise HTTPException(status_code=400, detail={"error": "ADDRESS_NOT_FOUND"})
         buyer_lat = float(addr.lat)
         buyer_lng = float(addr.lng)
+        checkout_address_snapshot = snapshot_from_user_address(addr, role="buyer_delivery")
     else:
         from app.modules.identity_auth.user_location import get_user_location
         buyer_lat, buyer_lng, _city, _state = await get_user_location(db, current_user.user_id)
@@ -956,12 +1073,16 @@ async def buy_now(body: BuyNowRequest, current_user: BasicUser, db: DBSession):
         # field before commit so it lands in the same insert.
         if txn and body.order_notes:
             txn.order_notes = body.order_notes.strip() or None
+        if txn and checkout_address_snapshot:
+            txn.buyer_delivery_address_snapshot = checkout_address_snapshot
         await db.commit()
 
         return {
             "transaction_id": str(txn.id) if txn else None,
             "offer_id": str(offer.id),
             "amount": str(listing.price),
+            "gross_amount": str(txn.gross_amount) if txn else str(buyer_amount),
+            "delivery_fee": str(txn.delivery_fee) if txn else str(delivery_fee_for(category_slug)),
             "status": txn.status if txn else "pending",
             "payment_link": payment_link.short_url if payment_link else None,
             "message": "Order placed successfully.",

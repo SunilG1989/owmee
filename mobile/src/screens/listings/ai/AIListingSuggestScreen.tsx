@@ -28,15 +28,17 @@ import {
   ScrollView,
   Image,
   TouchableOpacity,
-  ActivityIndicator,
   Alert,
+  TextInput,
+  Linking,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { C, T, S, R, Shadow, formatPrice } from '../../../utils/tokens';
 import { AIListing } from '../../../services/api';
 import { BackButton, Button } from '../../../components/ui';
-import type { AIDraftResponse } from '../../../services/api';
+import type { AIDraftPriceRefreshRequest, AIDraftResponse } from '../../../services/api';
 import { parseApiError } from '../../../utils/errors';
 import type { RootScreen } from '../../../navigation/types';
 import EditDetailsSheet from './shared/EditDetailsSheet';
@@ -65,6 +67,51 @@ const CONDITION_OPTIONS: { key: 'like_new' | 'good' | 'fair'; label: string; mul
 // Categories that need an IMEI/serial sub-step before listing goes live
 const IDENTIFIER_CATEGORIES = new Set(['smartphones', 'laptops', 'tablets']);
 
+const PHOTO_BLOCKING_FLAGS = new Set([
+  'nsfw',
+  'personal_info',
+  'multiple_items',
+  'no_product',
+  'blurry',
+  'packaging_only',
+  'screenshot_only',
+  'stock_or_catalog_suspected',
+]);
+
+const SCREEN_CONDITION_OPTIONS = [
+  { value: 'flawless', label: 'Flawless' },
+  { value: 'minor_scratches', label: 'Minor scratches' },
+  { value: 'cracked', label: 'Cracked' },
+];
+
+const BODY_CONDITION_OPTIONS = [
+  { value: 'flawless', label: 'Flawless' },
+  { value: 'minor_dents', label: 'Minor dents' },
+  { value: 'major_damage', label: 'Major damage' },
+];
+
+const COMMON_DEFECTS = [
+  'Screen scratch',
+  'Body dent',
+  'Crack',
+  'Battery issue',
+  'Speaker issue',
+  'Camera issue',
+  'Missing part',
+  'Not fully working',
+];
+
+const KIDS_SAFETY_ITEMS = [
+  { key: 'cleaned', label: 'Cleaned' },
+  { key: 'no_small_parts', label: 'No unsafe small parts' },
+  { key: 'no_loose_batteries', label: 'No loose batteries' },
+  { key: 'no_sharp_edges', label: 'No sharp edges' },
+  { key: 'age_label_correct', label: 'Age label checked' },
+  { key: 'working_condition', label: 'Works as expected' },
+];
+
+const TERMS_URL = 'https://owmee.in/terms';
+
 type DetailOverrides = {
   title?: string;
   brand?: string;
@@ -88,6 +135,8 @@ type DetailOverrides = {
   category_slug?: string;
 };
 
+type KidsSafetyState = Record<string, boolean | null>;
+
 type InlineField =
   | 'category'
   | 'title'
@@ -103,6 +152,8 @@ type InlineField =
   | 'has_earphones'
   | 'water_damage_history'
   | 'seller_functional_attestation'
+  | 'screen_condition'
+  | 'body_condition'
   | null;
 
 type BooleanDetailField =
@@ -118,6 +169,62 @@ const cleanText = (value?: string | null) => {
   return cleaned.length ? cleaned : null;
 };
 
+const OTHER_PLACEHOLDERS = new Set([
+  '',
+  'item',
+  'used item',
+  'product',
+  'other',
+  'others',
+  'misc',
+  'miscellaneous',
+  'general',
+  'accessory',
+  'accessories',
+  'electronics',
+  'unknown',
+  'not sure',
+  'other / not sure',
+]);
+
+const isMeaningfulOtherDetail = (value?: string | null) => {
+  const cleaned = (value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  return cleaned.length >= 3 && !OTHER_PLACEHOLDERS.has(cleaned);
+};
+
+const normalizeConditionChoice = (value?: string | null, options: { value: string }[] = []) => {
+  const cleaned = (value || '').trim().toLowerCase();
+  return options.some((option) => option.value === cleaned) ? cleaned : '';
+};
+
+const normalizeDefects = (items?: string[] | null) => {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  (items || []).forEach((item) => {
+    const cleaned = cleanText(item);
+    if (!cleaned) return;
+    const key = cleaned.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(cleaned);
+  });
+  return out.slice(0, 12);
+};
+
+const normalizeMrpSource = (value?: string | null) => {
+  const source = (value || '').trim().toLowerCase();
+  if (source === 'visible_mrp' || source === 'receipt_or_bill' || source === 'market_anchor' || source === 'seller_entered') return source;
+  return null;
+};
+
+const buyerFacingMrpSource = (source?: string | null) =>
+  source === 'visible_mrp' || source === 'receipt_or_bill' || source === 'seller_entered';
+
+const conditionLabel = (value?: string | null) => {
+  const all = [...SCREEN_CONDITION_OPTIONS, ...BODY_CONDITION_OPTIONS];
+  return all.find((option) => option.value === value)?.label || '';
+};
+
 export default function AIListingSuggestScreen({
   route,
   navigation,
@@ -125,25 +232,46 @@ export default function AIListingSuggestScreen({
   const initialDraft: AIDraftResponse = route.params.draft;
 
   // Editable state, seeded from AI response
-  const draft = initialDraft;
+  const [draft, setDraft] = useState<AIDraftResponse>(initialDraft);
   const [condition, setCondition] = useState<'like_new' | 'good' | 'fair'>(
     (initialDraft.detected.condition_guess as any) || 'good',
   );
   const [customPrice, setCustomPrice] = useState<number | null>(null);
+  const [confirmedOriginalPrice, setConfirmedOriginalPrice] = useState<number | null>(null);
+  const [mrpSource, setMrpSource] = useState<string | null>(normalizeMrpSource(initialDraft.detected.mrp_source));
+  const [mrpReviewed, setMrpReviewed] = useState(false);
+  const [screenCondition, setScreenCondition] = useState(
+    normalizeConditionChoice(initialDraft.detected.screen_condition, SCREEN_CONDITION_OPTIONS),
+  );
+  const [bodyCondition, setBodyCondition] = useState(
+    normalizeConditionChoice(initialDraft.detected.body_condition, BODY_CONDITION_OPTIONS),
+  );
+  const [defects, setDefects] = useState<string[]>(normalizeDefects(initialDraft.detected.defects));
+  const [newDefect, setNewDefect] = useState('');
+  const [kidsSafetyChecklist, setKidsSafetyChecklist] = useState<KidsSafetyState>(() => ({}));
+  const [removedPhotoIndices, setRemovedPhotoIndices] = useState<number[]>([]);
+  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(
+    typeof initialDraft.detected.hero_image_index === 'number' ? initialDraft.detected.hero_image_index : 0,
+  );
   const [overrides, setOverrides] = useState<DetailOverrides>({});
   const [inlineField, setInlineField] = useState<InlineField>(null);
   const [editSheet, setEditSheet] = useState(false);
   const [priceSheet, setPriceSheet] = useState(false);
   const [compsSheet, setCompsSheet] = useState(false);
+  const [priceRefreshing, setPriceRefreshing] = useState(false);
+  const [priceRefreshError, setPriceRefreshError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState<{ listingId: string; price: number; title: string } | null>(null);
 
   // Timer for the comparables → price sheet handoff. Tracked via ref so we
   // can cancel on unmount and avoid setState-on-unmounted-component warnings.
   const compsToPriceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const priceRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastPriceRefreshKey = useRef<string>('');
   useEffect(() => {
     return () => {
       if (compsToPriceTimer.current) clearTimeout(compsToPriceTimer.current);
+      if (priceRefreshTimer.current) clearTimeout(priceRefreshTimer.current);
     };
   }, []);
 
@@ -188,7 +316,42 @@ export default function AIListingSuggestScreen({
   const ageSuitability = overrides.age_suitability ?? '';
   const hygieneStatus = overrides.hygiene_status ?? '';
   const imageQuality = draft.detected.image_set_quality || {};
+  const reviewPhotos = useMemo(() => {
+    const source = draft.photo_urls && draft.photo_urls.length > 0 ? draft.photo_urls : [draft.photo_url];
+    return source.filter((url): url is string => Boolean(url));
+  }, [draft.photo_url, draft.photo_urls]);
+  const activePhotoIndexes = useMemo(
+    () => reviewPhotos.map((_, index) => index).filter((index) => !removedPhotoIndices.includes(index)),
+    [removedPhotoIndices, reviewPhotos],
+  );
+  const selectedPhotoUrl = reviewPhotos[selectedPhotoIndex] && !removedPhotoIndices.includes(selectedPhotoIndex)
+    ? reviewPhotos[selectedPhotoIndex]
+    : reviewPhotos[activePhotoIndexes[0] ?? 0] || draft.photo_url;
+  const aiPhotoFlags = useMemo(() => {
+    const raw = [...(draft.detected.flags || []), ...(draft.detected.blocking_reasons || [])]
+      .map((flag) => String(flag || '').trim().toLowerCase())
+      .filter(Boolean);
+    if (imageQuality.has_private_info === true) raw.push('personal_info');
+    if (imageQuality.is_stock_or_catalog_image_suspected === true) raw.push('stock_or_catalog_suspected');
+    if (imageQuality.overall_photo_quality === 'unusable') raw.push('blurry');
+    return Array.from(new Set(raw));
+  }, [draft.detected.blocking_reasons, draft.detected.flags, imageQuality]);
+  const photoBlockingFlags = useMemo(
+    () => aiPhotoFlags.filter((flag) => PHOTO_BLOCKING_FLAGS.has(flag)),
+    [aiPhotoFlags],
+  );
+  const photosBlocked = photoBlockingFlags.length > 0;
   const heroCleanup = (imageQuality.hero_image_cleanup || {}) as Record<string, any>;
+  useEffect(() => {
+    if (selectedPhotoIndex >= reviewPhotos.length) {
+      setSelectedPhotoIndex(0);
+      return;
+    }
+    if (removedPhotoIndices.includes(selectedPhotoIndex)) {
+      const next = reviewPhotos.findIndex((_, index) => !removedPhotoIndices.includes(index));
+      setSelectedPhotoIndex(next >= 0 ? next : 0);
+    }
+  }, [removedPhotoIndices, reviewPhotos, selectedPhotoIndex]);
   const heroCleanupStatus = typeof heroCleanup.status === 'string' ? heroCleanup.status : null;
   const heroCleanupNeedsRetake = heroCleanup.requires_retake === true || heroCleanupStatus === 'needs_retake';
   const heroCleanupDeferred = heroCleanupStatus === 'queued_after_listing';
@@ -218,6 +381,7 @@ export default function AIListingSuggestScreen({
     if (isOther) {
       const otherTitle = (overrides.title ?? draft.detected.title_suggestion ?? '').trim();
       if (otherTitle.length < 4 || /^used item$/i.test(otherTitle)) issues.push('title');
+      if (!isMeaningfulOtherDetail(model)) issues.push('product type');
       return issues;
     }
     if (!isElectronic) {
@@ -239,7 +403,7 @@ export default function AIListingSuggestScreen({
     if (hasCharger === null) issues.push('charger');
     if (categoryKind === 'phone' && hasEarphones === null) issues.push('earphones');
     if (waterDamageHistory === null) issues.push('water damage');
-    if (sellerFunctionalAttestation !== true) issues.push('working condition');
+    if (sellerFunctionalAttestation === null) issues.push('working condition');
     return issues;
   }, [
     brand,
@@ -272,6 +436,7 @@ export default function AIListingSuggestScreen({
     if (isOther) {
       const otherTitle = (overrides.title ?? draft.detected.title_suggestion ?? '').trim();
       if (otherTitle.length < 4 || /^used item$/i.test(otherTitle)) return 'title';
+      if (!isMeaningfulOtherDetail(model)) return 'model';
       return null;
     }
     if (!isElectronic) {
@@ -293,7 +458,7 @@ export default function AIListingSuggestScreen({
     if (hasCharger === null) return 'has_charger';
     if (categoryKind === 'phone' && hasEarphones === null) return 'has_earphones';
     if (waterDamageHistory === null) return 'water_damage_history';
-    if (sellerFunctionalAttestation !== true) return 'seller_functional_attestation';
+    if (sellerFunctionalAttestation === null) return 'seller_functional_attestation';
     return null;
   }, [
     brand,
@@ -380,18 +545,65 @@ export default function AIListingSuggestScreen({
     return suggestedPrice;
   }, [customPrice, suggestedPrice]);
 
-  const originalPrice = useMemo(() => {
+  const aiOriginalPrice = useMemo(() => {
     const rawMrp = draft.detected.mrp_inr;
     const roundedMrp = rawMrp == null ? NaN : Math.round(Number(rawMrp));
-    if (effectivePrice == null || !Number.isFinite(roundedMrp) || roundedMrp <= effectivePrice) return null;
+    if (!Number.isFinite(roundedMrp) || roundedMrp <= 0) return null;
     return roundedMrp;
-  }, [draft.detected.mrp_inr, effectivePrice]);
+  }, [draft.detected.mrp_inr]);
+
+  const originalPrice = useMemo(() => {
+    if (!mrpReviewed || !buyerFacingMrpSource(mrpSource)) return null;
+    if (effectivePrice == null || confirmedOriginalPrice == null || confirmedOriginalPrice <= effectivePrice) return null;
+    return confirmedOriginalPrice;
+  }, [confirmedOriginalPrice, effectivePrice, mrpReviewed, mrpSource]);
+
+  const payloadOriginalPrice = useMemo(() => {
+    if (!mrpReviewed || effectivePrice == null || confirmedOriginalPrice == null || confirmedOriginalPrice <= effectivePrice) {
+      return null;
+    }
+    return confirmedOriginalPrice;
+  }, [confirmedOriginalPrice, effectivePrice, mrpReviewed]);
+
+  const needsMrpReview = Boolean(
+    aiOriginalPrice
+    && effectivePrice
+    && aiOriginalPrice > effectivePrice
+    && !mrpReviewed,
+  );
 
   const discountPct = useMemo(() => {
     if (!originalPrice || effectivePrice == null) return null;
     const pct = Math.round((1 - effectivePrice / originalPrice) * 100);
     return pct > 0 ? pct : null;
   }, [effectivePrice, originalPrice]);
+
+  const kidsSafetyIncomplete = categoryKind === 'kids'
+    && KIDS_SAFETY_ITEMS.some((item) => kidsSafetyChecklist[item.key] === null || kidsSafetyChecklist[item.key] === undefined);
+
+  const conditionReviewIssues = useMemo(() => {
+    const issues: string[] = [];
+    if (isElectronic) {
+      if (!screenCondition) issues.push('screen condition');
+      if (!bodyCondition) issues.push('body condition');
+      if (sellerFunctionalAttestation === false && defects.length === 0) {
+        issues.push('what is not working');
+      }
+    }
+    if (categoryKind === 'kids' && kidsSafetyIncomplete) {
+      issues.push('kids safety checklist');
+    }
+    return issues;
+  }, [
+    bodyCondition,
+    categoryKind,
+    defects.length,
+    isElectronic,
+    kidsSafetyIncomplete,
+    screenCondition,
+    sellerFunctionalAttestation,
+  ]);
+  const needsConditionReview = conditionReviewIssues.length > 0;
 
   const titleGuess = useMemo(() => {
     if (overrides.title?.trim()) return overrides.title.trim();
@@ -421,6 +633,10 @@ export default function AIListingSuggestScreen({
     screen_size: cleanText(screenSize),
     color: cleanText(color),
     purchase_year: purchaseYear || null,
+    screen_condition: cleanText(screenCondition),
+    body_condition: cleanText(bodyCondition),
+    defects,
+    battery_health: draft.detected.battery_health ?? null,
     accessories: cleanText(accessories),
     warranty_status: cleanText(warrantyStatus),
     age_suitability: cleanText(ageSuitability),
@@ -431,28 +647,146 @@ export default function AIListingSuggestScreen({
     has_earphones: categoryKind === 'phone' ? hasEarphones : null,
     water_damage_history: waterDamageHistory,
     seller_functional_attestation: sellerFunctionalAttestation,
-    original_price: originalPrice,
+    kids_safety_checklist: categoryKind === 'kids'
+      ? Object.fromEntries(
+        KIDS_SAFETY_ITEMS
+          .filter((item) => kidsSafetyChecklist[item.key] !== null && kidsSafetyChecklist[item.key] !== undefined)
+          .map((item) => [item.key, Boolean(kidsSafetyChecklist[item.key])]),
+      )
+      : null,
+    original_price: payloadOriginalPrice,
   }), [
     accessories,
     ageSuitability,
     brand,
+    bodyCondition,
     categoryKind,
     color,
+    defects,
+    draft.detected.battery_health,
     hasBill,
     hasBox,
     hasCharger,
     hasEarphones,
     hygieneStatus,
     model,
-    originalPrice,
+    payloadOriginalPrice,
     processor,
     purchaseYear,
     ram,
     screenSize,
+    screenCondition,
     sellerFunctionalAttestation,
     storage,
     warrantyStatus,
     waterDamageHistory,
+    kidsSafetyChecklist,
+  ]);
+
+  const sellerAdjustedPriceInputs = useMemo(() => {
+    if (Object.keys(overrides).length > 0) return true;
+    if (condition !== ((initialDraft.detected.condition_guess as any) || 'good')) return true;
+    if (screenCondition !== normalizeConditionChoice(initialDraft.detected.screen_condition, SCREEN_CONDITION_OPTIONS)) return true;
+    if (bodyCondition !== normalizeConditionChoice(initialDraft.detected.body_condition, BODY_CONDITION_OPTIONS)) return true;
+    if (JSON.stringify(defects) !== JSON.stringify(normalizeDefects(initialDraft.detected.defects))) return true;
+    return false;
+  }, [
+    bodyCondition,
+    condition,
+    defects,
+    initialDraft.detected.body_condition,
+    initialDraft.detected.condition_guess,
+    initialDraft.detected.defects,
+    initialDraft.detected.screen_condition,
+    overrides,
+    screenCondition,
+  ]);
+
+  const priceRefreshPayload = useMemo<AIDraftPriceRefreshRequest>(() => ({
+    category_slug: categorySlug || null,
+    brand: cleanText(brand),
+    model: cleanText(model),
+    storage: cleanText(storage),
+    ram: cleanText(ram),
+    processor: cleanText(processor),
+    screen_size: cleanText(screenSize),
+    detected_item_type: cleanText(model || draft.detected.detected_item_type),
+    condition,
+    purchase_year: purchaseYear || null,
+    screen_condition: cleanText(screenCondition),
+    body_condition: cleanText(bodyCondition),
+    defects,
+    original_price: mrpReviewed ? confirmedOriginalPrice : null,
+    mrp_source: mrpReviewed ? mrpSource : null,
+    mrp_confidence: mrpReviewed ? draft.detected.mrp_confidence ?? null : null,
+  }), [
+    bodyCondition,
+    brand,
+    categorySlug,
+    condition,
+    confirmedOriginalPrice,
+    defects,
+    draft.detected.detected_item_type,
+    draft.detected.mrp_confidence,
+    model,
+    mrpReviewed,
+    mrpSource,
+    processor,
+    purchaseYear,
+    ram,
+    screenCondition,
+    screenSize,
+    storage,
+  ]);
+
+  const priceRefreshKey = useMemo(() => JSON.stringify(priceRefreshPayload), [priceRefreshPayload]);
+
+  useEffect(() => {
+    if (photosBlocked || heroCleanupNeedsRetake || needsDetailsReview) return;
+    if (customPrice != null && !sellerAdjustedPriceInputs) return;
+    if (suggestedPrice && aiOriginalPrice && !sellerAdjustedPriceInputs) return;
+    if (lastPriceRefreshKey.current === priceRefreshKey) return;
+
+    if (priceRefreshTimer.current) clearTimeout(priceRefreshTimer.current);
+    priceRefreshTimer.current = setTimeout(async () => {
+      lastPriceRefreshKey.current = priceRefreshKey;
+      setPriceRefreshing(true);
+      setPriceRefreshError(null);
+      try {
+        const { data } = await AIListing.refreshDraftPrice(draft.draft_id, priceRefreshPayload);
+        setDraft((prev) => ({
+          ...prev,
+          ...data,
+          detected: {
+            ...prev.detected,
+            ...data.detected,
+          },
+          photo_url: data.photo_url || prev.photo_url,
+          photo_urls: data.photo_urls?.length ? data.photo_urls : prev.photo_urls,
+          comparables: data.comparables || prev.comparables,
+        }));
+        if (!mrpReviewed) {
+          const nextSource = normalizeMrpSource(data.detected.mrp_source);
+          if (nextSource) setMrpSource(nextSource);
+        }
+      } catch (error) {
+        setPriceRefreshError(parseApiError(error));
+      } finally {
+        setPriceRefreshing(false);
+      }
+    }, 650);
+  }, [
+    aiOriginalPrice,
+    customPrice,
+    draft.draft_id,
+    heroCleanupNeedsRetake,
+    mrpReviewed,
+    needsDetailsReview,
+    photosBlocked,
+    priceRefreshKey,
+    priceRefreshPayload,
+    sellerAdjustedPriceInputs,
+    suggestedPrice,
   ]);
 
   const retakeHeroPhoto = useCallback(() => {
@@ -461,6 +795,14 @@ export default function AIListingSuggestScreen({
 
   const submit = useCallback(async () => {
     if (submitting) return;
+    if (photosBlocked) {
+      Alert.alert(
+        'Retake photos',
+        'These photos cannot be published safely. Remove private information, use original product photos, and list one item at a time.',
+        [{ text: 'Retake', onPress: retakeHeroPhoto }],
+      );
+      return;
+    }
     const priceToList = effectivePrice;
     if (!priceToList || priceToList <= 0) {
       Alert.alert('Set a price', 'Please set a price before listing.');
@@ -483,6 +825,22 @@ export default function AIListingSuggestScreen({
       );
       return;
     }
+    if (needsMrpReview) {
+      setPriceSheet(true);
+      return;
+    }
+    if (needsConditionReview) {
+      if (!screenCondition && isElectronic) {
+        setInlineField('screen_condition');
+        return;
+      }
+      if (!bodyCondition && isElectronic) {
+        setInlineField('body_condition');
+        return;
+      }
+      Alert.alert('Confirm condition', `Please complete: ${conditionReviewIssues.join(', ')}.`);
+      return;
+    }
 
     // If smartphone or laptop, route to identifier capture before creating
     if (IDENTIFIER_CATEGORIES.has(categorySlug)) {
@@ -494,6 +852,11 @@ export default function AIListingSuggestScreen({
           condition,
           category_slug: categorySlug,
           ...finalDetails,
+          mrp_source: mrpSource,
+          mrp_confidence: draft.detected.mrp_confidence ?? null,
+          seller_mrp_confirmed: mrpReviewed,
+          hero_image_index: selectedPhotoIndex,
+          removed_photo_indices: removedPhotoIndices,
           description: draft.detected.description_suggestion ?? '',
         },
       });
@@ -510,6 +873,11 @@ export default function AIListingSuggestScreen({
         condition,
         category_slug: categorySlug,
         ...finalDetails,
+        mrp_source: mrpSource,
+        mrp_confidence: draft.detected.mrp_confidence ?? null,
+        seller_mrp_confirmed: mrpReviewed,
+        hero_image_index: selectedPhotoIndex,
+        removed_photo_indices: removedPhotoIndices,
         description: draft.detected.description_suggestion ?? '',
       });
       setSuccess({
@@ -525,27 +893,46 @@ export default function AIListingSuggestScreen({
     draft,
     effectivePrice,
     condition,
+    photosBlocked,
     categorySlug,
     needsDetailsReview,
+    needsMrpReview,
+    needsConditionReview,
+    conditionReviewIssues,
+    screenCondition,
+    bodyCondition,
+    isElectronic,
     titleGuess,
     navigation,
     submitting,
     finalDetails,
+    mrpSource,
+    mrpReviewed,
+    selectedPhotoIndex,
+    removedPhotoIndices,
     openFirstRequiredField,
     heroCleanupNeedsRetake,
     retakeHeroPhoto,
   ]);
 
-  const ctaLabel = heroCleanupNeedsRetake
-    ? 'Retake hero photo'
+  const ctaLabel = photosBlocked || heroCleanupNeedsRetake
+    ? 'Retake photos'
     : needsDetailsReview
-      ? 'Complete required details'
-      : 'Continue to list';
-  const ctaOnPress = heroCleanupNeedsRetake
+      ? 'Complete item details'
+      : !effectivePrice
+        ? priceRefreshing ? 'Finding price' : 'Set asking price'
+        : needsMrpReview
+          ? 'Review MRP'
+          : needsConditionReview
+            ? 'Confirm condition'
+            : 'Publish listing';
+  const ctaOnPress = photosBlocked || heroCleanupNeedsRetake
     ? retakeHeroPhoto
     : needsDetailsReview
       ? openFirstRequiredField
-      : submit;
+      : !effectivePrice || needsMrpReview
+        ? () => setPriceSheet(true)
+        : submit;
 
   const renderInlinePicker = () => {
     if (!inlineField) return null;
@@ -658,6 +1045,38 @@ export default function AIListingSuggestScreen({
       );
     }
 
+    if (inlineField === 'screen_condition') {
+      return (
+        <InlineChoicePanel
+          title="Screen condition"
+          helper="Use the worst visible screen issue, not the best-looking angle."
+          options={SCREEN_CONDITION_OPTIONS.map((option) => ({ label: option.label, value: option.value }))}
+          selected={screenCondition}
+          onSelect={(next) => {
+            setScreenCondition(next);
+            setInlineField(null);
+          }}
+          onClose={() => setInlineField(null)}
+        />
+      );
+    }
+
+    if (inlineField === 'body_condition') {
+      return (
+        <InlineChoicePanel
+          title="Body condition"
+          helper="Confirm dents, cracks, or frame damage before publishing."
+          options={BODY_CONDITION_OPTIONS.map((option) => ({ label: option.label, value: option.value }))}
+          selected={bodyCondition}
+          onSelect={(next) => {
+            setBodyCondition(next);
+            setInlineField(null);
+          }}
+          onClose={() => setInlineField(null)}
+        />
+      );
+    }
+
     const booleanConfig: Partial<Record<Exclude<InlineField, null>, { title: string; helper: string; value: boolean | null }>> = {
       has_box: {
         title: 'Original box',
@@ -718,7 +1137,7 @@ export default function AIListingSuggestScreen({
           </View>
           <Text style={st.successTitle}>Your listing is ready</Text>
           <Text style={st.successHelper}>
-            We'll notify you the moment a verified buyer commits.
+            We'll notify you the moment a buyer commits.
           </Text>
 
           <View style={st.successCard}>
@@ -727,7 +1146,7 @@ export default function AIListingSuggestScreen({
           </View>
 
           <Text style={st.successSection}>What happens next</Text>
-          <SuccessStep num={1} text="A verified buyer commits — usually within 72 hours" />
+          <SuccessStep num={1} text="A buyer commits — usually within 72 hours" />
           <SuccessStep num={2} text="Owmee manages protected payment and delivery support" />
           <SuccessStep num={3} text="Keep the item ready and update details if anything changes" />
           <SuccessStep num={4} text="Payout is released after delivery as per Owmee policy" />
@@ -767,7 +1186,7 @@ export default function AIListingSuggestScreen({
       <ScrollView style={st.flex} contentContainerStyle={st.scrollPad}>
         {/* Compact item card — image left, title + price + edit affordance */}
         <View style={st.itemCard}>
-          <Image source={{ uri: draft.photo_url }} style={st.itemImage} resizeMode="cover" />
+          <Image source={{ uri: selectedPhotoUrl }} style={st.itemImage} resizeMode="cover" />
           <View style={st.itemMeta}>
             <Text style={st.itemTitle} numberOfLines={2}>{titleGuess}</Text>
             {subtitleSpecifics ? (
@@ -779,6 +1198,63 @@ export default function AIListingSuggestScreen({
             <Text style={st.itemEditGlyph}>✎</Text>
           </TouchableOpacity>
         </View>
+        <View style={st.photoReviewCard}>
+          <View style={st.photoReviewHeader}>
+            <View>
+              <Text style={st.photoReviewTitle}>Photos</Text>
+              <Text style={st.photoReviewSub}>Choose hero and remove accidental photos.</Text>
+            </View>
+            <TouchableOpacity onPress={retakeHeroPhoto} activeOpacity={0.82} style={st.photoRetakeBtn}>
+              <Text style={st.photoRetakeText}>Retake</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.photoRail}>
+            {reviewPhotos.map((url, index) => {
+              const removed = removedPhotoIndices.includes(index);
+              const active = selectedPhotoIndex === index && !removed;
+              return (
+                <View key={`${url}-${index}`} style={[st.photoThumbWrap, active && st.photoThumbActive, removed && st.photoThumbRemoved]}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      if (!removed) setSelectedPhotoIndex(index);
+                    }}
+                    activeOpacity={0.84}
+                    accessibilityRole="button">
+                    <Image source={{ uri: url }} style={st.photoThumb} resizeMode="cover" />
+                    {active ? <Text style={st.photoHeroLabel}>Hero</Text> : null}
+                    {removed ? <Text style={st.photoRemovedLabel}>Removed</Text> : null}
+                  </TouchableOpacity>
+                  {reviewPhotos.length > 1 ? (
+                    <TouchableOpacity
+                      onPress={() => {
+                        if (!removed && activePhotoIndexes.length <= 1) {
+                          Alert.alert('Keep one photo', 'At least one product photo is required.');
+                          return;
+                        }
+                        setRemovedPhotoIndices((prev) => (
+                          prev.includes(index)
+                            ? prev.filter((item) => item !== index)
+                            : [...prev, index]
+                        ));
+                      }}
+                      style={st.photoRemoveBtn}
+                      activeOpacity={0.82}>
+                      <Text style={st.photoRemoveText}>{removed ? 'Keep' : 'Remove'}</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              );
+            })}
+          </ScrollView>
+        </View>
+        {photosBlocked ? (
+          <View style={[st.photoNotice, st.photoNoticeCritical]}>
+            <Text style={[st.photoNoticeTitle, st.photoNoticeCriticalText]}>Photos blocked</Text>
+            <Text style={st.photoNoticeText}>
+              Retake before publishing: {photoBlockingFlags.join(', ')}.
+            </Text>
+          </View>
+        ) : null}
         {heroCleanupNeedsRetake ? (
           <View style={[st.photoNotice, st.photoNoticeCritical]}>
             <Text style={[st.photoNoticeTitle, st.photoNoticeCriticalText]}>Retake hero photo</Text>
@@ -794,6 +1270,30 @@ export default function AIListingSuggestScreen({
             </Text>
           </View>
         ) : null}
+
+        <View style={st.checklistCard}>
+          <Text style={st.checklistTitle}>Publish checklist</Text>
+          <ChecklistRow
+            label="Photos"
+            ready={!photosBlocked && !heroCleanupNeedsRetake && activePhotoIndexes.length > 0}
+            hint={photosBlocked || heroCleanupNeedsRetake ? 'Retake required' : `${activePhotoIndexes.length} ready`}
+          />
+          <ChecklistRow
+            label="Item identity"
+            ready={!needsDetailsReview}
+            hint={needsDetailsReview ? detailReviewIssues.join(', ') : 'Confirmed'}
+          />
+          <ChecklistRow
+            label="Price and MRP"
+            ready={Boolean(effectivePrice) && !needsMrpReview}
+            hint={!effectivePrice ? 'Set price' : needsMrpReview ? 'Review MRP source' : 'Ready'}
+          />
+          <ChecklistRow
+            label="Condition"
+            ready={!needsConditionReview}
+            hint={needsConditionReview ? conditionReviewIssues.join(', ') : 'Confirmed'}
+          />
+        </View>
 
         <View style={st.detailCard}>
             <View style={st.detailHeader}>
@@ -902,7 +1402,7 @@ export default function AIListingSuggestScreen({
                   <SpecPill
                     label="Works"
                     value={boolLabel(sellerFunctionalAttestation)}
-                    missing={sellerFunctionalAttestation !== true}
+                    missing={sellerFunctionalAttestation === null}
                     onPress={() => setInlineField('seller_functional_attestation')}
                   />
                 </>
@@ -913,7 +1413,7 @@ export default function AIListingSuggestScreen({
                 Required before listing: {detailReviewIssues.join(', ')}.
               </Text>
             ) : null}
-            {renderInlinePicker()}
+            {inlineField === 'screen_condition' || inlineField === 'body_condition' ? null : renderInlinePicker()}
             <TouchableOpacity
               style={st.detailAction}
               onPress={needsDetailsReview ? openFirstRequiredField : () => setEditSheet(true)}
@@ -941,20 +1441,40 @@ export default function AIListingSuggestScreen({
           </Text>
 
           <TouchableOpacity style={st.priceBtn} onPress={() => setPriceSheet(true)}>
-            <Text style={st.priceBtnTitle}>{originalPrice ? 'Discounted price' : 'Your asking price'}</Text>
+            <View style={st.priceTitleRow}>
+              <Text style={st.priceBtnTitle}>{originalPrice ? 'Discounted price' : 'Asking price and MRP'}</Text>
+              {priceRefreshing ? <ActivityIndicator size="small" color={C.ctaPrimary} /> : null}
+            </View>
             <Text style={st.priceBtnHint}>
               {customPrice != null
                 ? `${formatPrice(customPrice)} · you set this price.`
                 : effectivePrice
                   ? `${formatPrice(effectivePrice)} · starts from Owmee guidance.`
-                  : 'No reliable guidance yet. Enter the amount you want.'}
+                  : priceRefreshing
+                    ? 'Getting Owmee guidance from confirmed details.'
+                    : 'No reliable guidance yet. Enter the amount you want.'}
             </Text>
             <Text style={st.priceBtnArrow}>›</Text>
           </TouchableOpacity>
+          {priceRefreshError && !effectivePrice ? (
+            <Text style={st.priceRefreshError}>{priceRefreshError}</Text>
+          ) : null}
           {originalPrice && discountPct ? (
             <View style={st.mrpDealRow}>
               <Text style={st.mrpText}>MRP {formatPrice(originalPrice)}</Text>
               <Text style={st.discountBadge}>{discountPct}% off</Text>
+            </View>
+          ) : needsMrpReview && aiOriginalPrice ? (
+            <View style={st.mrpReviewRow}>
+              <Text style={st.mrpReviewText}>
+                AI found MRP {formatPrice(aiOriginalPrice)}. Review source before any discount is shown.
+              </Text>
+            </View>
+          ) : mrpReviewed && confirmedOriginalPrice && !buyerFacingMrpSource(mrpSource) ? (
+            <View style={st.mrpReviewRow}>
+              <Text style={st.mrpReviewText}>
+                MRP saved for context. No buyer discount shown from market estimate.
+              </Text>
             </View>
           ) : null}
           <Text style={st.priceNote}>
@@ -992,14 +1512,108 @@ export default function AIListingSuggestScreen({
               );
             })}
           </View>
+          {isElectronic ? (
+            <>
+              <View style={st.conditionGrid}>
+                <SpecPill
+                  label="Screen"
+                  value={conditionLabel(screenCondition)}
+                  missing={!screenCondition}
+                  onPress={() => setInlineField('screen_condition')}
+                />
+                <SpecPill
+                  label="Body"
+                  value={conditionLabel(bodyCondition)}
+                  missing={!bodyCondition}
+                  onPress={() => setInlineField('body_condition')}
+                />
+                {draft.detected.battery_health != null ? (
+                  <SpecPill label="Battery" value={`${draft.detected.battery_health}%`} />
+                ) : null}
+              </View>
+              <Text style={st.issueLabel}>Known issues</Text>
+              <View style={st.issueChipRow}>
+                {COMMON_DEFECTS.map((issue) => {
+                  const active = defects.some((item) => item.toLowerCase() === issue.toLowerCase());
+                  return (
+                    <TouchableOpacity
+                      key={issue}
+                      onPress={() => {
+                        setDefects((prev) => (
+                          active
+                            ? prev.filter((item) => item.toLowerCase() !== issue.toLowerCase())
+                            : [...prev, issue]
+                        ));
+                      }}
+                      activeOpacity={0.82}
+                      style={[st.issueChip, active && st.issueChipActive]}>
+                      <Text style={[st.issueChipText, active && st.issueChipTextActive]}>{issue}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <View style={st.customIssueRow}>
+                <TextInput
+                  value={newDefect}
+                  onChangeText={setNewDefect}
+                  placeholder="Add another issue"
+                  placeholderTextColor={C.text4}
+                  style={st.customIssueInput}
+                />
+                <TouchableOpacity
+                  onPress={() => {
+                    const cleaned = cleanText(newDefect);
+                    if (!cleaned) return;
+                    setDefects((prev) => normalizeDefects([...prev, cleaned]));
+                    setNewDefect('');
+                  }}
+                  activeOpacity={0.82}
+                  style={st.addIssueBtn}>
+                  <Text style={st.addIssueText}>Add</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          ) : null}
+          {categoryKind === 'kids' ? (
+            <View style={st.kidsSafetyBox}>
+              <Text style={st.issueLabel}>Kids safety declarations</Text>
+              {KIDS_SAFETY_ITEMS.map((item) => {
+                const value = kidsSafetyChecklist[item.key];
+                return (
+                  <View key={item.key} style={st.safetyRow}>
+                    <Text style={st.safetyLabel}>{item.label}</Text>
+                    <View style={st.safetyChoices}>
+                      {[true, false].map((choice) => (
+                        <TouchableOpacity
+                          key={`${item.key}-${choice ? 'yes' : 'no'}`}
+                          onPress={() => setKidsSafetyChecklist((prev) => ({ ...prev, [item.key]: choice }))}
+                          activeOpacity={0.82}
+                          style={[st.safetyChoice, value === choice && st.safetyChoiceActive]}>
+                          <Text style={[st.safetyChoiceText, value === choice && st.safetyChoiceTextActive]}>
+                            {choice ? 'Yes' : 'No'}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          ) : null}
+          {needsConditionReview ? (
+            <Text style={st.detailIssue}>
+              Required before listing: {conditionReviewIssues.join(', ')}.
+            </Text>
+          ) : null}
+          {inlineField === 'screen_condition' || inlineField === 'body_condition' ? renderInlinePicker() : null}
         </View>
 
         {/* How Owmee protects your trust */}
         <View style={st.trustBlock}>
           <Text style={st.trustHeading}>How Owmee protects your sale</Text>
-          <TrustRow text="KYC verification stays visible as your seller trust badge" />
+          <TrustRow text="Seller KYC badge appears only after verification is complete" />
           <TrustRow text="Owmee manages protected payment and delivery support" />
-          <TrustRow text="Verified buyers use safe payment through Owmee" />
+          <TrustRow text="Buyer payment stays inside Owmee checkout" />
           <TrustRow text="You can edit details until a buyer commits" />
           <TrustRow text="Clear photos and honest condition help prevent returns" />
         </View>
@@ -1020,7 +1634,7 @@ export default function AIListingSuggestScreen({
         {/* Tiny legal */}
         <Text style={st.legal}>
           By listing, you agree to{' '}
-          <Text style={st.legalLink} onPress={() => Alert.alert('Owmee Terms', 'Terms and Conditions go here.')}>
+          <Text style={st.legalLink} onPress={() => Linking.openURL(TERMS_URL)}>
             Owmee Terms
           </Text>
           .
@@ -1079,17 +1693,21 @@ export default function AIListingSuggestScreen({
       {priceSheet && (
         <PriceSheet
           suggested={suggestedPrice}
-          mrp={originalPrice}
-          discountPct={discountPct}
+          initialMrp={confirmedOriginalPrice ?? aiOriginalPrice}
+          initialMrpSource={mrpSource}
+          mrpConfidence={draft.detected.mrp_confidence ?? null}
+          mrpReasoning={draft.detected.mrp_reasoning ?? null}
           comparables={draft.comparables}
           initial={customPrice ?? effectivePrice}
-          onSave={(p) => {
+          onSave={(p, mrp, source) => {
             setCustomPrice(p);
+            setConfirmedOriginalPrice(mrp);
+            setMrpSource(source);
+            setMrpReviewed(Boolean(mrp && source));
             setPriceSheet(false);
           }}
           onUseSuggested={() => {
             setCustomPrice(null);
-            setPriceSheet(false);
           }}
           onClose={() => setPriceSheet(false)}
         />
@@ -1116,6 +1734,22 @@ function TrustRow({ text }: { text: string }) {
     <View style={st.trustRow}>
       <Text style={st.trustCheck}>✓</Text>
       <Text style={st.trustText}>{text}</Text>
+    </View>
+  );
+}
+
+function ChecklistRow({ label, ready, hint }: { label: string; ready: boolean; hint: string }) {
+  return (
+    <View style={st.checklistRow}>
+      <View style={[st.checklistDot, ready ? st.checklistDotReady : st.checklistDotTodo]}>
+        <Text style={[st.checklistDotText, ready ? st.checklistDotTextReady : st.checklistDotTextTodo]}>
+          {ready ? '✓' : '!'}
+        </Text>
+      </View>
+      <View style={st.checklistCopy}>
+        <Text style={st.checklistLabel}>{label}</Text>
+        <Text style={st.checklistHint} numberOfLines={1}>{hint}</Text>
+      </View>
     </View>
   );
 }
@@ -1284,6 +1918,103 @@ const st = StyleSheet.create({
     justifyContent: 'center',
   },
   itemEditGlyph: { fontSize: T.size.md, color: C.ctaPrimary, fontWeight: T.weight.semi },
+  photoReviewCard: {
+    backgroundColor: C.surface,
+    marginHorizontal: S.lg,
+    marginTop: S.sm,
+    padding: S.md,
+    borderRadius: R.lg,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  photoReviewHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: S.md,
+  },
+  photoReviewTitle: {
+    fontSize: T.size.md,
+    fontWeight: T.weight.bold,
+    color: C.text,
+  },
+  photoReviewSub: {
+    marginTop: 2,
+    fontSize: T.size.sm,
+    color: C.text3,
+  },
+  photoRetakeBtn: {
+    paddingHorizontal: S.md,
+    paddingVertical: S.xs,
+    borderRadius: R.pill,
+    backgroundColor: C.bone,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  photoRetakeText: {
+    color: C.ctaPrimary,
+    fontSize: T.size.sm,
+    fontWeight: T.weight.bold,
+  },
+  photoRail: {
+    gap: S.sm,
+    paddingTop: S.md,
+    paddingBottom: 2,
+  },
+  photoThumbWrap: {
+    width: 88,
+    borderRadius: R.md,
+    borderWidth: 1,
+    borderColor: C.border,
+    overflow: 'hidden',
+    backgroundColor: C.bone,
+  },
+  photoThumbActive: {
+    borderColor: C.ctaPrimary,
+    borderWidth: 2,
+  },
+  photoThumbRemoved: {
+    opacity: 0.52,
+  },
+  photoThumb: {
+    width: '100%',
+    height: 72,
+    backgroundColor: C.bone2,
+  },
+  photoHeroLabel: {
+    position: 'absolute',
+    left: 5,
+    top: 5,
+    overflow: 'hidden',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: R.xs,
+    backgroundColor: C.ctaPrimary,
+    color: C.surface,
+    fontSize: T.size.xs,
+    fontWeight: T.weight.bold,
+  },
+  photoRemovedLabel: {
+    position: 'absolute',
+    left: 4,
+    right: 4,
+    top: 26,
+    textAlign: 'center',
+    color: C.red,
+    fontSize: T.size.xs,
+    fontWeight: T.weight.bold,
+    backgroundColor: 'rgba(255,253,248,0.86)',
+  },
+  photoRemoveBtn: {
+    alignItems: 'center',
+    paddingVertical: 5,
+    backgroundColor: C.surface,
+  },
+  photoRemoveText: {
+    color: C.text3,
+    fontSize: T.size.xs,
+    fontWeight: T.weight.bold,
+  },
   photoNotice: {
     marginHorizontal: S.lg,
     marginTop: S.sm,
@@ -1313,6 +2044,50 @@ const st = StyleSheet.create({
     fontSize: T.size.sm,
     lineHeight: T.size.sm + 5,
     color: C.text2,
+  },
+  checklistCard: {
+    backgroundColor: C.surface,
+    marginHorizontal: S.lg,
+    marginTop: S.md,
+    padding: S.lg,
+    borderRadius: R.lg,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  checklistTitle: {
+    fontSize: T.size.md,
+    fontWeight: T.weight.bold,
+    color: C.text,
+    marginBottom: S.sm,
+  },
+  checklistRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: S.md,
+    paddingVertical: S.sm,
+  },
+  checklistDot: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checklistDotReady: { backgroundColor: C.ctaPrimary },
+  checklistDotTodo: { backgroundColor: C.amberSoft, borderWidth: 1, borderColor: C.amberBorder },
+  checklistDotText: { fontSize: T.size.xs, fontWeight: T.weight.bold },
+  checklistDotTextReady: { color: C.surface },
+  checklistDotTextTodo: { color: C.amberDeep },
+  checklistCopy: { flex: 1, minWidth: 0 },
+  checklistLabel: {
+    color: C.text,
+    fontSize: T.size.sm,
+    fontWeight: T.weight.bold,
+  },
+  checklistHint: {
+    marginTop: 1,
+    color: C.text3,
+    fontSize: T.size.xs,
   },
 
   detailCard: {
@@ -1526,7 +2301,14 @@ const st = StyleSheet.create({
     backgroundColor: C.bone,
     marginBottom: S.sm,
   },
+  priceTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: S.sm,
+    paddingRight: S.xl,
+  },
   priceBtnTitle: {
+    flexShrink: 1,
     fontSize: T.size.md,
     fontWeight: T.weight.semi,
     color: C.text,
@@ -1535,6 +2317,13 @@ const st = StyleSheet.create({
     marginTop: 2,
     fontSize: T.size.sm,
     color: C.text3,
+  },
+  priceRefreshError: {
+    marginTop: -2,
+    marginBottom: S.sm,
+    fontSize: T.size.xs,
+    color: C.amberDeep,
+    lineHeight: T.size.xs + 4,
   },
   mrpDealRow: {
     flexDirection: 'row',
@@ -1547,6 +2336,21 @@ const st = StyleSheet.create({
     fontSize: T.size.sm,
     color: C.text4,
     textDecorationLine: 'line-through',
+  },
+  mrpReviewRow: {
+    marginTop: -2,
+    marginBottom: S.sm,
+    padding: S.sm,
+    borderRadius: R.md,
+    backgroundColor: C.amberSoft,
+    borderWidth: 1,
+    borderColor: C.amberBorder,
+  },
+  mrpReviewText: {
+    fontSize: T.size.sm,
+    lineHeight: T.size.sm + 5,
+    color: C.amberDeep,
+    fontWeight: T.weight.semi,
   },
   discountBadge: {
     paddingHorizontal: S.sm,
@@ -1608,6 +2412,119 @@ const st = StyleSheet.create({
     color: C.text2,
   },
   condPillLabelActive: { color: C.ctaPrimary },
+  conditionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: S.sm,
+    marginTop: S.md,
+  },
+  issueLabel: {
+    marginTop: S.md,
+    marginBottom: S.sm,
+    fontSize: T.size.sm,
+    fontWeight: T.weight.bold,
+    color: C.text,
+  },
+  issueChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: S.sm,
+  },
+  issueChip: {
+    paddingHorizontal: S.md,
+    paddingVertical: S.sm,
+    borderRadius: R.pill,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.bone,
+  },
+  issueChipActive: {
+    borderColor: C.ctaPrimary,
+    backgroundColor: C.ctaPrimarySoft,
+  },
+  issueChipText: {
+    fontSize: T.size.sm,
+    color: C.text2,
+    fontWeight: T.weight.semi,
+  },
+  issueChipTextActive: {
+    color: C.ctaPrimary,
+  },
+  customIssueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: S.sm,
+    marginTop: S.md,
+  },
+  customIssueInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: R.md,
+    paddingHorizontal: S.md,
+    paddingVertical: S.sm,
+    color: C.text,
+    backgroundColor: C.bone,
+    fontSize: T.size.base,
+  },
+  addIssueBtn: {
+    paddingHorizontal: S.md,
+    paddingVertical: S.sm,
+    borderRadius: R.md,
+    backgroundColor: C.ctaPrimary,
+  },
+  addIssueText: {
+    color: C.surface,
+    fontSize: T.size.sm,
+    fontWeight: T.weight.bold,
+  },
+  kidsSafetyBox: {
+    marginTop: S.md,
+    paddingTop: S.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: C.border,
+  },
+  safetyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: S.md,
+    paddingVertical: S.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: C.border,
+  },
+  safetyLabel: {
+    flex: 1,
+    color: C.text2,
+    fontSize: T.size.sm,
+    fontWeight: T.weight.semi,
+  },
+  safetyChoices: {
+    flexDirection: 'row',
+    gap: S.xs,
+  },
+  safetyChoice: {
+    minWidth: 44,
+    alignItems: 'center',
+    paddingHorizontal: S.sm,
+    paddingVertical: 6,
+    borderRadius: R.pill,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.bone,
+  },
+  safetyChoiceActive: {
+    borderColor: C.ctaPrimary,
+    backgroundColor: C.ctaPrimarySoft,
+  },
+  safetyChoiceText: {
+    color: C.text3,
+    fontSize: T.size.xs,
+    fontWeight: T.weight.bold,
+  },
+  safetyChoiceTextActive: {
+    color: C.ctaPrimary,
+  },
 
   // Trust — floating card, mint background, refund-guarantee aligned
   trustBlock: {

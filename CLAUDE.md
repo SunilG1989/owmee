@@ -56,3 +56,46 @@ and replaced free-form negotiation with structured offer mechanics:
 Migration: 0025_offer_v2. Mobile: OffersScreen now reachable as the
 MyOffers route from Profile, with update-price + counter accept/decline
 + cooldown rendering on the Sent tab.
+
+## Founder decision: order E2E and seller readiness
+
+Decision captured on 2026-05-23 after reviewing current repo state and
+marketplace patterns. Owmee's pilot flow must treat seller readiness as the
+post-payment gate. A buyer payment is not enough to send an FE blindly.
+
+Valid pilot use cases:
+- Buyer pays through Owmee; order becomes operational only after payment
+  capture, not payment-link creation.
+- Seller receives a structured paid-order task: confirm item availability,
+  pickup address, pickup slot/readiness, condition unchanged, and included
+  accessories.
+- If seller confirms, Owmee assigns FE pickup. If seller declines or misses
+  the response deadline, buyer is refunded and the seller/order is flagged
+  for ops.
+- Transaction stores immutable buyer delivery and seller pickup snapshots.
+  FE pickup/delivery tasks read from transaction snapshots, not mutable
+  current user defaults.
+- FE pickup, hub routing, FE/courier delivery, buyer ack code, delivered
+  state, 48h buyer acceptance, auto-complete, refund/return/dispute, and
+  payout eligibility are one canonical state machine.
+- Reuse existing code primitives where possible: Concierge already has
+  `FEVisit.address_snapshot`, seller arrival verification, seller approval,
+  visit issues, and close-visit handover fields. Post-purchase readiness must
+  be transaction-owned, but it should borrow those patterns instead of
+  inventing a second ops language.
+- Existing AI listing seller-info endpoints collect pickup address,
+  pincode, accessories, and available_slots, but they currently write mostly
+  to mutable user/listing records. They are useful inputs, not sufficient
+  transaction snapshots.
+
+Backlog, not pilot blockers:
+- Real courier API integrations and webhook status sync.
+- Automated routing rules after enough manual routes are observed.
+- Multi-quantity inventory and stock ledger. Pilot remains one listing =
+  one item, with reservation expiry and payment-timeout release.
+- Advanced seller defect scoring, RTO/NDR, live maps, pickup points, and
+  vendor dashboards.
+
+Still rejected:
+- Buyer/seller chat, Make Offer notes, buyer-seller meetup, seller-managed
+  shipping, and self-reported payment confirmation.

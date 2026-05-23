@@ -109,6 +109,10 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
 
   const isBuyer = txn.buyer_id === userId;
   const status = tracking.status;
+  const isSeller = txn.seller_id === userId;
+  const isPaymentPending = status === 'payment_pending';
+  const sellerReadinessStatus = txn.seller_readiness_status || tracking.seller_readiness_status;
+  const sellerNeedsReadiness = isSeller && status === 'payment_captured' && sellerReadinessStatus === 'pending';
   const isDelivered = status === 'delivered';
   const isCompleted = status === 'completed';
   const isDisputed = status === 'disputed';
@@ -117,6 +121,47 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
   const returnNeedsPhoto = ['item_not_as_described', 'damaged_in_transit', 'wrong_item'].includes(returnReason);
 
   const showAckCode = isBuyer && tracking.ack_code && status === 'delivery_in_progress' && tracking.delivery_mode === 'fe';
+
+  const openPayment = () => {
+    if (!txn.payment_link) {
+      Alert.alert('Payment link unavailable', 'Pull down to refresh, or wait for Owmee to create a new link.');
+      return;
+    }
+    Linking.openURL(txn.payment_link).catch(() => {
+      Alert.alert('Could not open payment link', 'Try again in a moment.');
+    });
+  };
+
+  const confirmReady = () => doAction(
+    () => Transactions.confirmSellerReadiness(transactionId),
+    'Pickup readiness confirmed. Owmee ops will assign a specialist.',
+  );
+
+  const declineReady = () => {
+    Alert.alert(
+      'Item unavailable?',
+      'Owmee will cancel this order and start the buyer refund.',
+      [
+        { text: 'Back', style: 'cancel' },
+        {
+          text: 'Sold elsewhere',
+          style: 'destructive',
+          onPress: () => doAction(
+            () => Transactions.declineSellerReadiness(transactionId, 'sold_elsewhere'),
+            'Order cancelled. Buyer refund started.',
+          ),
+        },
+        {
+          text: 'Condition changed',
+          style: 'destructive',
+          onPress: () => doAction(
+            () => Transactions.declineSellerReadiness(transactionId, 'item_damaged'),
+            'Order cancelled. Buyer refund started.',
+          ),
+        },
+      ],
+    );
+  };
 
   // Upload a single local URI to R2 via the evidence presigned-URL flow.
   // Returns the r2_key that the BE persists into Dispute.photo_keys /
@@ -185,8 +230,10 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
         </View>
 
         <View style={[s.banner, isCompleted && s.bannerOK, isDisputed && s.bannerWarn, isCancelled && s.bannerErr]}>
-          <Text style={s.bannerText}>{labelForStatus(status, isBuyer)}</Text>
-          <Text style={s.bannerSubText}>{nextStepForStatus(status, isBuyer, tracking.delivery_mode)}</Text>
+          <Text style={s.bannerText}>{labelForStatus(status, isBuyer, isSeller, sellerReadinessStatus)}</Text>
+          <Text style={s.bannerSubText}>
+            {nextStepForStatus(status, isBuyer, isSeller, tracking.delivery_mode, sellerReadinessStatus)}
+          </Text>
         </View>
 
         {showAckCode && (
@@ -233,6 +280,51 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
           >
             <Text style={s.courierText}>Track via {tracking.courier_name || 'courier'} →</Text>
           </TouchableOpacity>
+        )}
+
+        {isPaymentPending && isBuyer && (
+          <View style={s.paymentBox}>
+            <Text style={s.paymentTitle}>Complete payment</Text>
+            <Text style={s.paymentHint}>
+              Owmee starts seller confirmation and pickup only after payment is captured.
+            </Text>
+            <Button
+              label="Open secure payment"
+              variant="primary"
+              size="lg"
+              onPress={openPayment}
+              fullWidth
+            />
+          </View>
+        )}
+
+        {sellerNeedsReadiness && (
+          <View style={s.paymentBox}>
+            <Text style={s.paymentTitle}>Confirm pickup readiness</Text>
+            <Text style={s.paymentHint}>
+              Confirm only if the item is available, condition is unchanged, and included accessories are ready for Owmee pickup.
+            </Text>
+            {txn.seller_pickup_address?.full_address ? (
+              <Text style={s.addressLine}>{txn.seller_pickup_address.full_address}</Text>
+            ) : null}
+            <Button
+              label="Item ready for Owmee pickup"
+              variant="primary"
+              size="lg"
+              loading={acting}
+              disabled={acting}
+              onPress={confirmReady}
+              fullWidth
+            />
+            <Button
+              label="Item unavailable"
+              variant="secondary"
+              size="lg"
+              disabled={acting}
+              onPress={declineReady}
+              fullWidth
+            />
+          </View>
         )}
 
         <View style={s.timeline}>
@@ -652,12 +744,23 @@ function Row({ label, value, bold }: { label: string; value: string; bold?: bool
   );
 }
 
-function labelForStatus(status: string, isBuyer: boolean): string {
+function labelForStatus(
+  status: string,
+  isBuyer: boolean,
+  isSeller: boolean,
+  sellerReadinessStatus?: string | null,
+): string {
   switch (status) {
     case 'payment_pending': return 'Waiting for payment to clear.';
-    case 'payment_captured': return isBuyer
-      ? 'Payment received. Owmee will inspect the item and prepare delivery soon.'
-      : 'Buyer paid. Keep the item packed for Owmee logistics.';
+    case 'payment_captured':
+      if (sellerReadinessStatus === 'confirmed') {
+        return isBuyer
+          ? 'Seller confirmed pickup. Owmee is assigning collection.'
+          : 'Pickup readiness confirmed.';
+      }
+      return isSeller
+        ? 'Buyer paid. Confirm pickup readiness.'
+        : 'Payment received. Waiting for seller pickup confirmation.';
     case 'at_hub': return 'Item is at the Owmee hub. Out for delivery soon.';
     case 'delivery_in_progress': return isBuyer ? 'On the way to you.' : 'On the way to the buyer.';
     case 'delivered': return isBuyer ? 'Delivered. Confirm receipt to release payout.' : 'Delivered to buyer. Awaiting confirmation.';
@@ -669,12 +772,23 @@ function labelForStatus(status: string, isBuyer: boolean): string {
   }
 }
 
-function nextStepForStatus(status: string, isBuyer: boolean, deliveryMode?: string | null): string {
+function nextStepForStatus(
+  status: string,
+  isBuyer: boolean,
+  isSeller: boolean,
+  deliveryMode?: string | null,
+  sellerReadinessStatus?: string | null,
+): string {
   switch (status) {
     case 'payment_pending':
       return isBuyer ? 'Complete payment to reserve the item.' : 'We will update you after the buyer pays.';
     case 'payment_captured':
-      return isBuyer ? 'Owmee will inspect the item before delivery.' : 'Keep the item packed and ready for Owmee logistics.';
+      if (sellerReadinessStatus === 'confirmed') {
+        return 'Owmee ops will assign pickup, then the item goes through inspection.';
+      }
+      return isSeller
+        ? 'Confirm availability so Owmee can assign pickup. If unavailable, cancel here so the buyer refund starts.'
+        : 'The seller must confirm availability before Owmee can send pickup.';
     case 'at_hub':
       return 'Inspection is done. We are preparing delivery.';
     case 'delivery_in_progress':
@@ -791,6 +905,27 @@ const s = StyleSheet.create({
     backgroundColor: C.petrolLight,
   },
   courierText: { fontSize: T.size.sm + 1, color: C.petrolDeep, fontWeight: T.weight.semi, textAlign: 'center' },
+
+  paymentBox: {
+    marginHorizontal: S.lg,
+    marginBottom: S.md,
+    padding: S.lg,
+    borderRadius: R.sm,
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
+    gap: S.sm,
+  },
+  paymentTitle: { fontSize: T.size.md, fontWeight: T.weight.bold, color: C.text },
+  paymentHint: { fontSize: T.size.sm + 1, color: C.text3, lineHeight: 20 },
+  addressLine: {
+    fontSize: T.size.sm,
+    color: C.text2,
+    lineHeight: 18,
+    padding: S.sm,
+    borderRadius: R.xs,
+    backgroundColor: C.bone,
+  },
 
   timeline: { paddingHorizontal: S.xxl, paddingVertical: S.lg },
   tlRow: { flexDirection: 'row', alignItems: 'flex-start' },

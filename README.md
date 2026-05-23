@@ -73,6 +73,7 @@ docker compose down
 ## Things to know before changing core code
 
 - Postgres is the source of truth. Partner systems (KYC vendors, payment aggregator) are external sources for verification events.
+- Verification is layered: MSG91 for OTP, Bureau-style fraud screening, KYC for legal identity, and Owmee policy for action gates. See [docs/VERIFICATION_ARCHITECTURE.md](docs/VERIFICATION_ARCHITECTURE.md).
 - UUID primary keys use `uuid.uuid4()` as Python defaults; migrations use `uuid_generate_v4()` (NOT `gen_random_uuid()`).
 - Async SQLAlchemy via `AsyncSession` — get the session from the `DBSession` type alias.
 - `metadata_` is the Python attribute name mapped to the `metadata` column.

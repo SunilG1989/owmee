@@ -99,6 +99,19 @@ class Settings(BaseSettings):
     geocoding_provider: str = "photon"
     push_provider: str = "fcm"
 
+    # ── Fraud / risk decisioning ──────────────────────────────────────────
+    fraud_provider: str = "mock"
+    fraud_api_base_url: str = ""
+    fraud_api_key: str = ""
+    fraud_webhook_secret: str = ""
+    # Keep Bureau endpoint shape configurable until the commercial contract is
+    # finalized. The adapter normalizes the response into Owmee's policy model.
+    fraud_onboarding_path: str = "/v1/onboarding/check"
+    fraud_timeout_seconds: float = 3.0
+    fraud_decision_valid_days: int = 30
+    fraud_enforcement_enabled: bool = True
+    high_value_verification_threshold_inr: int = 10000
+
     # ── KYC partner ────────────────────────────────────────────────────────
     kyc_partner: str = "digio"
     kyc_partner_api_key: str = ""

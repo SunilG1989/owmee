@@ -4,7 +4,8 @@ Each is idempotent, writes to event log before side effects.
 """
 from __future__ import annotations
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 
 import structlog
 from temporalio import activity
@@ -141,10 +142,12 @@ async def act_flag_seller_ghosting(inp: ActivityTransactionInput) -> dict:
 
 @activity.defn(name="act_auto_complete_transaction")
 async def act_auto_complete_transaction(inp: ActivityTransactionInput) -> dict:
-    """Auto-complete after 48h buyer silence. Sets completed status."""
+    """Auto-complete after 48h buyer silence on delivered orders only."""
     from app.db.session import AsyncSessionLocal
     from app.modules.offers.models import Transaction
     from app.modules.listings.models import Listing
+    from app.modules.transactions.shipped import compute_tds, seller_payout_verified
+    from app.modules.offers.service import _notify
     from sqlalchemy import select
     import uuid
 
@@ -158,11 +161,24 @@ async def act_auto_complete_transaction(inp: ActivityTransactionInput) -> dict:
 
         if txn.status in ("completed", "auto_completed"):
             return {"success": True, "already_completed": True}
+        if txn.status != "delivered":
+            return {"success": False, "reason": "INVALID_STATUS", "status": txn.status}
 
         now = datetime.now(timezone.utc)
+        if txn.confirmation_deadline and txn.confirmation_deadline > now:
+            return {"success": False, "reason": "DEADLINE_NOT_REACHED"}
+
+        seller_gross = Decimal(str(txn.gross_amount or 0)) - Decimal(str(txn.delivery_fee or 0))
+        tds_result = await compute_tds(db, txn.seller_id, seller_gross, txn.id)
+        txn.tds_withheld = tds_result["tds_amount"]
+        txn.platform_fee = tds_result["platform_fee"]
+        txn.gst_on_fee = tds_result["gst_on_fee"]
+        txn.net_payout = tds_result["net_payout"]
         txn.status = "auto_completed"
         txn.completed_at = now
+        txn.auto_completed_at = now
         txn.payout_flagged_at = now
+        txn.rate_available_at = now + timedelta(hours=2)
 
         # Mark listing as sold
         listing_result = await db.execute(
@@ -171,6 +187,22 @@ async def act_auto_complete_transaction(inp: ActivityTransactionInput) -> dict:
         listing = listing_result.scalar_one_or_none()
         if listing:
             listing.status = "sold"
+
+        if not await seller_payout_verified(db, txn.seller_id):
+            logger.warning(
+                "payout.flagged_for_unverified_seller",
+                transaction_id=inp.transaction_id,
+                seller_id=str(txn.seller_id),
+                net_payout=str(txn.net_payout),
+            )
+        await _notify(db, txn.seller_id, "deal_confirmed",
+            "Deal auto-completed — payout queued",
+            f"₹{txn.net_payout:,.0f} payout being processed. Rate your buyer in 2 hours.",
+            "transaction", str(txn.id))
+        await _notify(db, txn.buyer_id, "deal_confirmed_buyer",
+            "Deal complete",
+            "The 48-hour confirmation window ended, so Owmee completed the order.",
+            "transaction", str(txn.id))
 
         await db.commit()
         logger.info("act_auto_complete_transaction.done", transaction_id=inp.transaction_id)

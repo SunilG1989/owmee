@@ -3,7 +3,7 @@ Offers service — business logic.
 
 India UX review changes (v2):
 - Tiered offer expiry: 24h <5K, 48h 5K–20K, 72h >20K
-- Offer note field (buyer context with offer)
+- Make Offer note/chat removed; structured updates only
 - Payment link expiry: 30min <5K, 24h >=5K
 - Pickup readiness SLA: seller_response_deadline = payment_captured + 4h
 - Blind mutual rating: hidden until both rate or 7 days
@@ -31,6 +31,7 @@ from app.modules.offers.models import (
 )
 from app.modules.listings.models import Category, Listing
 from app.modules.listings.service import create_snapshot
+from app.modules.transactions.address_snapshots import snapshot_default_address
 
 # Sprint 5a: analytics hook
 from app.modules.analytics import track
@@ -43,6 +44,19 @@ CONFIRMATION_WINDOW_HOURS = 48
 RATING_DELAY_HOURS = 2          # Rate available 2h after deal complete
 BLIND_RATING_DAYS = 7           # Reveal ratings after 7 days if peer hasn't rated
 SELLER_RESPONSE_HOURS = 4       # Auto-escalate if seller silent after payment
+
+SELLER_READINESS_PENDING = "pending"
+SELLER_READINESS_CONFIRMED = "confirmed"
+SELLER_READINESS_DECLINED = "declined"
+SELLER_READINESS_EXPIRED = "expired"
+
+SELLER_DECLINE_REASONS = {
+    "sold_elsewhere",
+    "item_damaged",
+    "changed_mind",
+    "cannot_pickup",
+    "other",
+}
 
 
 # ── Pricing — Owmee V1 model ──────────────────────────────────────────────
@@ -324,6 +338,48 @@ async def accept_offer(
         raise ValueError("LISTING_NO_LONGER_AVAILABLE")
 
     agreed_price = offer.counter_price if is_buyer_accepting_counter else offer.offered_price
+    # Pricing: zero platform fee, conditional delivery fee. Buyer pays
+    # (agreed_price + delivery_fee); seller receives (agreed_price - TDS);
+    # Owmee keeps delivery_fee.
+    cat_result = await db.execute(
+        select(Category.slug).where(Category.id == listing.category_id)
+    )
+    cat_slug = cat_result.scalar_one_or_none()
+    fee = delivery_fee_for(cat_slug)
+    buyer_pays = agreed_price + fee
+
+    from app.modules.verification.service import (
+        ACTION_BUY,
+        evaluate_user_action,
+        record_action_policy_decision,
+    )
+    buyer_policy = await evaluate_user_action(
+        db,
+        user_id=offer.buyer_id,
+        action=ACTION_BUY,
+        context={
+            "amount": buyer_pays,
+            "listing_id": str(offer.listing_id),
+            "category_slug": cat_slug,
+        },
+    )
+    if not buyer_policy.allowed:
+        await record_action_policy_decision(
+            db,
+            user_id=offer.buyer_id,
+            action=ACTION_BUY,
+            policy=buyer_policy,
+            metadata={
+                "listing_id": str(offer.listing_id),
+                "offer_id": str(offer.id),
+                "amount": str(buyer_pays),
+                "category_slug": cat_slug,
+            },
+        )
+        raise ValueError(
+            f"BUYER_VERIFICATION_REQUIRED:{buyer_policy.reason_codes[0]}:{buyer_policy.required_step or 'kyc'}"
+        )
+
     now = datetime.now(timezone.utc)
     offer.status = "accepted"
     offer.responded_at = now
@@ -347,16 +403,6 @@ async def accept_offer(
 
     snapshot = await create_snapshot(db, offer.listing_id, reservation.id)
 
-    # Pricing: zero platform fee, conditional delivery fee. Buyer pays
-    # (agreed_price + delivery_fee); seller receives (agreed_price - TDS);
-    # Owmee keeps delivery_fee.
-    cat_result = await db.execute(
-        select(Category.slug).where(Category.id == listing.category_id)
-    )
-    cat_slug = cat_result.scalar_one_or_none()
-    fee = delivery_fee_for(cat_slug)
-    buyer_pays = agreed_price + fee
-
     payment_method = "upi"  # Sprint 6c: direct seller-buyer handoff removed
 
     txn = Transaction(
@@ -377,7 +423,30 @@ async def accept_offer(
     db.add(txn)
     await db.flush()
 
-    # Sprint 5a: analytics event — fires for both UPI and cash deals
+    # Best-effort prefill. Buy Now overwrites the buyer snapshot with the
+    # checkout-selected address; Make Offer falls back to default saved address.
+    txn.buyer_delivery_address_snapshot = await snapshot_default_address(
+        db, user_id=offer.buyer_id, role="buyer_delivery"
+    )
+    txn.seller_pickup_address_snapshot = await snapshot_default_address(
+        db, user_id=offer.seller_id, role="seller_pickup"
+    )
+
+    await record_action_policy_decision(
+        db,
+        user_id=offer.buyer_id,
+        action=ACTION_BUY,
+        policy=buyer_policy,
+        metadata={
+            "listing_id": str(offer.listing_id),
+            "offer_id": str(offer.id),
+            "transaction_id": str(txn.id),
+            "amount": str(buyer_pays),
+            "category_slug": cat_slug,
+        },
+    )
+
+    # Sprint 5a: analytics event — accepted managed deal
     await track(
         db,
         event_name="offer_accepted",
@@ -523,14 +592,82 @@ async def process_payment_paid(db, razorpay_link_id, razorpay_payment_id, webhoo
     if not txn:
         return None
 
+    listing_result = await db.execute(select(Listing).where(Listing.id == txn.listing_id))
+    listing = listing_result.scalar_one_or_none()
+    cat_slug = None
+    if listing:
+        cat_result = await db.execute(select(Category.slug).where(Category.id == listing.category_id))
+        cat_slug = cat_result.scalar_one_or_none()
+
+    from app.modules.verification.service import (
+        ACTION_BUY,
+        evaluate_user_action,
+        record_action_policy_decision,
+    )
+    buyer_policy = await evaluate_user_action(
+        db,
+        user_id=txn.buyer_id,
+        action=ACTION_BUY,
+        context={
+            "amount": txn.gross_amount,
+            "listing_id": str(txn.listing_id),
+            "transaction_id": str(txn.id),
+            "category_slug": cat_slug,
+        },
+    )
+    await record_action_policy_decision(
+        db,
+        user_id=txn.buyer_id,
+        action=ACTION_BUY,
+        policy=buyer_policy,
+        metadata={
+            "listing_id": str(txn.listing_id),
+            "transaction_id": str(txn.id),
+            "amount": str(txn.gross_amount),
+            "category_slug": cat_slug,
+            "stage": "payment_webhook",
+        },
+    )
+    if not buyer_policy.allowed:
+        txn.status = "payment_capture_uncertain"
+        txn.seller_response_deadline = None
+        await _notify(db, txn.buyer_id, "payment_under_review",
+            "Payment under review",
+            "Payment was received, but Owmee needs a quick account review before delivery starts.",
+            "transaction", str(txn.id))
+        logger.warning(
+            "payment.capture_held_by_verification",
+            transaction_id=str(txn.id),
+            buyer_id=str(txn.buyer_id),
+            decision=buyer_policy.decision,
+            reasons=buyer_policy.reason_codes,
+        )
+        return txn
+
+    await _prefill_missing_transaction_snapshots(db, txn)
+    if not txn.buyer_delivery_address_snapshot:
+        txn.status = "payment_capture_uncertain"
+        txn.seller_response_deadline = None
+        await _notify(db, txn.buyer_id, "delivery_address_required",
+            "Add delivery address",
+            "Payment was received, but Owmee needs a delivery address before pickup starts.",
+            "transaction", str(txn.id))
+        logger.warning(
+            "payment.capture_missing_buyer_address",
+            transaction_id=str(txn.id),
+            buyer_id=str(txn.buyer_id),
+        )
+        return txn
+
     txn.status = "payment_captured"
     txn.confirmation_deadline = now + timedelta(hours=CONFIRMATION_WINDOW_HOURS)
     # Seller readiness deadline: surface stale post-payment handoffs to ops.
     txn.seller_response_deadline = now + timedelta(hours=SELLER_RESPONSE_HOURS)
+    txn.seller_readiness_status = SELLER_READINESS_PENDING
 
-    await _notify(db, txn.seller_id, "payment_confirmed",
-        "Payment received",
-        f"₹{txn.gross_amount:,.0f} paid. Owmee delivery prep is next.",
+    await _notify(db, txn.seller_id, "seller_readiness_required",
+        "Buyer paid — confirm pickup",
+        "Confirm the item is available and ready before Owmee assigns pickup.",
         "transaction", str(txn.id))
     await _notify(db, txn.buyer_id, "payment_confirmed",
         "Payment confirmed",
@@ -538,6 +675,193 @@ async def process_payment_paid(db, razorpay_link_id, razorpay_payment_id, webhoo
         "transaction", str(txn.id))
     logger.info("payment.confirmed", transaction_id=str(txn.id))
     return txn
+
+
+async def _prefill_missing_transaction_snapshots(db: AsyncSession, txn: Transaction) -> None:
+    if not txn.buyer_delivery_address_snapshot:
+        txn.buyer_delivery_address_snapshot = await snapshot_default_address(
+            db, user_id=txn.buyer_id, role="buyer_delivery"
+        )
+    if not txn.seller_pickup_address_snapshot:
+        txn.seller_pickup_address_snapshot = await snapshot_default_address(
+            db, user_id=txn.seller_id, role="seller_pickup"
+        )
+
+
+async def confirm_seller_readiness(
+    db: AsyncSession,
+    transaction_id: UUID,
+    seller_id: UUID,
+    *,
+    pickup_address_id: UUID | None = None,
+    pickup_slot_start: datetime | None = None,
+    pickup_slot_end: datetime | None = None,
+    item_available: bool = True,
+    condition_unchanged: bool = True,
+    accessories_confirmed: bool = True,
+) -> Transaction:
+    txn = (await db.execute(
+        select(Transaction).where(Transaction.id == transaction_id).with_for_update()
+    )).scalar_one_or_none()
+    if not txn:
+        raise ValueError("TRANSACTION_NOT_FOUND")
+    if txn.seller_id != seller_id:
+        raise ValueError("NOT_YOUR_TRANSACTION")
+    if txn.status != "payment_captured":
+        raise ValueError(f"INVALID_STATUS:{txn.status}")
+    if txn.pickup_fe_id:
+        raise ValueError("PICKUP_ALREADY_ASSIGNED")
+    if txn.seller_readiness_status == SELLER_READINESS_CONFIRMED:
+        return txn
+    if txn.seller_readiness_status in (SELLER_READINESS_DECLINED, SELLER_READINESS_EXPIRED):
+        raise ValueError(f"READINESS_CLOSED:{txn.seller_readiness_status}")
+    if not item_available:
+        raise ValueError("ITEM_NOT_AVAILABLE")
+    if not condition_unchanged:
+        raise ValueError("CONDITION_CHANGED")
+    if not accessories_confirmed:
+        raise ValueError("ACCESSORIES_NOT_CONFIRMED")
+    if pickup_slot_start and pickup_slot_end and pickup_slot_end <= pickup_slot_start:
+        raise ValueError("INVALID_PICKUP_SLOT")
+
+    await _prefill_missing_transaction_snapshots(db, txn)
+    if pickup_address_id:
+        from app.modules.transactions.address_snapshots import snapshot_owned_address
+        txn.seller_pickup_address_snapshot = await snapshot_owned_address(
+            db, address_id=pickup_address_id, user_id=seller_id, role="seller_pickup"
+        )
+    if not txn.seller_pickup_address_snapshot:
+        raise ValueError("PICKUP_ADDRESS_REQUIRED")
+    if not txn.buyer_delivery_address_snapshot:
+        raise ValueError("BUYER_DELIVERY_ADDRESS_REQUIRED")
+
+    now = datetime.now(timezone.utc)
+    txn.seller_readiness_status = SELLER_READINESS_CONFIRMED
+    txn.seller_readiness_reason = None
+    txn.seller_responded_at = now
+    txn.pickup_ready_at = now
+    txn.seller_pickup_slot_start = pickup_slot_start
+    txn.seller_pickup_slot_end = pickup_slot_end
+
+    await _notify(db, txn.buyer_id, "seller_ready",
+        "Seller confirmed pickup",
+        "The item is ready. Owmee will assign pickup and inspect it next.",
+        "transaction", str(txn.id))
+    logger.info("seller_readiness.confirmed", transaction_id=str(txn.id), seller_id=str(seller_id))
+    return txn
+
+
+async def decline_seller_readiness(
+    db: AsyncSession,
+    transaction_id: UUID,
+    seller_id: UUID,
+    *,
+    reason: str,
+) -> Transaction:
+    if reason not in SELLER_DECLINE_REASONS:
+        raise ValueError("INVALID_REASON")
+
+    txn = (await db.execute(
+        select(Transaction).where(Transaction.id == transaction_id).with_for_update()
+    )).scalar_one_or_none()
+    if not txn:
+        raise ValueError("TRANSACTION_NOT_FOUND")
+    if txn.seller_id != seller_id:
+        raise ValueError("NOT_YOUR_TRANSACTION")
+    if txn.status != "payment_captured":
+        raise ValueError(f"INVALID_STATUS:{txn.status}")
+    if txn.pickup_fe_id:
+        raise ValueError("PICKUP_ALREADY_ASSIGNED")
+
+    now = datetime.now(timezone.utc)
+    txn.seller_readiness_status = SELLER_READINESS_DECLINED
+    txn.seller_readiness_reason = reason
+    txn.seller_responded_at = now
+    txn.cancelled_at = now
+    txn.cancelled_reason = f"seller_{reason}"
+    txn.status = "cancelled"
+
+    await _suppress_listing_after_seller_readiness_failure(db, txn, reason)
+    await _refund_for_seller_readiness_failure(db, txn, reason=f"Seller declined: {reason}")
+
+    await _notify(db, txn.buyer_id, "seller_unavailable_refund",
+        "Order cancelled — refund started",
+        "The seller could not complete pickup. Your refund is being processed.",
+        "transaction", str(txn.id))
+    await _notify(db, txn.seller_id, "seller_readiness_declined",
+        "Order cancelled",
+        "Owmee has started the buyer refund because you could not complete pickup.",
+        "transaction", str(txn.id))
+    logger.info("seller_readiness.declined", transaction_id=str(txn.id), seller_id=str(seller_id), reason=reason)
+    return txn
+
+
+async def expire_seller_readiness(db: AsyncSession, txn: Transaction) -> Transaction:
+    if txn.status != "payment_captured":
+        raise ValueError(f"INVALID_STATUS:{txn.status}")
+    if txn.seller_readiness_status != SELLER_READINESS_PENDING:
+        raise ValueError(f"INVALID_READINESS_STATUS:{txn.seller_readiness_status}")
+    if txn.seller_response_deadline and txn.seller_response_deadline > datetime.now(timezone.utc):
+        raise ValueError("DEADLINE_NOT_REACHED")
+
+    now = datetime.now(timezone.utc)
+    txn.seller_readiness_status = SELLER_READINESS_EXPIRED
+    txn.seller_readiness_reason = "timeout"
+    txn.cancelled_at = now
+    txn.cancelled_reason = "seller_timeout"
+    txn.status = "cancelled"
+
+    await _suppress_listing_after_seller_readiness_failure(db, txn, "seller_timeout")
+    await _refund_for_seller_readiness_failure(db, txn, reason="Seller did not confirm pickup readiness")
+    await _notify(db, txn.buyer_id, "seller_timeout_refund",
+        "Order cancelled — refund started",
+        "The seller did not confirm pickup in time. Your refund is being processed.",
+        "transaction", str(txn.id))
+    await _notify(db, txn.seller_id, "seller_readiness_expired",
+        "Order cancelled",
+        "The pickup confirmation window expired, so Owmee cancelled and refunded the buyer.",
+        "transaction", str(txn.id))
+    logger.info("seller_readiness.expired", transaction_id=str(txn.id), seller_id=str(txn.seller_id))
+    return txn
+
+
+async def _suppress_listing_after_seller_readiness_failure(
+    db: AsyncSession, txn: Transaction, reason: str
+) -> None:
+    listing = (await db.execute(select(Listing).where(Listing.id == txn.listing_id))).scalar_one_or_none()
+    if not listing:
+        return
+    now = datetime.now(timezone.utc)
+    if reason == "sold_elsewhere":
+        listing.status = "sold_elsewhere"
+        listing.deletion_reason = "sold_elsewhere"
+        listing.deleted_at = now
+    elif reason in {"item_damaged", "changed_mind", "cannot_pickup", "seller_timeout", "other"}:
+        listing.status = "removed"
+        listing.deletion_reason = "item_damaged" if reason == "item_damaged" else "other"
+        listing.deleted_at = now
+
+
+async def _refund_for_seller_readiness_failure(
+    db: AsyncSession, txn: Transaction, *, reason: str
+) -> None:
+    from app.modules.transactions.refund_service import (
+        INITIATED_BY_SYSTEM_SELLER,
+        initiate_refund,
+    )
+    try:
+        await initiate_refund(
+            db,
+            txn,
+            reason=reason[:200],
+            initiated_by=INITIATED_BY_SYSTEM_SELLER,
+        )
+    except ValueError as ref_err:
+        logger.warning(
+            "seller_readiness.refund_skip",
+            transaction_id=str(txn.id),
+            reason=str(ref_err),
+        )
 
 
 
@@ -551,7 +875,7 @@ async def buyer_confirm_deal(db, transaction_id, buyer_id):
         raise ValueError("TRANSACTION_NOT_FOUND")
     if txn.buyer_id != buyer_id:
         raise ValueError("NOT_YOUR_TRANSACTION")
-    if txn.status not in ("payment_captured", "awaiting_confirmation"):
+    if txn.status not in ("delivered", "awaiting_confirmation"):
         raise ValueError(f"INVALID_STATUS:{txn.status}")
 
     now = datetime.now(timezone.utc)

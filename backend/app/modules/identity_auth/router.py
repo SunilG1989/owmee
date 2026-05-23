@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 import hashlib
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 from pydantic import BaseModel, Field
 import phonenumbers
 import structlog
@@ -15,6 +15,10 @@ from app.core.settings import settings
 from app.modules.identity_auth.sms_adapter import (
     get_sms_adapter,
     sms_provider_is_mock,
+)
+from app.modules.verification.service import (
+    record_phone_otp_verified,
+    run_onboarding_fraud_check,
 )
 
 router = APIRouter()
@@ -356,7 +360,12 @@ async def send_otp(body: SendOTPRequest, request: Request):
 
 
 @router.post("/otp/verify", response_model=TokenResponse)
-async def verify_otp(body: VerifyOTPRequest, db: DBSession):
+async def verify_otp(
+    body: VerifyOTPRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: DBSession,
+):
     """Verify OTP and issue JWT. Creates user on first visit."""
     phone = _normalise_phone(body.phone_number)
     await _verify_otp(phone, body.otp)
@@ -381,6 +390,25 @@ async def verify_otp(body: VerifyOTPRequest, db: DBSession):
         expires_at=datetime.now(timezone.utc) + timedelta(days=settings.jwt_refresh_token_expire_days),
     )
     db.add(session)
+    await record_phone_otp_verified(
+        db,
+        user_id=user.id,
+        phone=phone,
+        provider=settings.sms_provider,
+    )
+    # Commit before the background risk task opens its own DB session.
+    await db.commit()
+
+    background_tasks.add_task(
+        run_onboarding_fraud_check,
+        user_id=str(user.id),
+        phone=phone,
+        device_id=body.device_id,
+        device_model=body.device_model,
+        os=body.os,
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+    )
 
     logger.info(
         "auth.verified",

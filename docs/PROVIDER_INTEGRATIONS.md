@@ -8,6 +8,7 @@ Owmee code should call app-level adapters, not third-party SDKs directly. This k
 | --- | --- | --- | --- |
 | AI listing assist | `AI_PROVIDER` | `app.modules.ai_assistant.provider` | `gemini` |
 | SMS OTP | `SMS_PROVIDER` | `app.modules.identity_auth.sms_adapter` | `mock`, `msg91` |
+| Fraud/risk decisioning | `FRAUD_PROVIDER` | `app.modules.verification.fraud_adapter` | `mock`, `bureau` |
 | Payment aggregator | `PA_PROVIDER` | `app.modules.payments.adapter` | `mock`, `razorpay` |
 | KYC | `KYC_PARTNER` | `app.modules.kyc.adapter` | `mock`, `digio` |
 | Reverse geocoding | `GEOCODING_PROVIDER` | `app.modules.geo.provider` | `photon` |
@@ -19,6 +20,7 @@ Business logic should import only the adapter/factory for the capability:
 
 - AI listing routes call `ai_assistant.provider`, never `gemini_client`.
 - Auth routes call `sms_adapter`, never MSG91 directly.
+- Signup/action policy calls `verification.service`, never Bureau directly.
 - Offer/transaction flows call `payments.adapter`, never Razorpay directly.
 - Address routes call `geo.provider`, never Photon directly.
 - Notification service calls `push_adapter`, never FCM directly.
@@ -30,6 +32,19 @@ Business logic should import only the adapter/factory for the capability:
 3. Map provider-specific payloads into existing Owmee response/result types.
 4. Add a provider-boundary test in `backend/tests/test_provider_boundaries.py`.
 5. Keep database field changes separate from provider swaps unless the domain model truly changes.
+
+## Verification Policy
+
+Verification is deliberately layered:
+
+- MSG91 proves phone ownership.
+- Bureau provides fraud/risk signals.
+- KYC partners prove legal identity, liveness, PAN, and payout account status.
+- Owmee policy decides whether the user can publish, buy, receive payout, or needs manual review.
+
+Use `app.modules.verification.service.evaluate_user_action(...)` for trust-sensitive actions.
+Do not call provider APIs from product screens or high-traffic read endpoints.
+See [VERIFICATION_ARCHITECTURE.md](VERIFICATION_ARCHITECTURE.md) for the full model.
 
 ## Production Guardrail
 

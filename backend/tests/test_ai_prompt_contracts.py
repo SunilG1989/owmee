@@ -138,6 +138,8 @@ def test_price_prompt_allows_responsible_no_price_output():
     assert "everyday lower-value items" in PROMPT_PRICE_ESTIMATE
     assert "base-variant estimate" in PROMPT_PRICE_ESTIMATE
     assert "Missing storage should lower confidence" in PROMPT_PRICE_ESTIMATE
+    assert "Never back-calculate MRP from resale" in PROMPT_PRICE_ESTIMATE
+    assert "mrp_source must be \"market_anchor\"" in PROMPT_PRICE_ESTIMATE
     assert "do not return\n  null only because storage is missing" in PROMPT_VISION_DETECT
 
 
@@ -150,7 +152,7 @@ def test_deprecated_gemini_model_aliases_fail_forward():
 
 def test_gemini_pricing_token_budgets_are_large_enough_for_mrp_payloads():
     assert gemini_client.VISION_DETECT_MAX_OUTPUT_TOKENS >= 8192
-    assert gemini_client.PRICE_ESTIMATE_MAX_OUTPUT_TOKENS >= 1536
+    assert gemini_client.PRICE_ESTIMATE_MAX_OUTPUT_TOKENS >= 2048
 
 
 def test_cleanup_prompt_preserves_reflective_or_same_color_products():

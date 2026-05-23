@@ -127,6 +127,7 @@ class AIDetected(BaseModel):
 class DraftFromImageResponse(BaseModel):
     draft_id: UUID
     photo_url: str
+    photo_urls: list[str] = Field(default_factory=list)
     detected: AIDetected
     suggested_price: float | None = None
     price_source: str = "none"               # comparables | vision | mrp_anchor | category_anchor | ai | none
@@ -173,6 +174,32 @@ class AIDraftAnalysisStatusResponse(BaseModel):
     retry_after_seconds: int | None = None
 
 
+class DraftPriceRefreshRequest(BaseModel):
+    """Seller-confirmed fields used to recover price guidance.
+
+    Vision is allowed to be conservative on the first pass. This request lets
+    the review screen send the fields the seller just confirmed so the backend
+    can recompute MRP + asking-price guidance without making the seller start
+    over or manually research the market.
+    """
+    category_slug: str | None = None
+    brand: str | None = None
+    model: str | None = None
+    storage: str | None = None
+    ram: str | None = None
+    processor: str | None = None
+    screen_size: str | None = None
+    detected_item_type: str | None = None
+    condition: str | None = None
+    purchase_year: int | None = Field(None, ge=2000, le=2030)
+    screen_condition: str | None = Field(None, pattern="^(flawless|minor_scratches|cracked)$")
+    body_condition: str | None = Field(None, pattern="^(flawless|minor_dents|major_damage)$")
+    defects: list[str] | None = None
+    original_price: float | None = Field(None, gt=0, le=10000000)
+    mrp_source: str | None = None
+    mrp_confidence: float | None = Field(None, ge=0, le=1)
+
+
 # ── IMEI extraction ───────────────────────────────────────────────────────
 
 
@@ -206,6 +233,9 @@ class CreateFromDraftRequest(BaseModel):
     screen_size: str | None = None
     color: str | None = None
     purchase_year: int | None = Field(None, ge=2000, le=2030)
+    screen_condition: str | None = Field(None, pattern="^(flawless|minor_scratches|cracked)$")
+    body_condition: str | None = Field(None, pattern="^(flawless|minor_dents|major_damage)$")
+    defects: list[str] | None = None
     battery_health: int | None = Field(None, ge=0, le=100)
     accessories: str | None = None
     warranty_status: str | None = None
@@ -217,7 +247,13 @@ class CreateFromDraftRequest(BaseModel):
     has_earphones: bool | None = None
     water_damage_history: bool | None = None
     seller_functional_attestation: bool | None = None
+    kids_safety_checklist: dict[str, Any] | None = None
     description: str | None = None
+    mrp_source: str | None = None
+    mrp_confidence: float | None = Field(None, ge=0, le=1)
+    seller_mrp_confirmed: bool | None = None
+    hero_image_index: int | None = Field(None, ge=0, le=5)
+    removed_photo_indices: list[int] | None = None
     imei_1: str | None = None
     imei_2: str | None = None
     serial_number: str | None = None

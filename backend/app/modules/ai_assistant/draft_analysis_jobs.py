@@ -238,9 +238,7 @@ async def process_ai_draft_analysis(
         )
         await session.commit()
 
-        image_pairs: list[tuple[bytes, str]] = []
-        photo_urls: list[str] = []
-        for key in keys:
+        async def process_key(key: str) -> tuple[str, tuple[bytes, str]]:
             try:
                 raw = await _download_bounded_object(key, max_bytes=ai_router.MAX_ANALYSIS_UPLOAD_BYTES)
                 prepared_bytes, prepared_type = await asyncio.to_thread(
@@ -261,35 +259,54 @@ async def process_ai_draft_analysis(
                     thumbnail_quality=78,
                     polish=False,
                 )
-                photo_urls.append(processed.display_key or key)
-                image_pairs.append((prepared_bytes, prepared_type))
+                return processed.display_key or key, (prepared_bytes, prepared_type)
             except UploadedPhotoTooLarge as exc:
-                await _mark_draft_failed(
-                    session,
-                    draft_id_str,
-                    error="PHOTO_TOO_LARGE",
-                    message="One photo is too large. Please retake or select a smaller photo.",
-                )
-                return AIDraftAnalysisResult(
-                    status="failed",
-                    draft_id=draft_id_str,
-                    reason=f"photo_too_large:{exc.size}",
-                )
+                raise exc
             except Exception as exc:
-                await _mark_draft_failed(
-                    session,
-                    draft_id_str,
-                    error="PHOTO_DOWNLOAD_FAILED",
-                    message="One of the uploaded photos could not be processed. Please try again.",
-                )
-                return AIDraftAnalysisResult(
-                    status="failed",
-                    draft_id=draft_id_str,
-                    reason=f"photo_process_failed:{type(exc).__name__}",
-                )
+                raise RuntimeError(f"photo_process_failed:{type(exc).__name__}") from exc
 
-        _lat, _lng, _city, user_state = await get_user_location(session, UUID(user_id_str))
-        detected = await ai_router._detect_from_images_bounded(image_pairs)
+        semaphore = asyncio.Semaphore(ai_router.AI_DRAFT_IMAGE_IO_CONCURRENCY)
+
+        async def process_key_bounded(key: str) -> tuple[str, tuple[bytes, str]]:
+            async with semaphore:
+                return await process_key(key)
+
+        try:
+            processed_images = await asyncio.gather(*[process_key_bounded(key) for key in keys])
+        except UploadedPhotoTooLarge as exc:
+            await _mark_draft_failed(
+                session,
+                draft_id_str,
+                error="PHOTO_TOO_LARGE",
+                message="One photo is too large. Please retake or select a smaller photo.",
+            )
+            return AIDraftAnalysisResult(
+                status="failed",
+                draft_id=draft_id_str,
+                reason=f"photo_too_large:{exc.size}",
+            )
+        except Exception as exc:
+            await _mark_draft_failed(
+                session,
+                draft_id_str,
+                error="PHOTO_DOWNLOAD_FAILED",
+                message="One of the uploaded photos could not be processed. Please try again.",
+            )
+            reason = str(exc) if str(exc).startswith("photo_process_failed:") else f"photo_process_failed:{type(exc).__name__}"
+            return AIDraftAnalysisResult(
+                status="failed",
+                draft_id=draft_id_str,
+                reason=reason,
+            )
+
+        photo_urls = [photo_url for photo_url, _ in processed_images]
+        image_pairs = [image_pair for _, image_pair in processed_images]
+
+        location_task = get_user_location(session, UUID(user_id_str))
+        detected, (_lat, _lng, _city, user_state) = await asyncio.gather(
+            ai_router._detect_from_images_bounded(image_pairs),
+            location_task,
+        )
         detected = ai_router._with_canonical_category(detected)
         hero_index = select_hero_image_index(detected, len(photo_urls))
         hero_index = ai_router._front_face_hero_override(detected, hero_index, len(photo_urls))

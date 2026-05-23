@@ -40,6 +40,7 @@ REFUND_STATUS_COMPLETED = "completed"
 REFUND_STATUS_FAILED = "failed"
 
 INITIATED_BY_SYSTEM_PICKUP = "system_pickup_rejected"
+INITIATED_BY_SYSTEM_SELLER = "system_seller_unavailable"
 INITIATED_BY_ADMIN = "admin"
 INITIATED_BY_BUYER = "buyer"
 

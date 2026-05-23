@@ -58,6 +58,29 @@ type EditableDetails = {
   category_slug?: string;
 };
 
+const OTHER_PLACEHOLDERS = new Set([
+  '',
+  'item',
+  'used item',
+  'product',
+  'other',
+  'others',
+  'misc',
+  'miscellaneous',
+  'general',
+  'accessory',
+  'accessories',
+  'electronics',
+  'unknown',
+  'not sure',
+  'other / not sure',
+]);
+
+const isMeaningfulOtherDetail = (value?: string | null) => {
+  const cleaned = (value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  return cleaned.length >= 3 && !OTHER_PLACEHOLDERS.has(cleaned);
+};
+
 interface Props {
   initial: EditableDetails;
   onSave: (next: EditableDetails) => void;
@@ -108,6 +131,7 @@ export default function EditDetailsSheet({ initial, onSave, onClose }: Props) {
     const missing: string[] = [];
     if (!category_slug) missing.push('category');
     if (isOther && (title.trim().length < 4 || /^used item$/i.test(title.trim()))) missing.push('title');
+    if (isOther && !isMeaningfulOtherDetail(model)) missing.push('product type');
     if (!isElectronic && !isOther && modelOptions.length > 0 && !findCatalogOption(model, modelOptions)) {
       missing.push('item type');
     }
@@ -121,7 +145,7 @@ export default function EditDetailsSheet({ initial, onSave, onClose }: Props) {
       if (hasCharger === null) missing.push('charger');
       if (categoryKind === 'phone' && hasEarphones === null) missing.push('earphones');
       if (waterDamageHistory === null) missing.push('water damage');
-      if (sellerFunctionalAttestation !== true) missing.push('working condition');
+      if (sellerFunctionalAttestation === null) missing.push('working condition');
     }
     if (categoryKind === 'kids') {
       if (!findCatalogOption(ageSuitability, KIDS_AGE_OPTIONS)) missing.push('age suitability');
@@ -251,7 +275,7 @@ export default function EditDetailsSheet({ initial, onSave, onClose }: Props) {
                   />
                   {sellerFunctionalAttestation === false ? (
                     <Text style={st.blockHint}>
-                      Use the manual listing form for items with functional issues so the defect can be captured clearly.
+                      Add the issue details in Condition before publishing so buyers see the problem clearly.
                     </Text>
                   ) : null}
                 </View>
@@ -287,10 +311,10 @@ export default function EditDetailsSheet({ initial, onSave, onClose }: Props) {
                 />
 
                 <SuggestionField
-                  label={categoryKind === 'appliance' || categoryKind === 'kids' ? 'Item type *' : 'Model'}
+                  label={categoryKind === 'appliance' || categoryKind === 'kids' || isOther ? 'Item type *' : 'Model'}
                   value={model}
                   onChangeText={setModel}
-                  placeholder={categoryKind === 'appliance' || categoryKind === 'kids' ? 'Choose item type' : 'Exact model or product name'}
+                  placeholder={categoryKind === 'appliance' || categoryKind === 'kids' || isOther ? 'Specific product type' : 'Exact model or product name'}
                   suggestions={modelOptions}
                 />
 

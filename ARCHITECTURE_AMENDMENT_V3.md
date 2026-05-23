@@ -59,6 +59,31 @@ Any user can browse and transact with phone OTP alone. KYC is required at specif
 
 Every transaction follows this sequence:
 
+**Payment and seller-readiness gate (always required):**
+- Buyer payment moves the transaction from payment-link intent to paid order
+  only after payment capture/webhook confirmation.
+- After payment capture, seller must complete a structured readiness task:
+  item still available, condition unchanged, accessories included, pickup
+  address confirmed, and pickup slot/readiness confirmed.
+- Seller readiness is not buyer-seller chat. It is a first-party Owmee task
+  with fixed choices only.
+- If seller confirms before deadline, transaction can enter FE pickup
+  assignment.
+- If seller declines, is unreachable, or misses deadline, buyer is refunded,
+  the listing is hidden or forced through re-confirmation, and ops records a
+  seller reliability defect.
+- FE pickup and FE/courier delivery use immutable transaction snapshots for
+  seller pickup address and buyer delivery address. They must not depend on a
+  user's current default address after checkout.
+- This should reuse patterns already present in Concierge: `FEVisit` address
+  snapshots, seller at-door verification, seller approval before listing,
+  visit issue capture, and handover proof. The post-purchase implementation
+  is separate because it belongs to `Transaction`, but the UX/control grammar
+  should feel identical.
+- Existing AI listing seller-info collection is an input source, not the
+  order record. At payment capture, copy the then-current seller pickup and
+  buyer delivery details into immutable transaction-owned snapshots.
+
 **Pickup leg (always FE):**
 - FE visits seller, picks up item, inspects against listing snapshot
 - FE captures: verification photos, IMEI (phones), serial (laptops), condition notes, accessory checklist
@@ -210,6 +235,11 @@ For explicit clarity, these v2 decisions remain in effect:
 
 13. **Admin decides delivery routing during pilot.** FE or courier per transaction, manually, until at least 50 transactions are routed and a rule becomes obvious.
 
+14. **Seller readiness is mandatory after payment.** Owmee does not dispatch
+    pickup until the seller confirms item availability, pickup address, and
+    readiness through structured controls. Missed/declined readiness triggers
+    refund and ops review, not buyer-seller negotiation.
+
 ---
 
 ## Amendment 9 — Top mistakes to avoid (section: "Top 10 mistakes to avoid")
@@ -226,6 +256,14 @@ Append to the v2 list:
 
 14. **Letting the "verified" badge become a negative framing ("unverified").** Missing badge is neutral. Present verification as an opt-in upgrade, never as a deficit to fix.
 
+15. **Treating payment-link creation as an order.** A payment link is only an
+    intent. Buyer-facing copy, admin queues, and seller tasks must key off
+    captured payment.
+
+16. **Skipping seller readiness because Buy Now feels automatic.** Buy Now
+    removes price negotiation, not seller accountability. The seller must
+    confirm availability before Owmee spends FE capacity.
+
 ---
 
 ## Open amendment work (future sprints)
@@ -236,6 +274,12 @@ The following are acknowledged but deferred:
 - **v3 notification design:** with chat removed, notification becomes more important. Flesh out the notification spec for offer updates, counter-offers, FE pickup, FE delivery, courier tracking. Sprint 7.
 - **v3 dispute state machine:** v2's state machine assumed chat evidence. Replace with offer-history + FE inspection evidence. Sprint 7.
 - **v3 FE earnings model:** v2 implied single-visit fee. With delivery leg, we need `pickup_fee` and `delivery_fee` separately. Sprint 7 finance work.
+- **v3 courier/vendor integrations:** keep pilot courier routing manual until
+  enough volume exists. Real Shiprocket/Delhivery/Porter booking, AWB sync,
+  NDR/RTO, and webhook status events are backlog.
+- **v3 inventory depth:** pilot supports one listing = one item. Add
+  reservation expiry/payment-timeout release now; defer multi-quantity stock
+  ledger until Owmee supports vendor-like sellers.
 
 ---
 

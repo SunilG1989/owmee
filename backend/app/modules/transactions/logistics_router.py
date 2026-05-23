@@ -21,7 +21,7 @@ Buyer endpoint is BasicUser (phone OTP).
 from __future__ import annotations
 
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Annotated, Optional
 from uuid import UUID
 
@@ -34,6 +34,7 @@ from app.core.dependencies import BasicUser, CurrentUser, DBSession, VerifiedUse
 from app.modules.identity_auth.models import User
 from app.modules.listings.models import Listing
 from app.modules.offers.models import PaymentLink, Transaction
+from app.modules.transactions.address_snapshots import snapshot_summary
 from app.modules.transactions.logistics_state import (
     AT_HUB, COMPLETED, DELIVERED, DELIVERY_IN_PROGRESS,
     PAYMENT_CAPTURED, PICKUP_REJECTED,
@@ -91,10 +92,29 @@ def _fmt_logistics(txn: Transaction, listing_title: str | None = None) -> dict:
         "pickup_inspection_notes": txn.pickup_inspection_notes,
         "pickup_inspection_photo_keys": txn.pickup_inspection_photo_keys,
         "delivery_handover_photo_key": txn.delivery_handover_photo_key,
+        "seller_readiness_status": txn.seller_readiness_status,
+        "seller_readiness_reason": txn.seller_readiness_reason,
+        "pickup_readiness_deadline": txn.seller_response_deadline.isoformat() if txn.seller_response_deadline else None,
+        "seller_responded_at": txn.seller_responded_at.isoformat() if txn.seller_responded_at else None,
         "at_hub_at": txn.at_hub_at.isoformat() if txn.at_hub_at else None,
         "routed_at": txn.routed_at.isoformat() if txn.routed_at else None,
         "delivered_at": txn.delivered_at.isoformat() if txn.delivered_at else None,
     }
+
+
+def _with_address_payload(d: dict, *, prefix: str, snapshot: dict | None) -> dict:
+    summary = snapshot_summary(snapshot)
+    if not summary:
+        return d
+    d[f"{prefix}_name"] = summary.get("full_name")
+    d[f"{prefix}_phone"] = summary.get("phone_number")
+    d[f"{prefix}_full_address"] = summary.get("full_address")
+    d[f"{prefix}_locality"] = summary.get("locality")
+    d[f"{prefix}_city"] = summary.get("city")
+    d[f"{prefix}_pincode"] = summary.get("pincode")
+    d[f"{prefix}_lat"] = summary.get("lat")
+    d[f"{prefix}_lng"] = summary.get("lng")
+    return d
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
@@ -129,17 +149,53 @@ class CompleteDeliveryRequest(BaseModel):
     ack_code: str = Field(..., min_length=6, max_length=8)
 
 
-# ── Admin: pickup queue ───────────────────────────────────────────────────────
+# ── Admin: seller readiness + pickup queue ────────────────────────────────────
 
-@router.get("/v1/admin/logistics/pickup-queue", dependencies=[Depends(require_admin)])
-async def admin_pickup_queue(db: DBSession):
-    """Transactions where buyer paid but no FE has been assigned to pickup yet."""
+@router.get("/v1/admin/logistics/seller-readiness-queue", dependencies=[Depends(require_admin)])
+async def admin_seller_readiness_queue(db: DBSession):
+    """Paid orders waiting for seller readiness confirmation."""
     rows = await db.execute(
         select(Transaction, Listing.title)
         .join(Listing, Listing.id == Transaction.listing_id)
         .where(and_(
             Transaction.status == PAYMENT_CAPTURED,
+            Transaction.seller_readiness_status == "pending",
+        ))
+        .order_by(Transaction.seller_response_deadline.asc().nullslast())
+    )
+    return {"transactions": [_fmt_logistics(t, title) for t, title in rows.all()]}
+
+
+@router.post(
+    "/v1/admin/logistics/transactions/{transaction_id}/expire-seller-readiness",
+    dependencies=[Depends(require_admin)],
+)
+async def admin_expire_seller_readiness(transaction_id: UUID, db: DBSession):
+    """Ops action for seller non-response after the readiness deadline."""
+    from app.modules.offers.service import expire_seller_readiness
+
+    txn = await db.get(Transaction, transaction_id)
+    if not txn:
+        raise HTTPException(404, {"error": "NOT_FOUND"})
+    try:
+        await expire_seller_readiness(db, txn)
+    except ValueError as e:
+        raise HTTPException(400, {"error": str(e).split(":")[0]})
+    await db.commit()
+    return _fmt_logistics(txn)
+
+@router.get("/v1/admin/logistics/pickup-queue", dependencies=[Depends(require_admin)])
+async def admin_pickup_queue(db: DBSession):
+    """Paid transactions where seller confirmed readiness and pickup is unassigned."""
+    rows = await db.execute(
+        select(Transaction, Listing.title)
+        .join(Listing, Listing.id == Transaction.listing_id)
+        .where(and_(
+            Transaction.status == PAYMENT_CAPTURED,
+            Transaction.seller_readiness_status == "confirmed",
             Transaction.pickup_fe_id.is_(None),
+            Transaction.buyer_delivery_address_snapshot.is_not(None),
+            Transaction.seller_pickup_address_snapshot.is_not(None),
         ))
         .order_by(Transaction.created_at.asc())
     )
@@ -156,6 +212,10 @@ async def admin_assign_pickup(transaction_id: UUID, body: AssignPickupRequest, d
         raise HTTPException(404, {"error": "NOT_FOUND"})
     if txn.status != PAYMENT_CAPTURED:
         raise HTTPException(400, {"error": "INVALID_STATUS", "current": txn.status})
+    if txn.seller_readiness_status != "confirmed":
+        raise HTTPException(400, {"error": "SELLER_NOT_READY"})
+    if not txn.seller_pickup_address_snapshot or not txn.buyer_delivery_address_snapshot:
+        raise HTTPException(400, {"error": "ADDRESS_SNAPSHOT_MISSING"})
 
     fe = await db.get(User, body.fe_user_id)
     if not fe:
@@ -165,6 +225,11 @@ async def admin_assign_pickup(transaction_id: UUID, body: AssignPickupRequest, d
         logger.warning("logistics.assign_pickup.user_not_fe", user_id=str(body.fe_user_id))
 
     txn.pickup_fe_id = body.fe_user_id
+    from app.modules.offers.service import _notify
+    await _notify(db, txn.seller_id, "pickup_assigned",
+        "Owmee pickup assigned",
+        "A field executive has been assigned for your confirmed order.",
+        "transaction", str(txn.id))
     await db.commit()
     return _fmt_logistics(txn)
 
@@ -179,10 +244,16 @@ async def fe_my_pickups(current_user: FeUser, db: DBSession):
         .where(and_(
             Transaction.pickup_fe_id == current_user.user_id,
             Transaction.status == PAYMENT_CAPTURED,
+            Transaction.seller_readiness_status == "confirmed",
         ))
         .order_by(Transaction.created_at.asc())
     )
-    return {"pickups": [_fmt_logistics(t, title) for t, title in rows.all()]}
+    out = []
+    for txn, title in rows.all():
+        d = _fmt_logistics(txn, title)
+        _with_address_payload(d, prefix="seller", snapshot=txn.seller_pickup_address_snapshot)
+        out.append(d)
+    return {"pickups": out}
 
 
 @router.post("/v1/fe/pickups/{transaction_id}/complete")
@@ -209,6 +280,15 @@ async def fe_complete_pickup(
 
     if body.inspection_passed:
         txn.at_hub_at = now
+        from app.modules.offers.service import _notify
+        await _notify(db, txn.buyer_id, "item_at_hub",
+            "Item inspected by Owmee",
+            "Pickup passed inspection and the item is now moving through Owmee logistics.",
+            "transaction", str(txn.id))
+        await _notify(db, txn.seller_id, "pickup_completed",
+            "Pickup completed",
+            "Owmee collected and inspected the item. Track payout progress in the order.",
+            "transaction", str(txn.id))
     else:
         # Pickup rejected = trust failure. Auto-initiate the buyer's
         # refund right here so ops doesn't have to chase it manually.
@@ -229,6 +309,15 @@ async def fe_complete_pickup(
                 transaction_id=str(transaction_id),
                 reason=str(ref_err),
             )
+        from app.modules.offers.service import _notify
+        await _notify(db, txn.buyer_id, "pickup_rejected_refund",
+            "Inspection failed — refund started",
+            "The item did not pass Owmee inspection. Your refund is being processed.",
+            "transaction", str(txn.id))
+        await _notify(db, txn.seller_id, "pickup_rejected_refund",
+            "Pickup inspection failed",
+            "Owmee could not accept the item at pickup. Buyer refund processing has started.",
+            "transaction", str(txn.id))
 
     await db.commit()
     return _fmt_logistics(txn)
@@ -567,8 +656,16 @@ async def admin_route_to_fe_delivery(
     txn.buyer_acknowledgment_code = _gen_handover_code()
     txn.routed_at = now
     txn.status = DELIVERY_IN_PROGRESS
+    from app.modules.offers.service import _notify
+    await _notify(db, txn.buyer_id, "out_for_delivery",
+        "Out for delivery",
+        "Owmee is bringing your item. Keep the handover code private until the FE reaches you.",
+        "transaction", str(txn.id))
+    await _notify(db, txn.seller_id, "delivery_in_progress",
+        "Delivery in progress",
+        "Your item is on the way to the buyer.",
+        "transaction", str(txn.id))
     await db.commit()
-    # Buyer gets the ack code via push notification — see TODO below.
     logger.info(
         "logistics.routed_fe_delivery",
         transaction_id=str(transaction_id), fe_user_id=str(body.fe_user_id),
@@ -600,6 +697,15 @@ async def admin_route_to_courier(
     txn.courier_tracking_url = body.tracking_url
     txn.routed_at = now
     txn.status = DELIVERY_IN_PROGRESS
+    from app.modules.offers.service import _notify
+    await _notify(db, txn.buyer_id, "out_for_delivery",
+        "Courier delivery started",
+        "Your item has been handed to the courier. Tracking is available in the order.",
+        "transaction", str(txn.id))
+    await _notify(db, txn.seller_id, "delivery_in_progress",
+        "Delivery in progress",
+        "Your item has been handed to the courier for buyer delivery.",
+        "transaction", str(txn.id))
     await db.commit()
     return _fmt_logistics(txn)
 
@@ -625,6 +731,16 @@ async def admin_courier_status(
         assert_legal_transition(txn.status, DELIVERED)
         txn.status = DELIVERED
         txn.delivered_at = datetime.now(timezone.utc)
+        txn.confirmation_deadline = txn.delivered_at + timedelta(hours=48)
+        from app.modules.offers.service import _notify
+        await _notify(db, txn.buyer_id, "delivered_confirm_receipt",
+            "Delivered — confirm receipt",
+            "Confirm receipt if everything matches. You have 48 hours to raise an issue.",
+            "transaction", str(txn.id))
+        await _notify(db, txn.seller_id, "delivered_awaiting_confirmation",
+            "Delivered to buyer",
+            "Buyer confirmation or the 48-hour window will move payout forward.",
+            "transaction", str(txn.id))
 
     logger.info(
         "logistics.courier_status_update",
@@ -643,24 +759,12 @@ async def admin_courier_status(
 async def fe_my_deliveries(current_user: FeUser, db: DBSession):
     """List my active deliveries.
 
-    P0 launch-fix: enrich each row with the buyer's default-address
-    full_name + phone_number + order_notes so the FE delivery agent
-    knows whose name is on the package and any gate/parking notes
-    before they ring the bell. Pulled from user_addresses (the
-    buyer's default row) to avoid a redundant snapshot.
+    FE receives immutable buyer-delivery snapshot captured at order time.
+    Do not read the buyer's mutable current default address here.
     """
-    from app.modules.identity_auth.models import UserAddress
-
     rows = await db.execute(
-        select(Transaction, Listing.title, UserAddress)
+        select(Transaction, Listing.title)
         .join(Listing, Listing.id == Transaction.listing_id)
-        .outerjoin(
-            UserAddress,
-            and_(
-                UserAddress.user_id == Transaction.buyer_id,
-                UserAddress.is_default == True,  # noqa: E712
-            ),
-        )
         .where(and_(
             Transaction.delivery_fe_id == current_user.user_id,
             Transaction.status == DELIVERY_IN_PROGRESS,
@@ -668,10 +772,9 @@ async def fe_my_deliveries(current_user: FeUser, db: DBSession):
         .order_by(Transaction.routed_at.asc())
     )
     out: list[dict] = []
-    for txn, title, addr in rows.all():
+    for txn, title in rows.all():
         d = _fmt_logistics(txn, title)
-        d["buyer_name"] = addr.full_name if addr else None
-        d["buyer_phone"] = addr.phone_number if addr else None
+        _with_address_payload(d, prefix="buyer", snapshot=txn.buyer_delivery_address_snapshot)
         d["order_notes"] = txn.order_notes
         out.append(d)
     return {"deliveries": out}
@@ -698,6 +801,16 @@ async def fe_complete_delivery(
     txn.delivery_handover_photo_key = body.handover_photo_key
     txn.status = DELIVERED
     txn.delivered_at = datetime.now(timezone.utc)
+    txn.confirmation_deadline = txn.delivered_at + timedelta(hours=48)
+    from app.modules.offers.service import _notify
+    await _notify(db, txn.buyer_id, "delivered_confirm_receipt",
+        "Delivered — confirm receipt",
+        "Confirm receipt if everything matches. You have 48 hours to raise an issue.",
+        "transaction", str(txn.id))
+    await _notify(db, txn.seller_id, "delivered_awaiting_confirmation",
+        "Delivered to buyer",
+        "Buyer confirmation or the 48-hour window will move payout forward.",
+        "transaction", str(txn.id))
     await db.commit()
     return _fmt_logistics(txn)
 
@@ -714,9 +827,12 @@ async def buyer_tracking(transaction_id: UUID, current_user: BasicUser, db: DBSe
     if txn.buyer_id != current_user.user_id and txn.seller_id != current_user.user_id:
         raise HTTPException(403, {"error": "FORBIDDEN"})
 
+    payment_done = txn.status not in ("pending", "payment_pending")
     timeline: list[dict] = [
-        {"step": "payment_captured",      "at": txn.created_at.isoformat() if txn.created_at else None,
-         "label": "Payment received", "done": True},
+        {"step": "payment_captured",      "at": txn.created_at.isoformat() if payment_done and txn.created_at else None,
+         "label": "Payment received", "done": payment_done},
+        {"step": "seller_ready",          "at": txn.pickup_ready_at.isoformat() if txn.pickup_ready_at else None,
+         "label": "Seller confirmed pickup", "done": txn.seller_readiness_status == "confirmed"},
         {"step": "fe_pickup",             "at": txn.at_hub_at.isoformat() if txn.at_hub_at else None,
          "label": "Inspected by Owmee", "done": txn.at_hub_at is not None},
         {"step": "at_hub",                "at": txn.at_hub_at.isoformat() if txn.at_hub_at else None,
@@ -739,6 +855,8 @@ async def buyer_tracking(transaction_id: UUID, current_user: BasicUser, db: DBSe
     return {
         "transaction_id": str(transaction_id),
         "status": txn.status,
+        "seller_readiness_status": txn.seller_readiness_status,
+        "pickup_readiness_deadline": txn.seller_response_deadline.isoformat() if txn.seller_response_deadline else None,
         "timeline": timeline,
         "delivery_mode": txn.delivery_mode,
         "courier_name": txn.courier_name,

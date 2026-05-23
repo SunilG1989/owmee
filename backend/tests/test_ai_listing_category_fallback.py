@@ -1,13 +1,18 @@
+import re
 from datetime import datetime, timezone
+from pathlib import Path
 from uuid import uuid4
 
+from app.modules.ai_assistant.category_taxonomy import CATEGORY_SLUGS
 from app.modules.ai_assistant.router import (
     _canonical_category_slug,
     _category_needs_identifier,
+    _publish_detail_rejection,
     _photo_rejection_detail,
+    _publish_rejection_detail,
     _with_canonical_category,
 )
-from app.modules.ai_assistant.schemas import AIDetected, DraftFromImageResponse
+from app.modules.ai_assistant.schemas import AIDetected, CreateFromDraftRequest, DraftFromImageResponse
 
 
 def test_category_aliases_supported_launch_taxonomy():
@@ -16,6 +21,14 @@ def test_category_aliases_supported_launch_taxonomy():
     assert _canonical_category_slug("iPad") == "tablets"
     assert _canonical_category_slug("small_appliances") == "small-appliances"
     assert _canonical_category_slug("kids toys") == "kids-utility"
+
+
+def test_mobile_category_picks_match_backend_launch_taxonomy():
+    repo_root = Path(__file__).resolve().parents[2]
+    mobile_catalog = repo_root / "mobile" / "src" / "utils" / "listingCatalog.ts"
+    slugs = re.findall(r"\{ slug: '([^']+)'", mobile_catalog.read_text())
+
+    assert slugs == CATEGORY_SLUGS
 
 
 def test_unknown_visible_products_fallback_to_other():
@@ -64,6 +77,44 @@ def test_photo_rejection_blocks_bad_inputs_but_allows_other_category():
     assert _photo_rejection_detail(AIDetected(category_slug="others", flags=[])) is None
 
 
+def test_publish_rejection_blocks_manual_review_photo_risks():
+    assert _publish_rejection_detail({"flags": ["packaging_only"]}) == {
+        "error": "DRAFT_PHOTOS_BLOCKED",
+        "flags": ["packaging_only"],
+        "message": "Add a clear photo of the actual item. Packaging alone is not enough to publish.",
+    }
+    assert _publish_rejection_detail({"image_set_quality": {"has_private_info": True}})["flags"] == ["personal_info"]
+
+
+def test_other_publish_requires_specific_product_type():
+    generic_payload = CreateFromDraftRequest(
+        draft_id=uuid4(),
+        title="Used item",
+        price=500,
+        condition="good",
+        category_slug="others",
+        model="item",
+    )
+    assert _publish_detail_rejection("others", generic_payload) == {
+        "error": "OTHER_DETAILS_REQUIRED",
+        "fields": ["title"],
+        "message": "Add a specific title for this Other category listing.",
+    }
+
+    missing_type_payload = generic_payload.model_copy(update={
+        "title": "Sony headphones",
+        "model": "item",
+    })
+    assert _publish_detail_rejection("others", missing_type_payload) == {
+        "error": "OTHER_DETAILS_REQUIRED",
+        "fields": ["model"],
+        "message": "Add a concrete product type or product name before publishing an Other category listing.",
+    }
+
+    valid_payload = missing_type_payload.model_copy(update={"model": "wireless headphones"})
+    assert _publish_detail_rejection("others", valid_payload) is None
+
+
 def test_identifier_requirement_tracks_canonical_category():
     assert _category_needs_identifier("mobile") is True
     assert _category_needs_identifier("laptop") is True
@@ -85,6 +136,7 @@ def test_draft_response_exposes_new_ai_review_fields():
     response = DraftFromImageResponse(
         draft_id=uuid4(),
         photo_url="ai-drafts/test.jpg",
+        photo_urls=["ai-drafts/test.jpg", "ai-drafts/test-2.jpg"],
         detected=detected,
         expires_at=datetime.now(timezone.utc),
     )
@@ -94,3 +146,4 @@ def test_draft_response_exposes_new_ai_review_fields():
     assert payload["detected"]["detected_item_type"] == "vintage wall clock"
     assert payload["detected"]["seller_edit_fields"] == ["title", "brand", "model"]
     assert payload["detected"]["field_confidence"] == {"title": 0.88}
+    assert payload["photo_urls"] == ["ai-drafts/test.jpg", "ai-drafts/test-2.jpg"]

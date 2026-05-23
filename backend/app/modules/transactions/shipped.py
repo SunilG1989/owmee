@@ -47,17 +47,16 @@ BUYER_ACCEPTANCE_WINDOW_HOURS = 48
 # driven (no code endpoint), so we log + return a flag at flag-time so
 # the admin dashboard can suppress unverified payouts.
 async def seller_payout_verified(db, seller_id: UUID) -> bool:
-    """Returns True iff the seller's KYCVerification.payout_verified=True."""
-    from sqlalchemy import select as _select
-    from app.modules.kyc.models import KYCVerification
-    r = await db.execute(
-        _select(KYCVerification.payout_verified)
-        .where(KYCVerification.user_id == seller_id)
-        .order_by(KYCVerification.created_at.desc())
-        .limit(1)
+    """Returns True iff Owmee policy allows payout release for this seller."""
+    from app.modules.verification.service import ACTION_PAYOUT, evaluate_user_action
+
+    decision = await evaluate_user_action(
+        db,
+        user_id=seller_id,
+        action=ACTION_PAYOUT,
+        context={},
     )
-    row = r.scalar_one_or_none()
-    return bool(row)
+    return bool(decision.allowed)
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────

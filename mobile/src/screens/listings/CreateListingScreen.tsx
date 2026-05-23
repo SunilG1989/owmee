@@ -350,6 +350,8 @@ export default function CreateListingScreen({ navigation }: any) {
     }
     setBusy(true);
     try {
+      const hasStructuredIncludes = catType === 'phone' || catType === 'laptop' || catType === 'tablet' || catType === 'appliance';
+      const hasDeviceAttestation = catType === 'phone' || catType === 'laptop' || catType === 'tablet';
       const res = await Listings.create({
         category_id: cat!.id,
         title: title.trim(),
@@ -379,12 +381,12 @@ export default function CreateListingScreen({ navigation }: any) {
         imei: imei || undefined,
         accessories: accessories || undefined,
         warranty_info: warrantyInfo || undefined,
-        has_box: hasBox || undefined,
-        has_bill: hasBill || undefined,
-        has_charger: hasCharger || undefined,
-        has_earphones: hasEarphones || undefined,
+        has_box: hasStructuredIncludes ? hasBox : undefined,
+        has_bill: hasStructuredIncludes ? hasBill : undefined,
+        has_charger: hasStructuredIncludes ? hasCharger : undefined,
+        has_earphones: catType === 'phone' ? hasEarphones : undefined,
         water_damage_history: waterDamageHistory ?? undefined,
-        seller_functional_attestation: functionalAttest || undefined,
+        seller_functional_attestation: hasDeviceAttestation ? functionalAttest : undefined,
         battery_health: batteryHealth ? parseInt(batteryHealth) : undefined,
         age_suitability: ageSuitability || undefined,
         hygiene_status: hygiene || undefined,

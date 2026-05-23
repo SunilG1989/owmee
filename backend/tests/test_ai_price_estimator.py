@@ -88,3 +88,39 @@ async def test_estimate_price_keeps_comparables_priority_when_ai_disabled(monkey
     assert result["source"] == "comparables"
     assert result["price"] == 12000
     assert result["comparables_count"] == 3
+
+
+@pytest.mark.asyncio
+async def test_estimate_price_carries_text_ai_mrp_anchor(monkeypatch):
+    async def fake_comparables_query(*args, **kwargs):
+        return []
+
+    async def fake_ai_price_call(*args, **kwargs):
+        return {
+            "price_inr": 28000,
+            "confidence": 0.72,
+            "reasoning": "Conservative resale price for confirmed model.",
+            "mrp_inr": 69900,
+            "mrp_source": "market_anchor",
+            "mrp_confidence": 0.65,
+            "mrp_reasoning": "Conservative Indian new-price anchor.",
+        }
+
+    monkeypatch.setattr(price_estimator, "_comparables_query", fake_comparables_query)
+    monkeypatch.setattr(price_estimator.ai_provider, "estimate_price", fake_ai_price_call)
+
+    result = await price_estimator.estimate_price(
+        None,
+        brand="Apple",
+        model="iPhone 13",
+        storage="128GB",
+        condition="good",
+        state="Karnataka",
+        category_slug="smartphones",
+        allow_ai_fallback=True,
+    )
+
+    assert result["source"] == "ai"
+    assert result["price"] == 28000
+    assert result["mrp_inr"] == 69900
+    assert result["mrp_source"] == "market_anchor"

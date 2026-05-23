@@ -227,6 +227,11 @@ export interface Listing {
   listing_source?: 'self_prep' | 'fe_assisted';
   fe_visit_id?: string;
   reviewed_by?: 'none' | 'fe' | 'ops' | 'fe_and_ops';
+  seller_trust_label?: string;
+  listing_verified?: boolean;
+  listing_trust_label?: string;
+  trust_tier?: 'owmee_reviewed' | 'ai_assisted' | 'seller_confirmed' | 'limited' | string;
+  ai_assisted?: boolean;
   // Returned by Sprint 8 ai_assistant flow when an IMEI passes CEIR check
   imei_verified?: boolean;
   // Sprint 4 / Pass 3 — set on listings published through the kids
@@ -274,6 +279,14 @@ export interface FeedListing {
   seller_member_since?: string | null;
   seller_completed_deals?: number;
   is_owmee_verified: boolean;
+  seller_verified?: boolean;
+  listing_verified?: boolean;
+  listing_trust_label?: string;
+  seller_trust_label?: string;
+  trust_tier?: 'owmee_reviewed' | 'ai_assisted' | 'seller_confirmed' | 'limited' | string;
+  ai_assisted?: boolean;
+  listing_source?: 'self_prep' | 'fe_assisted' | string | null;
+  reviewed_by?: 'none' | 'fe' | 'ops' | 'fe_and_ops' | string | null;
   distance_km: number | null;
 
   // ── 2026-05-03: trust attributes for Indian-marketplace cards ─────
@@ -340,6 +353,28 @@ export interface Transaction {
   id: string; listing_id: string; listing_title: string; buyer_id: string; seller_id: string;
   amount: number; status: string; created_at: string;
   payment_link?: string; payment_link_status?: string;
+  payment_link_expires_at?: string | null;
+  seller_readiness_status?: 'pending' | 'confirmed' | 'declined' | 'expired' | string;
+  seller_readiness_reason?: string | null;
+  pickup_readiness_deadline?: string | null;
+  seller_responded_at?: string | null;
+  pickup_ready_at?: string | null;
+  seller_pickup_address?: {
+    full_name?: string | null;
+    phone_number?: string | null;
+    full_address?: string | null;
+    locality?: string | null;
+    city?: string | null;
+    pincode?: string | null;
+  } | null;
+  buyer_delivery_address?: {
+    full_name?: string | null;
+    phone_number?: string | null;
+    full_address?: string | null;
+    locality?: string | null;
+    city?: string | null;
+    pincode?: string | null;
+  } | null;
   // gross_amount is what the buyer actually paid (= amount + delivery_fee
   // if the category has a delivery fee — see Sprint pricing-rewrite).
   // Returned by /v1/transactions/{id} but legacy code reads `amount`.
@@ -697,12 +732,31 @@ export const Transactions = {
   get: (id: string) => cachedGet(`/v1/transactions/${id}`, undefined, 15_000),
   tracking: (id: string) => cachedGet<TrackingResponse>(`/v1/transactions/${id}/tracking`, undefined, 15_000),
   confirmDeal: (id: string) => api.post(`/v1/transactions/${id}/confirm`),
+  confirmSellerReadiness: (id: string, body?: {
+    pickup_address_id?: string;
+    item_available?: boolean;
+    condition_unchanged?: boolean;
+    accessories_confirmed?: boolean;
+  }) => api.post(`/v1/transactions/${id}/seller-readiness/confirm`, {
+    item_available: true,
+    condition_unchanged: true,
+    accessories_confirmed: true,
+    ...(body || {}),
+  }).then((res) => {
+    clearApiCaches(['/v1/transactions', `/v1/transactions/${id}`, `/v1/transactions/${id}/tracking`]);
+    return res;
+  }),
+  declineSellerReadiness: (id: string, reason: 'sold_elsewhere' | 'item_damaged' | 'changed_mind' | 'cannot_pickup' | 'other') =>
+    api.post(`/v1/transactions/${id}/seller-readiness/decline`, { reason }).then((res) => {
+      clearApiCaches(['/v1/transactions', `/v1/transactions/${id}`, `/v1/transactions/${id}/tracking`]);
+      return res;
+    }),
   rate: (id: string, stars: number, ok: boolean, note?: string) =>
     api.post(`/v1/transactions/${id}/rate`, { stars, item_as_described: ok ? 'yes' : 'no', comment: note }),
 };
 
 export interface TrackingStep {
-  step: 'payment_captured' | 'fe_pickup' | 'at_hub' | 'routed_for_delivery' | 'delivered';
+  step: 'payment_captured' | 'seller_ready' | 'fe_pickup' | 'at_hub' | 'routed_for_delivery' | 'delivered';
   at: string | null;
   label: string;
   done: boolean;
@@ -711,6 +765,8 @@ export interface TrackingStep {
 export interface TrackingResponse {
   transaction_id: string;
   status: string;
+  seller_readiness_status: 'pending' | 'confirmed' | 'declined' | 'expired' | string;
+  pickup_readiness_deadline: string | null;
   timeline: TrackingStep[];
   delivery_mode: 'fe' | 'courier' | null;
   courier_name: string | null;
@@ -988,6 +1044,16 @@ export interface FePickup {
   // delivery instructions captured at checkout.
   buyer_name?: string | null;
   buyer_phone?: string | null;
+  buyer_full_address?: string | null;
+  buyer_locality?: string | null;
+  buyer_city?: string | null;
+  buyer_pincode?: string | null;
+  seller_name?: string | null;
+  seller_phone?: string | null;
+  seller_full_address?: string | null;
+  seller_locality?: string | null;
+  seller_city?: string | null;
+  seller_pincode?: string | null;
   order_notes?: string | null;
 }
 
@@ -1079,6 +1145,7 @@ export interface AIComparable {
 export interface AIDraftResponse {
   draft_id: string;
   photo_url: string;
+  photo_urls?: string[];
   detected: AIDetectedFields;
   suggested_price: number | null;
   price_source: 'comparables' | 'vision' | 'mrp_anchor' | 'category_anchor' | 'ai' | 'none';
@@ -1112,6 +1179,25 @@ export interface AIDraftAnalysisStatusResponse {
   retry_after_seconds: number | null;
 }
 
+export interface AIDraftPriceRefreshRequest {
+  category_slug?: string | null;
+  brand?: string | null;
+  model?: string | null;
+  storage?: string | null;
+  ram?: string | null;
+  processor?: string | null;
+  screen_size?: string | null;
+  detected_item_type?: string | null;
+  condition?: string | null;
+  purchase_year?: number | null;
+  screen_condition?: string | null;
+  body_condition?: string | null;
+  defects?: string[] | null;
+  original_price?: number | null;
+  mrp_source?: string | null;
+  mrp_confidence?: number | null;
+}
+
 export interface AIExtractIMEIResponse {
   identifier_kind: 'imei' | 'serial' | null;
   identifier_value: string | null;
@@ -1139,6 +1225,9 @@ export interface AICreateFromDraftRequest {
   screen_size?: string | null;
   color?: string | null;
   purchase_year?: number | null;
+  screen_condition?: 'flawless' | 'minor_scratches' | 'cracked' | string | null;
+  body_condition?: 'flawless' | 'minor_dents' | 'major_damage' | string | null;
+  defects?: string[] | null;
   battery_health?: number | null;
   accessories?: string | null;
   warranty_status?: string | null;
@@ -1150,7 +1239,13 @@ export interface AICreateFromDraftRequest {
   has_earphones?: boolean | null;
   water_damage_history?: boolean | null;
   seller_functional_attestation?: boolean | null;
+  kids_safety_checklist?: Record<string, boolean> | null;
   description?: string | null;
+  mrp_source?: string | null;
+  mrp_confidence?: number | null;
+  seller_mrp_confirmed?: boolean | null;
+  hero_image_index?: number | null;
+  removed_photo_indices?: number[] | null;
   imei_1?: string | null;
   imei_2?: string | null;
   serial_number?: string | null;
@@ -1268,6 +1363,20 @@ function uploadAiDraftPhoto(upload: AIDraftUploadSlot, imageUri: string): Promis
   });
 }
 
+async function uploadAiDraftPhotos(uploads: AIDraftUploadSlot[], imageUris: string[], concurrency: number = 3): Promise<void> {
+  let next = 0;
+  const workerCount = Math.min(Math.max(1, concurrency), uploads.length);
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (next < uploads.length) {
+      const upload = uploads[next++];
+      const uri = imageUris[upload.index];
+      if (!uri) throw new Error(`Missing photo ${upload.index + 1}`);
+      await uploadAiDraftPhoto(upload, uri);
+    }
+  });
+  await Promise.all(workers);
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -1286,11 +1395,7 @@ export const AIListing = {
       });
 
       const uploads = [...session.data.uploads].sort((a, b) => a.index - b.index);
-      for (const upload of uploads) {
-        const uri = imageUris[upload.index];
-        if (!uri) throw new Error(`Missing photo ${upload.index + 1}`);
-        await uploadAiDraftPhoto(upload, uri);
-      }
+      await uploadAiDraftPhotos(uploads, imageUris);
 
       await api.post(
         `/v1/listings/draft/${session.data.draft_id}/analysis/start`,
@@ -1358,6 +1463,12 @@ export const AIListing = {
 
   /** Backward-compatible alias for older call sites. */
   extractIMEI: (draftId: string, imageUri: string) => postIdentifierOCR(draftId, imageUri, 'smartphones'),
+
+  /** Recompute MRP + suggested price after seller confirms details in review. */
+  refreshDraftPrice: (draftId: string, body: AIDraftPriceRefreshRequest) =>
+    api.post<AIDraftResponse>(`/v1/listings/draft/${draftId}/price-suggestion`, body, {
+      timeout: REQUEST_TIMEOUT,
+    }),
 
   /** Convert a draft + final fields into a real listing in pending_buyer state. */
   createFromDraft: (body: AICreateFromDraftRequest) =>

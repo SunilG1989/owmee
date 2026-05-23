@@ -14,7 +14,7 @@ from unittest.mock import MagicMock
 from app.modules.listings.router import _seller_verified, _fmt_card, _fmt_detail
 
 
-def _make_listing(snapshot: bool):
+def _make_listing(snapshot: bool, reviewed_by: str = "none"):
     """Just enough listing-shaped attrs to satisfy _fmt_card. Most fields are
     pass-through; we only care about seller_kyc_verified_at_listing_time."""
     return SimpleNamespace(
@@ -44,7 +44,8 @@ def _make_listing(snapshot: bool):
         description=None, state="Karnataka", moderation_status="approved",
         accessories=None, warranty_info=None, battery_health=None,
         hygiene_status=None, listing_source="self_prep",
-        reviewed_by="none", kids_safety_checklist=None,
+        reviewed_by=reviewed_by, kids_safety_checklist=None,
+        ai_draft_id=None, seller_review_snapshot=None,
     )
 
 
@@ -91,12 +92,20 @@ def test_seller_verified_false_when_seller_missing():
 # ── _fmt_card ─────────────────────────────────────────────────────────────────
 
 def test_fmt_card_seller_verified_field_propagates():
-    """The seller_verified arg should round-trip into both badge fields the
-    mobile API contract exposes (seller_verified for the Listing shape,
-    verified_by_owmee mirror for forward compat)."""
+    """Seller KYC and listing review are separate trust signals."""
     out = _fmt_card(_make_listing(True), seller_verified=True)
     assert out["seller_verified"] is True
+    assert out["seller_trust_label"] == "KYC verified"
+    assert out["verified_by_owmee"] is False
+    assert out["listing_trust_label"] == "Seller confirmed"
+
+
+def test_fmt_card_listing_review_uses_owmee_badge_without_seller_kyc():
+    out = _fmt_card(_make_listing(False, reviewed_by="ops"), seller_verified=False)
+    assert out["seller_verified"] is False
+    assert out["listing_verified"] is True
     assert out["verified_by_owmee"] is True
+    assert out["listing_trust_label"] == "Owmee reviewed"
 
 
 def test_fmt_card_default_unverified():

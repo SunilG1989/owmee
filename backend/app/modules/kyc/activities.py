@@ -65,6 +65,15 @@ class ActivityUpdateKYCStatusInput:
     note: str = ""
 
 
+def _normalise_provider_name_match(value: str) -> str:
+    raw = str(value or "").strip().lower()
+    if raw in {"pass", "passed", "match", "matched", "success", "true"}:
+        return "pass"
+    if raw in {"reject", "rejected", "mismatch", "failed", "false"}:
+        return "reject"
+    return "manual_review"
+
+
 # ── Activities ─────────────────────────────────────────────────────────────────
 
 @activity.defn(name="act_aadhaar_otp_initiate")
@@ -176,7 +185,7 @@ async def act_pan_verify(inp: ActivityPANVerifyInput) -> dict:
     from app.db.session import AsyncSessionLocal
     from app.modules.kyc.service import (
         get_or_create_verification, record_kyc_event,
-        update_user_kyc_status, compute_name_match
+        update_user_kyc_status
     )
     import uuid
 
@@ -223,12 +232,15 @@ async def act_pan_verify(inp: ActivityPANVerifyInput) -> dict:
         v.pan_aadhaar_linked = True
         v.pan_name = result.name
 
-        # Fuzzy name match between PAN name and Aadhaar name
-        aadhaar_name_for_match = result.name or ""   # PAN name as reference
-        score, match_result = compute_name_match(
-            result.name or "",
-            v.pan_name or "",
-        )
+        # Prefer provider-side Aadhaar/PAN name match. We intentionally do not
+        # store full Aadhaar names, so falling back to a local fuzzy match would
+        # compare PAN against itself and create a false pass.
+        if result.name_match_result:
+            match_result = _normalise_provider_name_match(result.name_match_result)
+            score = float(result.name_match_score) if result.name_match_score is not None else 1.0
+        else:
+            match_result = "manual_review"
+            score = 0.0
         v.name_match_score = str(round(score, 3))
         v.name_match_result = match_result
 

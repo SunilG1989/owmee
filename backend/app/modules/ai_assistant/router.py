@@ -46,6 +46,13 @@ from app.modules.ai_assistant import (
     provider as ai_provider,
     price_estimator,
 )
+from app.modules.ai_assistant.category_taxonomy import (
+    CATEGORY_ALIASES,
+    IDENTIFIER_CATEGORIES,
+    canonical_category_slug,
+    category_token,
+    is_meaningful_other_detail,
+)
 from app.modules.ai_assistant.identifier_extraction import normalize_serial_number
 from app.modules.ai_assistant.schemas import (
     AIDetected,
@@ -57,6 +64,7 @@ from app.modules.ai_assistant.schemas import (
     CreateFromDraftRequest,
     CreateFromDraftResponse,
     DraftFromImageResponse,
+    DraftPriceRefreshRequest,
     EditListingRequest,
     EditListingResponse,
     ExtractIMEIResponse,
@@ -78,97 +86,17 @@ router = APIRouter(prefix="/v1/listings", tags=["ai-assistant"])
 
 VISION_TIMEOUT_SECONDS = 45
 HERO_CLEANUP_TIMEOUT_SECONDS = 18
-PRICE_TIMEOUT_SECONDS = 15
+PRICE_TIMEOUT_SECONDS = 25
 MAX_ANALYSIS_UPLOAD_BYTES = 8 * 1024 * 1024
 MAX_ANALYSIS_IMAGE_DIMENSION = 1280
 ANALYSIS_IMAGE_JPEG_QUALITY = 82
 AI_DRAFT_DISPLAY_DIMENSION = 1280
 AI_DRAFT_THUMBNAIL_DIMENSION = 720
+AI_DRAFT_IMAGE_IO_CONCURRENCY = 3
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────
 
-
-# Categories that need an identifier (smartphones, laptops/tablets).
-IDENTIFIER_CATEGORIES = {"smartphones", "laptops", "tablets"}
-
-_CATEGORY_ALIASES = {
-    "smartphone": "smartphones",
-    "smartphones": "smartphones",
-    "phone": "smartphones",
-    "phones": "smartphones",
-    "mobile": "smartphones",
-    "mobiles": "smartphones",
-    "mobilephone": "smartphones",
-    "mobilephones": "smartphones",
-    "cellphone": "smartphones",
-    "cellphones": "smartphones",
-    "handset": "smartphones",
-    "iphone": "smartphones",
-    "android": "smartphones",
-    "androidphone": "smartphones",
-    "laptop": "laptops",
-    "laptops": "laptops",
-    "notebook": "laptops",
-    "notebooks": "laptops",
-    "macbook": "laptops",
-    "computer": "laptops",
-    "computers": "laptops",
-    "ultrabook": "laptops",
-    "pc": "laptops",
-    "tablet": "tablets",
-    "tablets": "tablets",
-    "ipad": "tablets",
-    "ipads": "tablets",
-    "tab": "tablets",
-    "tabs": "tablets",
-    "appliance": "small-appliances",
-    "appliances": "small-appliances",
-    "smallappliance": "small-appliances",
-    "smallappliances": "small-appliances",
-    "homeappliance": "small-appliances",
-    "homeappliances": "small-appliances",
-    "kid": "kids-utility",
-    "kids": "kids-utility",
-    "toy": "kids-utility",
-    "toys": "kids-utility",
-    "kidstoys": "kids-utility",
-    "kidseducation": "kids-utility",
-    "kidslearning": "kids-utility",
-    "kidsutility": "kids-utility",
-    "baby": "kids-utility",
-    "other": "others",
-    "others": "others",
-    "misc": "others",
-    "miscellaneous": "others",
-    "general": "others",
-    "accessory": "others",
-    "accessories": "others",
-    "electronics": "others",
-    "camera": "others",
-    "cameras": "others",
-    "headphone": "others",
-    "headphones": "others",
-    "speaker": "others",
-    "speakers": "others",
-    "furniture": "others",
-    "book": "others",
-    "books": "others",
-    "fashion": "others",
-    "clothes": "others",
-    "clothing": "others",
-    "shoes": "others",
-    "sports": "others",
-}
-
-_SUPPORTED_CATEGORY_SLUGS = {
-    "smartphones",
-    "laptops",
-    "tablets",
-    "small-appliances",
-    "kids-utility",
-    "others",
-}
 
 _DRAFT_REJECT_FLAGS = {
     "no_product",
@@ -178,16 +106,19 @@ _DRAFT_REJECT_FLAGS = {
     "stock_or_catalog_suspected",
 }
 
+_PUBLISH_BLOCK_FLAGS = _DRAFT_REJECT_FLAGS | {
+    "nsfw",
+    "personal_info",
+    "packaging_only",
+}
+
+_VALID_SCREEN_CONDITIONS = {"flawless", "minor_scratches", "cracked"}
+_VALID_BODY_CONDITIONS = {"flawless", "minor_dents", "major_damage"}
+_PRICE_REFRESH_MRP_SOURCES = {"visible_mrp", "receipt_or_bill", "market_anchor", "seller_entered"}
+
 
 def _canonical_category_slug(slug: str | None, *, fallback_empty_to_others: bool = True) -> str | None:
-    token = "".join(ch for ch in (slug or "").strip().lower() if ch.isalnum())
-    if not token:
-        return "others" if fallback_empty_to_others else None
-    aliased = _CATEGORY_ALIASES.get(token)
-    if aliased:
-        return aliased
-    normalized = (slug or "").strip().lower().replace("_", "-")
-    return normalized if normalized in _SUPPORTED_CATEGORY_SLUGS else "others"
+    return canonical_category_slug(slug, fallback_empty_to_others=fallback_empty_to_others)
 
 
 def _with_canonical_category(detected):
@@ -201,10 +132,10 @@ def _with_canonical_category(detected):
         })
 
     normalized = (raw or "").strip().lower().replace("_", "-")
-    token = "".join(ch for ch in (raw or "").strip().lower() if ch.isalnum())
+    token = category_token(raw)
     if canonical == normalized:
         resolution = "canonical"
-    elif token in _CATEGORY_ALIASES:
+    elif token in CATEGORY_ALIASES:
         resolution = "alias"
     else:
         resolution = "fallback_others"
@@ -247,6 +178,182 @@ def _photo_rejection_detail(detected) -> dict | None:
         message = "Please upload original photos of the actual item, not screenshots or catalogue images."
 
     return {"error": "PHOTO_REJECTED", "flags": reject_flags, "message": message}
+
+
+def _publish_rejection_detail(draft_ai_response: dict) -> dict | None:
+    """Hard gate unsafe/unusable AI drafts at publish time.
+
+    Draft analysis already rejects the clearest bad inputs, but publish is the
+    final trust boundary. This catches older drafts, async-worker drift, and
+    manual_review_required cases where the LLM explicitly asked for retake.
+    """
+    flags = {
+        str(flag).strip().lower()
+        for flag in (draft_ai_response.get("flags") or [])
+        if str(flag).strip()
+    }
+    blocking_reasons = {
+        str(reason).strip().lower()
+        for reason in (draft_ai_response.get("blocking_reasons") or [])
+        if str(reason).strip()
+    }
+    image_quality = draft_ai_response.get("image_set_quality") or {}
+    if isinstance(image_quality, dict):
+        if image_quality.get("has_private_info") is True:
+            flags.add("personal_info")
+        if image_quality.get("is_stock_or_catalog_image_suspected") is True:
+            flags.add("stock_or_catalog_suspected")
+        quality = str(image_quality.get("overall_photo_quality") or "").lower()
+        if quality == "unusable":
+            flags.add("blurry")
+
+    reject_flags = sorted((flags | blocking_reasons).intersection(_PUBLISH_BLOCK_FLAGS))
+    if not reject_flags:
+        return None
+
+    if {"personal_info", "nsfw"}.intersection(reject_flags):
+        message = "Remove private or unsafe content and upload clean product photos before listing."
+    elif "multiple_items" in reject_flags:
+        message = "List one product at a time. Retake photos with only the item being sold."
+    elif "packaging_only" in reject_flags:
+        message = "Add a clear photo of the actual item. Packaging alone is not enough to publish."
+    elif {"screenshot_only", "stock_or_catalog_suspected"}.intersection(reject_flags):
+        message = "Use original photos of the item in your possession, not catalogue images or screenshots."
+    else:
+        message = "Retake clearer product photos before publishing this listing."
+
+    return {"error": "DRAFT_PHOTOS_BLOCKED", "flags": reject_flags, "message": message}
+
+
+def _publish_detail_rejection(category_slug: str, payload: CreateFromDraftRequest) -> dict | None:
+    """Require enough seller-confirmed structure for launch-risk categories."""
+    if category_slug != "others":
+        return None
+
+    if not is_meaningful_other_detail(payload.title):
+        return {
+            "error": "OTHER_DETAILS_REQUIRED",
+            "fields": ["title"],
+            "message": "Add a specific title for this Other category listing.",
+        }
+
+    if not is_meaningful_other_detail(payload.model):
+        return {
+            "error": "OTHER_DETAILS_REQUIRED",
+            "fields": ["model"],
+            "message": "Add a concrete product type or product name before publishing an Other category listing.",
+        }
+
+    return None
+
+
+def _clean_condition_choice(value: str | None, allowed: set[str]) -> str | None:
+    cleaned = (value or "").strip().lower()
+    return cleaned if cleaned in allowed else None
+
+
+def _clean_defects(value) -> list[str] | None:
+    if not isinstance(value, list):
+        return None
+    seen: set[str] = set()
+    defects: list[str] = []
+    for item in value:
+        cleaned = " ".join(str(item or "").split())[:80]
+        if not cleaned:
+            continue
+        key = cleaned.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        defects.append(cleaned)
+        if len(defects) >= 12:
+            break
+    return defects
+
+
+def _clean_kids_safety_checklist(value) -> dict | None:
+    if not isinstance(value, dict):
+        return None
+    allowed = {
+        "cleaned",
+        "no_small_parts",
+        "no_loose_batteries",
+        "no_sharp_edges",
+        "original_packaging",
+        "working_condition",
+        "no_recalled_model",
+        "age_label_correct",
+    }
+    cleaned = {key: bool(value[key]) for key in allowed if key in value and isinstance(value[key], bool)}
+    return cleaned or None
+
+
+def _final_photo_keys(
+    draft_photo_keys: list[str],
+    *,
+    hero_image_index: int | None,
+    removed_photo_indices: list[int] | None,
+) -> list[str]:
+    removed = {
+        int(idx)
+        for idx in (removed_photo_indices or [])
+        if isinstance(idx, int) and idx >= 0
+    }
+    indexed = [(idx, key) for idx, key in enumerate(draft_photo_keys or []) if idx not in removed]
+    if not indexed:
+        return []
+    if hero_image_index is not None:
+        for pos, (original_idx, key) in enumerate(indexed):
+            if original_idx == hero_image_index:
+                indexed.pop(pos)
+                indexed.insert(0, (original_idx, key))
+                break
+    return [key for _, key in indexed]
+
+
+def _seller_review_snapshot(
+    *,
+    payload: CreateFromDraftRequest,
+    draft_ai_response: dict,
+    photo_keys: list[str],
+    final_fields: dict,
+    original_price: float | None,
+) -> dict:
+    return {
+        "confirmed_at": datetime.now(timezone.utc).isoformat(),
+        "ai_draft_id": str(payload.draft_id),
+        "photo_count": len(photo_keys),
+        "hero_image_index": payload.hero_image_index,
+        "removed_photo_indices": payload.removed_photo_indices or [],
+        "ai_detected": {
+            "category_slug": draft_ai_response.get("category_slug"),
+            "brand": draft_ai_response.get("brand"),
+            "model": draft_ai_response.get("model"),
+            "condition_guess": draft_ai_response.get("condition_guess"),
+            "screen_condition": draft_ai_response.get("screen_condition"),
+            "body_condition": draft_ai_response.get("body_condition"),
+            "defects": draft_ai_response.get("defects") or [],
+            "battery_health": draft_ai_response.get("battery_health"),
+            "suggested_price_inr": draft_ai_response.get("suggested_price_inr"),
+            "mrp_inr": draft_ai_response.get("mrp_inr"),
+            "mrp_source": draft_ai_response.get("mrp_source"),
+            "mrp_confidence": draft_ai_response.get("mrp_confidence"),
+            "price_source": draft_ai_response.get("_owmee_price_source"),
+            "field_evidence": draft_ai_response.get("field_evidence") or {},
+            "field_confidence": draft_ai_response.get("field_confidence") or {},
+            "flags": draft_ai_response.get("flags") or [],
+            "blocking_reasons": draft_ai_response.get("blocking_reasons") or [],
+        },
+        "seller_confirmed": {
+            **final_fields,
+            "price": payload.price,
+            "original_price": original_price,
+            "seller_entered_original_price": payload.original_price,
+            "mrp_source": payload.mrp_source,
+            "mrp_confidence": payload.mrp_confidence,
+            "seller_mrp_confirmed": bool(payload.seller_mrp_confirmed),
+        },
+    }
 
 # Listing states that allow seller edits.
 EDITABLE_STATES = {"draft_ai", "pending_buyer"}
@@ -407,20 +514,47 @@ async def _store_draft_photos(
     user_id: UUID,
     draft_id: UUID,
 ) -> tuple[list[str], list[str]]:
-    stored: list[tuple[str, str]] = []
-    for idx, (image_bytes, content_type) in enumerate(image_pairs):
-        stored.append(
-            await _store_draft_photo(
+    semaphore = asyncio.Semaphore(AI_DRAFT_IMAGE_IO_CONCURRENCY)
+
+    async def _store_one(idx: int, image_bytes: bytes, content_type: str) -> tuple[str, str]:
+        async with semaphore:
+            return await _store_draft_photo(
                 image_bytes=image_bytes,
                 content_type=content_type,
                 user_id=user_id,
                 draft_id=draft_id,
                 index=idx,
             )
-        )
+
+    stored = await asyncio.gather(*[
+        _store_one(idx, image_bytes, content_type)
+        for idx, (image_bytes, content_type) in enumerate(image_pairs)
+    ])
     photo_urls = [photo_url for photo_url, _ in stored]
     original_keys = [key for _, key in stored]
     return photo_urls, original_keys
+
+
+async def _prepare_uploaded_analysis_images(images: list[UploadFile]) -> list[tuple[bytes, str]]:
+    semaphore = asyncio.Semaphore(AI_DRAFT_IMAGE_IO_CONCURRENCY)
+
+    async def _prepare_one(img: UploadFile) -> tuple[bytes, str] | None:
+        async with semaphore:
+            b = await img.read()
+            if not b:
+                return None
+            if len(b) > MAX_ANALYSIS_UPLOAD_BYTES:
+                raise HTTPException(status_code=400, detail="IMAGE_TOO_LARGE")
+            prepared = await asyncio.to_thread(
+                _prepare_analysis_image_bytes,
+                b,
+                img.content_type or "image/jpeg",
+            )
+            del b
+            return prepared
+
+    prepared = await asyncio.gather(*[_prepare_one(img) for img in images])
+    return [pair for pair in prepared if pair is not None]
 
 
 async def _timed_step(timings: dict[str, int], key: str, coro):
@@ -705,8 +839,8 @@ def _mrp_anchor_price_result(detected: AIDetected, existing: dict | None = None)
     }
 
 
-def _apply_price_fallbacks(price_result: dict, detected: AIDetected) -> dict:
-    if price_result["source"] in ("none", "ai") and detected.suggested_price_inr:
+def _apply_price_fallbacks(price_result: dict, detected: AIDetected, *, prefer_vision: bool = True) -> dict:
+    if prefer_vision and price_result["source"] in ("none", "ai") and detected.suggested_price_inr:
         return {
             "price": float(detected.suggested_price_inr),
             "source": "vision",
@@ -718,26 +852,123 @@ def _apply_price_fallbacks(price_result: dict, detected: AIDetected) -> dict:
         mrp_anchor = _mrp_anchor_price_result(detected, price_result)
         if mrp_anchor:
             return mrp_anchor
+    if not prefer_vision and price_result["source"] == "none" and detected.suggested_price_inr:
+        return {
+            "price": float(detected.suggested_price_inr),
+            "source": "vision",
+            "reasoning": detected.price_reasoning or "Inferred from photos",
+            "comparables": price_result.get("comparables", []),
+            "comparables_count": price_result.get("comparables_count", 0),
+        }
     return price_result
+
+
+def _safe_text(value: str | None, *, max_len: int = 120) -> str | None:
+    cleaned = (value or "").replace("\x00", "").strip()
+    cleaned = " ".join(cleaned.split())
+    return cleaned[:max_len] if cleaned else None
+
+
+def _safe_defects(values: list[str] | None) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for value in values or []:
+        cleaned = _safe_text(value, max_len=80)
+        if not cleaned:
+            continue
+        key = cleaned.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(cleaned)
+        if len(out) >= 12:
+            break
+    return out
+
+
+def _merge_mrp_from_price_result(detected: AIDetected, price_result: dict) -> AIDetected:
+    """Carry text-price MRP back into the draft when vision had none."""
+    if detected.mrp_inr:
+        return detected
+    mrp = price_result.get("mrp_inr")
+    if not mrp:
+        return detected
+    try:
+        mrp_value = int(float(mrp))
+    except (TypeError, ValueError):
+        return detected
+    if mrp_value <= 0:
+        return detected
+    result_price = price_result.get("price")
+    if result_price is not None and mrp_value <= float(result_price):
+        return detected
+    source = _safe_text(price_result.get("mrp_source"), max_len=40) or "market_anchor"
+    if source not in _PRICE_REFRESH_MRP_SOURCES:
+        source = "market_anchor"
+    confidence = price_result.get("mrp_confidence")
+    try:
+        mrp_confidence = max(0.0, min(1.0, float(confidence or 0.0)))
+    except (TypeError, ValueError):
+        mrp_confidence = 0.0
+    return detected.model_copy(update={
+        "mrp_inr": mrp_value,
+        "mrp_source": source,
+        "mrp_confidence": mrp_confidence,
+        "mrp_reasoning": _safe_text(price_result.get("mrp_reasoning"), max_len=200),
+    })
+
+
+def _draft_with_seller_price_inputs(detected: AIDetected, payload: DraftPriceRefreshRequest) -> AIDetected:
+    """Overlay seller-confirmed review fields before recomputing price."""
+    updates: dict = {}
+    category = _canonical_category_slug(payload.category_slug, fallback_empty_to_others=False)
+    if category:
+        updates["category_slug"] = category
+    for field in ("brand", "model", "storage", "ram", "processor", "screen_size", "detected_item_type"):
+        value = _safe_text(getattr(payload, field), max_len=120)
+        if value:
+            updates[field] = value
+    if payload.condition in {"like_new", "good", "fair"}:
+        updates["condition_guess"] = payload.condition
+    if payload.purchase_year:
+        updates["purchase_year"] = payload.purchase_year
+    if payload.screen_condition in _VALID_SCREEN_CONDITIONS:
+        updates["screen_condition"] = payload.screen_condition
+    if payload.body_condition in _VALID_BODY_CONDITIONS:
+        updates["body_condition"] = payload.body_condition
+    if payload.defects is not None:
+        updates["defects"] = _safe_defects(payload.defects)
+
+    mrp_source = _safe_text(payload.mrp_source, max_len=40)
+    if payload.original_price and mrp_source in _PRICE_REFRESH_MRP_SOURCES:
+        updates["mrp_inr"] = int(round(float(payload.original_price)))
+        updates["mrp_source"] = mrp_source
+        updates["mrp_confidence"] = float(payload.mrp_confidence if payload.mrp_confidence is not None else 0.8)
+        updates["mrp_reasoning"] = (
+            "Seller confirmed MRP during listing review."
+            if mrp_source == "seller_entered"
+            else detected.mrp_reasoning
+        )
+    return detected.model_copy(update=updates)
 
 
 def _clean_original_price_for_listing(
     *,
     asking_price: float,
     payload_original_price: float | None,
-    draft_ai_response: dict | None,
+    seller_mrp_confirmed: bool | None,
+    mrp_source: str | None,
 ) -> float | None:
     """Choose the MRP/original price to save on a published AI listing.
 
-    Mobile sends `original_price` when it has the latest app build. The draft
-    JSON fallback keeps older builds from losing AI-extracted MRP. In both
-    cases we only persist a value that can produce a truthful buyer-facing
-    discount.
+    Buyer-facing discount must be seller-reviewed. We intentionally do not
+    persist an AI draft MRP fallback here; latest mobile sends `original_price`
+    only after the seller confirms the MRP and source in the review flow.
     """
+    source = (mrp_source or "").strip().lower()
+    if not seller_mrp_confirmed or source not in {"visible_mrp", "receipt_or_bill", "seller_entered"}:
+        return None
     raw_value = payload_original_price
-    if raw_value is None and isinstance(draft_ai_response, dict):
-        raw_value = draft_ai_response.get("mrp_inr")
-
     if raw_value is None:
         return None
     try:
@@ -902,6 +1133,7 @@ async def draft_from_image(
     return DraftFromImageResponse(
         draft_id=draft_id,
         photo_url=_client_photo_url(photo_url),
+        photo_urls=[_client_photo_url(photo_url)] if photo_url else [],
         detected=detected,
         suggested_price=price_result.get("price"),
         price_source=price_result["source"],
@@ -1098,6 +1330,7 @@ async def get_ai_draft_analysis_status(
         draft = DraftFromImageResponse(
             draft_id=draft_id,
             photo_url=_client_photo_url(photo_urls[0] if photo_urls else None),
+            photo_urls=[_client_photo_url(key) for key in photo_urls if key],
             detected=detected,
             suggested_price=float(row["suggested_price"]) if row["suggested_price"] is not None else None,
             price_source=price_source,
@@ -1121,6 +1354,117 @@ async def get_ai_draft_analysis_status(
         draft_id=draft_id,
         status=status_value or "processing",
         retry_after_seconds=2,
+    )
+
+
+@router.post("/draft/{draft_id}/price-suggestion", response_model=DraftFromImageResponse)
+async def refresh_ai_draft_price(
+    draft_id: UUID,
+    payload: DraftPriceRefreshRequest,
+    user: AuthUser,
+    db: DBSession,
+):
+    """Recompute MRP + asking-price guidance from seller-confirmed details."""
+    row = (
+        await db.execute(
+            text("""
+                SELECT user_id, photo_urls, ai_response, suggested_price,
+                       comparables_count, status, expires_at
+                FROM listing_drafts
+                WHERE id = :id
+            """),
+            {"id": draft_id},
+        )
+    ).mappings().first()
+    if not row:
+        raise HTTPException(status_code=404, detail="DRAFT_NOT_FOUND")
+    if str(row["user_id"]) != str(user.user_id):
+        raise HTTPException(status_code=403, detail="DRAFT_NOT_OWNED")
+    if row["expires_at"] and row["expires_at"] < datetime.now(timezone.utc):
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail={"error": "DRAFT_EXPIRED", "message": "This draft expired. Please analyse the photos again."},
+        )
+    if row["status"] != "open":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"error": "DRAFT_NOT_READY", "message": "Photo analysis is still running. Please wait a moment."},
+        )
+
+    raw_ai = row["ai_response"] if isinstance(row["ai_response"], dict) else {}
+    detected = _draft_with_seller_price_inputs(AIDetected(**raw_ai), payload)
+    detected = _with_canonical_category(detected)
+
+    rejection = _publish_rejection_detail(detected.model_dump())
+    fallback_reason = None
+    if rejection:
+        price_result = {
+            "price": None,
+            "source": "none",
+            "reasoning": rejection.get("message") or "Photo review required before pricing.",
+            "comparables": [],
+            "comparables_count": 0,
+        }
+        fallback_reason = price_result["reasoning"]
+    else:
+        from app.modules.identity_auth.user_location import get_user_location
+        _, _, _, user_state = await get_user_location(db, user.user_id)
+        price_result = await _estimate_price_bounded(
+            price_estimator.estimate_price(
+                db,
+                brand=detected.brand,
+                model=detected.model,
+                storage=detected.storage,
+                condition=detected.condition_guess or "good",
+                state=user_state,
+                category_slug=detected.category_slug,
+                detected_item_type=detected.detected_item_type,
+                allow_ai_fallback=True,
+            )
+        )
+        detected = _merge_mrp_from_price_result(detected, price_result)
+        price_result = _apply_price_fallbacks(price_result, detected, prefer_vision=False)
+        if price_result["source"] == "none":
+            fallback_reason = price_result.get("reasoning")
+
+    await db.execute(
+        text("""
+            UPDATE listing_drafts
+            SET ai_response = CAST(:ai_response AS JSONB),
+                suggested_price = :price,
+                comparables_count = :ccount
+            WHERE id = :id
+        """),
+        {
+            "id": draft_id,
+            "ai_response": _draft_ai_response_json(detected, price_result),
+            "price": price_result.get("price"),
+            "ccount": price_result.get("comparables_count", 0),
+        },
+    )
+    await db.commit()
+
+    photo_urls = list(row["photo_urls"] or [])
+    log.info(
+        "ai_assistant.draft_price_refreshed",
+        extra={
+            "draft_id": str(draft_id),
+            "category_slug": detected.category_slug,
+            "price_source": price_result.get("source"),
+            "has_mrp": bool(detected.mrp_inr),
+        },
+    )
+    return DraftFromImageResponse(
+        draft_id=draft_id,
+        photo_url=_client_photo_url(photo_urls[0] if photo_urls else None),
+        photo_urls=[_client_photo_url(key) for key in photo_urls if key],
+        detected=detected,
+        suggested_price=price_result.get("price"),
+        price_source=price_result.get("source") or "none",
+        comparables=price_result.get("comparables", []),
+        expires_at=row["expires_at"] or datetime.now(timezone.utc),
+        needs_identifier=_category_needs_identifier(detected.category_slug),
+        fallback_reason=fallback_reason,
     )
 
 
@@ -1329,6 +1673,11 @@ async def create_from_draft(
     # surface in the home feed.
     from app.modules.identity_auth.user_location import get_user_location
     seller_lat, seller_lng, seller_city, seller_state = await get_user_location(db, user.user_id)
+    seller_kyc_row = await db.execute(
+        text("SELECT kyc_status FROM users WHERE id = :uid"),
+        {"uid": user.user_id},
+    )
+    seller_kyc_verified_at_listing_time = seller_kyc_row.scalar() == "verified"
 
     # Sprint trust pillar: hyperlocal-pilot geo-fence. Same gate as the
     # non-AI listing path — mirrored here so the AI flow can't bypass.
@@ -1336,18 +1685,96 @@ async def create_from_draft(
     if not is_in_service_area(seller_lat, seller_lng):
         raise HTTPException(status_code=400, detail=out_of_service_message())
 
-    # Combine draft photo keys with any extra image URLs from the mobile client
-    photo_urls = list(rec.photo_urls or [])
+    draft_ai_response = rec.ai_response if isinstance(rec.ai_response, dict) else {}
+    publish_rejection = _publish_rejection_detail(draft_ai_response)
+    if publish_rejection:
+        raise HTTPException(status_code=400, detail=publish_rejection)
+    detail_rejection = _publish_detail_rejection(category_slug, payload)
+    if detail_rejection:
+        raise HTTPException(status_code=400, detail=detail_rejection)
+
+    # Start from the draft's canonical photo keys. The review screen can remove
+    # accidental/bad photos and choose a hero by original index; extra images
+    # from older clients are appended after that.
+    photo_urls = _final_photo_keys(
+        list(rec.photo_urls or []),
+        hero_image_index=payload.hero_image_index,
+        removed_photo_indices=payload.removed_photo_indices,
+    )
     if payload.image_urls:
         for u in payload.image_urls:
             if u not in photo_urls:
                 photo_urls.append(u)
+    if not photo_urls:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "PHOTO_REQUIRED",
+                "message": "At least one product photo is required to publish.",
+            },
+        )
 
-    draft_ai_response = rec.ai_response if isinstance(rec.ai_response, dict) else {}
     original_price = _clean_original_price_for_listing(
         asking_price=payload.price,
         payload_original_price=payload.original_price,
+        seller_mrp_confirmed=payload.seller_mrp_confirmed,
+        mrp_source=payload.mrp_source,
+    )
+    screen_condition = _clean_condition_choice(
+        payload.screen_condition or draft_ai_response.get("screen_condition"),
+        _VALID_SCREEN_CONDITIONS,
+    )
+    body_condition = _clean_condition_choice(
+        payload.body_condition or draft_ai_response.get("body_condition"),
+        _VALID_BODY_CONDITIONS,
+    )
+    defects = _clean_defects(payload.defects)
+    if defects is None:
+        defects = _clean_defects(draft_ai_response.get("defects")) or []
+    battery_health = payload.battery_health
+    if battery_health is None:
+        try:
+            raw_battery = draft_ai_response.get("battery_health")
+            battery_health = int(raw_battery) if raw_battery is not None else None
+            if battery_health is not None and not (0 <= battery_health <= 100):
+                battery_health = None
+        except (TypeError, ValueError):
+            battery_health = None
+    kids_safety_checklist = _clean_kids_safety_checklist(payload.kids_safety_checklist)
+    final_review_fields = {
+        "category_slug": category_slug,
+        "title": payload.title,
+        "condition": payload.condition,
+        "brand": payload.brand,
+        "model": payload.model,
+        "storage": payload.storage,
+        "ram": payload.ram,
+        "processor": payload.processor,
+        "screen_size": payload.screen_size,
+        "color": payload.color,
+        "purchase_year": payload.purchase_year,
+        "screen_condition": screen_condition,
+        "body_condition": body_condition,
+        "defects": defects,
+        "battery_health": battery_health,
+        "accessories": payload.accessories,
+        "warranty_status": payload.warranty_status,
+        "age_suitability": payload.age_suitability,
+        "hygiene_status": payload.hygiene_status,
+        "has_box": payload.has_box,
+        "has_bill": payload.has_bill,
+        "has_charger": payload.has_charger,
+        "has_earphones": payload.has_earphones,
+        "water_damage_history": payload.water_damage_history,
+        "seller_functional_attestation": payload.seller_functional_attestation,
+        "kids_safety_checklist": kids_safety_checklist,
+    }
+    seller_review_snapshot = _seller_review_snapshot(
+        payload=payload,
         draft_ai_response=draft_ai_response,
+        photo_keys=photo_urls,
+        final_fields=final_review_fields,
+        original_price=original_price,
     )
     listing_id = uuid4()
 
@@ -1358,27 +1785,29 @@ async def create_from_draft(
             id, seller_id, category_id, title, description, price, condition,
             status, moderation_status, image_urls, thumbnail_url,
             brand, model, storage, ram, processor, screen_size, color,
-            purchase_year, battery_health, accessories, warranty_info,
+            purchase_year, screen_condition, body_condition, defects,
+            battery_health, accessories, warranty_info,
             age_suitability, hygiene_status,
             has_box, has_bill, has_charger, has_earphones,
             water_damage_history, seller_functional_attestation,
-            serial_number, original_price,
+            kids_safety_checklist, serial_number, original_price,
             imei_1, imei_2, listing_state, verification_status, video_url,
             ai_draft_id, city, state, listing_source, reviewed_by,
-            published_at
+            seller_kyc_verified_at_listing_time, seller_review_snapshot, published_at
         )
         VALUES (
             :id, :seller_id, :category_id, :title, :description, :price, :condition,
             'active', 'pending', :image_urls, :thumb,
             :brand, :model, :storage, :ram, :processor, :screen_size, :color,
-            :purchase_year, :battery_health, :accessories, :warranty_info,
+            :purchase_year, :screen_condition, :body_condition, CAST(:defects AS JSONB),
+            :battery_health, :accessories, :warranty_info,
             :age_suitability, :hygiene_status,
             :has_box, :has_bill, :has_charger, :has_earphones,
             :water_damage_history, :seller_functional_attestation,
-            :serial, :original_price,
+            CAST(:kids_safety_checklist AS JSONB), :serial, :original_price,
             :imei_1, :imei_2, 'pending_buyer', :verif, :video,
             :draft_id, :city, :state, 'self_prep', 'none',
-            NOW()
+            :seller_kyc_verified_at_listing_time, CAST(:seller_review_snapshot AS JSONB), NOW()
         )
     """).bindparams(bindparam("image_urls", type_=PGARRAY(SAString)))
 
@@ -1406,7 +1835,10 @@ async def create_from_draft(
             "screen_size": payload.screen_size,
             "color": payload.color,
             "purchase_year": payload.purchase_year,
-            "battery_health": payload.battery_health,
+            "screen_condition": screen_condition,
+            "body_condition": body_condition,
+            "defects": json.dumps(defects),
+            "battery_health": battery_health,
             "accessories": payload.accessories,
             "warranty_info": payload.warranty_status,
             "age_suitability": payload.age_suitability,
@@ -1417,6 +1849,7 @@ async def create_from_draft(
             "has_earphones": payload.has_earphones,
             "water_damage_history": payload.water_damage_history,
             "seller_functional_attestation": payload.seller_functional_attestation,
+            "kids_safety_checklist": json.dumps(kids_safety_checklist) if kids_safety_checklist else None,
             "serial": serial_number,
             "original_price": original_price,
             "imei_1": payload.imei_1,
@@ -1426,6 +1859,8 @@ async def create_from_draft(
             "draft_id": payload.draft_id,
             "city": seller_city,
             "state": seller_state,
+            "seller_kyc_verified_at_listing_time": seller_kyc_verified_at_listing_time,
+            "seller_review_snapshot": json.dumps(seller_review_snapshot),
         },
     )
 
@@ -1724,21 +2159,9 @@ async def draft_from_images(
     step_started = total_started
     timings: dict[str, int] = {}
 
-    # Read every uploaded file
-    image_pairs: list[tuple[bytes, str]] = []
-    for img in images:
-        b = await img.read()
-        if not b:
-            continue
-        if len(b) > MAX_ANALYSIS_UPLOAD_BYTES:
-            raise HTTPException(status_code=400, detail="IMAGE_TOO_LARGE")
-        prepared = await asyncio.to_thread(
-            _prepare_analysis_image_bytes,
-            b,
-            img.content_type or "image/jpeg",
-        )
-        image_pairs.append(prepared)
-        del b
+    # Read + normalize uploaded files with bounded parallelism. The limit keeps
+    # peak memory stable while removing the avoidable per-photo serial wait.
+    image_pairs = await _prepare_uploaded_analysis_images(images)
     timings["read_ms"] = _ms_since(step_started)
 
     if not image_pairs:
@@ -1867,6 +2290,7 @@ async def draft_from_images(
     return DraftFromImageResponse(
         draft_id=draft_id,
         photo_url=_client_photo_url(photo_urls[0] if photo_urls else None),
+        photo_urls=[_client_photo_url(key) for key in photo_urls if key],
         detected=detected,
         suggested_price=price_result.get("price"),
         price_source=price_result["source"],

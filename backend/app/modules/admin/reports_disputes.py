@@ -216,7 +216,15 @@ async def raise_dispute(body: RaiseDisputeRequest, current_user: VerifiedUser, d
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail={"error": "DISPUTE_ALREADY_EXISTS"})
 
-    if txn.status not in ("payment_captured", "awaiting_confirmation", "completed", "disputed"):
+    if txn.status not in (
+        "payment_captured",
+        "at_hub",
+        "delivery_in_progress",
+        "delivered",
+        "awaiting_confirmation",
+        "completed",
+        "disputed",
+    ):
         raise HTTPException(status_code=400, detail={
             "error": "INVALID_STATUS",
             "message": "Disputes can only be raised on active or completed transactions.",

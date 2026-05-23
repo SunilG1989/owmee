@@ -147,9 +147,20 @@ function placeSummary(listing: FeedListing): string | null {
 }
 
 function sellerTrustSummary(listing: FeedListing): string {
+  if (listing.seller_trust_label) return listing.seller_trust_label;
   const completedDeals = Math.max(0, listing.seller_completed_deals || 0);
-  if (completedDeals >= 3) return `Verified seller • ${completedDeals} sold`;
-  return 'Verified seller';
+  if (listing.seller_verified && completedDeals >= 3) return `KYC verified • ${completedDeals} sold`;
+  if (listing.seller_verified) return 'KYC verified';
+  if (completedDeals >= 3) return `${completedDeals} completed sales`;
+  return 'Seller self-listed';
+}
+
+function listingTrustSummary(listing: FeedListing): string {
+  if (listing.listing_trust_label) return listing.listing_trust_label;
+  if (listing.listing_verified || listing.is_owmee_verified) return 'Owmee reviewed';
+  if (listing.ai_assisted) return 'AI-assisted';
+  if (listing.category_slug === 'others') return 'Limited review';
+  return 'Seller confirmed';
 }
 
 function dealSignal(listing: FeedListing): string | null {
@@ -240,6 +251,7 @@ export function FeedCard({
   const displayTitle = cleanListingTitle(listing.title);
   const conditionLabel = conditionTagLabel(listing.condition);
   const sellerTrustLine = sellerTrustSummary(listing);
+  const listingTrustLine = listingTrustSummary(listing);
   const placeLine = placeSummary(listing);
   const signal = dealSignal(listing);
   const buyerFacts = buildListingFactChips(
@@ -284,7 +296,7 @@ export function FeedCard({
 
         <View style={s.imageTrustBadge}>
           <ShieldCheck size={11} strokeWidth={2.35} color={C.petrolDeep} />
-          <Text style={s.imageTrustText} numberOfLines={1}>Verified listing</Text>
+          <Text style={s.imageTrustText} numberOfLines={1}>{listingTrustLine}</Text>
         </View>
 
         {listing.discount_pct != null && listing.discount_pct > 0 && (
@@ -546,7 +558,7 @@ const s = StyleSheet.create({
     position: 'absolute',
     top: S.sm,
     left: S.sm,
-    maxWidth: 104,
+    maxWidth: 118,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,

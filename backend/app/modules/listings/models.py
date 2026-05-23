@@ -135,6 +135,9 @@ class Listing(Base, TimestampMixin):
     # CreateListingScreen.tsx submit guard.
     water_damage_history = Column(Boolean, nullable=True)
     seller_functional_attestation = Column(Boolean, nullable=True)
+    # Immutable AI-review lineage captured when an AI draft becomes a listing:
+    # AI detected values, seller-edited values, MRP source, photo choices.
+    seller_review_snapshot = Column(JSONB, nullable=True)
 
     # ── Seller lifecycle (migration 0040) ─────────────────────────────────────
     # Soft-delete metadata. status='removed' is the canonical "gone" signal;

@@ -89,6 +89,24 @@ services:
         value: ""
       - key: KYC_WEBHOOK_SECRET
         value: ""
+      - key: FRAUD_PROVIDER
+        value: mock
+      - key: FRAUD_API_BASE_URL
+        value: ""
+      - key: FRAUD_API_KEY
+        value: ""
+      - key: FRAUD_WEBHOOK_SECRET
+        value: ""
+      - key: FRAUD_ONBOARDING_PATH
+        value: /v1/onboarding/check
+      - key: FRAUD_TIMEOUT_SECONDS
+        value: "3"
+      - key: FRAUD_DECISION_VALID_DAYS
+        value: "30"
+      - key: FRAUD_ENFORCEMENT_ENABLED
+        value: "true"
+      - key: HIGH_VALUE_VERIFICATION_THRESHOLD_INR
+        value: "10000"
       - key: PA_PROVIDER
         value: mock
       - key: PA_KEY_ID
@@ -221,6 +239,24 @@ services:
         value: ""
       - key: KYC_WEBHOOK_SECRET
         value: ""
+      - key: FRAUD_PROVIDER
+        value: mock
+      - key: FRAUD_API_BASE_URL
+        value: ""
+      - key: FRAUD_API_KEY
+        value: ""
+      - key: FRAUD_WEBHOOK_SECRET
+        value: ""
+      - key: FRAUD_ONBOARDING_PATH
+        value: /v1/onboarding/check
+      - key: FRAUD_TIMEOUT_SECONDS
+        value: "3"
+      - key: FRAUD_DECISION_VALID_DAYS
+        value: "30"
+      - key: FRAUD_ENFORCEMENT_ENABLED
+        value: "true"
+      - key: HIGH_VALUE_VERIFICATION_THRESHOLD_INR
+        value: "10000"
       - key: PA_PROVIDER
         value: mock
       - key: PA_KEY_ID

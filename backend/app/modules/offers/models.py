@@ -67,8 +67,8 @@ class Transaction(Base, TimestampMixin):
     net_payout = Column(Numeric(10, 2), nullable=False, default=0)
     status = Column(String(40), nullable=False, default="pending")
     # pending | payment_pending | payment_captured | payment_capture_uncertain
-    # awaiting_confirmation | completed | auto_completed
-    # cancelled | refunded | disputed
+    # at_hub | delivery_in_progress | delivered | awaiting_confirmation
+    # completed | auto_completed | cancelled | refunded | disputed
     workflow_id = Column(String(256))
     dispute_id = Column(UUID(as_uuid=True))
     # Concierge Phase 5 (master spec section 8.3): when admin resolves a
@@ -86,6 +86,14 @@ class Transaction(Base, TimestampMixin):
     pickup_deadline = Column("meetup_deadline", DateTime(timezone=True))
     seller_response_deadline = Column(DateTime(timezone=True))
     seller_responded_at = Column(DateTime(timezone=True))
+    seller_readiness_status = Column(
+        String(24), nullable=False, default="pending", server_default=text("'pending'")
+    )
+    seller_readiness_reason = Column(String(80))
+    seller_pickup_slot_start = Column(DateTime(timezone=True))
+    seller_pickup_slot_end = Column(DateTime(timezone=True))
+    buyer_delivery_address_snapshot = Column(JSONB, nullable=True)
+    seller_pickup_address_snapshot = Column(JSONB, nullable=True)
 
     # Confirmation & completion
     buyer_confirmed_at = Column(DateTime(timezone=True))
@@ -129,7 +137,7 @@ class Transaction(Base, TimestampMixin):
     refund_reason = Column(String(200))
     refund_initiated_at = Column(DateTime(timezone=True))
     refund_completed_at = Column(DateTime(timezone=True))
-    refund_initiated_by = Column(String(20))                       # system_pickup_rejected | admin | buyer
+    refund_initiated_by = Column(String(40))                       # system_pickup_rejected | system_seller_unavailable | admin | buyer
     razorpay_refund_id = Column(String(120))
 
     # ── Sprint return flow (migration 0031) ────────────────────────────────

@@ -250,13 +250,35 @@ async def estimate_price(
         detected_item_type=detected_item_type,
     )
 
-    if ai and _sanity_check(ai["price_inr"], category_slug):
-        return {
+    if ai and ai.get("price_inr") and _sanity_check(ai["price_inr"], category_slug):
+        result = {
             "price": float(ai["price_inr"]),
             "source": "ai",
             "comparables": comparables_objs[:5],   # show what we have, even if <3
             "comparables_count": len(rows),
             "reasoning": ai.get("reasoning") or "AI estimate based on Indian retail prices.",
+        }
+        mrp = ai.get("mrp_inr")
+        if mrp and _sanity_check(float(mrp), category_slug) and float(mrp) > result["price"]:
+            result.update({
+                "mrp_inr": int(mrp),
+                "mrp_source": ai.get("mrp_source") or "market_anchor",
+                "mrp_confidence": float(ai.get("mrp_confidence") or 0.0),
+                "mrp_reasoning": ai.get("mrp_reasoning"),
+            })
+        return result
+
+    if ai and ai.get("mrp_inr") and _sanity_check(float(ai["mrp_inr"]), category_slug):
+        return {
+            "price": None,
+            "source": "none",
+            "comparables": comparables_objs[:5],   # show what we have, even if <3
+            "comparables_count": len(rows),
+            "reasoning": ai.get("reasoning") or "AI price unavailable; market MRP anchor returned.",
+            "mrp_inr": int(ai["mrp_inr"]),
+            "mrp_source": ai.get("mrp_source") or "market_anchor",
+            "mrp_confidence": float(ai.get("mrp_confidence") or 0.0),
+            "mrp_reasoning": ai.get("mrp_reasoning"),
         }
 
     # ── Both failed: let seller set price ──────────────────────────────────

@@ -96,6 +96,8 @@ def create_app() -> FastAPI:
     # Sprint 7 / Phase 1: Community module
     from app.modules.community.router import router as community_router
     from app.modules.community.admin_router import router as community_admin_router
+    from app.modules.verification.router import admin_router as verification_admin_router
+    from app.modules.verification.router import router as verification_router
 
     app.include_router(auth_router, prefix="/v1/auth", tags=["auth"])
 
@@ -107,6 +109,7 @@ def create_app() -> FastAPI:
 
     app.include_router(user_loc_router_mod.router)
     app.include_router(user_addresses_router_mod.router)
+    app.include_router(verification_router, prefix="/v1/verification", tags=["verification"])
     app.include_router(kyc_router, prefix="/v1/kyc", tags=["kyc"])
     app.include_router(listings_router, prefix="/v1/listings", tags=["listings"])
     app.include_router(offers_router, prefix="/v1", tags=["offers"])
@@ -120,6 +123,7 @@ def create_app() -> FastAPI:
     app.include_router(stuck_workflow_router, prefix="/v1/admin/stuck-workflows", tags=["admin-stuck-workflows"])
     app.include_router(admin_kyc_router, prefix="/v1/admin/kyc", tags=["admin-kyc"])
     app.include_router(admin_listings_router, prefix="/v1/admin/listings", tags=["admin-listings"])
+    app.include_router(verification_admin_router, prefix="/v1/admin/verification", tags=["admin-verification"])
     # ── Sprint 4 / Pass 4 Batch 2 admin mounts ────────────────────────────
     app.include_router(tx_snapshot_router, prefix="/v1/admin/transactions", tags=["admin-transaction-snapshot"])
     app.include_router(admin_audit_log_router, prefix="/v1/admin/audit-log", tags=["admin-audit-log"])

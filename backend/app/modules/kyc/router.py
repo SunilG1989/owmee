@@ -27,6 +27,7 @@ from app.modules.kyc.service import (
     record_consent,
     update_user_kyc_status,
 )
+from app.modules.verification.service import flag_payout_duplicate_if_needed
 from app.modules.kyc.activities import (
     ActivityAadhaarInitInput,
     ActivityAadhaarVerifyInput,
@@ -229,7 +230,7 @@ async def pan_verify(
             },
         )
 
-    name_match_result = act_result.get("name_match_result", "pass")
+    name_match_result = act_result.get("name_match_result", "manual_review")
 
     # Sprint 4: advance seller_tier / buyer_eligible based on newly-set flags
     # (still Lite at this point unless liveness was done out of order)
@@ -325,6 +326,17 @@ async def payout_account_verify(
 
     # Check if all steps are now complete → mark verified
     v = await get_or_create_verification(db, current_user.user_id)
+    duplicate_payout = await flag_payout_duplicate_if_needed(db, user_id=current_user.user_id)
+    if duplicate_payout:
+        await derive_tri_state_from_kyc(db, current_user.user_id)
+        await db.commit()
+        return {
+            "success": True,
+            "next_step": "manual_review",
+            "manual_review_required": True,
+            "message": "Account added. Owmee will review this payout account before release.",
+        }
+
     if (
         v.aadhaar_verified
         and v.pan_verified
@@ -366,6 +378,7 @@ async def payout_account_verify(
     return {
         "success": True,
         "next_step": next_pending_step(v),
+        "manual_review_required": duplicate_payout,
         "message": "Account added.",
     }
 

@@ -12,6 +12,7 @@ import app.modules.listings.models  # noqa
 import app.modules.offers.models  # noqa
 import app.modules.transactions.models  # noqa
 import app.modules.admin.models  # noqa
+import app.modules.verification.models  # noqa
 
 config = context.config
 

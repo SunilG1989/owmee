@@ -12,7 +12,7 @@ once ops confirmed routing economics held at city scale.
 - All categories except large-appliances.
 - Buyer and seller never meet — Owmee FE handles pickup, hub, delivery.
 
-Last reviewed: 2026-05-02.
+Last reviewed: 2026-05-23.
 
 ---
 
@@ -108,6 +108,51 @@ credentials are dropped in (`google-services.json` + `npm install
 
 ## Pending — pre-pilot
 
+### Founder decision: order E2E and seller readiness
+Captured 2026-05-23 after repo review and marketplace benchmark thinking.
+These are the valid pilot use cases Owmee should build now:
+
+- **Payment truth:** checkout must treat payment-link creation as pending,
+  open/complete the payment link, and only enter logistics after payment
+  capture.
+- **Seller readiness gate:** after payment capture, seller gets a structured
+  paid-order task to confirm item availability, condition unchanged,
+  accessories, pickup address, and pickup slot/readiness.
+- **Seller non-response path:** if seller declines or misses deadline, Owmee
+  refunds buyer, suppresses/re-confirms listing, and records an ops-visible
+  seller reliability event.
+- **Immutable addresses:** transaction must snapshot buyer delivery address
+  and seller pickup address. FE/admin screens must use snapshots, not current
+  default addresses.
+- **Operational task chain:** paid order -> seller ready -> FE pickup assigned
+  -> pickup inspection -> hub -> admin route -> delivery in progress ->
+  delivered -> buyer acceptance/48h auto-complete -> payout eligibility.
+- **Structured notifications:** buyer, seller, FE, and admin need event
+  notifications for payment captured, seller action required, seller ready,
+  pickup assigned, pickup failed, at hub, out for delivery, delivered,
+  refund/return/dispute, and payout queued.
+- **State-machine tests:** add E2E coverage for buy-now/payment/seller-ready/
+  pickup/hub/delivery/confirm/payout plus seller-timeout refund.
+
+Repo primitives to reuse:
+- Concierge already snapshots visit addresses in `FEVisit.address_snapshot`,
+  supports seller at-door verification, seller approval before listing,
+  issue creation, and visit handover proof.
+- AI listing seller-info endpoints already collect pickup address, pincode,
+  accessories, and available slots. Treat these as prefill inputs for
+  seller readiness, not as the immutable post-payment order record.
+- Transaction already has `seller_response_deadline`,
+  `seller_responded_at`, and legacy `pickup_ready_at` aliases. These can
+  seed the seller-readiness SLA, but the flow still needs explicit structured
+  seller actions and snapshots.
+
+Explicitly not valid, even as "quick fixes":
+- Buyer/seller chat.
+- Make Offer notes or free-form order chat.
+- Buyer-seller meetup.
+- Seller-managed shipping.
+- Self-reported payment confirmation.
+
 ### Push notification path (mobile side)
 **Backend ready:** `app/modules/notifications/service.py` does FCM v1 with
 in-app fallback; `users.fcm_token` column exists; registration endpoint at
@@ -157,6 +202,17 @@ transitions. The two existing test files only cover offers + listings.
 - **Railway production deploy.**
 - **End-to-end smoke** with real money — blocked on Razorpay above.
 - **FE field test** in the two pilot zones with real FEs.
+- **Real courier/vendor integrations.** Manual admin AWB/tracking remains
+  acceptable for pilot. Shiprocket/Delhivery/Porter booking APIs, webhook
+  status sync, NDR/RTO, and lost/damaged courier exception handling are
+  backlog.
+- **Automated routing rules.** Admin chooses FE vs courier during pilot until
+  at least 50 routed transactions make the rule obvious.
+- **Multi-quantity inventory.** Pilot remains one listing = one item. Build
+  reservation expiry/payment-timeout release first; stock ledger is backlog
+  for future vendor-like sellers.
+- **Advanced logistics surface.** Live maps, pickup points, buyer hub pickup,
+  vendor dashboards, and advanced seller defect scoring are backlog.
 
 ---
 

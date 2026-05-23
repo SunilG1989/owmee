@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput,
-  Alert, ActivityIndicator, KeyboardAvoidingView, Platform,
+  Alert, ActivityIndicator, KeyboardAvoidingView, Platform, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -15,8 +15,9 @@ import { BackButton, Button } from '../../components/ui';
 import { parseApiError } from '../../utils/errors';
 import { afterInteractions } from '../../utils/schedule';
 
-const PLATFORM_FEE_PERCENT = 0.02; // 2%
-const GST_RATE = 0.18;             // 18% on platform fee
+const DELIVERY_FEE_BY_CATEGORY: Record<string, number> = {
+  'small-appliances': 100,
+};
 
 export default function CheckoutScreen({ navigation, route }: any) {
   const { listingId } = route.params;
@@ -64,9 +65,8 @@ export default function CheckoutScreen({ navigation, route }: any) {
   }
 
   const itemPrice = listing.price;
-  const platformFee = Math.round(itemPrice * PLATFORM_FEE_PERCENT);
-  const gstOnFee = Math.round(platformFee * GST_RATE);
-  const total = itemPrice + platformFee + gstOnFee;
+  const deliveryFee = DELIVERY_FEE_BY_CATEGORY[listing.category_slug || ''] || 0;
+  const total = itemPrice + deliveryFee;
 
   // Address must have a recipient name + phone to be deliverable. Older
   // addresses stored before the P0.1 schema upgrade may be missing these —
@@ -87,13 +87,21 @@ export default function CheckoutScreen({ navigation, route }: any) {
     try {
       const res = await Orders.buyNow(listingId, orderNotes, address?.id);
       const txnId = res.data?.transaction_id;
-      navigation.replace('OrderConfirmation', {
-        transactionId: txnId || 'pending',
-        listing: { title: listing.title, price: listing.price, image: listing.images?.[0] },
-        total,
-      });
+      const paymentLink = res.data?.payment_link;
+      if (paymentLink) {
+        await Linking.openURL(paymentLink);
+      }
+      if (txnId) {
+        navigation.replace('TransactionDetail', { transactionId: txnId });
+      } else {
+        navigation.replace('OrderConfirmation', {
+          transactionId: 'pending',
+          listing: { title: listing.title, price: listing.price, image: listing.images?.[0] },
+          total: Number(res.data?.gross_amount || total),
+        });
+      }
     } catch (e: any) {
-      Alert.alert('Payment failed', parseApiError(e, 'Could not complete purchase. Please try again.'));
+      Alert.alert('Could not start payment', parseApiError(e, 'Could not create the payment link. Please try again.'));
     } finally { setPaying(false); }
   };
 
@@ -189,13 +197,15 @@ export default function CheckoutScreen({ navigation, route }: any) {
               <Text style={s.priceValue}>{formatPrice(itemPrice)}</Text>
             </View>
             <View style={s.priceRow}>
-              <Text style={s.priceLabel}>Platform fee (2%)</Text>
-              <Text style={s.priceValue}>{formatPrice(platformFee)}</Text>
+              <Text style={s.priceLabel}>Owmee fee</Text>
+              <Text style={s.priceValue}>₹0</Text>
             </View>
-            <View style={s.priceRow}>
-              <Text style={s.priceLabel}>GST (18% on fee)</Text>
-              <Text style={s.priceValue}>{formatPrice(gstOnFee)}</Text>
-            </View>
+            {deliveryFee > 0 && (
+              <View style={s.priceRow}>
+                <Text style={s.priceLabel}>Delivery fee</Text>
+                <Text style={s.priceValue}>{formatPrice(deliveryFee)}</Text>
+              </View>
+            )}
             <View style={s.priceDivider} />
             <View style={s.priceRow}>
               <Text style={s.totalLabel}>Total</Text>
@@ -221,10 +231,10 @@ export default function CheckoutScreen({ navigation, route }: any) {
       <View style={s.bottomBar}>
         <View>
           <Text style={s.bottomTotal}>{formatPrice(total)}</Text>
-          <Text style={s.bottomSub}>Total amount</Text>
+          <Text style={s.bottomSub}>Pay securely</Text>
         </View>
         <Button
-          label={`Pay ${formatPrice(total)} →`}
+          label={`Open payment ${formatPrice(total)} →`}
           variant="primary"
           size="lg"
           loading={paying}

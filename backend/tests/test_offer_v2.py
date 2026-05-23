@@ -21,11 +21,18 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.settings import settings
-from app.modules.offers.models import Offer
+from app.modules.offers.models import Offer, Reservation, Transaction
 from app.modules.identity_auth.models import User
 from app.modules.listings.models import Category, Listing
+from app.modules.listings.service import create_snapshot
 from app.modules.offers.service import (
-    counter_offer, make_offer, reject_offer, update_offer_price,
+    buyer_confirm_deal,
+    confirm_seller_readiness,
+    counter_offer,
+    decline_seller_readiness,
+    make_offer,
+    reject_offer,
+    update_offer_price,
 )
 
 
@@ -103,6 +110,89 @@ async def _seed_listing_and_users(db: AsyncSession):
     db.add(listing)
     await db.flush()
     return buyer, seller, listing
+
+
+def _address_snapshot(user_id, role: str, name: str) -> dict:
+    return {
+        "snapshot_version": 1,
+        "source": "test",
+        "role": role,
+        "user_id": str(user_id),
+        "full_name": name,
+        "phone_number": "9999999999",
+        "lat": 12.9716,
+        "lng": 77.5946,
+        "flat_house_number": "12",
+        "address_line_1": "Pilot Street",
+        "locality": "Indiranagar",
+        "city": "Bengaluru",
+        "state": "Karnataka",
+        "pincode": "560038",
+        "full_address": "12, Pilot Street, Indiranagar, Bengaluru, Karnataka, 560038",
+    }
+
+
+async def _seed_paid_transaction(
+    db: AsyncSession,
+    *,
+    buyer_snapshot: bool = True,
+    seller_snapshot: bool = True,
+):
+    buyer, seller, listing = await _seed_listing_and_users(db)
+    now = datetime.now(timezone.utc)
+    offer = Offer(
+        listing_id=listing.id,
+        buyer_id=buyer.id,
+        seller_id=seller.id,
+        offered_price=Decimal("9000"),
+        status="accepted",
+        expires_at=now + timedelta(hours=24),
+        responded_at=now,
+    )
+    db.add(offer)
+    await db.flush()
+
+    listing.status = "reserved"
+    reservation = Reservation(
+        offer_id=offer.id,
+        listing_id=listing.id,
+        buyer_id=buyer.id,
+        seller_id=seller.id,
+        agreed_price=Decimal("9000"),
+        status="active",
+        expires_at=now + timedelta(hours=48),
+        activated_at=now,
+    )
+    db.add(reservation)
+    await db.flush()
+
+    snapshot = await create_snapshot(db, listing.id, reservation.id)
+    txn = Transaction(
+        reservation_id=reservation.id,
+        listing_id=listing.id,
+        buyer_id=buyer.id,
+        seller_id=seller.id,
+        listing_snapshot_id=snapshot.id,
+        transaction_type="shipped",
+        payment_method="upi",
+        gross_amount=Decimal("9000"),
+        delivery_fee=Decimal("0"),
+        net_payout=Decimal("9000"),
+        status="payment_captured",
+        seller_response_deadline=now + timedelta(hours=4),
+        seller_readiness_status="pending",
+        buyer_delivery_address_snapshot=(
+            _address_snapshot(buyer.id, "buyer_delivery", "Buyer Test")
+            if buyer_snapshot else None
+        ),
+        seller_pickup_address_snapshot=(
+            _address_snapshot(seller.id, "seller_pickup", "Seller Test")
+            if seller_snapshot else None
+        ),
+    )
+    db.add(txn)
+    await db.flush()
+    return buyer, seller, listing, txn
 
 
 # ── update_offer_price ──────────────────────────────────────────────────────
@@ -257,3 +347,52 @@ async def test_make_offer_blocks_duplicate_active(db):
     await db.flush()
     with pytest.raises(ValueError, match="OFFER_ALREADY_EXISTS"):
         await make_offer(db, listing.id, buyer.id, Decimal("9500"))
+
+
+# ── Seller readiness gate after captured payment ─────────────────────────────
+
+@pytest.mark.asyncio
+async def test_seller_readiness_confirm_opens_pickup_assignment(db):
+    buyer, seller, listing, txn = await _seed_paid_transaction(db)
+
+    ready = await confirm_seller_readiness(db, txn.id, seller.id)
+
+    assert ready.status == "payment_captured"
+    assert ready.seller_readiness_status == "confirmed"
+    assert ready.seller_responded_at is not None
+    assert ready.pickup_ready_at is not None
+    assert ready.buyer_delivery_address_snapshot["full_name"] == "Buyer Test"
+    assert ready.seller_pickup_address_snapshot["full_name"] == "Seller Test"
+
+
+@pytest.mark.asyncio
+async def test_seller_readiness_requires_pickup_address_snapshot(db):
+    buyer, seller, listing, txn = await _seed_paid_transaction(db, seller_snapshot=False)
+
+    with pytest.raises(ValueError, match="PICKUP_ADDRESS_REQUIRED"):
+        await confirm_seller_readiness(db, txn.id, seller.id)
+
+
+@pytest.mark.asyncio
+async def test_seller_readiness_decline_cancels_and_suppresses_listing(db):
+    buyer, seller, listing, txn = await _seed_paid_transaction(db)
+
+    declined = await decline_seller_readiness(
+        db,
+        txn.id,
+        seller.id,
+        reason="sold_elsewhere",
+    )
+
+    assert declined.status == "cancelled"
+    assert declined.seller_readiness_status == "declined"
+    assert declined.cancelled_reason == "seller_sold_elsewhere"
+    assert listing.status == "sold_elsewhere"
+
+
+@pytest.mark.asyncio
+async def test_buyer_cannot_confirm_before_delivery(db):
+    buyer, seller, listing, txn = await _seed_paid_transaction(db)
+
+    with pytest.raises(ValueError, match=r"INVALID_STATUS:payment_captured"):
+        await buyer_confirm_deal(db, txn.id, buyer.id)

@@ -127,11 +127,35 @@ async def _get_user_coords(db, user_id):
 
 def _serialize_row(r, distance_km):
     reviewed_by = (r.get("reviewed_by") or "none").lower()
-    is_owmee_verified = bool(
-        r.get("seller_kyc_status") == "verified"
-        or r.get("seller_kyc_verified_at_listing_time")
-        or reviewed_by in {"fe", "ops", "fe_and_ops"}
+    seller_verified = bool(
+        r.get("seller_kyc_verified_at_listing_time")
+        and r.get("seller_kyc_status") == "verified"
     )
+    listing_verified = reviewed_by in {"fe", "ops", "fe_and_ops"}
+    ai_assisted = bool(r.get("ai_draft_id"))
+    category_slug = r.get("category_slug")
+    completed_deals = int(r.get("seller_completed_deals") or 0)
+    if listing_verified:
+        listing_trust_label = "Owmee reviewed"
+        trust_tier = "owmee_reviewed"
+    elif ai_assisted:
+        listing_trust_label = "AI-assisted"
+        trust_tier = "ai_assisted"
+    elif category_slug == "others":
+        listing_trust_label = "Limited review"
+        trust_tier = "limited"
+    else:
+        listing_trust_label = "Seller confirmed"
+        trust_tier = "seller_confirmed"
+
+    if seller_verified and completed_deals >= 3:
+        seller_trust_label = f"KYC verified • {completed_deals} sold"
+    elif seller_verified:
+        seller_trust_label = "KYC verified"
+    elif completed_deals >= 3:
+        seller_trust_label = f"{completed_deals} completed sales"
+    else:
+        seller_trust_label = "Seller self-listed"
     accessories = (r.get("accessories") or "").lower()
     warranty_info = (r.get("warranty_info") or "").strip()
     warranty_lower = warranty_info.lower()
@@ -157,7 +181,7 @@ def _serialize_row(r, distance_km):
         "thumbnail_url": thumb_url,
         "city": r.get("city"),
         "state": r.get("state"),
-        "category_slug": r.get("category_slug"),
+        "category_slug": category_slug,
         "brand": r.get("brand"),
         "model": r.get("model"),
         "storage": r.get("storage"),
@@ -179,8 +203,18 @@ def _serialize_row(r, distance_km):
         "seller_id": str(r["seller_id"]),
         "seller_name": _seller_short_name(r.get("seller_name")),
         "seller_member_since": seller_created_at.isoformat() if seller_created_at else None,
-        "seller_completed_deals": int(r.get("seller_completed_deals") or 0),
-        "is_owmee_verified": is_owmee_verified,
+        "seller_completed_deals": completed_deals,
+        # Back-compat field now means the listing itself was reviewed by Owmee,
+        # not merely that the seller has KYC.
+        "is_owmee_verified": listing_verified,
+        "seller_verified": seller_verified,
+        "listing_verified": listing_verified,
+        "listing_trust_label": listing_trust_label,
+        "seller_trust_label": seller_trust_label,
+        "trust_tier": trust_tier,
+        "ai_assisted": ai_assisted,
+        "listing_source": r.get("listing_source"),
+        "reviewed_by": reviewed_by,
         "bill_available": bool(r.get("has_bill")) or "bill" in accessories or "invoice" in accessories,
         "box_available": bool(r.get("has_box")) or "box" in accessories,
         "warranty_active": warranty_active,
@@ -193,7 +227,7 @@ def _serialize_row(r, distance_km):
 async def blockbuster_deals(current_user: OptionalUser, db: DBSession):
     user_id = current_user.user_id if current_user else None
     user_lat, user_lng, user_state = await _get_user_coords(db, user_id)
-    cache_key = f"blockbuster:v2:{user_state}"
+    cache_key = f"blockbuster:v3:{user_state}"
 
     try:
         redis = await get_redis()
@@ -211,7 +245,8 @@ async def blockbuster_deals(current_user: OptionalUser, db: DBSession):
             l.brand, l.model, l.storage, l.ram, l.color,
             l.processor, l.screen_size, l.purchase_year, l.battery_health,
             l.age_suitability, l.hygiene_status,
-            l.reviewed_by, l.is_negotiable, l.accessories, l.warranty_info,
+            l.reviewed_by, l.listing_source, l.ai_draft_id,
+            l.is_negotiable, l.accessories, l.warranty_info,
             l.has_bill, l.has_box, l.has_charger, l.has_earphones,
             l.seller_functional_attestation,
             ST_Y(l.geo_point::geometry) AS listing_lat,
@@ -290,7 +325,8 @@ async def explore_feed(
             l.brand, l.model, l.storage, l.ram, l.color,
             l.processor, l.screen_size, l.purchase_year, l.battery_health,
             l.age_suitability, l.hygiene_status,
-            l.reviewed_by, l.is_negotiable, l.accessories, l.warranty_info,
+            l.reviewed_by, l.listing_source, l.ai_draft_id,
+            l.is_negotiable, l.accessories, l.warranty_info,
             l.has_bill, l.has_box, l.has_charger, l.has_earphones,
             l.seller_functional_attestation,
             ST_Y(l.geo_point::geometry) AS listing_lat,
@@ -341,11 +377,12 @@ async def explore_feed(
         proximity = (1.0 / (1.0 + d_km / max(radius_km, 1))) if d_km is not None else 0.5
         deal = max(0.0, float(r.get("discount_pct") or 0) / 100.0)
         reviewed_by = (r.get("reviewed_by") or "none").lower()
-        trust = 1.0 if (
-            r.get("seller_kyc_status") == "verified"
-            or r.get("seller_kyc_verified_at_listing_time")
-            or reviewed_by in {"fe", "ops", "fe_and_ops"}
-        ) else 0.0
+        seller_verified = bool(
+            r.get("seller_kyc_verified_at_listing_time")
+            and r.get("seller_kyc_status") == "verified"
+        )
+        listing_reviewed = reviewed_by in {"fe", "ops", "fe_and_ops"}
+        trust = 1.0 if (seller_verified or listing_reviewed) else 0.0
 
         score = 0.30 * freshness + 0.40 * proximity + 0.20 * deal + 0.10 * trust
         scored.append((score, _serialize_row(dict(r), d_km)))

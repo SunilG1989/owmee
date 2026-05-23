@@ -103,6 +103,7 @@ from app.modules.listings.service import (
 )
 from app.modules.offers.models import Offer, Rating, Transaction
 from app.modules.identity_auth.models import User
+from app.modules.verification.service import ACTION_PUBLISH_LISTING, evaluate_user_action
 
 router = APIRouter()
 logger = structlog.get_logger()
@@ -250,8 +251,26 @@ def _seller_verified(listing: Listing, seller: User | None) -> bool:
     )
 
 
+def _listing_verified(listing: Listing) -> bool:
+    reviewed_by = (getattr(listing, "reviewed_by", None) or "none").lower()
+    return reviewed_by in {"fe", "ops", "fe_and_ops"}
+
+
+def _listing_trust_label(listing: Listing) -> tuple[str, str]:
+    if _listing_verified(listing):
+        return "Owmee reviewed", "owmee_reviewed"
+    if getattr(listing, "ai_draft_id", None):
+        return "AI-assisted", "ai_assisted"
+    if _category_slug(listing) == "others":
+        return "Limited review", "limited"
+    return "Seller confirmed", "seller_confirmed"
+
+
 def _fmt_card(listing: Listing, seller_verified: bool = False) -> dict:
     """Minimal format for browse/search listing cards — includes seller_verified for UI badge."""
+    listing_verified = _listing_verified(listing)
+    listing_trust_label, trust_tier = _listing_trust_label(listing)
+    seller_trust_label = "KYC verified" if seller_verified else "Seller self-listed"
     return {
         "id": str(listing.id),
         "title": listing.title,
@@ -266,6 +285,11 @@ def _fmt_card(listing: Listing, seller_verified: bool = False) -> dict:
         "thumbnail_url": _img_url(listing.thumbnail_url),
         "view_count": listing.view_count,
         "seller_verified": seller_verified,
+        "seller_trust_label": seller_trust_label,
+        "listing_verified": listing_verified,
+        "listing_trust_label": listing_trust_label,
+        "trust_tier": trust_tier,
+        "ai_assisted": bool(getattr(listing, "ai_draft_id", None)),
         "is_kids_item": listing.is_kids_item,
         "is_negotiable": listing.is_negotiable,
         "brand": listing.brand,
@@ -299,7 +323,9 @@ def _fmt_card(listing: Listing, seller_verified: bool = False) -> dict:
         "verification_status": getattr(listing, "verification_status", None),
         "imei_verified": getattr(listing, "verification_status", None) == "verified",
         "video_url": getattr(listing, "video_url", None),
-        "verified_by_owmee": seller_verified,  # Sprint 6a: mirror the badge signal
+        "listing_source": listing.listing_source,
+        "reviewed_by": listing.reviewed_by,
+        "verified_by_owmee": listing_verified,
         # Sprint trust pillar: items >₹1000 get FE inspection at pickup;
         # mobile uses this flag to show the right copy on listing detail.
         "fe_inspection_required": _fe_inspection_required(listing.price),
@@ -321,9 +347,6 @@ def _fmt_detail(listing: Listing, seller: User | None, avg_rating: float | None,
         "warranty_status": listing.warranty_info,
         "battery_health": listing.battery_health,
         "hygiene_status": listing.hygiene_status,
-        # Sprint 4 / Pass 2: provenance badges
-        "listing_source": listing.listing_source,
-        "reviewed_by": listing.reviewed_by,
         # Sprint 4 / Pass 3: kids safety checklist
         "kids_safety_checklist": listing.kids_safety_checklist,
         # Seller info embedded — no second fetch needed from UI
@@ -710,6 +733,26 @@ async def publish(listing_id: UUID, current_user: BasicUser, db: DBSession):
     # initial pass and kept on VerifiedUser, which paired with creation
     # being BasicUser-gated meant unverified sellers could create drafts
     # but could not actually publish them.
+    draft_result = await db.execute(
+        select(Listing)
+        .options(selectinload(Listing.category))
+        .where(Listing.id == listing_id, Listing.seller_id == current_user.user_id)
+    )
+    draft = draft_result.scalar_one_or_none()
+    if draft is not None and draft.status == "draft":
+        category_slug = draft.category.slug if draft.category else None
+        policy = await evaluate_user_action(
+            db,
+            user_id=current_user.user_id,
+            action=ACTION_PUBLISH_LISTING,
+            context={"price": draft.price, "category_slug": category_slug},
+        )
+        if not policy.allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=policy.to_error_detail(),
+            )
+
     try:
         listing = await publish_listing(db, listing_id, current_user.user_id)
         await db.commit()

@@ -57,8 +57,8 @@ export default function KidsSectionScreen({ navigation }: any) {
       <View style={s.header}>
         <BackButton onPress={() => navigation.goBack()} />
         <View>
-          <Text style={s.title}>🧸 Kids items</Text>
-          <Text style={s.sub}>Verified sellers · Hygiene rated</Text>
+          <Text style={s.title}>Kids items</Text>
+          <Text style={s.sub}>Safety details · seller declarations</Text>
         </View>
       </View>
       {loading ? (

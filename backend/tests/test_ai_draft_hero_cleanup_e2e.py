@@ -521,6 +521,8 @@ async def test_create_from_draft_enqueues_hero_cleanup_after_commit(monkeypatch)
             title="Kids water bottle",
             price=350,
             original_price=700,
+            mrp_source="seller_entered",
+            seller_mrp_confirmed=True,
             condition="good",
             category_slug="kids-utility",
             brand="Milton",
@@ -545,7 +547,7 @@ async def test_create_from_draft_enqueues_hero_cleanup_after_commit(monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_create_from_draft_uses_draft_mrp_for_older_clients(monkeypatch):
+async def test_create_from_draft_does_not_publish_unconfirmed_draft_mrp(monkeypatch):
     user_id = uuid4()
     draft_id = uuid4()
     category_id = uuid4()
@@ -602,8 +604,8 @@ async def test_create_from_draft_uses_draft_mrp_for_older_clients(monkeypatch):
         db=db,
     )
 
-    assert response.original_price == 1200
-    assert db.insert_params["original_price"] == 1200
+    assert response.original_price is None
+    assert db.insert_params["original_price"] is None
 
 
 @pytest.mark.asyncio

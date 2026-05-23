@@ -64,17 +64,24 @@ class MyModel(Base, TimestampMixin):
 
 NOT from `app.db.mixins`. From `app.db.session`.
 
-### KYC tri-state model (Sprint 4)
+### Verification + KYC trust model
 
 | Field | Type | Meaning |
 |---|---|---|
-| `auth_state` | enum | `none → otp_verified → fully_verified` |
-| `buyer_eligible` | bool | Has minimum verification to buy |
-| `seller_tier` | enum | `lite → standard → premium` |
+| `auth_state` | enum | `guest | otp_verified | suspended` |
+| `buyer_eligible` | bool | Has enough identity/payout trust to buy in gated flows |
+| `seller_tier` | enum | `not_eligible | lite | full | restricted` |
+| `verification_checks` | table | Provider-neutral checks: phone OTP, Bureau fraud, KYC steps |
+| `risk_decisions` | table | Owmee action decision: allow, step_up, manual_review, block |
 
-After ANY KYC step succeeds, call `derive_tri_state_from_kyc(user_id)` from `app.modules.kyc.tri_state`. Forgetting this is a real bug we've hit.
+After ANY KYC step succeeds, call `derive_tri_state_from_kyc(...)` from
+`app.modules.kyc.service`. Forgetting this is a real bug we've hit.
 
 JWT claims include all three — they're in `CurrentUser`.
+
+Trust-sensitive actions should call `app.modules.verification.service.evaluate_user_action(...)`.
+That policy function is DB-only by design; it must not call MSG91, Bureau, KYC,
+payment, or notification providers inline. See `docs/VERIFICATION_ARCHITECTURE.md`.
 
 ### Temporal workflow versioning
 

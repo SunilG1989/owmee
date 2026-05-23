@@ -7,6 +7,7 @@ from app.modules.identity_auth.sms_adapter import get_sms_adapter
 from app.modules.kyc.adapter import get_kyc_adapter
 from app.modules.notifications.push_adapter import get_push_adapter
 from app.modules.payments.adapter import get_payment_adapter
+from app.modules.verification.fraud_adapter import get_fraud_adapter
 
 
 def test_ai_provider_rejects_unknown_provider(monkeypatch):
@@ -76,6 +77,27 @@ def test_kyc_provider_allows_explicit_mock_for_private_staging(monkeypatch):
     monkeypatch.setattr(settings, "kyc_partner", "mock")
     adapter = get_kyc_adapter()
     assert adapter.__class__.__name__ == "_DevKYCAdapter"
+
+
+def test_fraud_provider_uses_mock_adapter_in_development(monkeypatch):
+    monkeypatch.setattr(settings, "env", "development")
+    monkeypatch.setattr(settings, "fraud_provider", "bureau")
+    adapter = get_fraud_adapter()
+    assert adapter.__class__.__name__ == "_MockFraudAdapter"
+
+
+def test_fraud_provider_rejects_empty_outside_development(monkeypatch):
+    monkeypatch.setattr(settings, "env", "production")
+    monkeypatch.setattr(settings, "fraud_provider", "")
+    with pytest.raises(RuntimeError, match="FRAUD_PROVIDER must be set"):
+        get_fraud_adapter()
+
+
+def test_fraud_provider_allows_explicit_mock_for_private_staging(monkeypatch):
+    monkeypatch.setattr(settings, "env", "production")
+    monkeypatch.setattr(settings, "fraud_provider", "mock")
+    adapter = get_fraud_adapter()
+    assert adapter.__class__.__name__ == "_MockFraudAdapter"
 
 
 def test_geo_provider_rejects_unknown_provider(monkeypatch):

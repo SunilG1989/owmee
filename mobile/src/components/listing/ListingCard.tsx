@@ -77,11 +77,18 @@ export const ListingCard = memo(function ListingCard({
   );
   const cs = condStyle(listing.condition);
   const off = percentOff(listing.price, listing.original_price);
-  const hasOwmeeCheck = Boolean(
-    listing.seller_verified
-    || listing.seller?.kyc_verified
-    || (listing.reviewed_by && listing.reviewed_by !== 'none'),
-  );
+  const sellerKycVerified = Boolean(listing.seller_verified || listing.seller?.kyc_verified);
+  const listingReviewed = Boolean(listing.listing_verified || (listing.reviewed_by && listing.reviewed_by !== 'none'));
+  const trustBadgeLabel = listing.listing_trust_label
+    || (listingReviewed
+      ? 'Owmee reviewed'
+      : sellerKycVerified
+        ? 'KYC verified'
+        : listing.ai_assisted
+          ? 'AI-assisted'
+          : listing.category_slug === 'others'
+            ? 'Limited review'
+            : 'Seller confirmed');
   const signal = dealSignal(listing);
   const specChips = buildListingFactChips(listing, {
     conditionLabel: cs.label,
@@ -135,13 +142,11 @@ export const ListingCard = memo(function ListingCard({
             />
           </View>
         )}
-        <View style={[s.trustBadge, !hasOwmeeCheck && s.safeIconBadge]}>
+        <View style={s.trustBadge}>
           <ShieldCheck size={12} strokeWidth={2.35} color={C.petrolDeep} />
-          {hasOwmeeCheck ? (
-            <Text style={s.trustBadgeText} numberOfLines={1}>
-              Verified
-            </Text>
-          ) : null}
+          <Text style={s.trustBadgeText} numberOfLines={1}>
+            {trustBadgeLabel}
+          </Text>
         </View>
         <View style={[s.cond, { backgroundColor: cs.bg }]}>
           <Text style={[s.condText, { color: cs.color }]}>{cs.label}</Text>
@@ -284,6 +289,7 @@ const s = StyleSheet.create({
     position: 'absolute',
     top: S.xs + 2,
     left: S.xs + 2,
+    maxWidth: 122,
     paddingHorizontal: S.xs + 2,
     paddingVertical: 3,
     borderRadius: R.pill,

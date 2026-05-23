@@ -13,7 +13,7 @@ Why server-rendered (not React/Next):
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import UUID
 
@@ -126,7 +126,10 @@ async def dashboard(
     pickup_count = (await db.execute(
         select(text("count(*)")).select_from(Transaction).where(and_(
             Transaction.status == PAYMENT_CAPTURED,
+            Transaction.seller_readiness_status == "confirmed",
             Transaction.pickup_fe_id.is_(None),
+            Transaction.buyer_delivery_address_snapshot.is_not(None),
+            Transaction.seller_pickup_address_snapshot.is_not(None),
         ))
     )).scalar()
     hub_count = (await db.execute(
@@ -157,7 +160,13 @@ async def pickups_page(
         select(Transaction, Listing.title, User.phone_number)
         .join(Listing, Listing.id == Transaction.listing_id)
         .join(User, User.id == Transaction.seller_id)
-        .where(and_(Transaction.status == PAYMENT_CAPTURED, Transaction.pickup_fe_id.is_(None)))
+        .where(and_(
+            Transaction.status == PAYMENT_CAPTURED,
+            Transaction.seller_readiness_status == "confirmed",
+            Transaction.pickup_fe_id.is_(None),
+            Transaction.buyer_delivery_address_snapshot.is_not(None),
+            Transaction.seller_pickup_address_snapshot.is_not(None),
+        ))
         .order_by(Transaction.created_at.asc())
     )).all()
     fes = (await db.execute(
@@ -184,7 +193,16 @@ async def pickups_assign(
         raise HTTPException(404)
     if txn.status != PAYMENT_CAPTURED:
         raise HTTPException(400, f"bad_status:{txn.status}")
+    if txn.seller_readiness_status != "confirmed":
+        raise HTTPException(400, "seller_not_ready")
+    if not txn.seller_pickup_address_snapshot or not txn.buyer_delivery_address_snapshot:
+        raise HTTPException(400, "address_snapshot_missing")
     txn.pickup_fe_id = UUID(fe_user_id)
+    from app.modules.offers.service import _notify
+    await _notify(db, txn.seller_id, "pickup_assigned",
+        "Owmee pickup assigned",
+        "A field executive has been assigned for your confirmed order.",
+        "transaction", str(txn.id))
     await db.commit()
     logger.info("admin.assign_pickup", transaction_id=str(transaction_id),
                 fe_user_id=fe_user_id, admin_id=str(admin.id))
@@ -235,6 +253,15 @@ async def hub_route_fe(
     txn.buyer_acknowledgment_code = "".join(secrets.choice("0123456789") for _ in range(6))
     txn.routed_at = now
     txn.status = DELIVERY_IN_PROGRESS
+    from app.modules.offers.service import _notify
+    await _notify(db, txn.buyer_id, "out_for_delivery",
+        "Out for delivery",
+        "Owmee is bringing your item. Keep the handover code private until the FE reaches you.",
+        "transaction", str(txn.id))
+    await _notify(db, txn.seller_id, "delivery_in_progress",
+        "Delivery in progress",
+        "Your item is on the way to the buyer.",
+        "transaction", str(txn.id))
     await db.commit()
     logger.info("admin.route_fe", transaction_id=str(transaction_id),
                 fe_user_id=fe_user_id, admin_id=str(admin.id))
@@ -260,6 +287,11 @@ async def hub_route_courier(
     txn.courier_tracking_url = tracking_url or None
     txn.routed_at = now
     txn.status = DELIVERY_IN_PROGRESS
+    from app.modules.offers.service import _notify
+    await _notify(db, txn.buyer_id, "out_for_delivery",
+        "Courier delivery started",
+        "Your item has been handed to the courier. Tracking is available in the order.",
+        "transaction", str(txn.id))
     await db.commit()
     logger.info("admin.route_courier", transaction_id=str(transaction_id),
                 courier_name=courier_name, admin_id=str(admin.id))
@@ -491,6 +523,16 @@ async def txn_courier_status(
         assert_legal_transition(txn.status, DELIVERED)
         txn.status = DELIVERED
         txn.delivered_at = datetime.now(timezone.utc)
+        txn.confirmation_deadline = txn.delivered_at + timedelta(hours=48)
+        from app.modules.offers.service import _notify
+        await _notify(db, txn.buyer_id, "delivered_confirm_receipt",
+            "Delivered — confirm receipt",
+            "Confirm receipt if everything matches. You have 48 hours to raise an issue.",
+            "transaction", str(txn.id))
+        await _notify(db, txn.seller_id, "delivered_awaiting_confirmation",
+            "Delivered to buyer",
+            "Buyer confirmation or the 48-hour window will move payout forward.",
+            "transaction", str(txn.id))
     logger.info("admin.courier_status", transaction_id=str(transaction_id),
                 new_status=new_status, note=note, admin_id=str(admin.id))
     await db.commit()

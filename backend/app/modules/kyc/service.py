@@ -189,7 +189,7 @@ async def derive_tri_state_from_kyc(
     Rules:
       - v.aadhaar_verified -> seller_tier at least LITE
       - v.aadhaar + v.pan + v.liveness (and currently LITE) -> seller_tier FULL
-      - all four flags + name_match_result != 'reject' -> buyer_eligible = True
+      - all four flags + name_match_result pass/legacy-null -> buyer_eligible = True
     """
     u_result = await db.execute(select(User).where(User.id == user_id))
     user = u_result.scalar_one_or_none()
@@ -235,7 +235,7 @@ async def derive_tri_state_from_kyc(
         and v.pan_verified
         and v.liveness_verified
         and v.payout_verified
-        and v.name_match_result != "reject"
+        and v.name_match_result in ("pass", None)
     ):
         if await mark_buyer_eligible(db, user):
             changes["changed"] = True
