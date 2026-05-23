@@ -74,13 +74,17 @@ services:
       - key: OTP_WHITELIST_CODE
         value: "123456"
       - key: SMS_PROVIDER
-        value: mock
+        value: msg91
+      - key: SMS_API_BASE_URL
+        value: https://control.msg91.com
       - key: SMS_API_KEY
-        value: ""
+        sync: false
+      - key: SMS_TEMPLATE_ID
+        sync: false
       - key: SMS_SENDER_ID
-        value: OWMAPP
+        value: OWMEO
       - key: SMS_DLT_ENTITY_ID
-        value: ""
+        sync: false
       - key: KYC_PARTNER
         value: mock
       - key: KYC_PARTNER_API_KEY
@@ -224,13 +228,17 @@ services:
       - key: APP_BASE_URL
         value: https://owmee-api.onrender.com
       - key: SMS_PROVIDER
-        value: mock
+        value: msg91
+      - key: SMS_API_BASE_URL
+        value: https://control.msg91.com
       - key: SMS_API_KEY
-        value: ""
+        sync: false
+      - key: SMS_TEMPLATE_ID
+        sync: false
       - key: SMS_SENDER_ID
-        value: OWMAPP
+        value: OWMEO
       - key: SMS_DLT_ENTITY_ID
-        value: ""
+        sync: false
       - key: KYC_PARTNER
         value: mock
       - key: KYC_PARTNER_API_KEY
