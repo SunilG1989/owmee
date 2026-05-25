@@ -135,6 +135,7 @@ class DraftFromImageResponse(BaseModel):
     expires_at: datetime
     needs_identifier: bool = False           # True for smartphones/laptops/tablets
     fallback_reason: str | None = None       # set if vision/price failed
+    analysis_contract: dict[str, Any] = Field(default_factory=dict)
 
 
 class AIDraftUploadImageRequest(BaseModel):

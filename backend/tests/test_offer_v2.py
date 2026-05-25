@@ -52,23 +52,16 @@ async def db():
     engine = create_async_engine(
         settings.database_url, echo=False, poolclass=NullPool,
     )
-    async with engine.connect() as conn:
-        outer = await conn.begin()
-        Session = async_sessionmaker(bind=conn, expire_on_commit=False, class_=AsyncSession)
+    try:
+        Session = async_sessionmaker(bind=engine, expire_on_commit=False, class_=AsyncSession)
         async with Session() as session:
+            await session.begin()
             try:
                 yield session
             finally:
-                # asyncpg connections occasionally end up bound to a
-                # different event loop after a test catches a ValueError;
-                # the rollback then crashes during teardown even though
-                # the assertion passed. Swallow the teardown noise — the
-                # connection is going to be discarded anyway since this
-                # engine is per-test with NullPool.
-                try:
-                    await outer.rollback()
-                except RuntimeError:
-                    pass
+                await session.rollback()
+    finally:
+        await engine.dispose()
 
 
 async def _seed_listing_and_users(db: AsyncSession):

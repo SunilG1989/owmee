@@ -89,3 +89,26 @@ async def test_handle_message_marks_final_retry_failure(monkeypatch):
     assert marked == [(payload, "job_unhandled:TimeoutError")]
     assert dead_letters == [(payload, "job_unhandled:TimeoutError")]
     assert redis.acked == [(jobs.AI_DRAFT_ANALYSIS_STREAM_KEY, jobs.AI_DRAFT_ANALYSIS_GROUP, "1-0")]
+
+
+@pytest.mark.asyncio
+async def test_safe_process_passes_queue_timestamp_into_worker(monkeypatch):
+    received = {}
+
+    async def fake_process_ai_draft_analysis(**kwargs):
+        received.update(kwargs)
+        return jobs.AIDraftAnalysisResult(status="ready", draft_id=kwargs["draft_id"])
+
+    monkeypatch.setattr(jobs, "process_ai_draft_analysis", fake_process_ai_draft_analysis)
+
+    payload = {
+        "draft_id": "draft-1",
+        "user_id": "user-1",
+        "photo_keys": ["ai-drafts/u/d_0.jpg"],
+        "queued_at_ms": 123456,
+    }
+
+    result = await jobs._safe_process_ai_draft_analysis(payload)
+
+    assert result.status == "ready"
+    assert received["queued_at_ms"] == 123456

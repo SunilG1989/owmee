@@ -43,6 +43,7 @@ from app.core.storage import (
 )
 from app.modules.ai_assistant import (
     ceir_client,
+    draft_contracts,
     provider as ai_provider,
     price_estimator,
 )
@@ -565,10 +566,59 @@ async def _timed_step(timings: dict[str, int], key: str, coro):
         timings[key] = _ms_since(started)
 
 
+def _latest_metric(metrics: list[dict] | None, operation: str | None = None) -> dict:
+    for metric in reversed(metrics or []):
+        if operation is None or metric.get("operation") == operation:
+            return metric
+    return {}
+
+
+def _metric_payload(metric: dict | None) -> dict:
+    if not metric:
+        return {}
+    keys = (
+        "operation",
+        "provider",
+        "model",
+        "status",
+        "latency_ms",
+        "input_tokens",
+        "output_tokens",
+        "total_tokens",
+        "cached_tokens",
+        "thoughts_tokens",
+        "image_count",
+        "bytes_total",
+        "media_resolution",
+        "error",
+    )
+    return {key: metric.get(key) for key in keys if metric.get(key) is not None}
+
+
+def _artifact_latency(fallback_ms: int | None, metric: dict | None) -> int | None:
+    value = (metric or {}).get("latency_ms")
+    if value is None:
+        return fallback_ms
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return fallback_ms
+
+
+def _artifact_token(metric: dict | None, key: str) -> int | None:
+    value = (metric or {}).get(key)
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 async def _detect_from_images_bounded(image_pairs: list[tuple[bytes, str]]) -> AIDetected:
     try:
         return await asyncio.wait_for(
-            ai_provider.detect_from_images(image_pairs),
+            ai_provider.detect_fast_from_images(image_pairs),
             timeout=VISION_TIMEOUT_SECONDS,
         )
     except asyncio.TimeoutError:
@@ -585,10 +635,16 @@ async def _detect_from_images_bounded(image_pairs: list[tuple[bytes, str]]) -> A
         return AIDetected(flags=["ai_failed:vision_error"])
 
 
+async def _detect_from_images_bounded_with_metrics(image_pairs: list[tuple[bytes, str]]) -> tuple[AIDetected, dict]:
+    ai_provider.reset_call_metrics()
+    detected = await _detect_from_images_bounded(image_pairs)
+    return detected, _latest_metric(ai_provider.consume_call_metrics("vision_fast"), "vision_fast")
+
+
 async def _detect_from_image_bounded(image_bytes: bytes, content_type: str) -> AIDetected:
     try:
         return await asyncio.wait_for(
-            ai_provider.detect_from_image(image_bytes, content_type),
+            ai_provider.detect_fast_from_images([(image_bytes, content_type)]),
             timeout=VISION_TIMEOUT_SECONDS,
         )
     except asyncio.TimeoutError:
@@ -603,6 +659,12 @@ async def _detect_from_image_bounded(image_bytes: bytes, content_type: str) -> A
             extra={"error": f"{type(e).__name__}: {str(e)[:240]}"},
         )
         return AIDetected(flags=["ai_failed:vision_error"])
+
+
+async def _detect_from_image_bounded_with_metrics(image_bytes: bytes, content_type: str) -> tuple[AIDetected, dict]:
+    ai_provider.reset_call_metrics()
+    detected = await _detect_from_image_bounded(image_bytes, content_type)
+    return detected, _latest_metric(ai_provider.consume_call_metrics("vision_fast"), "vision_fast")
 
 
 async def _estimate_price_bounded(coro) -> dict:
@@ -632,6 +694,12 @@ async def _estimate_price_bounded(coro) -> dict:
             "comparables": [],
             "comparables_count": 0,
         }
+
+
+async def _estimate_price_bounded_with_metrics(coro) -> tuple[dict, dict]:
+    ai_provider.reset_call_metrics()
+    price_result = await _estimate_price_bounded(coro)
+    return price_result, _latest_metric(ai_provider.consume_call_metrics("price_text"), "price_text")
 
 
 def _front_face_hero_override(detected: AIDetected, hero_index: int, image_count: int) -> int:
@@ -778,13 +846,27 @@ def _ms_since(start: float) -> int:
     return int((perf_counter() - start) * 1000)
 
 
-def _draft_ai_response_json(detected: AIDetected, price_result: dict | None = None) -> str:
+def _draft_ai_response_json(
+    detected: AIDetected,
+    price_result: dict | None = None,
+    *,
+    contract: dict | None = None,
+) -> str:
     payload = detected.model_dump()
     if price_result:
         payload["_owmee_price_source"] = price_result.get("source") or "none"
         if price_result.get("reasoning"):
             payload["_owmee_price_reasoning"] = str(price_result["reasoning"])[:240]
+    payload["_owmee_contract"] = contract or draft_contracts.build_draft_contract(detected, price_result)
     return json.dumps(payload)
+
+
+def _pricing_artifact_provider(price_result: dict | None) -> str:
+    return "gemini" if (price_result or {}).get("source") == "ai" else "owmee"
+
+
+def _pricing_artifact_model(price_result: dict | None) -> str | None:
+    return ai_provider.current_text_model() if (price_result or {}).get("source") == "ai" else None
 
 
 def _round_resale_price(value: float) -> float:
@@ -1024,7 +1106,7 @@ async def draft_from_image(
 
     # Vision detection
     step_started = perf_counter()
-    detected = await _detect_from_image_bounded(image_bytes, content_type)
+    detected, vision_metric = await _detect_from_image_bounded_with_metrics(image_bytes, content_type)
     detected = _with_canonical_category(detected)
     timings["vision_ms"] = _ms_since(step_started)
 
@@ -1063,7 +1145,7 @@ async def draft_from_image(
         )
     step_started = perf_counter()
     vision_price_available = bool(detected.suggested_price_inr)
-    price_result = await _estimate_price_bounded(
+    price_result, price_metric = await _estimate_price_bounded_with_metrics(
         price_estimator.estimate_price(
             db,
             brand=detected.brand,
@@ -1073,7 +1155,7 @@ async def draft_from_image(
             state=user_state,
             category_slug=detected.category_slug,
             detected_item_type=detected.detected_item_type,
-            allow_ai_fallback=not vision_price_available and not ai_failed,
+            allow_ai_fallback=False,
         )
     )
     timings["price_ms"] = _ms_since(step_started)
@@ -1084,6 +1166,9 @@ async def draft_from_image(
     price_result = _apply_price_fallbacks(price_result, detected)
     if price_result["source"] == "none":
         fallback_reason = price_result.get("reasoning")
+    draft_contract = draft_contracts.build_draft_contract(detected, price_result, fast_path=True)
+    contract_statuses = draft_contract["statuses"]
+    await draft_contracts.upsert_category_field_definitions(db, detected.category_slug)
 
     # Persist the draft. ai_response is JSONB; pass JSON string and CAST.
     step_started = perf_counter()
@@ -1091,22 +1176,103 @@ async def draft_from_image(
         text("""
             INSERT INTO listing_drafts (
                 id, user_id, photo_urls, ai_response, suggested_price,
-                comparables_count, ai_model, status
+                comparables_count, ai_model, status,
+                category_slug, category_schema_version, draft_revision,
+                image_set_hash, safety_status, core_analysis_status,
+                category_enrichment_status, pricing_status, copy_status,
+                seller_review_status, publish_blockers, required_actions
             )
             VALUES (
                 :id, :uid, :photo_urls, CAST(:ai_response AS JSONB),
-                :price, :ccount, :model, 'open'
+                :price, :ccount, :model, 'open',
+                :category_slug, :category_schema_version, 1,
+                :image_set_hash, :safety_status, :core_analysis_status,
+                :category_enrichment_status, :pricing_status, :copy_status,
+                :seller_review_status, CAST(:publish_blockers AS JSONB),
+                CAST(:required_actions AS JSONB)
             )
         """).bindparams(bindparam("photo_urls", type_=PGARRAY(SAString))),
         {
             "id": draft_id,
             "uid": user.user_id,
             "photo_urls": [photo_url],
-            "ai_response": _draft_ai_response_json(detected, price_result),
+            "ai_response": _draft_ai_response_json(detected, price_result, contract=draft_contract),
             "price": price_result.get("price"),
             "ccount": price_result.get("comparables_count", 0),
             "model": ai_provider.current_vision_model(),
+            "category_slug": draft_contract["category_slug"],
+            "category_schema_version": draft_contract["category_schema_version"],
+            "image_set_hash": draft_contracts.image_set_hash_from_pairs([(image_bytes, content_type)]),
+            "safety_status": contract_statuses["safety_status"],
+            "core_analysis_status": contract_statuses["core_analysis_status"],
+            "category_enrichment_status": contract_statuses["category_enrichment_status"],
+            "pricing_status": contract_statuses["pricing_status"],
+            "copy_status": contract_statuses["copy_status"],
+            "seller_review_status": contract_statuses["seller_review_status"],
+            "publish_blockers": json.dumps(draft_contract["publish_blockers"]),
+            "required_actions": json.dumps(draft_contract["required_actions"]),
         },
+    )
+    await draft_contracts.record_draft_images(
+        db,
+        draft_id=draft_id,
+        display_keys=[photo_url],
+        image_pairs=[(image_bytes, content_type)],
+    )
+    vision_artifact_id = await draft_contracts.record_analysis_artifact(
+        db,
+        draft_id=draft_id,
+        stage=draft_contracts.STAGE_VISION_CORE,
+        status=contract_statuses["core_analysis_status"],
+        input_payload={
+            "analysis_mode": "fast_draft",
+            "image_count": 1,
+            "bytes_total": len(image_bytes),
+            "media_resolution": "low",
+            "provider_metrics": _metric_payload(vision_metric),
+        },
+        output_payload=detected.model_dump(),
+        model=ai_provider.current_vision_model(),
+        prompt_version="vision_fast_v1",
+        latency_ms=_artifact_latency(timings.get("vision_ms"), vision_metric),
+        input_tokens=_artifact_token(vision_metric, "input_tokens"),
+        output_tokens=_artifact_token(vision_metric, "output_tokens"),
+        cached_tokens=_artifact_token(vision_metric, "cached_tokens"),
+        error_code=fallback_reason if ai_failed else None,
+    )
+    await draft_contracts.record_ai_field_values(
+        db,
+        draft_id=draft_id,
+        detected=detected,
+        artifact_id=vision_artifact_id,
+    )
+    pricing_artifact_id = await draft_contracts.record_analysis_artifact(
+        db,
+        draft_id=draft_id,
+        stage=draft_contracts.STAGE_PRICING,
+        status=contract_statuses["pricing_status"],
+        input_payload={
+            "category_slug": detected.category_slug,
+            "brand": detected.brand,
+            "model": detected.model,
+            "storage": detected.storage,
+            "condition": detected.condition_guess or "good",
+            "state": user_state,
+            "provider_metrics": _metric_payload(price_metric),
+        },
+        output_payload=price_result,
+        provider=_pricing_artifact_provider(price_result),
+        model=_pricing_artifact_model(price_result),
+        latency_ms=_artifact_latency(timings.get("price_ms"), price_metric),
+        input_tokens=_artifact_token(price_metric, "input_tokens"),
+        output_tokens=_artifact_token(price_metric, "output_tokens"),
+        cached_tokens=_artifact_token(price_metric, "cached_tokens"),
+    )
+    await draft_contracts.record_pricing_field_values(
+        db,
+        draft_id=draft_id,
+        price_result=price_result,
+        artifact_id=pricing_artifact_id,
     )
     await db.commit()
     timings["persist_ms"] = _ms_since(step_started)
@@ -1141,6 +1307,7 @@ async def draft_from_image(
         expires_at=expires_at,
         needs_identifier=_category_needs_identifier(detected.category_slug),
         fallback_reason=fallback_reason,
+        analysis_contract=draft_contract,
     )
 
 
@@ -1161,6 +1328,7 @@ async def request_ai_draft_uploads(
     draft_id = uuid4()
     uploads: list[AIDraftUploadSlot] = []
     photo_keys: list[str] = []
+    content_types: list[str] = []
     expires_in = 300
 
     for idx, image in enumerate(payload.images):
@@ -1168,6 +1336,7 @@ async def request_ai_draft_uploads(
         key = _draft_photo_object_key(user.user_id, draft_id, idx, _image_extension(content_type))
         upload_url = generate_presigned_upload_url(key, content_type=content_type, expires_in=expires_in)
         photo_keys.append(key)
+        content_types.append(content_type)
         uploads.append(
             AIDraftUploadSlot(
                 index=idx,
@@ -1181,10 +1350,18 @@ async def request_ai_draft_uploads(
     await db.execute(
         text("""
             INSERT INTO listing_drafts (
-                id, user_id, photo_urls, ai_response, status
+                id, user_id, photo_urls, ai_response, status,
+                category_schema_version, draft_revision, image_set_hash,
+                safety_status, core_analysis_status, category_enrichment_status,
+                pricing_status, copy_status, seller_review_status,
+                publish_blockers, required_actions
             )
             VALUES (
-                :id, :uid, :photo_urls, CAST(:ai_response AS JSONB), 'uploading'
+                :id, :uid, :photo_urls, CAST(:ai_response AS JSONB), 'uploading',
+                :category_schema_version, 1, :image_set_hash,
+                'pending', 'pending', 'pending',
+                'pending', 'pending', 'pending',
+                '[]'::jsonb, CAST(:required_actions AS JSONB)
             )
         """).bindparams(bindparam("photo_urls", type_=PGARRAY(SAString))),
         {
@@ -1192,7 +1369,16 @@ async def request_ai_draft_uploads(
             "uid": user.user_id,
             "photo_urls": photo_keys,
             "ai_response": json.dumps({"async_status": "uploading"}),
+            "category_schema_version": draft_contracts.CATEGORY_SCHEMA_VERSION,
+            "image_set_hash": draft_contracts.image_set_hash_from_keys(photo_keys),
+            "required_actions": json.dumps(["upload_photos", "start_analysis"]),
         },
+    )
+    await draft_contracts.record_draft_image_placeholders(
+        db,
+        draft_id=draft_id,
+        photo_keys=photo_keys,
+        content_types=content_types,
     )
     await db.commit()
 
@@ -1274,12 +1460,19 @@ async def start_ai_draft_analysis(
         text("""
             UPDATE listing_drafts
             SET status = 'processing',
-                ai_response = CAST(:ai_response AS JSONB)
+                ai_response = CAST(:ai_response AS JSONB),
+                core_analysis_status = 'processing',
+                safety_status = 'pending',
+                category_enrichment_status = 'pending',
+                pricing_status = 'pending',
+                copy_status = 'pending',
+                required_actions = CAST(:required_actions AS JSONB)
             WHERE id = :id
         """),
         {
             "id": draft_id,
             "ai_response": json.dumps({"async_status": "processing"}),
+            "required_actions": json.dumps(["wait_for_analysis"]),
         },
     )
     await db.commit()
@@ -1296,7 +1489,8 @@ async def get_ai_draft_analysis_status(
         await db.execute(
             text("""
                 SELECT user_id, photo_urls, ai_response, suggested_price,
-                       comparables_count, status, expires_at
+                       comparables_count, status, expires_at,
+                       category_slug, category_schema_version, draft_revision
                 FROM listing_drafts
                 WHERE id = :id
             """),
@@ -1338,6 +1532,7 @@ async def get_ai_draft_analysis_status(
             expires_at=row["expires_at"] or datetime.now(timezone.utc),
             needs_identifier=_category_needs_identifier(detected.category_slug),
             fallback_reason=fallback_reason,
+            analysis_contract=raw_ai.get("_owmee_contract") or {},
         )
         return AIDraftAnalysisStatusResponse(draft_id=draft_id, status="ready", draft=draft)
 
@@ -1392,11 +1587,22 @@ async def refresh_ai_draft_price(
         )
 
     raw_ai = row["ai_response"] if isinstance(row["ai_response"], dict) else {}
+    old_category_slug = row.get("category_slug") or raw_ai.get("category_slug")
+    prior_schema_version = row.get("category_schema_version") or draft_contracts.CATEGORY_SCHEMA_VERSION
     detected = _draft_with_seller_price_inputs(AIDetected(**raw_ai), payload)
     detected = _with_canonical_category(detected)
+    category_reconciliation = await draft_contracts.record_category_change_if_needed(
+        db,
+        draft_id=draft_id,
+        old_category=old_category_slug,
+        new_category=detected.category_slug,
+        changed_by="seller",
+        prior_schema_version=prior_schema_version,
+    )
 
     rejection = _publish_rejection_detail(detected.model_dump())
     fallback_reason = None
+    price_metric: dict = {}
     if rejection:
         price_result = {
             "price": None,
@@ -1409,7 +1615,7 @@ async def refresh_ai_draft_price(
     else:
         from app.modules.identity_auth.user_location import get_user_location
         _, _, _, user_state = await get_user_location(db, user.user_id)
-        price_result = await _estimate_price_bounded(
+        price_result, price_metric = await _estimate_price_bounded_with_metrics(
             price_estimator.estimate_price(
                 db,
                 brand=detected.brand,
@@ -1426,21 +1632,84 @@ async def refresh_ai_draft_price(
         price_result = _apply_price_fallbacks(price_result, detected, prefer_vision=False)
         if price_result["source"] == "none":
             fallback_reason = price_result.get("reasoning")
+    draft_contract = draft_contracts.build_draft_contract(
+        detected,
+        price_result,
+        stale_fields=category_reconciliation.get("stale_fields") or [],
+    )
+    contract_statuses = draft_contract["statuses"]
+    await draft_contracts.upsert_category_field_definitions(db, detected.category_slug)
 
     await db.execute(
         text("""
             UPDATE listing_drafts
             SET ai_response = CAST(:ai_response AS JSONB),
                 suggested_price = :price,
-                comparables_count = :ccount
+                comparables_count = :ccount,
+                category_slug = :category_slug,
+                category_schema_version = :category_schema_version,
+                draft_revision = draft_revision + :revision_delta,
+                safety_status = :safety_status,
+                core_analysis_status = :core_analysis_status,
+                category_enrichment_status = :category_enrichment_status,
+                pricing_status = :pricing_status,
+                copy_status = :copy_status,
+                seller_review_status = :seller_review_status,
+                publish_blockers = CAST(:publish_blockers AS JSONB),
+                required_actions = CAST(:required_actions AS JSONB)
             WHERE id = :id
         """),
         {
             "id": draft_id,
-            "ai_response": _draft_ai_response_json(detected, price_result),
+            "ai_response": _draft_ai_response_json(detected, price_result, contract=draft_contract),
             "price": price_result.get("price"),
             "ccount": price_result.get("comparables_count", 0),
+            "category_slug": draft_contract["category_slug"],
+            "category_schema_version": draft_contract["category_schema_version"],
+            "revision_delta": 1 if category_reconciliation.get("category_changed") else 0,
+            "safety_status": contract_statuses["safety_status"],
+            "core_analysis_status": contract_statuses["core_analysis_status"],
+            "category_enrichment_status": contract_statuses["category_enrichment_status"],
+            "pricing_status": contract_statuses["pricing_status"],
+            "copy_status": contract_statuses["copy_status"],
+            "seller_review_status": contract_statuses["seller_review_status"],
+            "publish_blockers": json.dumps(draft_contract["publish_blockers"]),
+            "required_actions": json.dumps(draft_contract["required_actions"]),
         },
+    )
+    pricing_artifact_id = await draft_contracts.record_analysis_artifact(
+        db,
+        draft_id=draft_id,
+        stage=draft_contracts.STAGE_PRICING,
+        status=contract_statuses["pricing_status"],
+        input_payload={
+            **payload.model_dump(exclude_none=True),
+            "provider_metrics": _metric_payload(price_metric),
+        },
+        output_payload=price_result,
+        provider=_pricing_artifact_provider(price_result),
+        model=_pricing_artifact_model(price_result),
+        latency_ms=_artifact_latency(None, price_metric),
+        input_tokens=_artifact_token(price_metric, "input_tokens"),
+        output_tokens=_artifact_token(price_metric, "output_tokens"),
+        cached_tokens=_artifact_token(price_metric, "cached_tokens"),
+    )
+    await draft_contracts.record_ai_field_values(
+        db,
+        draft_id=draft_id,
+        detected=detected,
+        artifact_id=pricing_artifact_id,
+    )
+    await draft_contracts.record_pricing_field_values(
+        db,
+        draft_id=draft_id,
+        price_result=price_result,
+        artifact_id=pricing_artifact_id,
+    )
+    await draft_contracts.record_seller_field_confirmations(
+        db,
+        draft_id=draft_id,
+        fields=payload.model_dump(exclude_none=True),
     )
     await db.commit()
 
@@ -1465,6 +1734,7 @@ async def refresh_ai_draft_price(
         expires_at=row["expires_at"] or datetime.now(timezone.utc),
         needs_identifier=_category_needs_identifier(detected.category_slug),
         fallback_reason=fallback_reason,
+        analysis_contract=draft_contract,
     )
 
 
@@ -1872,8 +2142,40 @@ async def create_from_draft(
         )
 
     # Mark the draft consumed
+    await draft_contracts.record_seller_field_confirmations(
+        db,
+        draft_id=payload.draft_id,
+        fields={
+            **final_review_fields,
+            "price": payload.price,
+            "original_price": original_price,
+            "imei_1": payload.imei_1,
+            "imei_2": payload.imei_2,
+            "serial_number": serial_number,
+        },
+    )
+    await draft_contracts.record_analysis_artifact(
+        db,
+        draft_id=payload.draft_id,
+        stage=draft_contracts.STAGE_SELLER_CONFIRMATION,
+        status="success",
+        input_payload={
+            "category_slug": category_slug,
+            "photo_count": len(photo_urls),
+            "listing_id": str(listing_id),
+        },
+        output_payload=seller_review_snapshot,
+        provider="owmee",
+        model=None,
+    )
     await db.execute(
-        text("UPDATE listing_drafts SET status = 'consumed' WHERE id = :id"),
+        text("""
+            UPDATE listing_drafts
+            SET status = 'consumed',
+                seller_review_status = 'confirmed',
+                required_actions = '[]'::jsonb
+            WHERE id = :id
+        """),
         {"id": payload.draft_id},
     )
 
@@ -2175,13 +2477,13 @@ async def draft_from_images(
     from app.modules.identity_auth.user_location import get_user_location
 
     location_task = _timed_step(timings, "location_ms", get_user_location(db, user.user_id))
-    photo_urls, _original_keys_unused = await _timed_step(
+    photo_urls, original_keys = await _timed_step(
         timings,
         "store_ms",
         _store_draft_photos(image_pairs, user_id=user.user_id, draft_id=draft_id),
     )
-    detected, (_lat, _lng, _city, user_state) = await asyncio.gather(
-        _timed_step(timings, "vision_ms", _detect_from_images_bounded(image_pairs)),
+    (detected, vision_metric), (_lat, _lng, _city, user_state) = await asyncio.gather(
+        _timed_step(timings, "vision_ms", _detect_from_images_bounded_with_metrics(image_pairs)),
         location_task,
     )
     detected = _with_canonical_category(detected)
@@ -2207,8 +2509,8 @@ async def draft_from_images(
         detected = _mark_hero_cleanup_deferred(detected, selected_index=hero_index)
     timings["cleanup_ms"] = 0
 
-    async def price_step() -> dict:
-        return await _estimate_price_bounded(
+    async def price_step() -> tuple[dict, dict]:
+        return await _estimate_price_bounded_with_metrics(
             price_estimator.estimate_price(
                 db,
                 brand=detected.brand,
@@ -2218,12 +2520,13 @@ async def draft_from_images(
                 state=user_state,
                 category_slug=detected.category_slug,
                 detected_item_type=detected.detected_item_type,
-                allow_ai_fallback=not vision_price_available and not analysis_failed,
+                allow_ai_fallback=False,
             )
         )
 
-    price_result = await _timed_step(timings, "price_ms", price_step())
+    price_result, price_metric = await _timed_step(timings, "price_ms", price_step())
 
+    stored_photo_urls = list(photo_urls)
     photo_urls = move_hero_first(photo_urls, hero_index)
 
     # Note: ai_failed:* flags are NOT a hard reject. The seller can still
@@ -2240,6 +2543,9 @@ async def draft_from_images(
     price_result = _apply_price_fallbacks(price_result, detected)
     if price_result["source"] == "none" and fallback_reason is None:
         fallback_reason = price_result.get("reasoning")
+    draft_contract = draft_contracts.build_draft_contract(detected, price_result, fast_path=True)
+    contract_statuses = draft_contract["statuses"]
+    await draft_contracts.upsert_category_field_definitions(db, detected.category_slug)
 
     # Persist draft
     step_started = perf_counter()
@@ -2247,22 +2553,104 @@ async def draft_from_images(
         text("""
             INSERT INTO listing_drafts (
                 id, user_id, photo_urls, ai_response, suggested_price,
-                comparables_count, ai_model, status
+                comparables_count, ai_model, status,
+                category_slug, category_schema_version, draft_revision,
+                image_set_hash, safety_status, core_analysis_status,
+                category_enrichment_status, pricing_status, copy_status,
+                seller_review_status, publish_blockers, required_actions
             )
             VALUES (
                 :id, :uid, :photo_urls, CAST(:ai_response AS JSONB),
-                :price, :ccount, :model, 'open'
+                :price, :ccount, :model, 'open',
+                :category_slug, :category_schema_version, 1,
+                :image_set_hash, :safety_status, :core_analysis_status,
+                :category_enrichment_status, :pricing_status, :copy_status,
+                :seller_review_status, CAST(:publish_blockers AS JSONB),
+                CAST(:required_actions AS JSONB)
             )
         """).bindparams(bindparam("photo_urls", type_=PGARRAY(SAString))),
         {
             "id": draft_id,
             "uid": user.user_id,
             "photo_urls": photo_urls,
-            "ai_response": _draft_ai_response_json(detected, price_result),
+            "ai_response": _draft_ai_response_json(detected, price_result, contract=draft_contract),
             "price": price_result.get("price"),
             "ccount": price_result.get("comparables_count", 0),
             "model": ai_provider.current_vision_model(),
+            "category_slug": draft_contract["category_slug"],
+            "category_schema_version": draft_contract["category_schema_version"],
+            "image_set_hash": draft_contracts.image_set_hash_from_pairs(image_pairs),
+            "safety_status": contract_statuses["safety_status"],
+            "core_analysis_status": contract_statuses["core_analysis_status"],
+            "category_enrichment_status": contract_statuses["category_enrichment_status"],
+            "pricing_status": contract_statuses["pricing_status"],
+            "copy_status": contract_statuses["copy_status"],
+            "seller_review_status": contract_statuses["seller_review_status"],
+            "publish_blockers": json.dumps(draft_contract["publish_blockers"]),
+            "required_actions": json.dumps(draft_contract["required_actions"]),
         },
+    )
+    await draft_contracts.record_draft_images(
+        db,
+        draft_id=draft_id,
+        display_keys=stored_photo_urls,
+        image_pairs=image_pairs,
+        original_keys=original_keys,
+    )
+    vision_artifact_id = await draft_contracts.record_analysis_artifact(
+        db,
+        draft_id=draft_id,
+        stage=draft_contracts.STAGE_VISION_CORE,
+        status=contract_statuses["core_analysis_status"],
+        input_payload={
+            "analysis_mode": "fast_draft",
+            "image_count": len(image_pairs),
+            "bytes_total": sum(len(b) for b, _ in image_pairs),
+            "media_resolution": "low",
+            "provider_metrics": _metric_payload(vision_metric),
+        },
+        output_payload=detected.model_dump(),
+        model=ai_provider.current_vision_model(),
+        prompt_version="vision_fast_v1",
+        latency_ms=_artifact_latency(timings.get("vision_ms"), vision_metric),
+        input_tokens=_artifact_token(vision_metric, "input_tokens"),
+        output_tokens=_artifact_token(vision_metric, "output_tokens"),
+        cached_tokens=_artifact_token(vision_metric, "cached_tokens"),
+        error_code=fallback_reason if ai_failed else None,
+    )
+    await draft_contracts.record_ai_field_values(
+        db,
+        draft_id=draft_id,
+        detected=detected,
+        artifact_id=vision_artifact_id,
+    )
+    pricing_artifact_id = await draft_contracts.record_analysis_artifact(
+        db,
+        draft_id=draft_id,
+        stage=draft_contracts.STAGE_PRICING,
+        status=contract_statuses["pricing_status"],
+        input_payload={
+            "category_slug": detected.category_slug,
+            "brand": detected.brand,
+            "model": detected.model,
+            "storage": detected.storage,
+            "condition": detected.condition_guess or "good",
+            "state": user_state,
+            "provider_metrics": _metric_payload(price_metric),
+        },
+        output_payload=price_result,
+        provider=_pricing_artifact_provider(price_result),
+        model=_pricing_artifact_model(price_result),
+        latency_ms=_artifact_latency(timings.get("price_ms"), price_metric),
+        input_tokens=_artifact_token(price_metric, "input_tokens"),
+        output_tokens=_artifact_token(price_metric, "output_tokens"),
+        cached_tokens=_artifact_token(price_metric, "cached_tokens"),
+    )
+    await draft_contracts.record_pricing_field_values(
+        db,
+        draft_id=draft_id,
+        price_result=price_result,
+        artifact_id=pricing_artifact_id,
     )
     await db.commit()
     timings["persist_ms"] = _ms_since(step_started)
@@ -2298,6 +2686,7 @@ async def draft_from_images(
         expires_at=expires_at,
         needs_identifier=_category_needs_identifier(detected.category_slug),
         fallback_reason=fallback_reason,
+        analysis_contract=draft_contract,
     )
 
 # ── End Sprint 8 Phase 2.1 multi-image block ─────────────────────────────  # SPRINT8_PHASE2_GEMINI_V2

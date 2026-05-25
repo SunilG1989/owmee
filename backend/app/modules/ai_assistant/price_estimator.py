@@ -220,15 +220,6 @@ async def estimate_price(
                     "reasoning": f"Median of {len(rows)} similar listings sold in last 90 days.",
                 }
 
-    if not allow_ai_fallback:
-        return {
-            "price": None,
-            "source": "none",
-            "comparables": comparables_objs[:5],
-            "comparables_count": len(rows),
-            "reasoning": "Not enough comparables. Vision price is available, so text price fallback was skipped.",
-        }
-
     generic = _generic_item_price(
         category_slug=category_slug,
         detected_item_type=detected_item_type,
@@ -239,6 +230,15 @@ async def estimate_price(
         generic["comparables"] = comparables_objs[:5]
         generic["comparables_count"] = len(rows)
         return generic
+
+    if not allow_ai_fallback:
+        return {
+            "price": None,
+            "source": "none",
+            "comparables": comparables_objs[:5],
+            "comparables_count": len(rows),
+            "reasoning": "Not enough comparables. Text AI price fallback was skipped for fast draft readiness.",
+        }
 
     # ── Phase 2: AI fallback ───────────────────────────────────────────────
     ai = await ai_provider.estimate_price(

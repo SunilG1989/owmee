@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from uuid import uuid4
@@ -294,7 +295,7 @@ async def test_draft_from_images_vision_timeout_persists_manual_draft(monkeypatc
         return (12.9, 77.6, "Bengaluru", "Karnataka")
 
     monkeypatch.setattr(router, "VISION_TIMEOUT_SECONDS", 0.01)
-    monkeypatch.setattr(router.ai_provider, "detect_from_images", slow_detect_from_images)
+    monkeypatch.setattr(router.ai_provider, "detect_fast_from_images", slow_detect_from_images)
     monkeypatch.setattr(router.price_estimator, "estimate_price", fake_estimate_price)
     monkeypatch.setattr(router, "process_listing_image_bytes", fake_process_listing_image_bytes)
     monkeypatch.setattr(router, "clean_hero_background", fail_if_cleanup_runs)
@@ -328,7 +329,8 @@ async def test_single_image_draft_defers_hero_cleanup_for_legacy_clients(monkeyp
     db = _FakeDB()
     user = SimpleNamespace(user_id=uuid4())
 
-    async def fake_detect_from_image(image_bytes, content_type):
+    async def fake_detect_fast_from_images(images):
+        image_bytes, content_type = images[0]
         assert image_bytes == b"single"
         assert content_type == "image/jpeg"
         return AIDetected(
@@ -360,7 +362,7 @@ async def test_single_image_draft_defers_hero_cleanup_for_legacy_clients(monkeyp
     async def fake_get_user_location(db, user_id):
         return (12.9, 77.6, "Bengaluru", "Karnataka")
 
-    monkeypatch.setattr(router.ai_provider, "detect_from_image", fake_detect_from_image)
+    monkeypatch.setattr(router.ai_provider, "detect_fast_from_images", fake_detect_fast_from_images)
     monkeypatch.setattr(router.price_estimator, "estimate_price", fake_estimate_price)
     monkeypatch.setattr(router, "process_listing_image_bytes", fake_process_listing_image_bytes)
     monkeypatch.setattr(router, "clean_hero_background", fail_if_cleanup_runs)
@@ -394,7 +396,7 @@ async def test_draft_from_images_selects_and_promotes_ai_hero_without_inline_cle
     user = SimpleNamespace(user_id=uuid4())
     seen_images: list[tuple[bytes, str]] = []
 
-    async def fake_detect_from_images(images):
+    async def fake_detect_fast_from_images(images):
         seen_images.extend(images)
         return AIDetected(
             category_slug="kids-utility",
@@ -427,7 +429,7 @@ async def test_draft_from_images_selects_and_promotes_ai_hero_without_inline_cle
     async def fake_get_user_location(db, user_id):
         return (12.9, 77.6, "Bengaluru", "Karnataka")
 
-    monkeypatch.setattr(router.ai_provider, "detect_from_images", fake_detect_from_images)
+    monkeypatch.setattr(router.ai_provider, "detect_fast_from_images", fake_detect_fast_from_images)
     monkeypatch.setattr(router.price_estimator, "estimate_price", fake_estimate_price)
     monkeypatch.setattr(router, "process_listing_image_bytes", fake_process_listing_image_bytes)
     monkeypatch.setattr(router, "clean_hero_background", fail_if_cleanup_runs)
@@ -457,6 +459,15 @@ async def test_draft_from_images_selects_and_promotes_ai_hero_without_inline_cle
     assert saved_urls[1].endswith("_0.jpg.display.webp")
     assert saved_urls[2].endswith("_1.jpg.display.webp")
     assert saved_urls[3].endswith("_3.jpg.display.webp")
+    saved_ai = json.loads(db.insert_params["ai_response"])
+    saved_contract = saved_ai["_owmee_contract"]
+    assert db.insert_params["category_slug"] == saved_contract["category_slug"]
+    assert db.insert_params["category_schema_version"] == saved_contract["category_schema_version"]
+    assert db.insert_params["safety_status"] == saved_contract["statuses"]["safety_status"]
+    assert db.insert_params["core_analysis_status"] == saved_contract["statuses"]["core_analysis_status"]
+    assert db.insert_params["pricing_status"] == saved_contract["statuses"]["pricing_status"]
+    assert json.loads(db.insert_params["publish_blockers"]) == saved_contract["publish_blockers"]
+    assert json.loads(db.insert_params["required_actions"]) == saved_contract["required_actions"]
     cleanup = response.detected.image_set_quality["hero_image_cleanup"]
     assert cleanup["status"] == "queued_after_listing"
     assert cleanup["provider"] == "owmee-media-worker"

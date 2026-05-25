@@ -1153,6 +1153,7 @@ export interface AIDraftResponse {
   expires_at: string;
   needs_identifier: boolean;
   fallback_reason: string | null;
+  analysis_contract?: Record<string, unknown>;
 }
 
 export interface AIDraftUploadSlot {

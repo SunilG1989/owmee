@@ -15,6 +15,9 @@ from app.modules.ai_assistant.schemas import AIDetected
 class AIListingProvider(Protocol):
     def current_vision_model(self) -> str: ...
     def current_text_model(self) -> str: ...
+    def reset_call_metrics(self) -> None: ...
+    def consume_call_metrics(self, operation: str | None = None) -> list[dict[str, Any]]: ...
+    async def detect_fast_from_images(self, images: list[tuple[bytes, str]]) -> AIDetected: ...
     async def detect_from_images(self, images: list[tuple[bytes, str]]) -> AIDetected: ...
     async def detect_from_image(self, image_bytes: bytes, content_type: str = "image/jpeg") -> AIDetected: ...
     async def extract_identifier(
@@ -50,6 +53,15 @@ class _GeminiListingProvider:
 
     def current_text_model(self) -> str:
         return self._client.current_text_model()
+
+    def reset_call_metrics(self) -> None:
+        self._client.reset_call_metrics()
+
+    def consume_call_metrics(self, operation: str | None = None) -> list[dict[str, Any]]:
+        return self._client.consume_call_metrics(operation)
+
+    async def detect_fast_from_images(self, images: list[tuple[bytes, str]]) -> AIDetected:
+        return await self._client.detect_fast_from_images(images)
 
     async def detect_from_images(self, images: list[tuple[bytes, str]]) -> AIDetected:
         return await self._client.detect_from_images(images)
@@ -119,8 +131,20 @@ def current_text_model() -> str:
     return get_ai_listing_provider().current_text_model()
 
 
+def reset_call_metrics() -> None:
+    get_ai_listing_provider().reset_call_metrics()
+
+
+def consume_call_metrics(operation: str | None = None) -> list[dict[str, Any]]:
+    return get_ai_listing_provider().consume_call_metrics(operation)
+
+
 async def detect_from_images(images: list[tuple[bytes, str]]) -> AIDetected:
     return await get_ai_listing_provider().detect_from_images(images)
+
+
+async def detect_fast_from_images(images: list[tuple[bytes, str]]) -> AIDetected:
+    return await get_ai_listing_provider().detect_fast_from_images(images)
 
 
 async def detect_from_image(

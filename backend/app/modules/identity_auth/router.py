@@ -347,9 +347,13 @@ async def send_otp(body: SendOTPRequest, request: Request):
     if fixed_otp_enabled:
         otp = _whitelist_otp_code()
         logger.info("otp.fixed_code", phone=phone, otp=otp, sms_provider=settings.sms_provider)
+        await _store_otp(phone, otp, count_rate=False)
+        logger.info("otp.sent", phone_suffix=phone[-4:], provider="fixed")
+        return
     else:
         otp = _generate_otp()
-    await _store_otp(phone, otp, count_rate=not fixed_otp_enabled)
+
+    await _store_otp(phone, otp, count_rate=True)
     try:
         await _send_sms(phone, otp)
     except HTTPException:

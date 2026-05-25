@@ -266,6 +266,41 @@ Append to the v2 list:
 
 ---
 
+## Launch-blocker critical backlog
+
+The following items are not optional polish. They must be resolved before
+public/paid launch because they protect money movement, seller readiness,
+buyer refunds, operational visibility, and order recovery.
+
+- **Production database readiness:** keep Postgres as the single source of
+  truth, but move off the smallest pilot database tier before paid launch.
+  Confirm backups/PITR, storage headroom, connection limits, migration
+  safety, and restore playbook. Do not introduce a second primary database
+  to compensate for an undersized Postgres instance.
+- **Durable order side effects:** add a Postgres-backed outbox/scheduled-job
+  mechanism, processed by the existing worker, for payment-captured events,
+  seller-readiness expiry, refund retries, payout eligibility, order-status
+  notifications, and provider reconciliation. Critical order state must be
+  recoverable from Postgres after API/worker restarts.
+- **Redis role hardening:** Redis can continue serving cache, rate limits,
+  geocoding cache, and AI/media async helpers during pilot, but it must not
+  be the source of truth for payments, refunds, payout, or seller-readiness
+  deadlines. If Redis queues become critical, either back them with Postgres
+  state or split cache and queue workloads with an eviction policy appropriate
+  for queues.
+- **Observability and stuck-order alerts:** enable production error tracking,
+  add DB/Redis/R2/provider readiness checks outside the cheap `/health`
+  endpoint, and alert on stuck states: payment captured without seller
+  readiness, readiness confirmed without pickup assignment, pickup completed
+  without routing, delivered without auto-complete/payout eligibility, and
+  refund processing/failed.
+- **No premature platform sprawl:** do not add Kafka, Elasticsearch/OpenSearch,
+  vector DB, analytics warehouse, or a separate notification service for
+  launch. Use Postgres indexes, Redis caching, R2, the existing worker, and
+  provider adapters until measured volume proves the need.
+
+---
+
 ## Open amendment work (future sprints)
 
 The following are acknowledged but deferred:

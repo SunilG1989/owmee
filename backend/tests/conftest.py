@@ -5,10 +5,17 @@ import os
 import sys
 from pathlib import Path
 
-# Required settings fields (Settings has no defaults for these). We stuff
-# valid-looking values so pydantic-settings is satisfied at import time.
-os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test:test@localhost/test")
-os.environ.setdefault("SYNC_DATABASE_URL", "postgresql://test:test@localhost/test")
+# Required settings fields (Settings has no defaults for these). Unit tests only
+# need valid-looking values, but backend E2E tests connect to Postgres. Default
+# to the repo's Docker Compose database on localhost so `pytest backend/tests`
+# works on a fresh local dev stack; CI can still override these explicitly.
+_DEFAULT_TEST_DATABASE_URL = "postgresql+asyncpg://owmee:owmee_dev_password@localhost:5432/owmee_test"
+_DEFAULT_TEST_SYNC_DATABASE_URL = "postgresql://owmee:owmee_dev_password@localhost:5432/owmee_test"
+os.environ.setdefault("DATABASE_URL", os.environ.get("OWMEE_TEST_DATABASE_URL", _DEFAULT_TEST_DATABASE_URL))
+os.environ.setdefault(
+    "SYNC_DATABASE_URL",
+    os.environ.get("OWMEE_TEST_SYNC_DATABASE_URL", _DEFAULT_TEST_SYNC_DATABASE_URL),
+)
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 os.environ.setdefault("R2_ENDPOINT", "https://example.r2.cloudflarestorage.com")
 os.environ.setdefault("R2_ACCESS_KEY", "test")

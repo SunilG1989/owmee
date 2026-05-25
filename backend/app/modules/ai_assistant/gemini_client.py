@@ -18,9 +18,9 @@ What v2 changes:
      constrain the decoder. Output is guaranteed to satisfy the type, or
      the SDK errors out — no markdown fences, no truncation, no parse step.
 
-  2. thinking_budget = 0. For pure structured extraction (vision detect,
-     IMEI OCR, price quote), we don't want internal reasoning eating the
-     output budget. Disable it.
+  2. Thinking is minimized/disabled where the model supports it. For Gemini 3
+     Flash, the SDK exposes thinking_level=MINIMAL; for Gemini 2.5 Flash,
+     thinking_budget=0 disables thinking.
 
   3. max_output_tokens raised to safe ceilings.
 
@@ -45,14 +45,17 @@ Acceptable for prototype; revisit before production with real seller data.
 """
 from __future__ import annotations
 
+from contextvars import ContextVar
 from io import BytesIO
 import logging
 import os
+from time import perf_counter
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from app.modules.ai_assistant.prompts import (
+    PROMPT_VISION_FAST_DETECT,
     PROMPT_VISION_DETECT,
     PROMPT_IMEI_OCR,
     PROMPT_SERIAL_OCR,
@@ -69,8 +72,14 @@ log = logging.getLogger(__name__)
 
 DEFAULT_GEMINI_VISION_MODEL = "gemini-3-flash-preview"
 DEFAULT_GEMINI_TEXT_MODEL = "gemini-3-flash-preview"
+VISION_FAST_MAX_OUTPUT_TOKENS = 2048
 VISION_DETECT_MAX_OUTPUT_TOKENS = 8192
 PRICE_ESTIMATE_MAX_OUTPUT_TOKENS = 2048
+
+_GEMINI_CALL_METRICS: ContextVar[tuple[dict[str, Any], ...]] = ContextVar(
+    "owmee_gemini_call_metrics",
+    default=(),
+)
 
 _DEPRECATED_MODEL_ALIASES = {
     # Google shut down Gemini 3 Pro Preview on 2026-03-09. Some Render envs
@@ -214,6 +223,41 @@ class _GeminiVisionOut(BaseModel):
     field_evidence: _FieldEvidence = _FieldEvidence()
 
 
+class _GeminiVisionFastOut(BaseModel):
+    """Low-latency first-pass schema.
+
+    This intentionally excludes rich description, MRP, full spec enrichment, and
+    long evidence narratives. The seller gets an editable draft quickly; deeper
+    enrichment can run later without blocking the ready state.
+    """
+    category_slug: str | None = None
+    category_confidence: float = 0.0
+    category_rationale: str | None = None
+    detected_item_type: str | None = None
+    brand: str | None = None
+    model: str | None = None
+    storage: str | None = None
+    color: str | None = None
+    condition_guess: str | None = None
+    screen_condition: str | None = None
+    body_condition: str | None = None
+    defects: list[str] = []
+    suggested_price_inr: int | None = None
+    price_confidence: float = 0.0
+    price_reasoning: str | None = None
+    title_suggestion: str | None = None
+    flags: list[str] = []
+    image_set_quality: _ImageSetQuality = _ImageSetQuality()
+    hero_image_index: int | None = None
+    hero_image_rationale: str | None = None
+    manual_review_required: bool = False
+    auto_publish_candidate: bool = False
+    blocking_reasons: list[str] = []
+    seller_edit_fields: list[str] = []
+    field_confidence: _FieldConfidence = _FieldConfidence()
+    field_evidence: _FieldEvidence = _FieldEvidence()
+
+
 class _GeminiIMEIOut(BaseModel):
     imei: str | None = None
     confidence: float = 0.0
@@ -304,6 +348,26 @@ def current_text_model() -> str:
     return _get_model("text")
 
 
+def reset_call_metrics() -> None:
+    _GEMINI_CALL_METRICS.set(())
+
+
+def consume_call_metrics(operation: str | None = None) -> list[dict[str, Any]]:
+    metrics = list(_GEMINI_CALL_METRICS.get())
+    if operation is None:
+        _GEMINI_CALL_METRICS.set(())
+        return metrics
+
+    matched = [metric for metric in metrics if metric.get("operation") == operation]
+    remaining = [metric for metric in metrics if metric.get("operation") != operation]
+    _GEMINI_CALL_METRICS.set(tuple(remaining))
+    return matched
+
+
+def _record_call_metric(metric: dict[str, Any]) -> None:
+    _GEMINI_CALL_METRICS.set((*_GEMINI_CALL_METRICS.get(), metric))
+
+
 def _thinking_config(types: Any, model: str, kind: str):
     """Use the right thinking control for Gemini 3 vs Gemini 2.5.
 
@@ -320,10 +384,88 @@ def _thinking_config(types: Any, model: str, kind: str):
                 else thinking_level.LOW
             )
             return types.ThinkingConfig(thinking_level=level)
-        return types.ThinkingConfig(thinking_budget=-1)
+        return types.ThinkingConfig(thinking_budget=0)
     if model.startswith("gemini-2.5-pro"):
         return types.ThinkingConfig(thinking_budget=-1)
     return types.ThinkingConfig(thinking_budget=0)
+
+
+def _low_media_resolution(types: Any):
+    media_resolution = getattr(types, "MediaResolution", None)
+    if media_resolution is None:
+        return None
+    return getattr(media_resolution, "MEDIA_RESOLUTION_LOW", None)
+
+
+def _usage_extra(resp: Any) -> dict[str, Any]:
+    usage = getattr(resp, "usage_metadata", None)
+    if usage is None:
+        return {}
+    return {
+        "input_tokens": getattr(usage, "prompt_token_count", None),
+        "output_tokens": getattr(usage, "candidates_token_count", None),
+        "total_tokens": getattr(usage, "total_token_count", None),
+        "cached_tokens": getattr(usage, "cached_content_token_count", None),
+        "thoughts_tokens": getattr(usage, "thoughts_token_count", None),
+    }
+
+
+async def _generate_content_with_metrics(
+    client: Any,
+    *,
+    operation: str,
+    model: str,
+    contents: Any,
+    config: Any,
+    image_count: int = 0,
+    bytes_total: int = 0,
+    media_resolution: str | None = None,
+):
+    started = perf_counter()
+    try:
+        resp = await client.aio.models.generate_content(
+            model=model,
+            contents=contents,
+            config=config,
+        )
+    except Exception as exc:
+        latency_ms = int((perf_counter() - started) * 1000)
+        metric = {
+            "operation": operation,
+            "provider": "gemini",
+            "model": model,
+            "status": "failed",
+            "latency_ms": latency_ms,
+            "image_count": image_count,
+            "bytes_total": bytes_total,
+            "media_resolution": media_resolution,
+            "error": f"{type(exc).__name__}: {str(exc)[:240]}",
+        }
+        _record_call_metric(metric)
+        log.warning(
+            "ai_assistant.gemini_call_failed",
+            extra=metric,
+        )
+        raise
+
+    latency_ms = int((perf_counter() - started) * 1000)
+    metric = {
+        "operation": operation,
+        "provider": "gemini",
+        "model": model,
+        "status": "success",
+        "latency_ms": latency_ms,
+        "image_count": image_count,
+        "bytes_total": bytes_total,
+        "media_resolution": media_resolution,
+        **_usage_extra(resp),
+    }
+    _record_call_metric(metric)
+    log.info(
+        "ai_assistant.gemini_call_timing",
+        extra=metric,
+    )
+    return resp
 
 
 def _normalize_media_type(content_type: str) -> str:
@@ -372,7 +514,119 @@ def _failed(reason: str) -> AIDetected:
     return AIDetected(flags=[f"ai_failed:{reason}"])
 
 
+def _vision_parts(
+    types: Any,
+    images: list[tuple[bytes, str]],
+    *,
+    media_resolution: Any | None = None,
+) -> list[Any]:
+    parts: list[Any] = []
+    parts.append(
+        "These photos show ONE proposed resale product from multiple angles. "
+        "Photo indexes are zero-based; use those indexes when setting hero_image_index."
+    )
+    for idx, (image_bytes, content_type) in enumerate(images):
+        part_kwargs = {
+            "data": image_bytes,
+            "mime_type": _normalize_media_type(content_type),
+        }
+        if media_resolution is not None:
+            part_kwargs["media_resolution"] = media_resolution
+        parts.append(f"Photo index {idx}:")
+        parts.append(types.Part.from_bytes(**part_kwargs))
+    return parts
+
+
+def _translate_fast_vision_response(parsed: "_GeminiVisionFastOut") -> AIDetected:
+    data = parsed.model_dump() if hasattr(parsed, "model_dump") else {}
+    data.setdefault("description_suggestion", None)
+    data.setdefault("mrp_inr", None)
+    data.setdefault("mrp_confidence", 0.0)
+    data.setdefault("mrp_source", None)
+    data.setdefault("mrp_reasoning", None)
+    return _translate_vision_response(_GeminiVisionOut(**data))
+
+
 # ── Vision: detect from one OR many images ───────────────────────────────
+
+
+async def detect_fast_from_images(
+    images: list[tuple[bytes, str]],
+) -> AIDetected:
+    """Low-latency first-pass vision call for draft readiness.
+
+    The full detect_from_images path remains available for enrichment, but the
+    initial seller wait should only pay for the fields needed to show an editable
+    draft safely.
+    """
+    if not images:
+        return _failed("no_images")
+
+    client = _get_client()
+    if client is None:
+        return _failed("no_client")
+
+    from google.genai import types
+
+    media_resolution = _low_media_resolution(types)
+    parts = _vision_parts(types, images, media_resolution=media_resolution)
+    media_resolution_name = str(media_resolution.value if hasattr(media_resolution, "value") else media_resolution or "")
+    model = _get_model("vision")
+    config = types.GenerateContentConfig(
+        system_instruction=PROMPT_VISION_FAST_DETECT,
+        response_mime_type="application/json",
+        response_schema=_GeminiVisionFastOut,
+        temperature=0.0,
+        max_output_tokens=VISION_FAST_MAX_OUTPUT_TOKENS,
+        media_resolution=media_resolution,
+        thinking_config=_thinking_config(types, model, "vision"),
+    )
+
+    try:
+        resp = await _generate_content_with_metrics(
+            client,
+            operation="vision_fast",
+            model=model,
+            contents=parts,
+            config=config,
+            image_count=len(images),
+            bytes_total=sum(len(image_bytes) for image_bytes, _ in images),
+            media_resolution=media_resolution_name,
+        )
+    except Exception as e:
+        log.warning(
+            "ai_assistant.vision_fast_api_failed",
+            extra={"error": f"{type(e).__name__}: {str(e)[:300]}"},
+        )
+        return _failed("api_error")
+
+    parsed = getattr(resp, "parsed", None)
+    if parsed is None:
+        raw = (resp.text or "").strip()
+        if not raw:
+            log.warning(
+                "ai_assistant.vision_fast_empty_response",
+                extra={
+                    "finish_reason": str(resp.candidates[0].finish_reason)
+                    if resp.candidates else "unknown",
+                    "thoughts": resp.usage_metadata.thoughts_token_count
+                    if resp.usage_metadata else None,
+                },
+            )
+            return _failed("empty_response")
+        import json
+        try:
+            data = json.loads(raw)
+            parsed = _GeminiVisionFastOut(**data)
+        except Exception as e:
+            log.warning(
+                "ai_assistant.vision_fast_parse_failed",
+                extra={"error": str(e)[:200], "raw": raw[:300]},
+            )
+            return _failed("parse_failed")
+
+    detected = _translate_fast_vision_response(parsed)
+    return _apply_post_processing_guardrails(detected)
 
 
 async def detect_from_images(
@@ -397,22 +651,7 @@ async def detect_from_images(
 
     from google.genai import types
 
-    parts: list[Any] = []
-    text_intro = (
-        "These photos show ONE product from multiple angles. "
-        "Combine signals from all photos, but stay evidence-led and avoid false precision. "
-        "Photos are provided with zero-based indexes; use those indexes "
-        "when setting hero_image_index."
-    )
-    parts.append(text_intro)
-    for idx, (image_bytes, content_type) in enumerate(images):
-        parts.append(f"Photo index {idx}:")
-        parts.append(
-            types.Part.from_bytes(
-                data=image_bytes,
-                mime_type=_normalize_media_type(content_type),
-            )
-        )
+    parts = _vision_parts(types, images)
 
     model = _get_model("vision")
     config = types.GenerateContentConfig(
@@ -425,10 +664,14 @@ async def detect_from_images(
     )
 
     try:
-        resp = await client.aio.models.generate_content(
+        resp = await _generate_content_with_metrics(
+            client,
+            operation="vision_full",
             model=model,
             contents=parts,
             config=config,
+            image_count=len(images),
+            bytes_total=sum(len(image_bytes) for image_bytes, _ in images),
         )
     except Exception as e:
         log.warning(
@@ -996,7 +1239,9 @@ async def regenerate_description(fields: dict[str, Any]) -> str:
     )
 
     try:
-        resp = await client.aio.models.generate_content(
+        resp = await _generate_content_with_metrics(
+            client,
+            operation="description_regen",
             model=model,
             contents=user_text,
             config=config,
@@ -1051,7 +1296,9 @@ async def estimate_price(
     )
 
     try:
-        resp = await client.aio.models.generate_content(
+        resp = await _generate_content_with_metrics(
+            client,
+            operation="price_text",
             model=model,
             contents=user_text,
             config=config,
