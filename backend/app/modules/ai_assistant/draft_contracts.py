@@ -263,6 +263,8 @@ def required_actions_for_detected(detected: AIDetected, price_result: dict | Non
     blockers = publish_blockers_for_detected(detected)
     if blockers:
         actions.append("retake_product_photos")
+    if detected.manual_review_required or any(str(flag).startswith("fast_quality:") for flag in (detected.flags or [])):
+        actions.append("review_ai_suggestions")
 
     category = canonical_category_slug(detected.category_slug, fallback_empty_to_others=False)
     if not category:

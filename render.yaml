@@ -137,6 +137,14 @@ services:
         value: gemini-3.1-flash-image-preview
       - key: IMAGE_CLEANUP_PROVIDER
         value: gemini
+      - key: AI_DRAFT_FAST_PATH_ENABLED
+        value: "true"
+      - key: AI_DRAFT_FULL_FALLBACK_ENABLED
+        value: "true"
+      - key: AI_DRAFT_SHADOW_FULL_ANALYSIS_ENABLED
+        value: "false"
+      - key: AI_DRAFT_FAST_MIN_CATEGORY_CONFIDENCE
+        value: "0.55"
 
   - type: worker
     name: owmee-worker
@@ -291,6 +299,14 @@ services:
         value: gemini-3.1-flash-image-preview
       - key: IMAGE_CLEANUP_PROVIDER
         value: gemini
+      - key: AI_DRAFT_FAST_PATH_ENABLED
+        value: "true"
+      - key: AI_DRAFT_FULL_FALLBACK_ENABLED
+        value: "true"
+      - key: AI_DRAFT_SHADOW_FULL_ANALYSIS_ENABLED
+        value: "false"
+      - key: AI_DRAFT_FAST_MIN_CATEGORY_CONFIDENCE
+        value: "0.55"
 
   - type: keyvalue
     name: owmee-redis

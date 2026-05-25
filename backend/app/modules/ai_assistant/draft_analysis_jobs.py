@@ -404,7 +404,11 @@ async def process_ai_draft_analysis(
         )
         price_result, price_metric = price_result
         price_result = ai_router._apply_price_fallbacks(price_result, detected)
-        draft_contract = draft_contracts.build_draft_contract(detected, price_result, fast_path=True)
+        draft_contract = draft_contracts.build_draft_contract(
+            detected,
+            price_result,
+            fast_path=ai_router._vision_contract_fast_path(vision_metric),
+        )
         contract_statuses = draft_contract["statuses"]
         persist_started = time.monotonic()
         await draft_contracts.upsert_category_field_definitions(session, detected.category_slug)
@@ -422,15 +426,15 @@ async def process_ai_draft_analysis(
             stage=draft_contracts.STAGE_VISION_CORE,
             status=contract_statuses["core_analysis_status"],
             input_payload={
-                "analysis_mode": "fast_draft",
+                "analysis_mode": ai_router._vision_analysis_mode(vision_metric),
                 "image_count": len(image_pairs),
                 "bytes_total": sum(len(b) for b, _ in image_pairs),
-                "media_resolution": "low",
+                "media_resolution": ai_router._vision_media_resolution(vision_metric),
                 "provider_metrics": ai_router._metric_payload(vision_metric),
             },
             output_payload=detected.model_dump(),
             model=ai_provider.current_vision_model(),
-            prompt_version="vision_fast_v1",
+            prompt_version=ai_router._vision_prompt_version(vision_metric),
             latency_ms=ai_router._artifact_latency(timings.get("vision_ms"), vision_metric),
             input_tokens=ai_router._artifact_token(vision_metric, "input_tokens"),
             output_tokens=ai_router._artifact_token(vision_metric, "output_tokens"),

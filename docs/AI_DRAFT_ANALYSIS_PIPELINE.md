@@ -15,8 +15,8 @@ multiple original photos in memory.
    job and marks the draft `processing`.
 6. Worker downloads one photo at a time, checks object size before download,
    normalizes photos for Gemini, creates display/thumb variants, runs the
-   low-latency Gemini fast-draft contract, estimates price without a second
-   text-LLM fallback, and marks the draft `open`.
+   configured Gemini draft strategy, estimates price without a second text-LLM
+   fallback, and marks the draft `open`.
 7. Mobile polls `GET /v1/listings/draft/{draft_id}/analysis/status` until the
    draft is `ready`, `failed`, or `expired`.
 
@@ -40,6 +40,17 @@ multiple original photos in memory.
 - The first Gemini pass is intentionally small: low media resolution, compact
   schema, no MRP/deep copy enrichment, and no serial text-pricing fallback before
   the draft becomes ready.
+- Fast vision is behind `AI_DRAFT_FAST_PATH_ENABLED`. Low-confidence fast
+  results fall back to full vision when `AI_DRAFT_FULL_FALLBACK_ENABLED=true`.
+  Fast results with safety blockers such as private info, stock/catalog image,
+  no product, or multiple items are not silently cleared by full fallback.
+- When full fallback is disabled or fails, weak fast results are marked for
+  seller review instead of being treated as publish-ready AI output.
+- `AI_DRAFT_SHADOW_FULL_ANALYSIS_ENABLED` can run full vision beside a fast
+  result and persist comparison metadata in `provider_metrics`. Keep this off
+  by default because it adds an extra Gemini call.
+- `AI_DRAFT_FAST_MIN_CATEGORY_CONFIDENCE` controls when category confidence is
+  considered too weak for fast-only handling.
 - Worker logs include queue wait, image processing, Gemini vision, pricing,
   persistence, and total timings so production latency can be traced by stage.
 - Gemini calls also emit durable provider instrumentation. `ai_analysis_artifacts`

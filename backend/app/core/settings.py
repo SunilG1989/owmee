@@ -62,6 +62,10 @@ class Settings(BaseSettings):
     ai_draft_analysis_stream_maxlen: int = 50000
     ai_draft_analysis_retry_max_attempts: int = 3
     ai_draft_analysis_read_block_ms: int = 2000
+    ai_draft_fast_path_enabled: bool = True
+    ai_draft_full_fallback_enabled: bool = True
+    ai_draft_shadow_full_analysis_enabled: bool = False
+    ai_draft_fast_min_category_confidence: float = 0.55
 
     # ── Temporal ───────────────────────────────────────────────────────────
     temporal_host: str = "localhost:7233"

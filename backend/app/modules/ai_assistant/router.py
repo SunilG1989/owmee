@@ -35,6 +35,7 @@ from sqlalchemy.dialects.postgresql import ARRAY as PGARRAY
 from sqlalchemy.types import String as SAString
 
 from app.core.dependencies import AuthUser, DBSession
+from app.core.settings import settings
 from app.core.storage import (
     generate_presigned_download_url,
     generate_presigned_upload_url,
@@ -578,6 +579,15 @@ def _metric_payload(metric: dict | None) -> dict:
         return {}
     keys = (
         "operation",
+        "analysis_mode",
+        "prompt_version",
+        "fallback_from_operation",
+        "fallback_reasons",
+        "fast_quality_reasons",
+        "fast_provider_metrics",
+        "full_fallback_provider_metrics",
+        "shadow_comparison",
+        "shadow_provider_metrics",
         "provider",
         "model",
         "status",
@@ -593,6 +603,137 @@ def _metric_payload(metric: dict | None) -> dict:
         "error",
     )
     return {key: metric.get(key) for key in keys if metric.get(key) is not None}
+
+
+def _vision_operation(mode: str) -> str:
+    return "vision_full" if mode == "full" else "vision_fast"
+
+
+def _vision_analysis_mode(metric: dict | None) -> str:
+    return str((metric or {}).get("analysis_mode") or "fast_draft")
+
+
+def _vision_prompt_version(metric: dict | None) -> str:
+    return str((metric or {}).get("prompt_version") or "vision_fast_v1")
+
+
+def _vision_media_resolution(metric: dict | None) -> str | None:
+    if (metric or {}).get("media_resolution"):
+        return (metric or {}).get("media_resolution")
+    operation = (metric or {}).get("operation")
+    analysis_mode = str((metric or {}).get("analysis_mode") or "")
+    if operation == "vision_fast" or analysis_mode.startswith("fast"):
+        return "low"
+    return None
+
+
+def _vision_contract_fast_path(metric: dict | None) -> bool:
+    return str((metric or {}).get("analysis_mode") or "").startswith("fast")
+
+
+def _blocking_photo_flags(detected: AIDetected) -> set[str]:
+    flags = {str(flag).strip().lower() for flag in (detected.flags or []) if str(flag).strip()}
+    quality = detected.image_set_quality or {}
+    if isinstance(quality, dict):
+        if quality.get("has_private_info") is True:
+            flags.add("personal_info")
+        if quality.get("is_stock_or_catalog_image_suspected") is True:
+            flags.add("stock_or_catalog_suspected")
+        if str(quality.get("overall_photo_quality") or "").lower() == "unusable":
+            flags.add("blurry")
+    return flags.intersection({
+        "nsfw",
+        "personal_info",
+        "multiple_items",
+        "no_product",
+        "blurry",
+        "packaging_only",
+        "screenshot_only",
+        "stock_or_catalog_suspected",
+    })
+
+
+def _fast_quality_reasons(detected: AIDetected) -> list[str]:
+    if _blocking_photo_flags(detected):
+        return []
+    reasons: list[str] = []
+    ai_failures = [
+        str(flag).split(":", 1)[1]
+        for flag in (detected.flags or [])
+        if str(flag).startswith("ai_failed:")
+    ]
+    if ai_failures:
+        if any(reason in {"parse_failed", "empty_response"} for reason in ai_failures):
+            reasons.append("fast_ai_failed")
+        return reasons
+    if not detected.category_slug:
+        reasons.append("missing_category")
+    elif (detected.category_confidence or 0.0) < settings.ai_draft_fast_min_category_confidence:
+        reasons.append("low_category_confidence")
+    if detected.manual_review_required and not _blocking_photo_flags(detected):
+        reasons.append("manual_review_required")
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for reason in reasons:
+        if reason in seen:
+            continue
+        seen.add(reason)
+        deduped.append(reason)
+    return deduped
+
+
+def _fast_full_fallback_reasons(detected: AIDetected) -> list[str]:
+    if not settings.ai_draft_full_fallback_enabled:
+        return []
+    return _fast_quality_reasons(detected)
+
+
+def _can_run_shadow_full_analysis(detected: AIDetected) -> bool:
+    if _blocking_photo_flags(detected):
+        return False
+    if detected.manual_review_required:
+        return False
+    if any(str(flag).startswith("ai_failed:") for flag in (detected.flags or [])):
+        return False
+    return bool(detected.category_slug)
+
+
+def _mark_fast_quality_review_required(detected: AIDetected, reasons: list[str]) -> AIDetected:
+    if not reasons:
+        return detected
+    flags = list(detected.flags or [])
+    for reason in reasons:
+        flag = f"fast_quality:{reason}"
+        if flag not in flags:
+            flags.append(flag)
+    edit_fields = list(detected.seller_edit_fields or [])
+    for field in ("category_slug", "brand", "model", "condition_guess"):
+        if field not in edit_fields:
+            edit_fields.append(field)
+    return detected.model_copy(
+        update={
+            "flags": flags,
+            "manual_review_required": True,
+            "auto_publish_candidate": False,
+            "seller_edit_fields": edit_fields,
+        },
+    )
+
+
+def _shadow_comparison(primary: AIDetected, shadow: AIDetected) -> dict:
+    return {
+        "category_match": primary.category_slug == shadow.category_slug,
+        "primary_category_slug": primary.category_slug,
+        "shadow_category_slug": shadow.category_slug,
+        "primary_category_confidence": primary.category_confidence,
+        "shadow_category_confidence": shadow.category_confidence,
+        "brand_match": (primary.brand or "").strip().lower() == (shadow.brand or "").strip().lower(),
+        "model_match": (primary.model or "").strip().lower() == (shadow.model or "").strip().lower(),
+        "condition_match": primary.condition_guess == shadow.condition_guess,
+        "hero_match": primary.hero_image_index == shadow.hero_image_index,
+        "primary_flags": list(primary.flags or []),
+        "shadow_flags": list(shadow.flags or []),
+    }
 
 
 def _artifact_latency(fallback_ms: int | None, metric: dict | None) -> int | None:
@@ -615,56 +756,105 @@ def _artifact_token(metric: dict | None, key: str) -> int | None:
         return None
 
 
-async def _detect_from_images_bounded(image_pairs: list[tuple[bytes, str]]) -> AIDetected:
+async def _detect_from_images_once(image_pairs: list[tuple[bytes, str]], *, mode: str) -> AIDetected:
     try:
+        detector = ai_provider.detect_from_images if mode == "full" else ai_provider.detect_fast_from_images
         return await asyncio.wait_for(
-            ai_provider.detect_fast_from_images(image_pairs),
+            detector(image_pairs),
             timeout=VISION_TIMEOUT_SECONDS,
         )
     except asyncio.TimeoutError:
         log.warning(
             "ai_assistant.vision_timeout",
-            extra={"timeout_seconds": VISION_TIMEOUT_SECONDS, "image_count": len(image_pairs)},
+            extra={
+                "timeout_seconds": VISION_TIMEOUT_SECONDS,
+                "image_count": len(image_pairs),
+                "mode": mode,
+            },
         )
         return AIDetected(flags=["ai_failed:vision_timeout"])
     except Exception as e:
         log.warning(
             "ai_assistant.vision_unhandled_error",
-            extra={"error": f"{type(e).__name__}: {str(e)[:240]}"},
+            extra={"error": f"{type(e).__name__}: {str(e)[:240]}", "mode": mode},
         )
         return AIDetected(flags=["ai_failed:vision_error"])
+
+
+async def _detect_from_images_bounded(image_pairs: list[tuple[bytes, str]]) -> AIDetected:
+    mode = "fast" if settings.ai_draft_fast_path_enabled else "full"
+    return await _detect_from_images_once(image_pairs, mode=mode)
 
 
 async def _detect_from_images_bounded_with_metrics(image_pairs: list[tuple[bytes, str]]) -> tuple[AIDetected, dict]:
+    mode = "fast" if settings.ai_draft_fast_path_enabled else "full"
     ai_provider.reset_call_metrics()
-    detected = await _detect_from_images_bounded(image_pairs)
-    return detected, _latest_metric(ai_provider.consume_call_metrics("vision_fast"), "vision_fast")
+    detected = await _detect_from_images_once(image_pairs, mode=mode)
+    metric = _latest_metric(ai_provider.consume_call_metrics(_vision_operation(mode)), _vision_operation(mode))
+    metric = {
+        **metric,
+        "analysis_mode": "fast_draft" if mode == "fast" else "full_draft",
+        "prompt_version": "vision_fast_v1" if mode == "fast" else "vision_full_v2",
+    }
+
+    fast_quality_reasons = _fast_quality_reasons(detected) if mode == "fast" else []
+    fallback_reasons = _fast_full_fallback_reasons(detected) if mode == "fast" else []
+    if fallback_reasons:
+        ai_provider.reset_call_metrics()
+        full_detected = await _detect_from_images_once(image_pairs, mode="full")
+        full_metric = _latest_metric(ai_provider.consume_call_metrics("vision_full"), "vision_full")
+        if not any(str(flag).startswith("ai_failed:") for flag in (full_detected.flags or [])):
+            metric = {
+                **full_metric,
+                "analysis_mode": "full_fallback_from_fast",
+                "prompt_version": "vision_full_v2",
+                "fallback_from_operation": "vision_fast",
+                "fallback_reasons": fallback_reasons,
+                "fast_provider_metrics": _metric_payload(metric),
+            }
+            detected = full_detected
+        else:
+            detected = _mark_fast_quality_review_required(detected, fallback_reasons)
+            metric = {
+                **metric,
+                "analysis_mode": "fast_draft_full_fallback_failed",
+                "fallback_reasons": fallback_reasons,
+                "full_fallback_provider_metrics": _metric_payload(full_metric),
+            }
+    elif mode == "fast" and fast_quality_reasons:
+        detected = _mark_fast_quality_review_required(detected, fast_quality_reasons)
+        metric = {
+            **metric,
+            "analysis_mode": "fast_draft_review_required",
+            "fast_quality_reasons": fast_quality_reasons,
+        }
+    elif (
+        mode == "fast"
+        and settings.ai_draft_shadow_full_analysis_enabled
+        and _can_run_shadow_full_analysis(detected)
+    ):
+        ai_provider.reset_call_metrics()
+        shadow_detected = await _detect_from_images_once(image_pairs, mode="full")
+        shadow_metric = _latest_metric(ai_provider.consume_call_metrics("vision_full"), "vision_full")
+        metric = {
+            **metric,
+            "shadow_comparison": _shadow_comparison(detected, shadow_detected),
+            "shadow_provider_metrics": _metric_payload({
+                **shadow_metric,
+                "analysis_mode": "shadow_full_from_fast",
+                "prompt_version": "vision_full_v2",
+            }),
+        }
+
+    return detected, metric
 
 
 async def _detect_from_image_bounded(image_bytes: bytes, content_type: str) -> AIDetected:
-    try:
-        return await asyncio.wait_for(
-            ai_provider.detect_fast_from_images([(image_bytes, content_type)]),
-            timeout=VISION_TIMEOUT_SECONDS,
-        )
-    except asyncio.TimeoutError:
-        log.warning(
-            "ai_assistant.vision_timeout",
-            extra={"timeout_seconds": VISION_TIMEOUT_SECONDS, "image_count": 1},
-        )
-        return AIDetected(flags=["ai_failed:vision_timeout"])
-    except Exception as e:
-        log.warning(
-            "ai_assistant.vision_unhandled_error",
-            extra={"error": f"{type(e).__name__}: {str(e)[:240]}"},
-        )
-        return AIDetected(flags=["ai_failed:vision_error"])
+    return await _detect_from_images_bounded([(image_bytes, content_type)])
 
 
 async def _detect_from_image_bounded_with_metrics(image_bytes: bytes, content_type: str) -> tuple[AIDetected, dict]:
-    ai_provider.reset_call_metrics()
-    detected = await _detect_from_image_bounded(image_bytes, content_type)
-    return detected, _latest_metric(ai_provider.consume_call_metrics("vision_fast"), "vision_fast")
+    return await _detect_from_images_bounded_with_metrics([(image_bytes, content_type)])
 
 
 async def _estimate_price_bounded(coro) -> dict:
@@ -1166,7 +1356,11 @@ async def draft_from_image(
     price_result = _apply_price_fallbacks(price_result, detected)
     if price_result["source"] == "none":
         fallback_reason = price_result.get("reasoning")
-    draft_contract = draft_contracts.build_draft_contract(detected, price_result, fast_path=True)
+    draft_contract = draft_contracts.build_draft_contract(
+        detected,
+        price_result,
+        fast_path=_vision_contract_fast_path(vision_metric),
+    )
     contract_statuses = draft_contract["statuses"]
     await draft_contracts.upsert_category_field_definitions(db, detected.category_slug)
 
@@ -1225,15 +1419,15 @@ async def draft_from_image(
         stage=draft_contracts.STAGE_VISION_CORE,
         status=contract_statuses["core_analysis_status"],
         input_payload={
-            "analysis_mode": "fast_draft",
+            "analysis_mode": _vision_analysis_mode(vision_metric),
             "image_count": 1,
             "bytes_total": len(image_bytes),
-            "media_resolution": "low",
+            "media_resolution": _vision_media_resolution(vision_metric),
             "provider_metrics": _metric_payload(vision_metric),
         },
         output_payload=detected.model_dump(),
         model=ai_provider.current_vision_model(),
-        prompt_version="vision_fast_v1",
+        prompt_version=_vision_prompt_version(vision_metric),
         latency_ms=_artifact_latency(timings.get("vision_ms"), vision_metric),
         input_tokens=_artifact_token(vision_metric, "input_tokens"),
         output_tokens=_artifact_token(vision_metric, "output_tokens"),
@@ -2543,7 +2737,11 @@ async def draft_from_images(
     price_result = _apply_price_fallbacks(price_result, detected)
     if price_result["source"] == "none" and fallback_reason is None:
         fallback_reason = price_result.get("reasoning")
-    draft_contract = draft_contracts.build_draft_contract(detected, price_result, fast_path=True)
+    draft_contract = draft_contracts.build_draft_contract(
+        detected,
+        price_result,
+        fast_path=_vision_contract_fast_path(vision_metric),
+    )
     contract_statuses = draft_contract["statuses"]
     await draft_contracts.upsert_category_field_definitions(db, detected.category_slug)
 
@@ -2603,15 +2801,15 @@ async def draft_from_images(
         stage=draft_contracts.STAGE_VISION_CORE,
         status=contract_statuses["core_analysis_status"],
         input_payload={
-            "analysis_mode": "fast_draft",
+            "analysis_mode": _vision_analysis_mode(vision_metric),
             "image_count": len(image_pairs),
             "bytes_total": sum(len(b) for b, _ in image_pairs),
-            "media_resolution": "low",
+            "media_resolution": _vision_media_resolution(vision_metric),
             "provider_metrics": _metric_payload(vision_metric),
         },
         output_payload=detected.model_dump(),
         model=ai_provider.current_vision_model(),
-        prompt_version="vision_fast_v1",
+        prompt_version=_vision_prompt_version(vision_metric),
         latency_ms=_artifact_latency(timings.get("vision_ms"), vision_metric),
         input_tokens=_artifact_token(vision_metric, "input_tokens"),
         output_tokens=_artifact_token(vision_metric, "output_tokens"),

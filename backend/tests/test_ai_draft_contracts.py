@@ -78,6 +78,25 @@ def test_fast_path_contract_defers_enrichment_and_copy_status():
     assert contract["statuses"]["pricing_status"] == "success"
 
 
+def test_fast_quality_flag_requires_seller_review_action():
+    detected = AIDetected(
+        category_slug="smartphones",
+        category_confidence=0.2,
+        condition_guess="good",
+        flags=["fast_quality:low_category_confidence"],
+        manual_review_required=True,
+    )
+
+    contract = draft_contracts.build_draft_contract(
+        detected,
+        {"price": 24000, "source": "vision"},
+        fast_path=True,
+    )
+
+    assert "review_ai_suggestions" in contract["required_actions"]
+    assert contract["statuses"]["seller_review_status"] == "pending"
+
+
 def test_category_change_reconciliation_invalidates_category_price_and_copy_fields():
     reconciliation = draft_contracts.category_change_reconciliation(
         "smartphones",
