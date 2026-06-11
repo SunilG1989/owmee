@@ -92,6 +92,11 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "RS256"
     jwt_access_token_expire_minutes: int = 15
     jwt_refresh_token_expire_days: int = 30
+    # Issuer/audience pinning — tokens are minted with these claims and rejected
+    # on decode if they don't match, so a token signed by a different service
+    # sharing the same keypair (or a future second token type) can't be replayed.
+    jwt_issuer: str = "owmee"
+    jwt_audience: str = "owmee-app"
 
     # ── App secret ─────────────────────────────────────────────────────────
     secret_key: str
@@ -155,6 +160,16 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_production_config(self) -> "Settings":
+        # ── Always-on invariants (enforced in every environment) ──────────────
+        # JWT must use an asymmetric algorithm. With a symmetric alg (HS*), the
+        # "public" verification key doubles as the signing secret, so anyone
+        # holding the (intentionally distributable) public key can forge tokens.
+        if not self.jwt_algorithm.upper().startswith(("RS", "ES", "PS")):
+            raise ValueError(
+                "JWT_ALGORITHM must be asymmetric (RS*/ES*/PS*); "
+                f"got {self.jwt_algorithm!r}. Symmetric algorithms enable token forgery."
+            )
+
         if not self.is_production:
             return self
 
@@ -169,6 +184,32 @@ class Settings(BaseSettings):
         origins = [origin for origin in self.cors_origins if origin]
         if not origins or any("localhost" in origin or "127.0.0.1" in origin for origin in origins):
             raise ValueError("ALLOWED_ORIGINS must contain only production client origins.")
+
+        # ── OTP / SMS: no mock-delivery bypass or static pilot OTP in prod ────
+        # A mock SMS provider makes the fixed pilot OTP (otp_whitelist_code,
+        # default 123456) accept for any phone, and a populated OTP_WHITELIST
+        # does the same for listed numbers — both are full account-takeover
+        # vectors if they reach production. Refuse to boot with either.
+        sms_provider = (self.sms_provider or "").strip().lower()
+        if sms_provider in {"", "mock", "dev", "log"}:
+            raise ValueError(
+                "SMS_PROVIDER must be a real delivery provider in production "
+                "(not empty/mock/dev/log) — a mock provider enables the static OTP bypass."
+            )
+        if self.otp_whitelist.strip():
+            raise ValueError(
+                "OTP_WHITELIST must be empty in production — whitelisted numbers "
+                "authenticate with a static code, which is a login bypass."
+            )
+
+        # ── Fraud: no mock auto-allow in prod while enforcement is enabled ────
+        fraud_provider = (self.fraud_provider or "").strip().lower()
+        if self.fraud_enforcement_enabled and fraud_provider in {"", "mock", "dev", "log"}:
+            raise ValueError(
+                "FRAUD_PROVIDER must be a real provider in production when "
+                "FRAUD_ENFORCEMENT_ENABLED is true — a mock provider silently "
+                "bypasses every fraud step-up/block decision."
+            )
 
         return self
 

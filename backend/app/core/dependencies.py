@@ -20,9 +20,12 @@ class CurrentUser:
         buyer_eligible: bool = False,
         seller_tier: str = "not_eligible",
         role: str = "user",
+        issued_at: int | None = None,
     ):
         self.user_id = UUID(user_id)
         self.session_id = session_id
+        # Unix epoch (seconds) the token was minted — used by revocation checks.
+        self.issued_at = issued_at
         self.phone_verified = phone_verified
         self.tier = tier
         self.kyc_status = kyc_status
@@ -61,6 +64,7 @@ async def _extract_user(authorization: str | None) -> CurrentUser | None:
             ),
             # ── Sprint 4 / Pass 2 ────────────────────────────────────────────
             role=payload.get("role", "user"),
+            issued_at=payload.get("iat"),
         )
     except (ValueError, KeyError):
         return None
@@ -90,6 +94,15 @@ async def require_auth(
                 "error": "ACCOUNT_SUSPENDED",
                 "message": "This account is suspended. Please contact support.",
             },
+        )
+    # Server-side kill switch: honor logout / suspension / "log out everywhere"
+    # on the still-valid access token instead of waiting for it to expire.
+    from app.core.revocation import is_revoked
+
+    if await is_revoked(user.session_id, str(user.user_id), user.issued_at):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"error": "SESSION_REVOKED", "message": "Please sign in again."},
         )
     return user
 
