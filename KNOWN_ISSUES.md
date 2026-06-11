@@ -99,3 +99,38 @@ upgrade body against the live schema first.
 
 **Priority:** medium-high. Blocks any environment that bootstraps
 from migrations rather than a SQL dump.
+
+## Z. Deferred items from the 2026-06-11 principal-architect hardening pass
+
+The `hardening/principal-review-fixes` branch fixed the auth, money-safety, and
+foundation issues from the review. Two foundation items were **deliberately
+deferred** rather than changed in that pass, with rationale:
+
+### Z.1 Temporal workflows lack `get_version`/`workflow.patched()` gates
+
+**Where:** `app/modules/{kyc,transactions,disputes,field_executive}/workflows.py`
+
+**What:** CLAUDE.md requires a version gate on every workflow change. None of the
+`run()` methods have one. Adding ceremonial anchors to *running* workflows is
+replay-safe but low-value without an accompanying logic change, and the Python
+SDK primitive is `workflow.patched()` (not Go/Java `get_version`), so the
+convention text and the SDK disagree.
+
+**Decision:** introduce a `workflow.patched("...")` gate as part of the *next*
+real change to each workflow's `run()`, verified against a Temporal replay test —
+not as an untested bulk edit to live workflows. The Wave 2 refund fixes touched
+only **activities** (run-once, results recorded), which do not cause replay
+non-determinism, so no gate was needed there.
+
+### Z.2 Benign migration fork (0018 / 0025 both descend from 0024)
+
+**Where:** `app/db/migrations/versions/0018_community_launch.py`,
+`0025_offer_v2.py`
+
+**What:** Two branches descend from `0024_kyc_to_badge` and re-converge at the
+`0032_merge_heads` diamond. `alembic heads` resolves to a single head.
+
+**Decision:** the fork is already applied to every environment, so rewriting the
+`down_revision` chain of applied migrations is higher-risk than the benign,
+self-healing fork. The 0018 docstring was corrected to match its real parent;
+the lineage itself is left intact. `alembic upgrade head` remains unambiguous.

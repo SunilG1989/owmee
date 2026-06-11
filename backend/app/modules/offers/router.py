@@ -717,100 +717,11 @@ async def mark_notification_read(notification_id: UUID, current_user: BasicUser,
         await db.commit()
 
 
-# ── Activity ticker (home screen social proof) ──────────────────────────────────
-
-@router.get("/listings/activity")
-async def listing_activity(db: DBSession, city: str | None = Query(None)):
-    """
-    Home screen social proof: "14 deals completed today · 8 new listings in Bengaluru"
-    India UX: First-time users need proof that real people are active here.
-    """
-    from datetime import timedelta
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
-
-    # Deals completed today
-    deals_result = await db.execute(
-        select(Transaction).where(
-            Transaction.status.in_(["completed", "auto_completed"]),
-            Transaction.completed_at >= cutoff,
-        )
-    )
-    deals_today = len(deals_result.scalars().all())
-
-    # New listings in last 24h (optionally in city)
-    q = select(Listing).where(
-        Listing.status == "active",
-        Listing.published_at >= cutoff,
-    )
-    if city:
-        q = q.where(Listing.city.ilike(f"%{city}%"))
-    new_listings_result = await db.execute(q)
-    new_listings = len(new_listings_result.scalars().all())
-
-    # Total active listings in city
-    q2 = select(Listing).where(Listing.status == "active")
-    if city:
-        q2 = q2.where(Listing.city.ilike(f"%{city}%"))
-    total_result = await db.execute(q2)
-    total_active = len(total_result.scalars().all())
-
-    return {
-        "deals_completed_today": deals_today,
-        "new_listings_24h": new_listings,
-        "total_active_listings": total_active,
-        "city": city,
-        # Human-readable ticker strings for the UI
-        "ticker_deals": f"{deals_today} deal{'s' if deals_today != 1 else ''} completed today" if deals_today else "Be the first to complete a deal today",
-        "ticker_listings": f"{new_listings} new listing{'s' if new_listings != 1 else ''} in {city or 'your city'} today" if new_listings else f"{total_active} listings available",
-    }
-
-
-@router.get("/listings/new-since-visit")
-async def new_since_last_visit(
-    current_user: BasicUser,
-    db: DBSession,
-    city: str | None = Query(None),
-):
-    """
-    Home screen retention: 'New since your last visit'
-    Updates user.last_seen_at on every call — so next visit shows delta.
-    India UX: gives users a reason to return daily.
-    """
-    from app.modules.identity_auth.models import User as UserModel
-
-    # Fetch user's last_seen_at
-    user_result = await db.execute(select(UserModel).where(UserModel.id == current_user.user_id))
-    user = user_result.scalar_one_or_none()
-
-    last_seen = user.last_seen_at if user and user.last_seen_at else None
-    now = datetime.now(timezone.utc)
-
-    # Update last_seen_at to now (for next call)
-    if user:
-        user.last_seen_at = now
-        await db.commit()
-
-    if not last_seen:
-        # First visit — show last 24h of listings as "new"
-        last_seen = now - timedelta(hours=24)
-
-    q = select(Listing).where(
-        Listing.status == "active",
-        Listing.published_at >= last_seen,
-    )
-    if city:
-        q = q.where(Listing.city.ilike(f"%{city}%"))
-    q = q.order_by(Listing.published_at.desc()).limit(10)
-    result = await db.execute(q)
-    listings = result.scalars().all()
-
-    from app.modules.listings.router import _fmt_card
-    return {
-        "since": last_seen.isoformat(),
-        "count": len(listings),
-        "listings": [_fmt_card(l) for l in listings],
-        "label": f"{len(listings)} new listing{'s' if len(listings) != 1 else ''} since your last visit" if listings else "You're all caught up",
-    }
+# ── Activity ticker + "new since visit" ─────────────────────────────────────────
+# These live in app/modules/listings/router.py (GET /v1/listings/activity and
+# /v1/listings/new-since-visit). The listings router is registered before the
+# offers router in main.py, so the copies that used to live here were dead,
+# shadowed routes that also collided on OpenAPI operation_id. Removed.
 
 
 # ── Payment webhook ──────────────────────────────────────────────────────────────

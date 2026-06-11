@@ -155,7 +155,7 @@ async def request_data_erasure(
             INSERT INTO kyc_events
                 (id, verification_id, user_id, event_type, step, result, payload, created_at)
             VALUES
-                (gen_random_uuid(), :ver_id, :uid, 'dpdp_erasure', 'erasure', 'completed',
+                (uuid_generate_v4(), :ver_id, :uid, 'dpdp_erasure', 'erasure', 'completed',
                  :payload::jsonb, :now)
         """), {
             "ver_id": str(ver_id),
