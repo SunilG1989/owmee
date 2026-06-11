@@ -1,8 +1,14 @@
 """Sprint 7 / Phase 1: Community launch infrastructure
 
 Revision ID: 0018_community_launch
-Revises: 0017_listing_source_reviewed_by
+Revises: 0024_kyc_to_badge
 Create Date: 2026-04-22
+
+NOTE: despite the low number, this migration was re-parented onto
+0024_kyc_to_badge (see down_revision below). The community branch and the
+0025_offer_v2 branch both descend from 0024 and re-converge at the
+0032_merge_heads diamond — a benign, already-applied fork. The docstring is
+kept consistent with the actual down_revision to avoid misleading ordering.
 
 Company B (hyperlocal community resale) launch foundation.
 

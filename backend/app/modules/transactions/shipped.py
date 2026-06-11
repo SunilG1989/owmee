@@ -184,7 +184,7 @@ async def initiate_shipment(
     await db.execute(text("""
         INSERT INTO shipments (id, transaction_id, status, logistics_provider,
             pickup_address, gross_amount, created_at, updated_at)
-        VALUES (gen_random_uuid(), :txn_id, 'pending', :provider,
+        VALUES (uuid_generate_v4(), :txn_id, 'pending', :provider,
             :pickup_address, :gross_amount, now(), now())
     """), {
         "txn_id": str(transaction_id),

@@ -5,14 +5,25 @@ from sqlalchemy import engine_from_config, pool
 from alembic import context
 from app.db.session import Base
 
+# Import EVERY model module so Base.metadata is complete. If any are missing,
+# `alembic revision --autogenerate` is blind to those tables and will propose
+# spurious DROPs (or miss real drift). Keep this list in sync with the modules
+# that define models (mirrors tests/conftest._preload_all_models).
+import app.modules.admin.models  # noqa
+import app.modules.community.models  # noqa
+import app.modules.compliance.models  # noqa
+import app.modules.disputes.models  # noqa
+import app.modules.field_executive.models  # noqa
 import app.modules.identity_auth.models  # noqa
 import app.modules.kyc.models  # noqa
 import app.modules.listings.models  # noqa
+import app.modules.media.models  # noqa
+import app.modules.notifications.models  # noqa
 import app.modules.offers.models  # noqa
+import app.modules.payments.models  # noqa
+import app.modules.risk.models  # noqa
 import app.modules.transactions.models  # noqa
-import app.modules.admin.models  # noqa
 import app.modules.verification.models  # noqa
-# offers models now include NotificationPreference (imported via offers.models)
 
 config = context.config
 

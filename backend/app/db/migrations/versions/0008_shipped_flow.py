@@ -22,7 +22,7 @@ def upgrade() -> None:
         op.create_table(
             'shipments',
             sa.Column('id', sa.UUID(), nullable=False, primary_key=True,
-                      server_default=sa.text('gen_random_uuid()')),
+                      server_default=sa.text('uuid_generate_v4()')),
             sa.Column('transaction_id', sa.UUID(), sa.ForeignKey('transactions.id'), nullable=False),
             sa.Column('status', sa.String(30), nullable=False, server_default='pending'),
             sa.Column('logistics_provider', sa.String(50), nullable=True),
@@ -71,7 +71,7 @@ def upgrade() -> None:
         op.create_table(
             'tds_ledger',
             sa.Column('id', sa.UUID(), nullable=False, primary_key=True,
-                      server_default=sa.text('gen_random_uuid()')),
+                      server_default=sa.text('uuid_generate_v4()')),
             sa.Column('seller_id', sa.UUID(), nullable=False),
             sa.Column('transaction_id', sa.UUID(), nullable=False),
             sa.Column('financial_year', sa.String(10), nullable=False),
