@@ -15,8 +15,13 @@ RUN pip install --no-cache-dir -r requirements.prod.txt
 
 COPY . .
 
-# Generate keys if not mounted
-RUN mkdir -p /app/keys
+# Run as a non-root user — any RCE in the app should not get root in-container.
+# Create the user, give it the app dir + a keys dir it can write to (the dev
+# keypair is generated at boot when JWT keys aren't mounted).
+RUN mkdir -p /app/keys \
+    && useradd --create-home --uid 10001 appuser \
+    && chown -R appuser:appuser /app
+USER appuser
 
 EXPOSE 8000
 

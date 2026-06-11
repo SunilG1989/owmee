@@ -4,10 +4,9 @@ Admin seed script — Epic 6
 POST /v1/admin/seed    — create first admin user (dev only)
 GET  /v1/admin/users   — list admin users (dev only)
 """
-import hashlib
-
 import structlog
 from fastapi import APIRouter, HTTPException
+from passlib.context import CryptContext
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
@@ -18,9 +17,14 @@ from app.modules.admin.models import AdminUser
 logger = structlog.get_logger()
 router = APIRouter()
 
+# Must match the verifier used by the login paths (admin_web.router and
+# admin.auth_router). The old unsalted sha256 produced hashes that bcrypt
+# could not verify — a seeded admin literally could not log in.
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
 
 def _hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode()).hexdigest()
+    return pwd_context.hash(password)
 
 
 class CreateAdminRequest(BaseModel):
@@ -35,7 +39,8 @@ async def seed_admin_user(body: CreateAdminRequest, db: DBSession):
     if settings.env == "production":
         raise HTTPException(status_code=404)
 
-    result = await db.execute(select(AdminUser).where(AdminUser.email == body.email))
+    email = body.email.lower()  # login looks up by lowercased email
+    result = await db.execute(select(AdminUser).where(AdminUser.email == email))
     if result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail={
             "error": "EMAIL_EXISTS",
@@ -43,7 +48,7 @@ async def seed_admin_user(body: CreateAdminRequest, db: DBSession):
         })
 
     admin = AdminUser(
-        email=body.email,
+        email=email,
         name=body.name,
         role=body.role,
         password_hash=_hash_password(body.password),
