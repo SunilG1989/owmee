@@ -16,7 +16,13 @@ os.environ.setdefault(
     "SYNC_DATABASE_URL",
     os.environ.get("OWMEE_TEST_SYNC_DATABASE_URL", _DEFAULT_TEST_SYNC_DATABASE_URL),
 )
-os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
+# Dev Redis runs with --requirepass (see docker-compose.yml); include the
+# password so Redis-backed tests (rate-limit, revocation) actually exercise it
+# instead of silently failing open. CI can override via REDIS_URL.
+os.environ.setdefault(
+    "REDIS_URL",
+    os.environ.get("OWMEE_TEST_REDIS_URL", "redis://:owmee_redis_password@localhost:6379/0"),
+)
 os.environ.setdefault("R2_ENDPOINT", "https://example.r2.cloudflarestorage.com")
 os.environ.setdefault("R2_ACCESS_KEY", "test")
 os.environ.setdefault("R2_SECRET_KEY", "test")

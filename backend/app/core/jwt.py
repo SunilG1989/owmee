@@ -9,6 +9,25 @@ from jose import JWTError, jwt
 from app.core.settings import settings
 
 
+_ASYMMETRIC_PREFIXES = ("RS", "ES", "PS")
+
+
+def _require_asymmetric_algorithm() -> str:
+    """Return the configured algorithm, refusing symmetric ones.
+
+    Defense in depth alongside the settings validator: a symmetric algorithm
+    (HS*) would turn the published public key into the signing secret, enabling
+    token forgery. We never sign or verify with one.
+    """
+    alg = settings.jwt_algorithm
+    if not alg.upper().startswith(_ASYMMETRIC_PREFIXES):
+        raise RuntimeError(
+            f"Refusing to use symmetric JWT algorithm {alg!r}; "
+            "configure an asymmetric algorithm (RS*/ES*/PS*)."
+        )
+    return alg
+
+
 def _normalise_inline_key(value: str) -> str:
     return value.replace("\\n", "\n").strip()
 
@@ -138,8 +157,10 @@ def create_access_token(
         "exp": expire,
         "jti": str(uuid4()),
         "type": "access",
+        "iss": settings.jwt_issuer,
+        "aud": settings.jwt_audience,
     }
-    return jwt.encode(payload, _private_key(), algorithm=settings.jwt_algorithm)
+    return jwt.encode(payload, _private_key(), algorithm=_require_asymmetric_algorithm())
 
 
 def create_refresh_token(user_id: str, session_id: str) -> str:
@@ -152,8 +173,10 @@ def create_refresh_token(user_id: str, session_id: str) -> str:
         "exp": expire,
         "jti": str(uuid4()),
         "type": "refresh",
+        "iss": settings.jwt_issuer,
+        "aud": settings.jwt_audience,
     }
-    return jwt.encode(payload, _private_key(), algorithm=settings.jwt_algorithm)
+    return jwt.encode(payload, _private_key(), algorithm=_require_asymmetric_algorithm())
 
 
 def decode_token(token: str) -> dict:
@@ -161,7 +184,9 @@ def decode_token(token: str) -> dict:
         return jwt.decode(
             token,
             _public_key(),
-            algorithms=[settings.jwt_algorithm],
+            algorithms=[_require_asymmetric_algorithm()],
+            audience=settings.jwt_audience,
+            issuer=settings.jwt_issuer,
         )
     except JWTError as e:
         raise ValueError(f"Invalid token: {e}") from e

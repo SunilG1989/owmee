@@ -92,6 +92,11 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "RS256"
     jwt_access_token_expire_minutes: int = 15
     jwt_refresh_token_expire_days: int = 30
+    # Issuer/audience pinning — tokens are minted with these claims and rejected
+    # on decode if they don't match, so a token signed by a different service
+    # sharing the same keypair (or a future second token type) can't be replayed.
+    jwt_issuer: str = "owmee"
+    jwt_audience: str = "owmee-app"
 
     # ── App secret ─────────────────────────────────────────────────────────
     secret_key: str
@@ -157,6 +162,16 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_production_config(self) -> "Settings":
+        # ── Always-on invariants (enforced in every environment) ──────────────
+        # JWT must use an asymmetric algorithm. With a symmetric alg (HS*), the
+        # "public" verification key doubles as the signing secret, so anyone
+        # holding the (intentionally distributable) public key can forge tokens.
+        if not self.jwt_algorithm.upper().startswith(("RS", "ES", "PS")):
+            raise ValueError(
+                "JWT_ALGORITHM must be asymmetric (RS*/ES*/PS*); "
+                f"got {self.jwt_algorithm!r}. Symmetric algorithms enable token forgery."
+            )
+
         if not self.is_production:
             return self
 

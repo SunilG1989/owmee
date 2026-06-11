@@ -117,6 +117,9 @@ def limit_by_ip(prefix: str, limit: RateLimit) -> Callable[[Request], Awaitable[
 # doesn't reach our SMS-partner billing.
 OTP_PER_PHONE = RateLimit(max_requests=3, window_seconds=3600)
 OTP_PER_IP = RateLimit(max_requests=20, window_seconds=3600)
+# OTP verify: cap guesses per IP so an attacker can't sidestep the per-phone
+# lockout by interleaving resends (which mint a fresh code) with guess bursts.
+OTP_VERIFY_PER_IP = RateLimit(max_requests=30, window_seconds=3600)
 
 # Listing create: 30 per hour per user. Real sellers list <5/day; bots that
 # script-create flood the feed.

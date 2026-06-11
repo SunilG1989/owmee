@@ -9,7 +9,7 @@ import structlog
 
 from app.core.dependencies import AuthUser, DBSession
 from app.core.jwt import create_access_token, create_refresh_token
-from app.core.rate_limit import OTP_PER_IP, limit_by_ip
+from app.core.rate_limit import OTP_PER_IP, OTP_VERIFY_PER_IP, limit_by_ip
 from app.core.redis import get_redis
 from app.core.settings import settings
 from app.modules.identity_auth.sms_adapter import (
@@ -115,8 +115,10 @@ async def _store_otp(phone: str, otp: str, *, count_rate: bool = True) -> None:
         rate_key = _otp_rate_key(phone)
         await redis.incr(rate_key)
         await redis.expire(rate_key, 3600)
-    # Reset attempt counter/lock so a fresh OTP send clears stale lockouts.
-    await redis.delete(_otp_attempts_key(phone), _otp_lock_key(phone))
+    # NOTE: deliberately do NOT clear the failed-attempt counter or lock here.
+    # Clearing them on every resend let an attacker reset the lockout by
+    # interleaving otp/send between guess bursts. Attempts/lock are cleared
+    # only on a successful verification (see _verify_otp).
 
 
 async def _verify_otp(phone: str, submitted_otp: str) -> None:
@@ -372,6 +374,10 @@ async def verify_otp(
 ):
     """Verify OTP and issue JWT. Creates user on first visit."""
     phone = _normalise_phone(body.phone_number)
+    # Per-IP guess cap on verify, independent of the per-phone lockout, so an
+    # attacker can't reset the lockout by interleaving resends with guesses.
+    if not (settings.env == "development" or _uses_fixed_otp(phone)):
+        await limit_by_ip("otp_verify_ip", OTP_VERIFY_PER_IP)(request)
     await _verify_otp(phone, body.otp)
 
     user = await _get_or_create_user(db, phone)
@@ -470,6 +476,15 @@ async def refresh_token(body: RefreshRequest, db: DBSession):
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail={"error": "USER_INACTIVE"})
 
+    # A suspended account must not be able to mint fresh access tokens off a
+    # still-valid refresh token, otherwise suspension is unenforceable for the
+    # full refresh window.
+    if user.auth_state == "suspended":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"error": "ACCOUNT_SUSPENDED", "message": "This account is suspended. Please contact support."},
+        )
+
     role = await _resolve_role(db, user.id)
     new_access = _issue_access_token(user, payload["session_id"], role=role)
 
@@ -500,6 +515,12 @@ async def logout(current_user: AuthUser, body: RefreshRequest, db: DBSession):
     if session:
         session.is_revoked = True
         session.revoked_at = datetime.now(timezone.utc)
+
+    # Kill the still-valid access token now, instead of waiting for it to expire.
+    from app.core.revocation import revoke_session
+
+    await revoke_session(current_user.session_id)
+    await db.commit()
 
     logger.info("auth.logout", user_id=str(current_user.user_id))
 
@@ -597,6 +618,7 @@ async def get_public_profile(user_id: str, db: DBSession):
         "trust_score": user.trust_score,
         "kyc_verified": user.tier == "verified",  # preserved for backward compat
         "seller_tier": user.seller_tier,  # Sprint 4
-        "city": user.address_city,
+        # NOTE: address_city is user PII and is deliberately NOT exposed on this
+        # unauthenticated endpoint (the docstring's "does NOT expose PII" promise).
         "member_since": user.created_at.isoformat() if user.created_at else None,
     }
