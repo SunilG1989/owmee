@@ -128,3 +128,6 @@ LISTING_CREATE_PER_USER = RateLimit(max_requests=30, window_seconds=3600)
 # Offer create: 60 per hour per user. Buyers might browse aggressively but
 # >1 offer per minute sustained is bot-like.
 OFFER_CREATE_PER_USER = RateLimit(max_requests=60, window_seconds=3600)
+
+# Admin login: throttle online password guessing. 10 attempts / 15 min / IP.
+ADMIN_LOGIN_PER_IP = RateLimit(max_requests=10, window_seconds=900)

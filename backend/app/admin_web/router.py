@@ -13,6 +13,10 @@ Why server-rendered (not React/Next):
 """
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import UUID
@@ -25,6 +29,8 @@ from passlib.context import CryptContext
 from sqlalchemy import and_, select, text
 
 from app.core.dependencies import DBSession
+from app.core.rate_limit import ADMIN_LOGIN_PER_IP, limit_by_ip
+from app.core.settings import settings
 from app.modules.admin.models import AdminUser as AdminUserModel
 from app.modules.identity_auth.models import User
 from app.modules.listings.models import Listing
@@ -41,9 +47,47 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Cookie name we set on successful login. HttpOnly so JS can't read it.
 COOKIE = "owmee_admin"
+COOKIE_MAX_AGE = 86400  # 24h — one ops shift.
+
+# Money-capable admin roles. SUPER_ADMIN is always admitted by the gate.
+ADMIN_MONEY_ROLES = ("L2_REVIEWER", "FINANCE_OPS")
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
+
+def _sign_cookie(admin_id: str) -> str:
+    """Produce a tamper-proof, time-stamped cookie value.
+
+    Previously the cookie was the raw admin UUID — anyone who learned an
+    admin's id (they leak in logs/URLs/audit rows) could forge a session and
+    it could not be expired server-side. We now HMAC the (id, issued_at) with
+    the app secret so the value is unforgeable and carries its own expiry.
+    """
+    issued = str(int(time.time()))
+    msg = f"{admin_id}:{issued}"
+    sig = hmac.new(settings.secret_key.encode(), msg.encode(), hashlib.sha256).hexdigest()
+    return base64.urlsafe_b64encode(f"{msg}:{sig}".encode()).decode()
+
+
+def _unsign_cookie(value: str, *, max_age: int = COOKIE_MAX_AGE) -> str | None:
+    """Return the admin id if the cookie signature is valid and unexpired."""
+    try:
+        raw = base64.urlsafe_b64decode(value.encode()).decode()
+        admin_id, issued, sig = raw.rsplit(":", 2)
+    except Exception:
+        return None
+    expected = hmac.new(
+        settings.secret_key.encode(), f"{admin_id}:{issued}".encode(), hashlib.sha256
+    ).hexdigest()
+    if not hmac.compare_digest(expected, sig):
+        return None
+    try:
+        if int(time.time()) - int(issued) > max_age:
+            return None
+    except ValueError:
+        return None
+    return admin_id
+
 
 async def _verify_admin(db, email: str, password: str) -> AdminUserModel | None:
     res = await db.execute(select(AdminUserModel).where(AdminUserModel.email == email.lower()))
@@ -59,14 +103,14 @@ async def require_admin_cookie(
     db: DBSession,
     owmee_admin: str | None = Cookie(default=None, alias=COOKIE),
 ) -> AdminUserModel:
-    """Look up the admin by id from the cookie. Cookie value is the admin
-    UUID (stable, simple). For real production we'd sign the cookie OR
-    use a JWT; for hyperlocal pilot this is enough as long as the cookie
-    is HttpOnly + Secure (we set both)."""
+    """Authenticate the admin from a signed, time-stamped cookie."""
     if not owmee_admin:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="login_required")
+    admin_id_str = _unsign_cookie(owmee_admin)
+    if not admin_id_str:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="bad_cookie")
     try:
-        admin_id = UUID(owmee_admin)
+        admin_id = UUID(admin_id_str)
     except ValueError:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="bad_cookie")
     res = await db.execute(select(AdminUserModel).where(AdminUserModel.id == admin_id))
@@ -74,6 +118,23 @@ async def require_admin_cookie(
     if not admin or not admin.is_active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="admin_inactive")
     return admin
+
+
+def require_admin_cookie_roles(*allowed: str):
+    """Factory: admit only admins whose role is in `allowed` (SUPER_ADMIN
+    always admitted). Used to gate money-moving admin-web actions so a
+    low-privilege agent can't issue refunds / release payouts."""
+
+    async def _dep(admin: AdminUserModel = Depends(require_admin_cookie)) -> AdminUserModel:
+        role = (admin.role or "").upper()
+        if role == "SUPER_ADMIN" or role in allowed:
+            return admin
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="insufficient_role")
+
+    return _dep
+
+
+require_admin_money_role = require_admin_cookie_roles(*ADMIN_MONEY_ROLES)
 
 
 def _redirect_to_login() -> RedirectResponse:
@@ -90,6 +151,9 @@ async def login_form(request: Request):
 @router.post("/admin/login")
 async def login_submit(request: Request, db: DBSession,
                        email: str = Form(...), password: str = Form(...)):
+    # Throttle online password guessing per IP.
+    await limit_by_ip("admin_login_ip", ADMIN_LOGIN_PER_IP)(request)
+
     admin = await _verify_admin(db, email, password)
     if not admin:
         return templates.TemplateResponse(
@@ -99,12 +163,12 @@ async def login_submit(request: Request, db: DBSession,
         )
     resp = RedirectResponse(url="/admin", status_code=status.HTTP_303_SEE_OTHER)
     # 24h session; long enough for one ops shift, short enough that a
-    # stolen laptop doesn't grant indefinite access.
+    # stolen laptop doesn't grant indefinite access. Cookie is signed (see
+    # _sign_cookie) and Secure in production so it can't be sniffed or forged.
     resp.set_cookie(
-        COOKIE, str(admin.id),
-        httponly=True, samesite="strict", secure=False, max_age=86400,
-        # secure=False keeps it usable on plain http://localhost in dev;
-        # change to True once we're on Railway/HTTPS.
+        COOKIE, _sign_cookie(str(admin.id)),
+        httponly=True, samesite="strict",
+        secure=settings.is_production, max_age=COOKIE_MAX_AGE,
     )
     return resp
 
@@ -428,41 +492,45 @@ async def disputes_resolve(
     dispute_id: UUID, db: DBSession,
     resolution: str = Form(...),
     resolution_note: str = Form(""),
-    admin: AdminUserModel = Depends(require_admin_cookie),
+    refund_amount_inr: str = Form(""),
+    admin: AdminUserModel = Depends(require_admin_money_role),
 ):
-    """Wraps the JSON admin endpoint so the form-post flow round-trips
-    cleanly. We don't reuse the JSON handler directly because the
-    response shape differs (HTML redirect vs JSON)."""
-    from app.modules.admin.reports_disputes import (
-        Dispute, VALID_RESOLUTIONS,
-    )
-    from app.modules.transactions.refund_service import initiate_refund, INITIATED_BY_ADMIN
+    """Resolve a dispute from the admin console. Money-role gated, and routed
+    through the same apply_dispute_resolution used by the JSON endpoint + the
+    Temporal workflow so refunds actually move money and partial refunds honor
+    an amount (no divergent inline copy)."""
+    from decimal import Decimal, InvalidOperation
+    from app.modules.admin.reports_disputes import Dispute, VALID_RESOLUTIONS
+    from app.modules.disputes.resolution import apply_dispute_resolution
+    from app.modules.transactions.refund_service import INITIATED_BY_ADMIN
+
     if resolution not in VALID_RESOLUTIONS:
         raise HTTPException(400, "bad_resolution")
+
+    amount: Decimal | None = None
+    if resolution == "partial_refund":
+        try:
+            amount = Decimal(refund_amount_inr)
+        except (InvalidOperation, ValueError):
+            amount = None
+        if amount is None or amount <= 0:
+            raise HTTPException(400, "partial_refund_amount_required")
+
     dispute = await db.get(Dispute, dispute_id)
     if not dispute:
         raise HTTPException(404)
-    now = datetime.now(timezone.utc)
-    dispute.status = "resolved"
-    dispute.resolution = resolution
-    dispute.resolution_note = resolution_note or None
-    dispute.resolved_at = now
+    if dispute.status == "resolved":
+        raise HTTPException(409, "already_resolved")
 
     txn = await db.get(Transaction, dispute.transaction_id)
-    if txn:
-        if resolution in ("full_refund", "partial_refund"):
-            txn.status = "refunded"
-            try:
-                await initiate_refund(
-                    db, txn,
-                    reason=f"Dispute {dispute.id}: {resolution}. {resolution_note or ''}"[:200],
-                    initiated_by=INITIATED_BY_ADMIN,
-                )
-            except ValueError as e:
-                logger.warning("admin.dispute_refund_skip", dispute_id=str(dispute_id), error=str(e))
-        elif resolution == "full_release":
-            txn.status = "completed"
-            txn.payout_flagged_at = now
+    if amount is not None and txn is not None and amount > Decimal(str(txn.gross_amount or 0)):
+        raise HTTPException(400, "refund_exceeds_gross")
+
+    await apply_dispute_resolution(
+        db, dispute=dispute, txn=txn, resolution=resolution,
+        resolution_note=resolution_note or "", refund_amount=amount,
+        initiated_by=INITIATED_BY_ADMIN,
+    )
     await db.commit()
     logger.info("admin.dispute_resolved", dispute_id=str(dispute_id),
                 resolution=resolution, admin_id=str(admin.id))
