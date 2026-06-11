@@ -410,6 +410,35 @@ def _usage_extra(resp: Any) -> dict[str, Any]:
     }
 
 
+def _classify_gemini_error(exc: Exception) -> str:
+    """Bucket a Gemini SDK exception so quota exhaustion is distinguishable
+    from transient/real errors in metrics and logs.
+
+    The free tier is ~20 vision calls/day (see CLAUDE.md). Without this, every
+    failure looks identical and operators can't tell "we hit the daily quota"
+    (operational, expected; switch model or enable billing) apart from a genuine
+    integration bug.
+    """
+    status = getattr(exc, "code", None) or getattr(exc, "status_code", None)
+    text = f"{type(exc).__name__} {exc}".lower()
+    if (
+        status == 429
+        or "resource_exhausted" in text
+        or "quota" in text
+        or "429" in text
+        or "rate limit" in text
+    ):
+        return "quota_exhausted"
+    if (
+        status in (500, 503)
+        or "unavailable" in text
+        or "deadline" in text
+        or "timeout" in text
+    ):
+        return "transient"
+    return "error"
+
+
 async def _generate_content_with_metrics(
     client: Any,
     *,
@@ -430,11 +459,13 @@ async def _generate_content_with_metrics(
         )
     except Exception as exc:
         latency_ms = int((perf_counter() - started) * 1000)
+        error_kind = _classify_gemini_error(exc)
         metric = {
             "operation": operation,
             "provider": "gemini",
             "model": model,
             "status": "failed",
+            "error_kind": error_kind,
             "latency_ms": latency_ms,
             "image_count": image_count,
             "bytes_total": bytes_total,
@@ -442,10 +473,13 @@ async def _generate_content_with_metrics(
             "error": f"{type(exc).__name__}: {str(exc)[:240]}",
         }
         _record_call_metric(metric)
-        log.warning(
-            "ai_assistant.gemini_call_failed",
-            extra=metric,
-        )
+        # Quota exhaustion is operational, not a bug — surface it distinctly so
+        # dashboards/alerts can route it (switch model or enable billing) rather
+        # than drowning it in generic error noise.
+        if error_kind == "quota_exhausted":
+            log.error("ai_assistant.gemini_quota_exhausted", extra=metric)
+        else:
+            log.warning("ai_assistant.gemini_call_failed", extra=metric)
         raise
 
     latency_ms = int((perf_counter() - started) * 1000)
