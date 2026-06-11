@@ -14,7 +14,7 @@ import {
   Image,
 } from 'react-native';
 
-import { C, T, S, R, formatPrice } from '../../../../utils/tokens';
+import { C, T, S, R, formatPrice, O } from '../../../../utils/tokens';
 import { Button, IconButton } from '../../../../components/ui';
 import type { AIComparable } from '../../../../services/api';
 
@@ -76,7 +76,7 @@ export default function ComparablesSheet({ comparables, onSetMyPrice, onClose }:
 }
 
 const st = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  backdrop: { flex: 1, backgroundColor: O.dark50, justifyContent: 'flex-end' },
   backdropTouch: { ...StyleSheet.absoluteFillObject },
   sheet: {
     backgroundColor: C.surface,

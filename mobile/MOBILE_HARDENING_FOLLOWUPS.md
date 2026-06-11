@@ -33,6 +33,15 @@ hardcoded font/padding/radius numbers — use tokens + `components/ui`). This is
 large, regression-prone sweep across styling, so it should be done file-by-file
 with the app running to catch layout regressions, not blind.
 
+**DONE — exact-match color literals → tokens (value-preserving):** 26 hex/rgba
+literals that exactly equal a token value were replaced with the token across 10
+files (HomeScreen, HeroCard, SearchScreen, OwmeeListingCard, RootNavigator,
+LocationMapScreen, CreateListingScreen, and the AI price/comparables/edit
+sheets). Pixel-identical by construction; verified with `tsc --noEmit` + a full
+Metro bundle build. The remaining color literals are genuine one-offs with no
+matching token — promoting those to tokens is a design decision (don't auto-map
+to the nearest value). Still TODO below:
+
 Heaviest `TouchableOpacity` offenders (raw, outside `components/ui/`):
 
 | File | count |

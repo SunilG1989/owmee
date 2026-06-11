@@ -19,7 +19,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import { parseApiError } from '../../utils/errors';
-import { C, T, S, R, Shadow, formatPrice } from '../../utils/tokens';
+import { C, T, S, R, Shadow, formatPrice, O } from '../../utils/tokens';
 import { Button, IconButton } from '../../components/ui';
 import { Listings } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
@@ -1332,7 +1332,7 @@ const st = StyleSheet.create({
   px: {
     position: 'absolute', top: 4, right: 4,
     width: 20, height: 20, borderRadius: 10,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: O.dark50,
     alignItems: 'center', justifyContent: 'center',
   },
 

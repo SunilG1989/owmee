@@ -665,7 +665,7 @@ const s = StyleSheet.create({
     minHeight: 280,
     borderRadius: R.xl,
     overflow: 'hidden',
-    backgroundColor: '#EAF4F1',
+    backgroundColor: C.petrolLight,
     borderWidth: 1,
     borderColor: 'rgba(47,118,107,0.14)',
     alignItems: 'center',
