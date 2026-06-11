@@ -38,7 +38,7 @@ const SLIDES: HeroSlide[] = [
     title: 'Resale, with less risk.',
     subtitle: 'Verified details, protected payments and delivery support.',
     wash: '#2F766B',
-    plate: '#245E56',
+    plate: C.petrol,
     kickerColor: '#FFE0C5',
     subtitleColor: '#E9F8F2',
     accessibilityLabel: 'Browse safe buying deals',
@@ -51,7 +51,7 @@ const SLIDES: HeroSlide[] = [
     title: 'We prepare it for sale.',
     subtitle: 'Owmee verifies, packs and lists it for you.',
     wash: '#B86F59',
-    plate: '#8F5749',
+    plate: C.ctaSecondaryDeep,
     kickerColor: '#FFE8D9',
     subtitleColor: '#FFF5EF',
     accessibilityLabel: 'Book Owmee Assist to sell from home',
@@ -124,8 +124,8 @@ export default function HeroCard({ onBrowse, onSell }: Props) {
                 <Stop offset="0" stopColor={slide.wash} stopOpacity="0.80" />
                 <Stop offset="0.34" stopColor={slide.wash} stopOpacity="0.60" />
                 <Stop offset="0.54" stopColor={slide.wash} stopOpacity="0.27" />
-                <Stop offset="0.74" stopColor="#FFF8EE" stopOpacity="0.04" />
-                <Stop offset="1" stopColor="#FFF8EE" stopOpacity="0" />
+                <Stop offset="0.74" stopColor={C.bone} stopOpacity="0.04" />
+                <Stop offset="1" stopColor={C.bone} stopOpacity="0" />
               </LinearGradient>
               <LinearGradient id="heroPlate" x1="0" y1="0" x2="1" y2="0">
                 <Stop offset="0" stopColor={slide.plate} stopOpacity="0.42" />

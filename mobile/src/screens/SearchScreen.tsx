@@ -159,9 +159,9 @@ export default function SearchScreen({ navigation, route }: TabScreen<'Search'>)
       <Svg pointerEvents="none" style={s.screenBg} viewBox="0 0 100 100" preserveAspectRatio="none">
         <Defs>
           <LinearGradient id="searchCanvas" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor="#FFF8EE" stopOpacity="1" />
-            <Stop offset="0.62" stopColor="#FFFDF8" stopOpacity="1" />
-            <Stop offset="1" stopColor="#EAF4F1" stopOpacity="1" />
+            <Stop offset="0" stopColor={C.bone} stopOpacity="1" />
+            <Stop offset="0.62" stopColor={C.surface} stopOpacity="1" />
+            <Stop offset="1" stopColor={C.petrolLight} stopOpacity="1" />
           </LinearGradient>
           <RadialGradient id="searchClay" cx="6%" cy="8%" r="52%">
             <Stop offset="0" stopColor="#D29472" stopOpacity="0.13" />

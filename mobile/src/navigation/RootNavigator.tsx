@@ -87,7 +87,7 @@ const RootStack = createNativeStackNavigator<RootStackParams>();
 const FeStack = createNativeStackNavigator<RootStackParams>();
 const AuthStack = createNativeStackNavigator<AuthStackParams>();
 const Tab = createBottomTabNavigator<TabParams>();
-const SPLASH_STATUS_BG = '#003F4B';
+const SPLASH_STATUS_BG = C.splashBg;
 const APP_STATUS_BG = C.bone;
 const SPLASH_MIN_MS = 450;
 

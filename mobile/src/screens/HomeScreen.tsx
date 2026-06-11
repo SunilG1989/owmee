@@ -479,27 +479,27 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
         <Defs>
           <LinearGradient id="homeCanvas" x1="0" y1="0" x2="0" y2="1">
             <Stop offset="0" stopColor="#F0D6C5" stopOpacity="1" />
-            <Stop offset="0.34" stopColor="#FFF8EE" stopOpacity="1" />
-            <Stop offset="0.68" stopColor="#FFFDF8" stopOpacity="1" />
+            <Stop offset="0.34" stopColor={C.bone} stopOpacity="1" />
+            <Stop offset="0.68" stopColor={C.surface} stopOpacity="1" />
             <Stop offset="1" stopColor="#DCEDE8" stopOpacity="1" />
           </LinearGradient>
           <LinearGradient id="warmRibbon" x1="0" y1="0" x2="1" y2="0">
-            <Stop offset="0" stopColor="#C97861" stopOpacity="0.16" />
+            <Stop offset="0" stopColor={C.ctaSecondary} stopOpacity="0.16" />
             <Stop offset="0.58" stopColor="#F2D6C7" stopOpacity="0.08" />
             <Stop offset="1" stopColor="#F2D6C7" stopOpacity="0" />
           </LinearGradient>
           <LinearGradient id="greenRibbon" x1="1" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor="#245E56" stopOpacity="0.12" />
-            <Stop offset="0.72" stopColor="#91B6B0" stopOpacity="0.06" />
-            <Stop offset="1" stopColor="#91B6B0" stopOpacity="0" />
+            <Stop offset="0" stopColor={C.petrol} stopOpacity="0.12" />
+            <Stop offset="0.72" stopColor={C.aqua} stopOpacity="0.06" />
+            <Stop offset="1" stopColor={C.aqua} stopOpacity="0" />
           </LinearGradient>
           <RadialGradient id="tealGlow" cx="86%" cy="10%" r="58%">
-            <Stop offset="0" stopColor="#245E56" stopOpacity="0.13" />
-            <Stop offset="1" stopColor="#245E56" stopOpacity="0" />
+            <Stop offset="0" stopColor={C.petrol} stopOpacity="0.13" />
+            <Stop offset="1" stopColor={C.petrol} stopOpacity="0" />
           </RadialGradient>
           <RadialGradient id="clayGlow" cx="4%" cy="28%" r="50%">
-            <Stop offset="0" stopColor="#C97861" stopOpacity="0.13" />
-            <Stop offset="1" stopColor="#C97861" stopOpacity="0" />
+            <Stop offset="0" stopColor={C.ctaSecondary} stopOpacity="0.13" />
+            <Stop offset="1" stopColor={C.ctaSecondary} stopOpacity="0" />
           </RadialGradient>
         </Defs>
         <Rect x="0" y="0" width="100" height="100" fill="url(#homeCanvas)" />
@@ -683,7 +683,7 @@ const s = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: C.coral,
     borderWidth: 1,
-    borderColor: '#F3E4D4',
+    borderColor: C.bone2,
   },
 
   // ── Search ──────────────────────────────────────────────────────────

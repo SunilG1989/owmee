@@ -17,7 +17,7 @@ import {
   Platform,
 } from 'react-native';
 
-import { C, T, S, R } from '../../../../utils/tokens';
+import { C, T, S, R, O } from '../../../../utils/tokens';
 import { Button } from '../../../../components/ui';
 import {
   CATEGORY_PICKS,
@@ -589,7 +589,7 @@ function SuggestionField({
 }
 
 const st = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  backdrop: { flex: 1, backgroundColor: O.dark50, justifyContent: 'flex-end' },
   backdropTouch: { ...StyleSheet.absoluteFillObject },
   sheet: {
     backgroundColor: C.surface,
