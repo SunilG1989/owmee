@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, SmallInteger, Numeric, String, Text, Boolean, text
+from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, SmallInteger, Numeric, String, Text, Boolean, text
 from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY, TSVECTOR
 from geoalchemy2 import Geography
 from sqlalchemy.orm import relationship
@@ -24,6 +24,21 @@ class Category(Base, TimestampMixin):
 
 class Listing(Base, TimestampMixin):
     __tablename__ = "listings"
+    __table_args__ = (
+        # Feed/browse hot paths filter active listings by address state and
+        # order by recency / published_at. Partial (status='active') keeps the
+        # indexes small and selective. See migration 0047 + the perf audit.
+        Index(
+            "ix_listings_active_state_created",
+            "state", "created_at",
+            postgresql_where=text("status = 'active'"),
+        ),
+        Index(
+            "ix_listings_active_published",
+            "published_at",
+            postgresql_where=text("status = 'active'"),
+        ),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     seller_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -49,7 +64,11 @@ class Listing(Base, TimestampMixin):
     ml_price_suggestion = Column(Numeric(10, 2))
     ml_price_range_low = Column(Numeric(10, 2))
     ml_price_range_high = Column(Numeric(10, 2))
-    geo_point = Column(Geography(geometry_type="POINT", srid=4326))
+    # spatial_index=False: the GIST index is created by the migrations as
+    # ix_listings_geo_point. GeoAlchemy2's default auto-index would declare a
+    # differently-named (idx_listings_geo_point) duplicate, so we disable it and
+    # rely on the migration-created index.
+    geo_point = Column(Geography(geometry_type="POINT", srid=4326, spatial_index=False))
     locality = Column(String(200))
     city = Column(String(100))
     state = Column(String(100))
