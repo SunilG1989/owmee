@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Adaptive-icon background layer. Only visible in the parallax sliver behind the
+  full-bleed foreground, so it just needs to read as the brand's warm gradient.
+  Colors sampled from the 1024px master icon corners.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:type="linear"
+        android:angle="315"
+        android:startColor="#BAE5D3"
+        android:centerColor="#FFA25A"
+        android:endColor="#EE6F27" />
+</shape>
