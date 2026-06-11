@@ -545,6 +545,12 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
         onEndReachedThreshold={0.6}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={s.listContent}
+        // Virtualization: the feed can grow long; cap mounted rows so scroll
+        // stays smooth (mirrors OffersScreen).
+        removeClippedSubviews
+        windowSize={5}
+        maxToRenderPerBatch={8}
+        initialNumToRender={6}
       />
     </SafeAreaView>
   );
