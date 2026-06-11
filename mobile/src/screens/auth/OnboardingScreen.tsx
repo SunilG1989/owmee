@@ -26,7 +26,7 @@ const SLIDES = [
   {
     emoji: '💳',
     title: 'Your money is protected',
-    sub: 'Payment held safely by our partner until you confirm the item.\nFull refund if it doesn\'t match.',
+    sub: 'Shop with confidence.\n100% refund if the item isn\'t as promised.',
     bg: C.coralLight,
     accent: C.coralDeep,
   },

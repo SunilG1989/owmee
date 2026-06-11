@@ -13,7 +13,7 @@ const TIMELINE = [
   { step: '2', label: 'Owmee logistics', desc: 'Owmee prepares the item for delivery' },
   { step: '3', label: 'Quality check', desc: 'Item is verified against the listing description' },
   { step: '4', label: 'Delivered to you', desc: 'You receive and inspect the item' },
-  { step: '5', label: 'Confirm receipt', desc: 'Money released to seller after your confirmation' },
+  { step: '5', label: 'Confirm receipt', desc: 'Happy with it? Confirm. If it’s not as promised, you get a 100% refund.' },
 ];
 
 export default function OrderConfirmationScreen({ navigation, route }: any) {
@@ -27,7 +27,7 @@ export default function OrderConfirmationScreen({ navigation, route }: any) {
         </View>
 
         <Text style={s.title}>Order placed!</Text>
-        <Text style={s.sub}>Your payment is held safely until you confirm receipt</Text>
+        <Text style={s.sub}>If it’s not as promised, you get a 100% refund</Text>
 
         <View style={s.idCard}>
           <Text style={s.idLabel}>Order ID</Text>
