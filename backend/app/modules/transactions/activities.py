@@ -38,11 +38,20 @@ async def act_check_transaction_status(inp: ActivityTransactionInput) -> dict:
 @activity.defn(name="act_trigger_refund")
 async def act_trigger_refund(inp: ActivityTransactionInput) -> dict:
     """
-    Mark transaction as refunded. In production this calls the PA refund API.
-    Idempotent — safe to retry.
+    Refund a cancelled/timed-out transaction by calling the payment adapter,
+    then mark it refunded and re-open the listing. Idempotent — safe to retry.
+
+    Previously this only flipped ``status='refunded'`` and never called the PA
+    refund API, so workflow-driven cancellations told the buyer "refunded"
+    while no money moved. Now it goes through ``initiate_refund`` (which has its
+    own DB + adapter idempotency keys).
     """
     from app.db.session import AsyncSessionLocal
-    from app.modules.offers.models import Transaction, PaymentLink
+    from app.modules.offers.models import Transaction
+    from app.modules.transactions.refund_service import (
+        initiate_refund,
+        REFUND_STATUS_COMPLETED,
+    )
     from sqlalchemy import select
     import uuid
 
@@ -54,9 +63,23 @@ async def act_trigger_refund(inp: ActivityTransactionInput) -> dict:
         if not txn:
             return {"success": False, "reason": "NOT_FOUND"}
 
-        # Idempotency: don't refund twice
-        if txn.status == "refunded":
+        # Idempotency: if money already came back, don't touch the adapter again.
+        if txn.status == "refunded" and txn.refund_status == REFUND_STATUS_COMPLETED:
             return {"success": True, "already_refunded": True}
+
+        refund_status = None
+        try:
+            await initiate_refund(
+                db, txn,
+                reason="Transaction cancelled/timed out by workflow",
+                initiated_by="system_workflow",
+            )
+            refund_status = txn.refund_status
+        except ValueError as exc:
+            # NOT_PAID: nothing was captured to refund (cancel before payment).
+            # ALREADY_REFUNDED: idempotent no-op.
+            logger.warning("act_trigger_refund.skip", transaction_id=inp.transaction_id, error=str(exc))
+            refund_status = "skipped"
 
         txn.status = "refunded"
         txn.cancelled_at = datetime.now(timezone.utc)
@@ -72,8 +95,8 @@ async def act_trigger_refund(inp: ActivityTransactionInput) -> dict:
                 listing.status = "active"
 
         await db.commit()
-        logger.info("act_trigger_refund.done", transaction_id=inp.transaction_id)
-        return {"success": True}
+        logger.info("act_trigger_refund.done", transaction_id=inp.transaction_id, refund_status=refund_status)
+        return {"success": True, "refund_status": refund_status}
 
 
 @activity.defn(name="act_trigger_payout_eligibility")

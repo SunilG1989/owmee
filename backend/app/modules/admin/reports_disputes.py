@@ -12,16 +12,28 @@ GET  /v1/admin/disputes                  — ops queue
 POST /v1/admin/disputes/{id}/resolve     — ops resolves dispute
 """
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, select
 
+from app.core.admin_dependencies import (
+    AdminAny,
+    CurrentAdmin,
+    require_admin_roles,
+)
 from app.core.dependencies import BasicUser, DBSession, VerifiedUser
 from app.modules.admin.models import Dispute, UserBlock, UserReport
+from app.modules.disputes.resolution import apply_dispute_resolution
 from app.modules.listings.models import Listing
+
+# Resolving a dispute moves money (refund) or releases payout, so it requires a
+# senior, money-capable role — not any logged-in admin. SUPER_ADMIN is always
+# admitted by the factory.
+require_dispute_resolver = require_admin_roles("L2_REVIEWER", "FINANCE_OPS")
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -60,6 +72,8 @@ class ResolveReportRequest(BaseModel):
 class ResolveDisputeRequest(BaseModel):
     resolution: str
     resolution_note: str = Field(..., min_length=5, max_length=500)
+    # Required for partial_refund; ignored otherwise. Rupees (not paise).
+    refund_amount_inr: Decimal | None = Field(default=None, gt=0)
 
 
 # ── Report endpoints ─────────────────────────────────────────────────────────────
@@ -155,7 +169,7 @@ async def block_user(
 
 
 @router.get("/admin/reports")
-async def get_reports_queue(db: DBSession, status_filter: str = "open"):
+async def get_reports_queue(admin: AdminAny, db: DBSession, status_filter: str = "open"):
     result = await db.execute(
         select(UserReport)
         .where(UserReport.status == status_filter)
@@ -178,7 +192,7 @@ async def get_reports_queue(db: DBSession, status_filter: str = "open"):
 
 
 @router.post("/admin/reports/{report_id}/resolve")
-async def resolve_report(report_id: UUID, body: ResolveReportRequest, db: DBSession):
+async def resolve_report(report_id: UUID, body: ResolveReportRequest, admin: AdminAny, db: DBSession):
     result = await db.execute(select(UserReport).where(UserReport.id == report_id))
     report = result.scalar_one_or_none()
     if not report:
@@ -289,7 +303,7 @@ async def get_dispute(dispute_id: UUID, current_user: VerifiedUser, db: DBSessio
 
 
 @router.get("/admin/disputes")
-async def get_disputes_queue(db: DBSession, status_filter: str = "opened"):
+async def get_disputes_queue(admin: AdminAny, db: DBSession, status_filter: str = "opened"):
     result = await db.execute(
         select(Dispute)
         .where(Dispute.status == status_filter)
@@ -311,59 +325,71 @@ async def get_disputes_queue(db: DBSession, status_filter: str = "opened"):
 
 
 @router.post("/admin/disputes/{dispute_id}/resolve")
-async def resolve_dispute(dispute_id: UUID, body: ResolveDisputeRequest, db: DBSession):
+async def resolve_dispute(
+    dispute_id: UUID,
+    body: ResolveDisputeRequest,
+    db: DBSession,
+    admin: CurrentAdmin = Depends(require_dispute_resolver),
+):
     if body.resolution not in VALID_RESOLUTIONS:
         raise HTTPException(status_code=400, detail={
             "error": "INVALID_RESOLUTION",
             "valid": list(VALID_RESOLUTIONS),
         })
+    if body.resolution == "partial_refund" and (
+        body.refund_amount_inr is None or body.refund_amount_inr <= 0
+    ):
+        raise HTTPException(status_code=400, detail={
+            "error": "PARTIAL_REFUND_AMOUNT_REQUIRED",
+            "message": "partial_refund requires a positive refund_amount_inr.",
+        })
+
     result = await db.execute(select(Dispute).where(Dispute.id == dispute_id))
     dispute = result.scalar_one_or_none()
     if not dispute:
         raise HTTPException(status_code=404, detail={"error": "NOT_FOUND"})
+    if dispute.status == "resolved":
+        raise HTTPException(status_code=409, detail={"error": "ALREADY_RESOLVED"})
 
-    now = datetime.now(timezone.utc)
-    dispute.status = "resolved"
-    dispute.resolution = body.resolution
-    dispute.resolution_note = body.resolution_note
-    dispute.resolved_at = now
-
-    # Update transaction status + actually move money
     from app.modules.offers.models import Transaction
-    from app.modules.transactions.refund_service import initiate_refund, INITIATED_BY_ADMIN
-    txn_result = await db.execute(
+    from app.modules.transactions.refund_service import INITIATED_BY_ADMIN
+
+    txn = (await db.execute(
         select(Transaction).where(Transaction.id == dispute.transaction_id)
+    )).scalar_one_or_none()
+
+    # A partial refund must not exceed what was charged.
+    if (
+        body.resolution == "partial_refund"
+        and txn is not None
+        and body.refund_amount_inr > Decimal(str(txn.gross_amount or 0))
+    ):
+        raise HTTPException(status_code=400, detail={
+            "error": "REFUND_EXCEEDS_GROSS",
+            "message": "Partial refund cannot exceed the amount charged.",
+        })
+
+    outcome = await apply_dispute_resolution(
+        db,
+        dispute=dispute,
+        txn=txn,
+        resolution=body.resolution,
+        resolution_note=body.resolution_note,
+        refund_amount=body.refund_amount_inr,
+        initiated_by=INITIATED_BY_ADMIN,
     )
-    txn = txn_result.scalar_one_or_none()
-    refund_status = None
-    if txn:
-        if body.resolution in ("full_refund", "partial_refund"):
-            txn.status = "refunded"
-            # Actually trigger the refund — earlier the code just flipped
-            # status='refunded' without calling the payment partner, so
-            # buyers were left wondering why their money never came back.
-            try:
-                await initiate_refund(
-                    db, txn,
-                    reason=f"Dispute {dispute_id} resolved: {body.resolution}. {body.resolution_note or ''}"[:200],
-                    initiated_by=INITIATED_BY_ADMIN,
-                )
-                refund_status = txn.refund_status
-            except ValueError as ref_err:
-                # E.g. ALREADY_REFUNDED if pickup auto-refunded earlier;
-                # NOT_PAID if dispute opened before payment captured.
-                logger.warning("dispute.refund_skip", dispute_id=str(dispute_id), error=str(ref_err))
-                refund_status = "skipped"
-        elif body.resolution == "full_release":
-            txn.status = "completed"
-            txn.payout_flagged_at = now
 
     await db.commit()
-    logger.info("dispute.resolved", dispute_id=str(dispute_id), resolution=body.resolution,
-                refund_status=refund_status)
+    logger.info(
+        "dispute.resolved",
+        dispute_id=str(dispute_id),
+        resolution=body.resolution,
+        refund_status=outcome["refund_status"],
+        admin_id=str(admin.admin_id),
+    )
     return {
         "dispute_id": str(dispute_id),
         "status": "resolved",
         "resolution": body.resolution,
-        "refund_status": refund_status,
+        "refund_status": outcome["refund_status"],
     }
