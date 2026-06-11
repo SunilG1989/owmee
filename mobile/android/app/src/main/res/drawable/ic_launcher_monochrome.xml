@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Monochrome layer for Android 13+ themed ("Material You") icons. The system
+  ignores the color and tints the shape, so this is a single-color silhouette of
+  the Owmee mark (the ring "O" + the "W"), kept inside the 66dp safe zone.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Ring (the "O") -->
+    <path
+        android:strokeColor="#1F1F1F"
+        android:strokeWidth="9"
+        android:fillColor="#00000000"
+        android:pathData="M54,28 A26,26 0 1 1 54,80 A26,26 0 1 1 54,28 Z" />
+    <!-- Stylized "W" -->
+    <path
+        android:strokeColor="#1F1F1F"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000"
+        android:pathData="M41,47 L47,61 L54,51 L61,61 L67,47" />
+</vector>
