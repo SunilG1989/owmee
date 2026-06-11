@@ -191,8 +191,15 @@ class _DevPaymentAdapter:
             status="processed",
         )
 
-    def build_dev_paid_webhook(self, razorpay_link_id: str, transaction_id: str) -> dict:
-        """Build a realistic-looking webhook payload for dev testing."""
+    def build_dev_paid_webhook(
+        self, razorpay_link_id: str, transaction_id: str, amount_paise: int = 0
+    ) -> dict:
+        """Build a realistic-looking webhook payload for dev testing.
+
+        ``amount_paise`` reflects the real link amount so the server-side
+        amount-validation in process_payment_paid passes for legitimate dev
+        payments (a hardcoded amount would always look like an underpayment).
+        """
         return {
             "event": "payment_link.paid",
             "payload": {
@@ -206,7 +213,7 @@ class _DevPaymentAdapter:
                 "payment": {
                     "entity": {
                         "id": f"pay_dev_{uuid4().hex[:12]}",
-                        "amount": 100,
+                        "amount": int(amount_paise) if amount_paise else 100,
                         "status": "captured",
                         "method": "upi",
                     }

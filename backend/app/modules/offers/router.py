@@ -879,7 +879,9 @@ async def dev_pay(link_id: str, db: DBSession):
     from app.modules.payments.adapter import get_payment_adapter
     import json
     adapter = get_payment_adapter()
-    payload = adapter.build_dev_paid_webhook(link_id, str(pl.transaction_id))
+    payload = adapter.build_dev_paid_webhook(
+        link_id, str(pl.transaction_id), amount_paise=int(Decimal(str(pl.amount or 0)) * 100)
+    )
     body = json.dumps(payload).encode()
     verify = adapter.verify_webhook(body, "dev_signature")
     if verify.event == "payment_link.paid":

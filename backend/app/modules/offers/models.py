@@ -1,5 +1,8 @@
 import uuid
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String, Boolean, Text, text
+from sqlalchemy import (
+    Column, DateTime, ForeignKey, Index, Integer, Numeric, String, Boolean,
+    Text, text,
+)
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from app.db.session import Base, TimestampMixin
@@ -7,6 +10,17 @@ from app.db.session import Base, TimestampMixin
 
 class Offer(Base, TimestampMixin):
     __tablename__ = "offers"
+    __table_args__ = (
+        # At most one live offer per (buyer, listing). Backstops the
+        # check-then-insert race in make_offer at the DB level so two
+        # concurrent requests can't both create an active offer.
+        Index(
+            "uq_active_offer_per_buyer_listing",
+            "buyer_id", "listing_id",
+            unique=True,
+            postgresql_where=text("status IN ('pending', 'countered')"),
+        ),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     listing_id = Column(UUID(as_uuid=True), ForeignKey("listings.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -199,6 +213,12 @@ class PaymentLink(Base, TimestampMixin):
 
 class Rating(Base):
     __tablename__ = "ratings"
+    __table_args__ = (
+        # One rating per rater per transaction. Backstops the check-then-insert
+        # race in submit_rating so a buyer/seller can't double-rate (and double
+        # the trust-score effect) under concurrency.
+        Index("uq_rating_per_txn_rater", "transaction_id", "rater_id", unique=True),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     transaction_id = Column(UUID(as_uuid=True), ForeignKey("transactions.id"), nullable=False, index=True)

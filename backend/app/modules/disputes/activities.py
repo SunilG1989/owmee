@@ -21,6 +21,9 @@ class ActivityDisputeResolutionInput:
     transaction_id: str
     resolution: str
     resolution_note: str = ""
+    # Rupees, used only for partial_refund. Carried as a string to keep the
+    # Temporal payload JSON-stable (Decimal is not natively serializable).
+    refund_amount_inr: str | None = None
 
 
 @activity.defn(name="act_archive_chat_evidence")
@@ -62,53 +65,46 @@ async def act_freeze_transaction_for_dispute(inp: ActivityDisputeInput) -> dict:
 
 @activity.defn(name="act_apply_dispute_resolution")
 async def act_apply_dispute_resolution(inp: ActivityDisputeResolutionInput) -> dict:
-    """Apply full_refund / full_release / partial_refund to transaction."""
+    """Apply full_refund / full_release / partial_refund to transaction.
+
+    Delegates to the shared ``apply_dispute_resolution`` service so the durable
+    workflow path moves money identically to the synchronous admin endpoint —
+    previously this only flipped ``txn.status='refunded'`` and the buyer never
+    got their money back.
+    """
+    from decimal import Decimal
     from app.db.session import AsyncSessionLocal
     from app.modules.offers.models import Transaction
     from app.modules.admin.reports_disputes import Dispute
-    from app.modules.listings.models import Listing
+    from app.modules.disputes.resolution import apply_dispute_resolution
     from sqlalchemy import select
     import uuid
 
+    refund_amount = Decimal(inp.refund_amount_inr) if inp.refund_amount_inr else None
+
     async with AsyncSessionLocal() as db:
-        now = datetime.now(timezone.utc)
-
-        # Update dispute record
-        disp_result = await db.execute(
+        dispute = (await db.execute(
             select(Dispute).where(Dispute.id == uuid.UUID(inp.dispute_id))
-        )
-        dispute = disp_result.scalar_one_or_none()
-        if dispute:
-            dispute.status = "resolved"
-            dispute.resolution = inp.resolution
-            dispute.resolution_note = inp.resolution_note
-            dispute.resolved_at = now
-
-        # Apply to transaction
-        txn_result = await db.execute(
+        )).scalar_one_or_none()
+        txn = (await db.execute(
             select(Transaction).where(Transaction.id == uuid.UUID(inp.transaction_id))
+        )).scalar_one_or_none()
+
+        outcome = await apply_dispute_resolution(
+            db,
+            dispute=dispute,
+            txn=txn,
+            resolution=inp.resolution,
+            resolution_note=inp.resolution_note,
+            refund_amount=refund_amount,
+            initiated_by="workflow:dispute",
         )
-        txn = txn_result.scalar_one_or_none()
-        if txn:
-            if inp.resolution in ("full_refund", "partial_refund"):
-                txn.status = "refunded"
-                txn.cancelled_at = now
-                # Re-open listing
-                listing_result = await db.execute(
-                    select(Listing).where(Listing.id == txn.listing_id)
-                )
-                listing = listing_result.scalar_one_or_none()
-                if listing:
-                    listing.status = "active"
-            elif inp.resolution == "full_release":
-                txn.status = "completed"
-                txn.completed_at = now
-                txn.payout_flagged_at = now
 
         await db.commit()
         logger.info("act_apply_dispute_resolution.done",
-                    dispute_id=inp.dispute_id, resolution=inp.resolution)
-        return {"success": True}
+                    dispute_id=inp.dispute_id, resolution=inp.resolution,
+                    refund_status=outcome["refund_status"])
+        return {"success": True, "refund_status": outcome["refund_status"]}
 
 
 @activity.defn(name="act_notify_dispute_event")

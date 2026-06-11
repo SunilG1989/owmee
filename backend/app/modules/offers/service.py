@@ -20,7 +20,8 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 import structlog
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.notifications.service import push as push_notify
@@ -165,6 +166,44 @@ async def _notify(
 
 # ── Offer logic ─────────────────────────────────────────────────────────────────
 
+async def _expire_stale_offers(
+    db: AsyncSession,
+    *,
+    buyer_id: UUID | None = None,
+    listing_id: UUID | None = None,
+) -> int:
+    """Mark offers whose window has elapsed as 'expired'.
+
+    - pending offers past ``expires_at``
+    - countered offers past ``counter_expires_at`` (the buyer's 48h window)
+
+    The 7-day cooldown for an expired counter is already armed on the row by
+    ``counter_offer`` (lockout_until), so make_offer's lockout check honors it
+    even before/without this sweep. Scope to a (buyer, listing) for the hot
+    path, or call unscoped from a periodic worker. Returns rows updated.
+    """
+    now = datetime.now(timezone.utc)
+    conds = [
+        or_(
+            and_(Offer.status == "pending", Offer.expires_at < now),
+            and_(Offer.status == "countered", Offer.counter_expires_at < now),
+        )
+    ]
+    if buyer_id is not None:
+        conds.append(Offer.buyer_id == buyer_id)
+    if listing_id is not None:
+        conds.append(Offer.listing_id == listing_id)
+    result = await db.execute(
+        update(Offer).where(and_(*conds)).values(status="expired", responded_at=now)
+    )
+    return result.rowcount or 0
+
+
+async def expire_stale_offers(db: AsyncSession) -> int:
+    """Unscoped sweep for a periodic worker (see workers)."""
+    return await _expire_stale_offers(db)
+
+
 async def make_offer(
     db: AsyncSession,
     listing_id: UUID,
@@ -184,6 +223,12 @@ async def make_offer(
     # lockout_until column is set on the prior offer when it terminates
     # negatively; we just need to honor any future-dated value here.
     now = datetime.now(timezone.utc)
+
+    # Retire any offer whose window has elapsed before evaluating "already
+    # exists", so a stale pending/countered offer doesn't permanently block the
+    # buyer from re-offering.
+    await _expire_stale_offers(db, buyer_id=buyer_id, listing_id=listing_id)
+
     lockout_result = await db.execute(
         select(func.max(Offer.lockout_until)).where(and_(
             Offer.buyer_id == buyer_id,
@@ -220,7 +265,12 @@ async def make_offer(
         expires_at=expires_at,
     )
     db.add(offer)
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError:
+        # uq_active_offer_per_buyer_listing — a concurrent request beat us to
+        # creating the active offer. The check above missed it due to the race.
+        raise ValueError("OFFER_ALREADY_EXISTS")
 
     await _notify(
         db, listing.seller_id,
@@ -317,7 +367,11 @@ async def accept_offer(
     offer_id: UUID,
     seller_id: UUID,
 ) -> tuple[Offer, Reservation, Transaction, PaymentLink | None]:
-    result = await db.execute(select(Offer).where(Offer.id == offer_id))
+    # Lock the offer row so two concurrent accepts (e.g. seller-accept racing
+    # buyer-accept-counter, or retry storms) can't both pass the status check.
+    result = await db.execute(
+        select(Offer).where(Offer.id == offer_id).with_for_update()
+    )
     offer = result.scalar_one_or_none()
     if not offer:
         raise ValueError("OFFER_NOT_FOUND")
@@ -326,6 +380,20 @@ async def accept_offer(
     is_buyer_accepting_counter = (offer.buyer_id == seller_id and offer.status == "countered")
     if not (is_seller_accepting or is_buyer_accepting_counter):
         raise ValueError("CANNOT_ACCEPT")
+
+    # Sprint 6b: the buyer's 48h counter window is enforced HERE, server-side.
+    # Without this a buyer could accept a stale counter days/years later at the
+    # seller's old price. On expiry we retire the offer (cooldown already armed
+    # by counter_offer) and refuse the accept.
+    now = datetime.now(timezone.utc)
+    if (
+        is_buyer_accepting_counter
+        and offer.counter_expires_at is not None
+        and now > offer.counter_expires_at
+    ):
+        offer.status = "expired"
+        offer.responded_at = now
+        raise ValueError("COUNTER_EXPIRED")
 
     # Lock the listing row to serialize concurrent accept attempts; without
     # this, two flows racing on the same listing could both pass the
@@ -534,7 +602,10 @@ async def reject_offer(db, offer_id, seller_id, reason=""):
     offer = result.scalar_one_or_none()
     if not offer or offer.seller_id != seller_id:
         raise ValueError("OFFER_NOT_FOUND")
-    if offer.status not in ("pending",):
+    # A seller can reject a pending offer OR retract a counter they made — both
+    # arm the 7-day cooldown. Previously 'countered' had no rejection path, so
+    # a countered offer could never be terminated by the seller.
+    if offer.status not in ("pending", "countered"):
         raise ValueError(f"INVALID_STATUS:{offer.status}")
     now = datetime.now(timezone.utc)
     offer.status = "rejected"
@@ -562,6 +633,18 @@ async def withdraw_offer(db, offer_id, buyer_id):
 
 
 # ── Payment processing ──────────────────────────────────────────────────────────
+
+def _extract_paid_amount_paise(webhook_payload) -> int | None:
+    """Pull the captured amount (paise) out of a Razorpay webhook payload.
+    Returns None if the shape is unexpected, so the caller can decide whether
+    to trust it."""
+    if not isinstance(webhook_payload, dict):
+        return None
+    try:
+        return int(webhook_payload["payload"]["payment"]["entity"]["amount"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
 
 async def process_payment_paid(db, razorpay_link_id, razorpay_payment_id, webhook_payload):
     # Lock the PaymentLink row so the (status check → status write)
@@ -591,6 +674,28 @@ async def process_payment_paid(db, razorpay_link_id, razorpay_payment_id, webhoo
     txn = txn_result.scalar_one_or_none()
     if not txn:
         return None
+
+    # Money-safety: never advance to captured on an underpayment. The link is
+    # created with accept_partial=False, but we still cross-check the captured
+    # amount against what we charged in case of a tampered/mismatched event.
+    # Only validate when the webhook actually carries an amount.
+    paid_paise = _extract_paid_amount_paise(webhook_payload)
+    if paid_paise is not None:
+        expected_paise = int(Decimal(str(pl.amount or 0)) * 100)
+        if expected_paise > 0 and paid_paise < expected_paise:
+            txn.status = "payment_capture_uncertain"
+            txn.seller_response_deadline = None
+            logger.error(
+                "payment.amount_mismatch",
+                transaction_id=str(txn.id),
+                expected_paise=expected_paise,
+                paid_paise=paid_paise,
+            )
+            await _notify(db, txn.buyer_id, "payment_under_review",
+                "Payment under review",
+                "We received a payment, but the amount didn't match the order. Owmee is reviewing it.",
+                "transaction", str(txn.id))
+            return txn
 
     listing_result = await db.execute(select(Listing).where(Listing.id == txn.listing_id))
     listing = listing_result.scalar_one_or_none()
@@ -869,7 +974,11 @@ async def _refund_for_seller_readiness_failure(
 # ── Deal confirmation ───────────────────────────────────────────────────────────
 
 async def buyer_confirm_deal(db, transaction_id, buyer_id):
-    result = await db.execute(select(Transaction).where(Transaction.id == transaction_id))
+    # Lock the transaction row so two concurrent confirms can't both pass the
+    # status check and both run compute_tds / flag payout twice.
+    result = await db.execute(
+        select(Transaction).where(Transaction.id == transaction_id).with_for_update()
+    )
     txn = result.scalar_one_or_none()
     if not txn:
         raise ValueError("TRANSACTION_NOT_FOUND")
@@ -983,7 +1092,11 @@ async def submit_rating(
         revealed_at=None,
     )
     db.add(rating)
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError:
+        # uq_rating_per_txn_rater — a concurrent request already rated.
+        raise ValueError("ALREADY_RATED")
 
     # Check if peer has also rated — if yes, reveal both
     peer_result = await db.execute(
