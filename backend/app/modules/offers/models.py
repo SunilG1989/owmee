@@ -20,12 +20,21 @@ class Offer(Base, TimestampMixin):
             unique=True,
             postgresql_where=text("status IN ('pending', 'countered')"),
         ),
+        # Seller offers list / dashboard: WHERE seller_id=? [AND status=?]
+        # ORDER BY created_at. Replaces the single-column seller_id index the
+        # model previously declared (but which migration 0001 never created).
+        Index("ix_offers_seller_status_created", "seller_id", "status", "created_at"),
+        # Expiry sweep (expire_stale_offers) scans only live offers.
+        Index("ix_offers_pending_expiry", "expires_at", postgresql_where=text("status = 'pending'")),
+        Index("ix_offers_countered_expiry", "counter_expires_at", postgresql_where=text("status = 'countered'")),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     listing_id = Column(UUID(as_uuid=True), ForeignKey("listings.id", ondelete="CASCADE"), nullable=False, index=True)
     buyer_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    seller_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    # seller_id is covered by ix_offers_seller_status_created above (composite),
+    # so no single-column index here.
+    seller_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     offered_price = Column(Numeric(10, 2), nullable=False)
     counter_price = Column(Numeric(10, 2))
     counter_offered_at = Column(DateTime(timezone=True))
@@ -61,9 +70,24 @@ class Reservation(Base, TimestampMixin):
 
 class Transaction(Base, TimestampMixin):
     __tablename__ = "transactions"
+    __table_args__ = (
+        # Seller payout/dashboard aggregates over completed deals; partial keeps
+        # it tiny vs the full transactions table.
+        Index(
+            "ix_txn_completed_seller", "seller_id",
+            postgresql_where=text("status IN ('completed', 'auto_completed')"),
+        ),
+        # FE price-suggestion query filters completed txns by a recency window.
+        Index(
+            "ix_transactions_completed_at", "completed_at",
+            postgresql_where=text("status = 'completed'"),
+        ),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    reservation_id = Column(UUID(as_uuid=True), ForeignKey("reservations.id"), nullable=False, unique=True, index=True)
+    # reservation_id is UNIQUE, which already creates a backing index
+    # (transactions_reservation_id_key) — no separate index=True needed.
+    reservation_id = Column(UUID(as_uuid=True), ForeignKey("reservations.id"), nullable=False, unique=True)
     listing_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     buyer_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     seller_id = Column(UUID(as_uuid=True), nullable=False, index=True)
@@ -243,6 +267,12 @@ class Wishlist(Base):
 
 class NotificationEvent(Base):
     __tablename__ = "notification_events"
+    __table_args__ = (
+        # Notifications list: WHERE user_id=? ORDER BY created_at DESC LIMIT 50.
+        Index("ix_notif_user_created", "user_id", "created_at"),
+        # Unread badge count: WHERE user_id=? AND is_read=false.
+        Index("ix_notif_user_unread", "user_id", postgresql_where=text("is_read = false")),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)

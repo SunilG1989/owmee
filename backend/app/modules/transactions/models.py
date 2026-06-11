@@ -6,16 +6,22 @@ This module retains only TDS ledger and reconciliation — financial audit table
 that belong to the transactions domain but are not part of the offer flow.
 """
 import uuid
-from sqlalchemy import Column, DateTime, Numeric, String, Boolean, ForeignKey, text
+from sqlalchemy import Column, DateTime, Index, Numeric, String, Boolean, ForeignKey, text
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from app.db.session import Base, TimestampMixin
 
 
 class TDSAnnualLedger(Base, TimestampMixin):
     __tablename__ = "tds_annual_ledger"
+    __table_args__ = (
+        # Declares the real DB index (created by an earlier migration). Lookups
+        # are always by (seller_id, financial_year), so this composite covers
+        # them; no separate single-column seller_id index is needed.
+        Index("ix_tds_ledger_seller_fy", "seller_id", "financial_year"),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    seller_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    seller_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     financial_year = Column(String(7), nullable=False)   # e.g. "2024-25"
     cumulative_paid = Column(Numeric(14, 2), nullable=False, default=0)
     tds_withheld = Column(Numeric(14, 2), nullable=False, default=0)
