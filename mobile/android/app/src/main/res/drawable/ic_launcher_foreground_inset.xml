@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android adaptive icons animate and crop the foreground layer differently per
+  launcher. Keep the approved Owmee artwork unchanged, but inset it so the mark
+  stays inside the safe zone instead of feeling oversized or off-center after a
+  launcher applies its mask.
+-->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@mipmap/ic_launcher_foreground"
+    android:insetLeft="8dp"
+    android:insetTop="8dp"
+    android:insetRight="8dp"
+    android:insetBottom="8dp" />
