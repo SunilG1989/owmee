@@ -33,9 +33,10 @@ let finalMasterURL = repoRoot.appendingPathComponent("mobile/assets/owmee/brand/
 let androidResRoot = repoRoot.appendingPathComponent("mobile/android/app/src/main/res")
 let iosAppIconRoot = repoRoot.appendingPathComponent("mobile/ios/owmee/Images.xcassets/AppIcon.appiconset")
 
-let visualMarkScale: CGFloat = 0.77
-let borderColor = NSColor(srgbRed: 0.00, green: 0.31, blue: 0.33, alpha: 0.68).cgColor
-let highlightBorderColor = NSColor(srgbRed: 1.00, green: 0.96, blue: 0.86, alpha: 0.46).cgColor
+let visualMarkScale: CGFloat = 0.75
+let markEdgeFeather: CGFloat = 0.09
+let borderColor = NSColor(srgbRed: 0.00, green: 0.31, blue: 0.33, alpha: 0.62).cgColor
+let highlightBorderColor = NSColor(srgbRed: 1.00, green: 0.96, blue: 0.86, alpha: 0.34).cgColor
 
 let densities = [
     Density(folderSuffix: "mdpi", multiplier: 1),
@@ -90,6 +91,10 @@ func roundedClipPath(_ rect: CGRect, radius: CGFloat) -> CGPath {
     CGPath(roundedRect: rect, cornerWidth: radius, cornerHeight: radius, transform: nil)
 }
 
+func clamp(_ value: CGFloat, min minimum: CGFloat, max maximum: CGFloat) -> CGFloat {
+    Swift.max(minimum, Swift.min(maximum, value))
+}
+
 func makeContext(size: Int, alpha: Bool) -> CGContext {
     let bitmapInfo = alpha
         ? CGImageAlphaInfo.premultipliedLast.rawValue
@@ -135,6 +140,41 @@ func drawSoftBackground(in context: CGContext, size: Int) {
     )
 }
 
+func makeRoundedFeatherMask(size: Int, rect: CGRect, radius: CGFloat, feather: CGFloat) -> CGImage {
+    var pixels = [UInt8](repeating: 0, count: size * size)
+    let rectCenter = CGPoint(x: rect.midX, y: rect.midY)
+    let halfSize = CGSize(width: rect.width / 2, height: rect.height / 2)
+    let innerHalf = CGSize(width: halfSize.width - radius, height: halfSize.height - radius)
+
+    for y in 0..<size {
+        for x in 0..<size {
+            let point = CGPoint(x: CGFloat(x) + 0.5, y: CGFloat(y) + 0.5)
+            let qx = abs(point.x - rectCenter.x) - innerHalf.width
+            let qy = abs(point.y - rectCenter.y) - innerHalf.height
+            let outsideX = max(qx, 0)
+            let outsideY = max(qy, 0)
+            let outsideDistance = sqrt(outsideX * outsideX + outsideY * outsideY)
+            let insideDistance = min(max(qx, qy), 0)
+            let signedDistance = outsideDistance + insideDistance - radius
+            let alpha = clamp(-signedDistance / feather, min: 0, max: 1)
+            pixels[y * size + x] = UInt8((alpha * 255).rounded())
+        }
+    }
+
+    let data = Data(pixels)
+    let provider = CGDataProvider(data: data as CFData)!
+    return CGImage(
+        maskWidth: size,
+        height: size,
+        bitsPerComponent: 8,
+        bitsPerPixel: 8,
+        bytesPerRow: size,
+        provider: provider,
+        decode: [1, 0],
+        shouldInterpolate: true
+    )!
+}
+
 func drawContainedMark(in context: CGContext, size: Int) {
     let side = CGFloat(size) * visualMarkScale
     let artRect = CGRect(
@@ -145,8 +185,13 @@ func drawContainedMark(in context: CGContext, size: Int) {
     )
 
     context.saveGState()
-    context.addPath(roundedClipPath(artRect, radius: side * 0.12))
-    context.clip()
+    let mask = makeRoundedFeatherMask(
+        size: size,
+        rect: artRect,
+        radius: side * 0.12,
+        feather: CGFloat(size) * markEdgeFeather
+    )
+    context.clip(to: CGRect(x: 0, y: 0, width: size, height: size), mask: mask)
     context.draw(source, in: artRect)
     context.restoreGState()
 }
@@ -188,7 +233,6 @@ func drawAdaptiveForeground(size: Int) -> CGContext {
     let context = makeContext(size: size, alpha: true)
     context.clear(CGRect(x: 0, y: 0, width: size, height: size))
     drawContainedMark(in: context, size: size)
-    drawContainerBorder(in: context, size: size)
     return context
 }
 

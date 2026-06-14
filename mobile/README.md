@@ -59,7 +59,7 @@ The generator produces:
 - Android adaptive foreground PNGs in `mipmap-*` and adaptive background PNGs in `drawable-*`.
 - iOS iPhone, iPad, and 1024 marketing icons in `ios/owmee/Images.xcassets/AppIcon.appiconset`.
 
-Android launchers can mask adaptive icons into circles, squircles, rounded squares, or OEM-specific shapes. Keep the Owmee O/W mark inside the generated safe area; the outer decorative border may follow the launcher mask, but the brand mark should not be clipped. iOS uses the generated opaque square PNGs and applies its own system corner mask.
+Android launchers can mask adaptive icons into circles, squircles, rounded squares, or OEM-specific shapes. Keep the Owmee O/W mark inside the generated safe area; do not depend on a fixed outer rounded-square border in the Android adaptive foreground because circle launchers can clip it. The decorative border is kept for iOS and Android legacy PNGs, where the app owns the square icon shape. iOS uses generated opaque square PNGs and applies its own system corner mask.
 
 ## Step 1: Start the Metro Server
 

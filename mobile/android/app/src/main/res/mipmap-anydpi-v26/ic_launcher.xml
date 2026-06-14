@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Adaptive icon (Android 8.0+). Keep the Owmee mark and border in the foreground
-  layer with transparent outer padding, and keep the soft gradient field in the
-  background layer. This lets launchers apply their own mask shape without
-  cropping the O/W mark or making the icon look different across OEM launchers.
+  Adaptive icon (Android 8.0+). Keep the Owmee mark in the foreground layer
+  with transparent outer padding, and keep the soft gradient field in the
+  background layer. Do not bake the fixed rounded-square border into the
+  adaptive foreground; launchers mask adaptive icons into OEM-specific shapes.
 -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@drawable/ic_launcher_background" />
