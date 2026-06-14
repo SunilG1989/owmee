@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Adaptive icon (Android 8.0+). The color icon is split into Android's
-  production launcher model: an opaque background layer plus a transparent
-  foreground mark centered in the safe zone. Keep the foreground generated from
-  the approved brand artwork; do not use a finished square bitmap here.
+  Adaptive icon (Android 8.0+). Without this, launchers that mask icons (Pixel
+  masks to a circle) fall back to "legacy icon treatment" and shrink the square
+  bitmap onto a neutral background inside the mask — the square-in-a-circle bug.
+  The foreground is the full-bleed brand mark, so the circle mask crops it to a
+  clean round icon; the gradient background only shows in the parallax sliver.
 -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@drawable/ic_launcher_background" />
