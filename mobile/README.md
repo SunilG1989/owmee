@@ -36,6 +36,31 @@ cd android
 3. Set `GOOGLE_MAPS_API_KEY = ...`.
 4. Restrict the key to bundle id `com.owmee`.
 
+## App icon assets
+
+The Owmee launcher icon is generated from one approved source so Android and iOS do not drift.
+
+Source of truth:
+
+- Approved artwork: `assets/owmee/brand/owmee-launcher-icon-approved.png`
+- Generated review master: `assets/owmee/brand/owmee-app-icon-final.png`
+- Generator: `scripts/generate-app-icons.swift`
+
+Regenerate all platform icon assets after any approved icon change:
+
+```bash
+cd mobile
+scripts/generate-app-icons.swift
+```
+
+The generator produces:
+
+- Android legacy launcher PNGs in `android/app/src/main/res/mipmap-*`.
+- Android adaptive foreground PNGs in `mipmap-*` and adaptive background PNGs in `drawable-*`.
+- iOS iPhone, iPad, and 1024 marketing icons in `ios/owmee/Images.xcassets/AppIcon.appiconset`.
+
+Android launchers can mask adaptive icons into circles, squircles, rounded squares, or OEM-specific shapes. Keep the Owmee O/W mark inside the generated safe area; the outer decorative border may follow the launcher mask, but the brand mark should not be clipped. iOS uses the generated opaque square PNGs and applies its own system corner mask.
+
 ## Step 1: Start the Metro Server
 
 First, you will need to start **Metro**, the JavaScript _bundler_ that ships _with_ React Native.
