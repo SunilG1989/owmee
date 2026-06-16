@@ -30,6 +30,9 @@ Fill these in the Render Blueprint flow before the first deploy:
 - `SMS_API_KEY` and `SMS_TEMPLATE_ID` when `SMS_PROVIDER=msg91`. The service
   can boot without these in private staging, but OTP sends fail closed until
   both values are real.
+- Clear `OTP_WHITELIST` when moving from pilot fixed-OTP testing to MSG91.
+  Production ignores stale whitelist entries by default, but strict launch
+  validation will reject them.
 - SMS, KYC, payment, Stream, FCM, Temporal, and Sentry credentials when you
   are ready for public launch.
 
@@ -45,6 +48,8 @@ The Blueprint is intentionally set up for a private app before public launch:
 - `SMS_PROVIDER=msg91`: OTP uses MSG91 when `SMS_API_KEY` and
   `SMS_TEMPLATE_ID` are present. If they are missing, `/v1/auth/otp/send`
   returns an OTP delivery failure instead of allowing a static OTP bypass.
+- `OTP_WHITELIST` is ignored in production so stale private-pilot phone numbers
+  cannot bypass MSG91.
 - `KYC_PARTNER=mock`: Aadhaar/PAN/liveness flows use the safe mock adapter.
 - `PA_PROVIDER=mock`: payment links simulate payment against the Render API URL.
 - `TEMPORAL_HOST=disabled`: the worker stays alive but does not connect to

@@ -217,10 +217,11 @@ class Settings(BaseSettings):
                     + ", ".join(missing_msg91)
                     + " — placeholders or empty values mean OTP SMS cannot be delivered."
                 )
-        if self.otp_whitelist.strip():
+        if self.strict_provider_startup_validation and self.otp_whitelist.strip():
             raise ValueError(
-                "OTP_WHITELIST must be empty in production — whitelisted numbers "
-                "authenticate with a static code, which is a login bypass."
+                "Strict provider startup validation requires OTP_WHITELIST to be empty "
+                "in production — whitelisted numbers authenticate with a static code, "
+                "which is a login bypass."
             )
 
         # ── Fraud: no mock auto-allow in prod while enforcement is enabled ────

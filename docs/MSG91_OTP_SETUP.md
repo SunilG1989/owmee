@@ -19,12 +19,16 @@ not send login OTPs and should not be blocked by missing SMS credentials.
 - `SMS_DLT_ENTITY_ID=<DLT entity id, if required by the account/template>`
 - `SMS_MSG91_TIMEOUT_SECONDS=10`
 - `SMS_MSG91_OTP_EXPIRY_MINUTES=10`
+- Delete any old `OTP_WHITELIST` value from Render once MSG91 is enabled.
+  Production ignores stale whitelist entries unless strict launch validation is
+  enabled, but keeping the env var around makes operator debugging confusing.
 
 Do not leave `SMS_TEMPLATE_ID` or `SMS_API_KEY` empty. With the default private
 staging setting `STRICT_PROVIDER_STARTUP_VALIDATION=false`, the app can boot but
 OTP sends fail closed until those values are real. Before public launch, set
 `STRICT_PROVIDER_STARTUP_VALIDATION=true` on `owmee-api` so empty or
-`REPLACE_WITH_...` MSG91 values stop the release at startup.
+`REPLACE_WITH_...` MSG91 values and stale `OTP_WHITELIST` values stop the
+release at startup.
 
 ## MSG91 Dashboard Checklist
 
@@ -45,6 +49,8 @@ OTP sends fail closed until those values are real. Before public launch, set
 ## Runtime Behavior
 
 - Development always uses the mock/fixed OTP path.
+- Production ignores `OTP_WHITELIST`; it cannot activate fixed OTP when
+  `SMS_PROVIDER=msg91`.
 - Production with `SMS_PROVIDER=msg91` sends `POST /api/v5/otp` to MSG91.
 - The authkey is sent in the `authkey` header rather than the query string.
 - Owmee sends the generated OTP and an expiry matching the Redis OTP TTL.

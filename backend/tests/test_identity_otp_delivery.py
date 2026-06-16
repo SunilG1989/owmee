@@ -5,6 +5,24 @@ from app.core.settings import settings
 from app.modules.identity_auth import router as auth_router
 
 
+def test_production_msg91_ignores_stale_otp_whitelist(monkeypatch):
+    monkeypatch.setattr(settings, "env", "production")
+    monkeypatch.setattr(settings, "sms_provider", "msg91")
+    monkeypatch.setattr(settings, "otp_whitelist", "+919876543210,9876543211")
+
+    assert auth_router._is_whitelisted_phone("+919876543210") is False
+    assert auth_router._uses_fixed_otp("+919876543210") is False
+
+
+def test_development_can_still_use_otp_whitelist(monkeypatch):
+    monkeypatch.setattr(settings, "env", "development")
+    monkeypatch.setattr(settings, "sms_provider", "msg91")
+    monkeypatch.setattr(settings, "otp_whitelist", "+919876543210")
+
+    assert auth_router._is_whitelisted_phone("+91 98765 43210") is True
+    assert auth_router._uses_fixed_otp("+91 98765 43210") is True
+
+
 @pytest.mark.asyncio
 async def test_send_otp_removes_stored_code_when_sms_delivery_fails(monkeypatch):
     stored: list[tuple[str, str, bool]] = []

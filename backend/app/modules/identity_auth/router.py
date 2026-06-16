@@ -91,9 +91,8 @@ def _otp_lock_key(phone: str) -> str:
 
 async def _check_rate_limit(phone: str) -> None:
     # Fix #30: Skip rate limit in dev — OTP is logged to console anyway.
-    # Private Render staging currently runs SMS_PROVIDER=mock. In that mode
-    # there is no real SMS delivery, so users must be able to use the fixed
-    # pilot OTP without getting stuck behind production SMS rate limits.
+    # Fixed OTP exists only for local/dev-style flows. Production real-SMS
+    # ignores OTP_WHITELIST so stale pilot config cannot bypass MSG91.
     if settings.env == "development" or _uses_fixed_otp(phone):
         return
     redis = await get_redis()
@@ -188,6 +187,8 @@ def _is_whitelisted_phone(phone: str) -> bool:
     Whitelist entries are compared post-normalization so they can be listed
     as 10-digit, +91..., or 91... and still match _normalise_phone output.
     """
+    if settings.env == "production":
+        return False
     wl_raw = getattr(settings, "otp_whitelist", "") or ""
     if not wl_raw:
         return False

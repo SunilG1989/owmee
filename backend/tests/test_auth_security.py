@@ -3,8 +3,8 @@
 Covers:
   - JWT algorithm-confusion guard (symmetric algorithms refused everywhere).
   - JWT issuer/audience pinning round-trip + rejection.
-  - Production config guards: mock SMS provider and OTP whitelist must refuse
-    to boot in production; mock fraud is refused when strict provider startup
+  - Production config guards: mock SMS provider must refuse to boot; OTP
+    whitelist and mock fraud are refused when strict provider startup
     validation is enabled for launch.
   - Redis-backed access-token revocation (session-level + user-epoch level).
 """
@@ -142,9 +142,16 @@ def test_mock_sms_provider_refused_in_production(provider):
         Settings(**_base_prod_kwargs(sms_provider=provider))
 
 
-def test_otp_whitelist_refused_in_production():
+def test_otp_whitelist_allowed_at_startup_for_private_staging_provider_mode():
+    Settings(**_base_prod_kwargs(otp_whitelist="+919876543210"))
+
+
+def test_otp_whitelist_refused_in_strict_provider_startup_validation():
     with pytest.raises(ValidationError):
-        Settings(**_base_prod_kwargs(otp_whitelist="+919876543210"))
+        Settings(**_base_prod_kwargs(
+            strict_provider_startup_validation=True,
+            otp_whitelist="+919876543210",
+        ))
 
 
 @pytest.mark.parametrize("provider", ["mock", "dev", "log", ""])
