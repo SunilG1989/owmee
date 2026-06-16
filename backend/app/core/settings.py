@@ -135,6 +135,8 @@ class Settings(BaseSettings):
     sms_sender_id: str = "OWMAPP"
     sms_dlt_entity_id: str = ""
     sms_template_id: str = ""
+    sms_msg91_timeout_seconds: float = 10.0
+    sms_msg91_otp_expiry_minutes: int = 10
 
     # ── Legacy Stream keys (unused; buyer-seller chat is not shipped)
     stream_api_key: str = ""
@@ -170,7 +172,53 @@ class Settings(BaseSettings):
         if not origins or any("localhost" in origin or "127.0.0.1" in origin for origin in origins):
             raise ValueError("ALLOWED_ORIGINS must contain only production client origins.")
 
+        # ── OTP / SMS: no mock-delivery bypass or static pilot OTP in prod ────
+        # A mock SMS provider makes the fixed pilot OTP (otp_whitelist_code,
+        # default 123456) accept for any phone, and a populated OTP_WHITELIST
+        # does the same for listed numbers — both are full account-takeover
+        # vectors if they reach production. Refuse to boot with either.
+        sms_provider = (self.sms_provider or "").strip().lower()
+        if sms_provider in {"", "mock", "dev", "log"}:
+            raise ValueError(
+                "SMS_PROVIDER must be a real delivery provider in production "
+                "(not empty/mock/dev/log) — a mock provider enables the static OTP bypass."
+            )
+        if sms_provider in {"msg91", "msg-91"}:
+            missing_msg91 = [
+                name
+                for name, value in {
+                    "SMS_API_KEY": self.sms_api_key,
+                    "SMS_TEMPLATE_ID": self.sms_template_id,
+                }.items()
+                if self._missing_required_secret(value)
+            ]
+            if missing_msg91:
+                raise ValueError(
+                    "MSG91 production SMS requires real values for "
+                    + ", ".join(missing_msg91)
+                    + " — placeholders or empty values mean OTP SMS cannot be delivered."
+                )
+        if self.otp_whitelist.strip():
+            raise ValueError(
+                "OTP_WHITELIST must be empty in production — whitelisted numbers "
+                "authenticate with a static code, which is a login bypass."
+            )
+
+        # ── Fraud: no mock auto-allow in prod while enforcement is enabled ────
+        fraud_provider = (self.fraud_provider or "").strip().lower()
+        if self.fraud_enforcement_enabled and fraud_provider in {"", "mock", "dev", "log"}:
+            raise ValueError(
+                "FRAUD_PROVIDER must be a real provider in production when "
+                "FRAUD_ENFORCEMENT_ENABLED is true — a mock provider silently "
+                "bypasses every fraud step-up/block decision."
+            )
+
         return self
+
+    @staticmethod
+    def _missing_required_secret(value: str | None) -> bool:
+        raw = str(value or "").strip()
+        return not raw or raw.startswith("REPLACE_WITH_")
 
     # ── Rate limiting ──────────────────────────────────────────────────────
     otp_rate_limit_per_hour: int = 3

@@ -80,11 +80,15 @@ services:
       - key: SMS_API_KEY
         sync: false
       - key: SMS_TEMPLATE_ID
-        value: REPLACE_WITH_MSG91_TEMPLATE_ID
+        sync: false
       - key: SMS_SENDER_ID
         value: OWMEO
       - key: SMS_DLT_ENTITY_ID
         sync: false
+      - key: SMS_MSG91_TIMEOUT_SECONDS
+        value: "10"
+      - key: SMS_MSG91_OTP_EXPIRY_MINUTES
+        value: "10"
       - key: KYC_PARTNER
         value: mock
       - key: KYC_PARTNER_API_KEY
@@ -242,11 +246,15 @@ services:
       - key: SMS_API_KEY
         sync: false
       - key: SMS_TEMPLATE_ID
-        value: REPLACE_WITH_MSG91_TEMPLATE_ID
+        sync: false
       - key: SMS_SENDER_ID
         value: OWMEO
       - key: SMS_DLT_ENTITY_ID
         sync: false
+      - key: SMS_MSG91_TIMEOUT_SECONDS
+        value: "10"
+      - key: SMS_MSG91_OTP_EXPIRY_MINUTES
+        value: "10"
       - key: KYC_PARTNER
         value: mock
       - key: KYC_PARTNER_API_KEY

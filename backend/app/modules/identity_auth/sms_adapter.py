@@ -51,18 +51,25 @@ class _Msg91SMSAdapter:
                 error="Valid SMS_API_KEY and SMS_TEMPLATE_ID are required for MSG91",
             )
 
-        mobile = phone.lstrip("+")
+        mobile = _normalise_msg91_mobile(phone)
         url = f"{settings.sms_api_base_url.rstrip('/')}/api/v5/otp"
         params = {
-            "template_id": settings.sms_template_id,
+            "template_id": settings.sms_template_id.strip(),
             "mobile": mobile,
-            "authkey": settings.sms_api_key,
             "otp": otp,
+            "otp_expiry": str(max(1, int(settings.sms_msg91_otp_expiry_minutes))),
+        }
+        headers = {
+            "accept": "application/json",
+            "authkey": settings.sms_api_key.strip(),
         }
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.post(url, params=params, json={})
-            data = resp.json() if resp.content else {}
+            async with httpx.AsyncClient(timeout=settings.sms_msg91_timeout_seconds) as client:
+                resp = await client.post(url, params=params, headers=headers, json={})
+            try:
+                data = resp.json() if resp.content else {}
+            except ValueError:
+                data = {"message": resp.text[:300]}
         except Exception as exc:
             logger.error("sms.msg91.exception", error=str(exc), phone_suffix=phone[-4:])
             return SMSDeliveryResult(success=False, provider="msg91", error=str(exc))
@@ -81,6 +88,8 @@ class _Msg91SMSAdapter:
             "sms.msg91.failed",
             status=resp.status_code,
             error=error,
+            provider_type=data.get("type") or data.get("status"),
+            request_id=data.get("request_id") or data.get("requestId"),
             phone_suffix=phone[-4:],
         )
         return SMSDeliveryResult(success=False, provider="msg91", error=error)
@@ -90,7 +99,13 @@ def _looks_successful_msg91_response(data: dict) -> bool:
     status = str(data.get("type") or data.get("status") or "").lower()
     if status in {"success", "sent"}:
         return True
+    if status in {"error", "failed", "failure"}:
+        return False
     return bool(data.get("request_id") or data.get("requestId"))
+
+
+def _normalise_msg91_mobile(phone: str) -> str:
+    return "".join(ch for ch in str(phone or "") if ch.isdigit())
 
 
 def _missing_msg91_value(value: str | None) -> bool:
