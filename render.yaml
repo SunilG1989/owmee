@@ -9,7 +9,7 @@ services:
     dockerCommand: sh /app/start.sh
     preDeployCommand: sh /app/predeploy.sh
     healthCheckPath: /health
-    autoDeployTrigger: off
+    autoDeployTrigger: commit
     maxShutdownDelaySeconds: 60
     envVars:
       - key: ENV
@@ -160,7 +160,7 @@ services:
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
     dockerCommand: sh /app/worker.sh
-    autoDeployTrigger: off
+    autoDeployTrigger: commit
     maxShutdownDelaySeconds: 60
     envVars:
       - key: ENV
