@@ -40,6 +40,8 @@ def _base_prod_kwargs(**overrides):
         jwt_algorithm="RS256",
         allowed_origins="https://app.owmee.com",
         sms_provider="msg91",
+        sms_api_key="msg91-auth-key",
+        sms_template_id="msg91-template-id",
         otp_whitelist="",
         fraud_provider="bureau",
         fraud_enforcement_enabled=True,
