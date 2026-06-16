@@ -14,6 +14,10 @@ class Settings(BaseSettings):
 
     # ── Environment ────────────────────────────────────────────────────────
     env: str = "development"
+    # Runtime provider adapters fail closed at call time when credentials are
+    # absent. Turn this on only for a public-launch release gate where a missing
+    # commercial provider must stop the API before any traffic is served.
+    strict_provider_startup_validation: bool = False
     # Sprint 5b: OTP whitelist for test numbers (pre-real-SMS)
     # Comma-separated list of phone numbers (10-digit, +91..., or 91...).
     # Whitelisted phones receive the hardcoded `otp_whitelist_code` instead
@@ -198,7 +202,7 @@ class Settings(BaseSettings):
                 "SMS_PROVIDER must be a real delivery provider in production "
                 "(not empty/mock/dev/log) — a mock provider enables the static OTP bypass."
             )
-        if sms_provider in {"msg91", "msg-91"}:
+        if self.strict_provider_startup_validation and sms_provider in {"msg91", "msg-91"}:
             missing_msg91 = [
                 name
                 for name, value in {
@@ -209,7 +213,7 @@ class Settings(BaseSettings):
             ]
             if missing_msg91:
                 raise ValueError(
-                    "MSG91 production SMS requires real values for "
+                    "MSG91 strict provider startup validation requires real values for "
                     + ", ".join(missing_msg91)
                     + " — placeholders or empty values mean OTP SMS cannot be delivered."
                 )
@@ -221,10 +225,14 @@ class Settings(BaseSettings):
 
         # ── Fraud: no mock auto-allow in prod while enforcement is enabled ────
         fraud_provider = (self.fraud_provider or "").strip().lower()
-        if self.fraud_enforcement_enabled and fraud_provider in {"", "mock", "dev", "log"}:
+        if (
+            self.strict_provider_startup_validation
+            and self.fraud_enforcement_enabled
+            and fraud_provider in {"", "mock", "dev", "log"}
+        ):
             raise ValueError(
-                "FRAUD_PROVIDER must be a real provider in production when "
-                "FRAUD_ENFORCEMENT_ENABLED is true — a mock provider silently "
+                "Strict provider startup validation requires FRAUD_PROVIDER to be real "
+                "when FRAUD_ENFORCEMENT_ENABLED is true — a mock provider silently "
                 "bypasses every fraud step-up/block decision."
             )
 

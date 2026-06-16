@@ -10,6 +10,7 @@ from app.modules.identity_auth import sms_adapter
 def _base_prod_kwargs(**overrides):
     kwargs = dict(
         env="production",
+        strict_provider_startup_validation=False,
         database_url="postgresql://u:p@db:5432/owmee",
         redis_url="redis://cache:6379/0",
         r2_endpoint="https://acct.r2.cloudflarestorage.com",
@@ -159,16 +160,30 @@ def test_render_blueprint_declares_required_msg91_env_slots():
     assert text.count("key: SMS_DLT_ENTITY_ID") == 2
     assert text.count("key: SMS_MSG91_TIMEOUT_SECONDS") == 2
     assert text.count("key: SMS_MSG91_OTP_EXPIRY_MINUTES") == 2
+    assert text.count("key: STRICT_PROVIDER_STARTUP_VALIDATION") == 2
     assert "REPLACE_WITH_MSG91_TEMPLATE_ID" not in text
 
 
 @pytest.mark.parametrize("field", ["sms_api_key", "sms_template_id"])
-def test_msg91_required_values_refused_when_missing_in_production(field):
-    with pytest.raises(ValidationError):
-        Settings(**_base_prod_kwargs(**{field: ""}))
+def test_msg91_required_values_allowed_at_startup_for_private_staging(field):
+    Settings(**_base_prod_kwargs(**{field: ""}))
 
 
 @pytest.mark.parametrize("field", ["sms_api_key", "sms_template_id"])
-def test_msg91_placeholder_values_refused_in_production(field):
+def test_msg91_required_values_refused_when_missing_in_strict_provider_startup_validation(field):
     with pytest.raises(ValidationError):
-        Settings(**_base_prod_kwargs(**{field: "REPLACE_WITH_MSG91_VALUE"}))
+        Settings(**_base_prod_kwargs(strict_provider_startup_validation=True, **{field: ""}))
+
+
+@pytest.mark.parametrize("field", ["sms_api_key", "sms_template_id"])
+def test_msg91_placeholder_values_allowed_at_startup_for_private_staging(field):
+    Settings(**_base_prod_kwargs(**{field: "REPLACE_WITH_MSG91_VALUE"}))
+
+
+@pytest.mark.parametrize("field", ["sms_api_key", "sms_template_id"])
+def test_msg91_placeholder_values_refused_in_strict_provider_startup_validation(field):
+    with pytest.raises(ValidationError):
+        Settings(**_base_prod_kwargs(
+            strict_provider_startup_validation=True,
+            **{field: "REPLACE_WITH_MSG91_VALUE"},
+        ))

@@ -3,8 +3,9 @@
 Covers:
   - JWT algorithm-confusion guard (symmetric algorithms refused everywhere).
   - JWT issuer/audience pinning round-trip + rejection.
-  - Production config guards: mock SMS provider, OTP whitelist, mock fraud
-    provider must all refuse to boot in production.
+  - Production config guards: mock SMS provider and OTP whitelist must refuse
+    to boot in production; mock fraud is refused when strict provider startup
+    validation is enabled for launch.
   - Redis-backed access-token revocation (session-level + user-epoch level).
 """
 import time
@@ -29,6 +30,7 @@ def _base_prod_kwargs(**overrides):
     test to assert the guard fires. Init kwargs take precedence over .env."""
     kwargs = dict(
         env="production",
+        strict_provider_startup_validation=False,
         database_url="postgresql://u:p@db:5432/owmee",
         redis_url="redis://cache:6379/0",
         r2_endpoint="https://acct.r2.cloudflarestorage.com",
@@ -148,7 +150,16 @@ def test_otp_whitelist_refused_in_production():
 @pytest.mark.parametrize("provider", ["mock", "dev", "log", ""])
 def test_mock_fraud_provider_refused_in_production_when_enforcing(provider):
     with pytest.raises(ValidationError):
-        Settings(**_base_prod_kwargs(fraud_provider=provider, fraud_enforcement_enabled=True))
+        Settings(**_base_prod_kwargs(
+            strict_provider_startup_validation=True,
+            fraud_provider=provider,
+            fraud_enforcement_enabled=True,
+        ))
+
+
+@pytest.mark.parametrize("provider", ["mock", "dev", "log", ""])
+def test_mock_fraud_provider_allowed_in_private_staging_provider_mode(provider):
+    Settings(**_base_prod_kwargs(fraud_provider=provider, fraud_enforcement_enabled=True))
 
 
 def test_mock_fraud_provider_allowed_in_production_when_enforcement_disabled():

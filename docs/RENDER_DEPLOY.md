@@ -27,7 +27,9 @@ Fill these in the Render Blueprint flow before the first deploy:
   `IMAGE_CLEANUP_PROVIDER=gemini` and `GEMINI_IMAGE_MODEL` configured so the
   AI listing flow cleans only the selected hero photo background during
   analysis.
-- `OTP_WHITELIST`: your private test phone numbers while SMS is not connected.
+- `SMS_API_KEY` and `SMS_TEMPLATE_ID` when `SMS_PROVIDER=msg91`. The service
+  can boot without these in private staging, but OTP sends fail closed until
+  both values are real.
 - SMS, KYC, payment, Stream, FCM, Temporal, and Sentry credentials when you
   are ready for public launch.
 
@@ -38,7 +40,11 @@ release checklist is green; deploy intentionally from known commits.
 
 The Blueprint is intentionally set up for a private app before public launch:
 
-- `SMS_PROVIDER=mock`: OTP is only reliable for numbers in `OTP_WHITELIST`.
+- `STRICT_PROVIDER_STARTUP_VALIDATION=false`: missing commercial provider
+  credentials do not kill the container; feature calls fail closed at runtime.
+- `SMS_PROVIDER=msg91`: OTP uses MSG91 when `SMS_API_KEY` and
+  `SMS_TEMPLATE_ID` are present. If they are missing, `/v1/auth/otp/send`
+  returns an OTP delivery failure instead of allowing a static OTP bypass.
 - `KYC_PARTNER=mock`: Aadhaar/PAN/liveness flows use the safe mock adapter.
 - `PA_PROVIDER=mock`: payment links simulate payment against the Render API URL.
 - `TEMPORAL_HOST=disabled`: the worker stays alive but does not connect to
@@ -47,7 +53,8 @@ The Blueprint is intentionally set up for a private app before public launch:
 This keeps the app usable while Cloudflare R2 and Gemini are real, and while
 Razorpay, Digio, SMS, Temporal, Stream, FCM, and Sentry are still pending.
 Before public launch, replace these mock/disabled values with real provider
-credentials and run the release gate again.
+credentials, set `STRICT_PROVIDER_STARTUP_VALIDATION=true` on `owmee-api`, and
+run the release gate again.
 
 ## JWT Key Generation
 

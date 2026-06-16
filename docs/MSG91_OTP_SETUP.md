@@ -6,7 +6,9 @@ stores for the login attempt.
 
 ## Required Render Values
 
-Set these on both `owmee-api` and `owmee-worker` when SMS delivery is enabled:
+Set these on `owmee-api` when SMS delivery is enabled. The Render blueprint
+also exposes the same slots on `owmee-worker` for symmetry, but the worker does
+not send login OTPs and should not be blocked by missing SMS credentials.
 
 - `ENV=production`
 - `SMS_PROVIDER=msg91`
@@ -18,8 +20,11 @@ Set these on both `owmee-api` and `owmee-worker` when SMS delivery is enabled:
 - `SMS_MSG91_TIMEOUT_SECONDS=10`
 - `SMS_MSG91_OTP_EXPIRY_MINUTES=10`
 
-Do not leave `SMS_TEMPLATE_ID` or `SMS_API_KEY` empty. Production startup now
-fails fast for empty or `REPLACE_WITH_...` MSG91 values.
+Do not leave `SMS_TEMPLATE_ID` or `SMS_API_KEY` empty. With the default private
+staging setting `STRICT_PROVIDER_STARTUP_VALIDATION=false`, the app can boot but
+OTP sends fail closed until those values are real. Before public launch, set
+`STRICT_PROVIDER_STARTUP_VALIDATION=true` on `owmee-api` so empty or
+`REPLACE_WITH_...` MSG91 values stop the release at startup.
 
 ## MSG91 Dashboard Checklist
 
@@ -45,6 +50,31 @@ fails fast for empty or `REPLACE_WITH_...` MSG91 values.
 - Owmee sends the generated OTP and an expiry matching the Redis OTP TTL.
 - If MSG91 returns an error response, Owmee returns `OTP_DELIVERY_FAILED` and
   deletes the stored OTP so the user cannot verify an undelivered code.
+
+## Production Probe
+
+After Render env vars and MSG91/DLT/operator approval are in place, open a
+Render shell for `owmee-api` and run:
+
+```bash
+PYTHONPATH=/app python scripts/probe_msg91_otp.py --phone +919876543210 --confirm-send
+```
+
+The probe uses Owmee's production MSG91 adapter and prints a redacted JSON
+result with the MSG91 request id. It does not store a Redis OTP and cannot be
+used to log in. If you must see the exact probe OTP for a handset test, add
+`--show-otp`.
+
+Interpret the result this way:
+
+- Probe fails: fix Owmee/Render configuration, authkey, template id, IP
+  security, or the MSG91 request shape before testing the app.
+- Probe succeeds and the handset receives the SMS: test the real app endpoint
+  `/v1/auth/otp/send`.
+- Probe succeeds but the handset receives nothing: use the request id in MSG91
+  reports and check DLT/operator routing, sender/header mapping, template
+  approval, Jio/Airtel/Vi propagation, blocked subscriber, or delivery report
+  status. At that point Owmee reached MSG91 successfully.
 
 ## Common Failure Modes
 
