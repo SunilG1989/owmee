@@ -82,9 +82,16 @@ async def apply_dispute_resolution(
             txn.cancelled_at = now
             await _reopen_listing(db, txn)
         elif resolution == "full_release":
+            from app.modules.transactions.payout_service import ensure_seller_payout_processing
+            await ensure_seller_payout_processing(
+                db,
+                txn,
+                source="dispute_full_release",
+                now=now,
+                notify=True,
+            )
             txn.status = "completed"
             txn.completed_at = now
-            txn.payout_flagged_at = now
         # "dismissed": dispute closed with no money movement / state change.
 
     logger.info(

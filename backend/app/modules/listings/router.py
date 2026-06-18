@@ -539,17 +539,21 @@ async def seller_dashboard(current_user: VerifiedUser, db: DBSession):
     txn_result = await db.execute(
         select(Transaction).where(
             Transaction.seller_id == current_user.user_id,
-            Transaction.status.in_(["completed", "auto_completed"]),
+            or_(
+                Transaction.status.in_(["completed", "auto_completed"]),
+                Transaction.payout_flagged_at.is_not(None),
+            ),
         )
     )
-    completed_txns = txn_result.scalars().all()
+    seller_txns = txn_result.scalars().all()
+    completed_txns = [t for t in seller_txns if t.status in ("completed", "auto_completed")]
 
     ratings_result = await db.execute(select(Rating).where(Rating.ratee_id == current_user.user_id))
     ratings = ratings_result.scalars().all()
 
     total_earnings = sum(float(t.net_payout or 0) for t in completed_txns)
     payout_pending = sum(
-        float(t.net_payout or 0) for t in completed_txns
+        float(t.net_payout or 0) for t in seller_txns
         if t.payout_flagged_at and not t.payout_released_at
     )
     avg_rating = round(sum(r.stars for r in ratings) / len(ratings), 1) if ratings else None

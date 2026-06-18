@@ -355,34 +355,20 @@ async def accept_delivery(
             "message": "Dispute opened. Our team will review within 48 hours.",
         }
 
-    # Buyer accepted — compute TDS on the SELLER-side gross
-    # (gross_amount - delivery_fee). Delivery fee is Owmee revenue.
-    seller_gross = Decimal(str(txn.gross_amount or 0)) - Decimal(str(txn.delivery_fee or 0))
-    tds_result = await compute_tds(
+    # Payout processing normally starts at pickup. Preserve that timestamp if
+    # present; for legacy/manual shipped flows, compute and flag it here.
+    from app.modules.transactions.payout_service import ensure_seller_payout_processing
+    payout_result = await ensure_seller_payout_processing(
         db,
-        txn.seller_id,
-        seller_gross,
-        transaction_id,
+        txn,
+        source="buyer_accept_delivery",
+        now=now,
+        notify=False,
     )
+    tds_result = payout_result["tds_result"]
 
     txn.status = "buyer_accepted"
-    txn.tds_withheld = tds_result["tds_amount"]
-    txn.platform_fee = tds_result["platform_fee"]
-    txn.gst_on_fee = tds_result["gst_on_fee"]
-    txn.net_payout = tds_result["net_payout"]
-    txn.payout_flagged_at = now
     txn.buyer_confirmed_at = now
-
-    # Trust gate: log if the seller isn't payout-verified. The actual
-    # release is ops-driven; the admin payout queue must filter on
-    # seller_payout_verified() before disbursing.
-    if not await seller_payout_verified(db, txn.seller_id):
-        logger.warning(
-            "payout.flagged_for_unverified_seller",
-            transaction_id=str(transaction_id),
-            seller_id=str(txn.seller_id),
-            net_payout=str(tds_result["net_payout"]),
-        )
 
     await db.execute(text("""
         UPDATE shipments SET
@@ -421,7 +407,7 @@ async def accept_delivery(
             "financial_year": tds_result["financial_year"],
             "tds_threshold_crossed": tds_result["tds_threshold_crossed"],
         },
-        "message": "Delivery accepted. Payout will be released within 24 hours.",
+        "message": "Delivery accepted. Payout processing continues after verification checks.",
     }
 
 

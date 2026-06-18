@@ -73,13 +73,14 @@ Do not use the Payment Link `callback_url` as the webhook. Razorpay treats `call
 
 Refund retries use Razorpay's `X-Refund-Idempotency` header so a network retry cannot double-refund the buyer.
 
-Seller payout is deliberately not released when the buyer pays. The order lifecycle is:
+Seller payout is deliberately not released when the buyer pays. Payout processing starts only after Owmee pickup/inspection succeeds:
 
 1. Buyer payment captured: move to seller readiness and notify the seller to confirm pickup.
 2. Seller confirms readiness: allow Owmee ops to assign pickup.
-3. FE pickup passes inspection: item moves to hub custody; payout remains held.
-4. Delivery completes: buyer gets the confirmation/dispute window; payout remains held.
-5. Buyer confirms, auto-complete fires after the window, or a dispute resolves to seller release: payout becomes eligible for ops-driven release after seller payout/KYC checks.
+3. FE pickup passes inspection: item moves to hub custody and seller payout processing starts.
+4. If the seller payout account/KYC is not verified, notify the seller to complete payout verification; `payout_released_at` must remain empty.
+5. Delivery completes: buyer gets the confirmation/dispute window; payout processing continues.
+6. Buyer confirms, auto-complete fires after the window, or a dispute resolves to seller release: ops/provider settlement can release the already-processing payout after seller payout/KYC checks.
 
 ## Production Guardrail
 

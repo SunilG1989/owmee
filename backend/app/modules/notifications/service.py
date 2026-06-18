@@ -47,6 +47,8 @@ BUCKET_MAP = {
     "deal_confirmed":        "transactions",
     "deal_confirmed_buyer":  "transactions",
     "payout_eligible":       "transactions",
+    "payout_processing_started": "transactions",
+    "payout_verification_required": "transactions",
     "dispute_opened":        "transactions",
     "price_drop":            "transactions",
     "promo_badge":           "promotions",

@@ -975,7 +975,7 @@ async def _refund_for_seller_readiness_failure(
 
 async def buyer_confirm_deal(db, transaction_id, buyer_id):
     # Lock the transaction row so two concurrent confirms can't both pass the
-    # status check and both run compute_tds / flag payout twice.
+    # status check and both complete the deal twice.
     result = await db.execute(
         select(Transaction).where(Transaction.id == transaction_id).with_for_update()
     )
@@ -989,35 +989,21 @@ async def buyer_confirm_deal(db, transaction_id, buyer_id):
 
     now = datetime.now(timezone.utc)
 
-    # Compute TDS on seller-side gross (agreed_price = gross_amount -
-    # delivery_fee). Delivery fee is Owmee revenue, not seller payout.
-    from app.modules.transactions.shipped import compute_tds
-    seller_gross = Decimal(str(txn.gross_amount or 0)) - Decimal(str(txn.delivery_fee or 0))
-    tds_result = await compute_tds(
-        db, txn.seller_id, seller_gross, transaction_id
+    # Payout processing normally starts at successful FE pickup. For legacy or
+    # manually progressed orders, ensure the payout breakdown exists here too
+    # without overwriting the original processing-start timestamp.
+    from app.modules.transactions.payout_service import ensure_seller_payout_processing
+    await ensure_seller_payout_processing(
+        db,
+        txn,
+        source="buyer_confirm_deal",
+        now=now,
+        notify=False,
     )
-    txn.tds_withheld = tds_result["tds_amount"]
-    txn.platform_fee = tds_result["platform_fee"]
-    txn.gst_on_fee = tds_result["gst_on_fee"]
-    txn.net_payout = tds_result["net_payout"]
 
     txn.status = "completed"
     txn.buyer_confirmed_at = now
     txn.completed_at = now
-    txn.payout_flagged_at = now
-
-    # Trust gate: payout cannot release until seller's bank/UPI is KYC-
-    # verified. Release is ops-driven; the admin payout queue must filter
-    # on seller_payout_verified() before disbursing. Log here so unverified-
-    # seller flags are observable in Sentry/logs.
-    from app.modules.transactions.shipped import seller_payout_verified
-    if not await seller_payout_verified(db, txn.seller_id):
-        logger.warning(
-            "payout.flagged_for_unverified_seller",
-            transaction_id=str(transaction_id),
-            seller_id=str(txn.seller_id),
-            net_payout=str(txn.net_payout),
-        )
 
     # Update trust scores
     import asyncio
@@ -1031,7 +1017,7 @@ async def buyer_confirm_deal(db, transaction_id, buyer_id):
         listing.status = "sold"
 
     await _notify(db, txn.seller_id, "deal_confirmed",
-        "Deal confirmed — payout queued",
+        "Deal confirmed — payout processing",
         f"₹{txn.net_payout:,.0f} payout being processed. Rate your buyer in 2 hours.",
         "transaction", str(txn.id))
     await _notify(db, txn.buyer_id, "deal_confirmed_buyer",

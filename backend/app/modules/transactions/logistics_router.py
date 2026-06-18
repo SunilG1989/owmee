@@ -280,6 +280,14 @@ async def fe_complete_pickup(
 
     if body.inspection_passed:
         txn.at_hub_at = now
+        from app.modules.transactions.payout_service import ensure_seller_payout_processing
+        payout_result = await ensure_seller_payout_processing(
+            db,
+            txn,
+            source="fe_pickup_completed",
+            now=now,
+            notify=True,
+        )
         from app.modules.offers.service import _notify
         await _notify(db, txn.buyer_id, "item_at_hub",
             "Item inspected by Owmee",
@@ -287,8 +295,14 @@ async def fe_complete_pickup(
             "transaction", str(txn.id))
         await _notify(db, txn.seller_id, "pickup_completed",
             "Pickup completed",
-            "Owmee collected and inspected the item. Track payout progress in the order.",
+            "Owmee collected and inspected the item. Seller payout processing has started.",
             "transaction", str(txn.id))
+        if not payout_result["seller_payout_verified"]:
+            logger.warning(
+                "logistics.pickup_completed_payout_verification_needed",
+                transaction_id=str(transaction_id),
+                seller_id=str(txn.seller_id),
+            )
     else:
         # Pickup rejected = trust failure. Auto-initiate the buyer's
         # refund right here so ops doesn't have to chase it manually.

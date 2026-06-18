@@ -5,7 +5,6 @@ Each is idempotent, writes to event log before side effects.
 from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
 
 import structlog
 from temporalio import activity
@@ -102,11 +101,11 @@ async def act_trigger_refund(inp: ActivityTransactionInput) -> dict:
 @activity.defn(name="act_trigger_payout_eligibility")
 async def act_trigger_payout_eligibility(inp: ActivityTransactionInput) -> dict:
     """
-    Mark transaction payout as eligible after the order is complete.
+    Mark transaction payout processing as started after successful pickup.
 
-    Buyer payment capture and FE pickup are not enough to release seller money:
-    the buyer must receive the item and either confirm it, let the confirmation
-    window auto-complete, or lose a dispute.
+    Buyer payment capture alone is not enough. Once the item is in Owmee custody
+    (at_hub or later), payout processing can start; actual release still stays
+    behind payout/KYC verification and ops/provider settlement.
     """
     from app.db.session import AsyncSessionLocal
     from app.modules.offers.models import Transaction
@@ -121,22 +120,31 @@ async def act_trigger_payout_eligibility(inp: ActivityTransactionInput) -> dict:
         if not txn:
             return {"success": False}
 
-        eligible_statuses = {"completed", "auto_completed", "buyer_accepted"}
-        if txn.status not in eligible_statuses:
+        from app.modules.transactions.payout_service import (
+            PAYOUT_PROCESSING_ALLOWED_STATUSES,
+            ensure_seller_payout_processing,
+        )
+        if txn.status not in PAYOUT_PROCESSING_ALLOWED_STATUSES:
             logger.warning(
                 "act_trigger_payout_eligibility.blocked_status",
                 transaction_id=inp.transaction_id,
                 status=txn.status,
             )
-            return {"success": False, "reason": "ORDER_NOT_COMPLETE", "status": txn.status}
+            return {"success": False, "reason": "PICKUP_NOT_CONFIRMED", "status": txn.status}
 
-        if txn.payout_flagged_at:
-            return {"success": True, "already_flagged": True}
-
-        txn.payout_flagged_at = datetime.now(timezone.utc)
+        payout_result = await ensure_seller_payout_processing(
+            db,
+            txn,
+            source="activity_trigger",
+            notify=False,
+        )
         await db.commit()
         logger.info("act_trigger_payout_eligibility.done", transaction_id=inp.transaction_id)
-        return {"success": True}
+        return {
+            "success": True,
+            "already_flagged": not payout_result["started_now"],
+            "seller_payout_verified": payout_result["seller_payout_verified"],
+        }
 
 
 @activity.defn(name="act_flag_seller_ghosting")
@@ -181,7 +189,6 @@ async def act_auto_complete_transaction(inp: ActivityTransactionInput) -> dict:
     from app.db.session import AsyncSessionLocal
     from app.modules.offers.models import Transaction
     from app.modules.listings.models import Listing
-    from app.modules.transactions.shipped import compute_tds, seller_payout_verified
     from app.modules.offers.service import _notify
     from sqlalchemy import select
     import uuid
@@ -203,16 +210,17 @@ async def act_auto_complete_transaction(inp: ActivityTransactionInput) -> dict:
         if txn.confirmation_deadline and txn.confirmation_deadline > now:
             return {"success": False, "reason": "DEADLINE_NOT_REACHED"}
 
-        seller_gross = Decimal(str(txn.gross_amount or 0)) - Decimal(str(txn.delivery_fee or 0))
-        tds_result = await compute_tds(db, txn.seller_id, seller_gross, txn.id)
-        txn.tds_withheld = tds_result["tds_amount"]
-        txn.platform_fee = tds_result["platform_fee"]
-        txn.gst_on_fee = tds_result["gst_on_fee"]
-        txn.net_payout = tds_result["net_payout"]
+        from app.modules.transactions.payout_service import ensure_seller_payout_processing
+        await ensure_seller_payout_processing(
+            db,
+            txn,
+            source="auto_complete",
+            now=now,
+            notify=False,
+        )
         txn.status = "auto_completed"
         txn.completed_at = now
         txn.auto_completed_at = now
-        txn.payout_flagged_at = now
         txn.rate_available_at = now + timedelta(hours=2)
 
         # Mark listing as sold
@@ -223,15 +231,8 @@ async def act_auto_complete_transaction(inp: ActivityTransactionInput) -> dict:
         if listing:
             listing.status = "sold"
 
-        if not await seller_payout_verified(db, txn.seller_id):
-            logger.warning(
-                "payout.flagged_for_unverified_seller",
-                transaction_id=inp.transaction_id,
-                seller_id=str(txn.seller_id),
-                net_payout=str(txn.net_payout),
-            )
         await _notify(db, txn.seller_id, "deal_confirmed",
-            "Deal auto-completed — payout queued",
+            "Deal auto-completed — payout processing",
             f"₹{txn.net_payout:,.0f} payout being processed. Rate your buyer in 2 hours.",
             "transaction", str(txn.id))
         await _notify(db, txn.buyer_id, "deal_confirmed_buyer",

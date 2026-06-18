@@ -43,6 +43,14 @@ class _Result:
     def scalar(self):
         return self.value
 
+    def scalars(self):
+        return self
+
+    def all(self):
+        if isinstance(self.value, list):
+            return self.value
+        return []
+
 
 class _DB:
     def __init__(self, *, get_value=None, execute_values=None):
@@ -166,6 +174,8 @@ def test_order_notification_events_stay_transaction_bucket_only():
         "pickup_completed",
         "item_at_hub",
         "pickup_rejected_refund",
+        "payout_processing_started",
+        "payout_verification_required",
         "out_for_delivery",
         "delivery_in_progress",
         "delivered_confirm_receipt",
@@ -357,7 +367,9 @@ async def test_seller_readiness_confirm_mutates_only_structured_state(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_pickup_completion_does_not_queue_seller_payout(monkeypatch):
+async def test_pickup_completion_starts_verified_seller_payout_processing(monkeypatch):
+    from app.modules.transactions import payout_service
+
     fe_id = uuid4()
     txn = _txn(
         status=PAYMENT_CAPTURED,
@@ -369,7 +381,11 @@ async def test_pickup_completion_does_not_queue_seller_payout(monkeypatch):
     async def fake_notify(_db, user_id, event_type, *_args, **_kwargs):
         notified.append((user_id, event_type))
 
+    async def fake_seller_payout_verified(*_args, **_kwargs):
+        return True
+
     monkeypatch.setattr(offer_service, "_notify", fake_notify)
+    monkeypatch.setattr(payout_service, "seller_payout_verified", fake_seller_payout_verified)
 
     out = await logistics_router.fe_complete_pickup(
         txn.id,
@@ -385,9 +401,49 @@ async def test_pickup_completion_does_not_queue_seller_payout(monkeypatch):
     assert out["status"] == AT_HUB
     assert txn.status == AT_HUB
     assert txn.at_hub_at is not None
-    assert txn.payout_flagged_at is None
+    assert txn.payout_flagged_at is not None
     assert txn.payout_released_at is None
+    assert txn.net_payout == Decimal("9000")
     assert (txn.seller_id, "pickup_completed") in notified
+    assert (txn.seller_id, "payout_processing_started") in notified
+
+
+@pytest.mark.asyncio
+async def test_pickup_completion_prompts_unverified_seller_before_payout_release(monkeypatch):
+    from app.modules.transactions import payout_service
+
+    fe_id = uuid4()
+    txn = _txn(
+        status=PAYMENT_CAPTURED,
+        seller_readiness_status="confirmed",
+        pickup_fe_id=fe_id,
+    )
+    notified = []
+
+    async def fake_notify(_db, user_id, event_type, *_args, **_kwargs):
+        notified.append((user_id, event_type))
+
+    async def fake_seller_payout_verified(*_args, **_kwargs):
+        return False
+
+    monkeypatch.setattr(offer_service, "_notify", fake_notify)
+    monkeypatch.setattr(payout_service, "seller_payout_verified", fake_seller_payout_verified)
+
+    await logistics_router.fe_complete_pickup(
+        txn.id,
+        logistics_router.CompletePickupRequest(
+            inspection_passed=True,
+            inspection_notes="serial and condition match",
+            inspection_photo_keys=["evidence/pickup.jpg"],
+        ),
+        SimpleNamespace(user_id=fe_id, role="fe"),
+        _DB(get_value=txn),
+    )
+
+    assert txn.status == AT_HUB
+    assert txn.payout_flagged_at is not None
+    assert txn.payout_released_at is None
+    assert (txn.seller_id, "payout_verification_required") in notified
 
 
 @pytest.mark.asyncio
@@ -397,7 +453,9 @@ async def test_delivery_completion_still_holds_payout_until_buyer_confirmation(m
         status=DELIVERY_IN_PROGRESS,
         delivery_fe_id=fe_id,
         buyer_acknowledgment_code="123456",
+        payout_flagged_at=datetime.now(timezone.utc) - timedelta(hours=1),
     )
+    original_payout_started_at = txn.payout_flagged_at
     notified = []
 
     async def fake_notify(_db, user_id, event_type, *_args, **_kwargs):
@@ -419,17 +477,17 @@ async def test_delivery_completion_still_holds_payout_until_buyer_confirmation(m
     assert txn.status == DELIVERED
     assert txn.delivered_at is not None
     assert txn.confirmation_deadline is not None
-    assert txn.payout_flagged_at is None
+    assert txn.payout_flagged_at == original_payout_started_at
     assert txn.payout_released_at is None
     assert (txn.seller_id, "delivered_awaiting_confirmation") in notified
 
 
 @pytest.mark.asyncio
-async def test_payout_activity_refuses_incomplete_order(monkeypatch):
+async def test_payout_activity_refuses_before_pickup_confirmation(monkeypatch):
     from app.db import session as db_session
     from app.modules.transactions import activities as transaction_activities
 
-    txn = _txn(status=AT_HUB)
+    txn = _txn(status=PAYMENT_CAPTURED)
 
     class FakeSessionFactory:
         def __call__(self):
@@ -447,17 +505,21 @@ async def test_payout_activity_refuses_incomplete_order(monkeypatch):
         transaction_activities.ActivityTransactionInput(transaction_id=str(txn.id))
     )
 
-    assert out == {"success": False, "reason": "ORDER_NOT_COMPLETE", "status": AT_HUB}
+    assert out == {"success": False, "reason": "PICKUP_NOT_CONFIRMED", "status": PAYMENT_CAPTURED}
     assert txn.payout_flagged_at is None
     assert txn.payout_released_at is None
 
 
 @pytest.mark.asyncio
-async def test_payout_activity_allows_completed_order(monkeypatch):
+async def test_payout_activity_allows_after_pickup_confirmation(monkeypatch):
     from app.db import session as db_session
     from app.modules.transactions import activities as transaction_activities
+    from app.modules.transactions import payout_service
 
-    txn = _txn(status=COMPLETED)
+    txn = _txn(status=AT_HUB)
+
+    async def fake_seller_payout_verified(*_args, **_kwargs):
+        return True
 
     class FakeSessionFactory:
         def __call__(self):
@@ -470,12 +532,17 @@ async def test_payout_activity_allows_completed_order(monkeypatch):
             return False
 
     monkeypatch.setattr(db_session, "AsyncSessionLocal", FakeSessionFactory())
+    monkeypatch.setattr(payout_service, "seller_payout_verified", fake_seller_payout_verified)
 
     out = await transaction_activities.act_trigger_payout_eligibility(
         transaction_activities.ActivityTransactionInput(transaction_id=str(txn.id))
     )
 
-    assert out == {"success": True}
+    assert out == {
+        "success": True,
+        "already_flagged": False,
+        "seller_payout_verified": True,
+    }
     assert txn.payout_flagged_at is not None
     assert txn.payout_released_at is None
 
