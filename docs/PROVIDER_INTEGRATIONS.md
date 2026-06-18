@@ -46,6 +46,41 @@ Use `app.modules.verification.service.evaluate_user_action(...)` for trust-sensi
 Do not call provider APIs from product screens or high-traffic read endpoints.
 See [VERIFICATION_ARCHITECTURE.md](VERIFICATION_ARCHITECTURE.md) for the full model.
 
+## Razorpay Payment Contract
+
+Owmee currently uses Razorpay Payment Links for buyer collection. The app creates the link through `app.modules.payments.adapter`, then trusts only signed Razorpay webhooks to advance the transaction.
+
+Production Razorpay mode requires:
+
+- `PA_PROVIDER=razorpay`
+- `PA_KEY_ID`
+- `PA_KEY_SECRET`
+- `PA_WEBHOOK_SECRET`
+
+Configure the Razorpay dashboard webhook URL to:
+
+```txt
+https://<api-host>/v1/payments/webhook/razorpay
+```
+
+Enable these events:
+
+- `payment_link.paid`
+- `refund.processed`
+- `refund.failed`
+
+Do not use the Payment Link `callback_url` as the webhook. Razorpay treats `callback_url` as the buyer browser redirect after checkout; webhooks are configured separately in the dashboard and signed with `X-Razorpay-Signature`.
+
+Refund retries use Razorpay's `X-Refund-Idempotency` header so a network retry cannot double-refund the buyer.
+
+Seller payout is deliberately not released when the buyer pays. The order lifecycle is:
+
+1. Buyer payment captured: move to seller readiness and notify the seller to confirm pickup.
+2. Seller confirms readiness: allow Owmee ops to assign pickup.
+3. FE pickup passes inspection: item moves to hub custody; payout remains held.
+4. Delivery completes: buyer gets the confirmation/dispute window; payout remains held.
+5. Buyer confirms, auto-complete fires after the window, or a dispute resolves to seller release: payout becomes eligible for ops-driven release after seller payout/KYC checks.
+
 ## Production Guardrail
 
 Unknown or empty providers now fail fast with a clear error. Explicit `mock` mode is still supported for private/staging environments, but production should never silently fall back to a fake integration because credentials are missing.

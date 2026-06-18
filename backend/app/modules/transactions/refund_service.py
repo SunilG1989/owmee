@@ -12,7 +12,7 @@ Idempotency
 -----------
 Two layers:
   - DB-level: refund_status check before initiating (won't double-fire).
-  - Adapter-level: Razorpay accepts an X-Razorpay-Idempotency-Key header.
+  - Adapter-level: Razorpay accepts an X-Refund-Idempotency header.
     We pass `f"refund:{txn.id}:v1"` so retries dedupe on the partner
     side too.
 """

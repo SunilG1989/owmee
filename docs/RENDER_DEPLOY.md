@@ -33,6 +33,10 @@ Fill these in the Render Blueprint flow before the first deploy:
 - Clear `OTP_WHITELIST` when moving from pilot fixed-OTP testing to MSG91.
   Production ignores stale whitelist entries by default, but strict launch
   validation will reject them.
+- Razorpay credentials when `PA_PROVIDER=razorpay`: `PA_KEY_ID`,
+  `PA_KEY_SECRET`, and `PA_WEBHOOK_SECRET`. Configure the Razorpay dashboard
+  webhook URL as `https://<api-host>/v1/payments/webhook/razorpay` for
+  `payment_link.paid`, `refund.processed`, and `refund.failed`.
 - SMS, KYC, payment, Stream, FCM, Temporal, and Sentry credentials when you
   are ready for public launch.
 
@@ -53,6 +57,8 @@ The Blueprint is intentionally set up for a private app before public launch:
   cannot bypass MSG91.
 - `KYC_PARTNER=mock`: Aadhaar/PAN/liveness flows use the safe mock adapter.
 - `PA_PROVIDER=mock`: payment links simulate payment against the Render API URL.
+  Set this to `razorpay` only after the Razorpay key id, key secret, and webhook
+  secret are all present.
 - `TEMPORAL_HOST=disabled`: the worker stays alive but does not connect to
   Temporal Cloud.
 

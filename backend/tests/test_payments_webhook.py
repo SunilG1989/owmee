@@ -6,9 +6,22 @@ stopping a forged 'paid'/'refunded' event. It had NO test.
 import hashlib
 import hmac
 import json
+import time
 
+import pytest
 from app.core.settings import settings
-from app.modules.payments.adapter import _RazorpayAdapter
+from app.modules.payments import adapter as payments_adapter
+from app.modules.payments.adapter import _RazorpayAdapter, get_payment_adapter
+
+
+class _FakeResponse:
+    def __init__(self, status_code=200, data=None):
+        self.status_code = status_code
+        self._data = data or {}
+        self.content = b"{}"
+
+    def json(self):
+        return self._data
 
 
 def _sign(secret: str, body: bytes) -> str:
@@ -52,3 +65,114 @@ def test_mutated_body_breaks_the_signature(monkeypatch):
     sig = _sign("whsec_test", original)
     tampered = b'{"amount":999999}'
     assert _RazorpayAdapter().verify_webhook(tampered, sig).valid is False
+
+
+def test_empty_webhook_secret_rejects_even_matching_hmac(monkeypatch):
+    monkeypatch.setattr(settings, "pa_webhook_secret", "", raising=False)
+    body = b'{"event":"payment_link.paid"}'
+    assert _RazorpayAdapter().verify_webhook(body, _sign("", body)).valid is False
+
+
+def test_razorpay_factory_requires_webhook_secret(monkeypatch):
+    monkeypatch.setattr(settings, "env", "production", raising=False)
+    monkeypatch.setattr(settings, "pa_provider", "razorpay", raising=False)
+    monkeypatch.setattr(settings, "pa_key_id", "rzp_live_key", raising=False)
+    monkeypatch.setattr(settings, "pa_key_secret", "rzp_live_secret", raising=False)
+    monkeypatch.setattr(settings, "pa_webhook_secret", "", raising=False)
+
+    with pytest.raises(RuntimeError, match="PA_WEBHOOK_SECRET"):
+        get_payment_adapter()
+
+
+@pytest.mark.asyncio
+async def test_razorpay_payment_link_payload_does_not_use_webhook_as_callback(monkeypatch):
+    captured = {}
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            captured["client_kwargs"] = kwargs
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def post(self, url, **kwargs):
+            captured["url"] = url
+            captured["request"] = kwargs
+            return _FakeResponse(
+                data={
+                    "id": "plink_test",
+                    "short_url": "https://rzp.io/i/test",
+                    "expire_by": int(time.time()) + 1800,
+                }
+            )
+
+    monkeypatch.setattr(settings, "pa_key_id", "rzp_key", raising=False)
+    monkeypatch.setattr(settings, "pa_key_secret", "rzp_secret", raising=False)
+    monkeypatch.setattr(payments_adapter.httpx, "AsyncClient", FakeAsyncClient)
+
+    result = await _RazorpayAdapter().create_payment_link(
+        amount_paise=12345,
+        transaction_id="txn_123",
+        buyer_phone="+918095918925",
+        description="Owmee order txn_123",
+        idempotency_key="idem_1234567890",
+    )
+
+    payload = captured["request"]["json"]
+    assert result.success is True
+    assert captured["url"].endswith("/payment_links")
+    assert captured["client_kwargs"]["auth"] == ("rzp_key", "rzp_secret")
+    assert payload["amount"] == 12345
+    assert payload["currency"] == "INR"
+    assert payload["accept_partial"] is False
+    assert payload["reference_id"] == "txn_123"
+    assert payload["customer"] == {"contact": "+918095918925"}
+    assert payload["notes"] == {"transaction_id": "txn_123"}
+    assert "callback_url" not in payload
+    assert "callback_method" not in payload
+
+
+@pytest.mark.asyncio
+async def test_razorpay_refund_uses_refund_idempotency_header(monkeypatch):
+    captured = {}
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            captured["client_kwargs"] = kwargs
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def post(self, url, **kwargs):
+            captured["url"] = url
+            captured["request"] = kwargs
+            return _FakeResponse(data={"id": "rfnd_test", "status": "processed"})
+
+    monkeypatch.setattr(settings, "pa_key_id", "rzp_key", raising=False)
+    monkeypatch.setattr(settings, "pa_key_secret", "rzp_secret", raising=False)
+    monkeypatch.setattr(payments_adapter.httpx, "AsyncClient", FakeAsyncClient)
+
+    result = await _RazorpayAdapter().refund(
+        razorpay_payment_id="pay_123",
+        amount_paise=5000,
+        idempotency_key="refund_key_123456",
+        notes={"transaction_id": "txn_123"},
+    )
+
+    assert result.success is True
+    assert captured["url"].endswith("/payments/pay_123/refund")
+    assert captured["request"]["auth"] == ("rzp_key", "rzp_secret")
+    assert captured["request"]["json"] == {
+        "amount": 5000,
+        "notes": {"transaction_id": "txn_123"},
+    }
+    assert captured["request"]["headers"] == {
+        "X-Refund-Idempotency": "refund_key_123456",
+    }
+    assert "X-Razorpay-Idempotency-Key" not in captured["request"]["headers"]

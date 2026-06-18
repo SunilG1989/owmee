@@ -107,13 +107,23 @@ def _txn(**overrides):
         "delivery_fe_id": None,
         "delivery_mode": None,
         "courier_name": None,
+        "courier_booking_id": None,
         "courier_tracking_url": None,
+        "pickup_inspection_passed": None,
+        "pickup_inspection_notes": None,
+        "pickup_inspection_photo_keys": None,
+        "delivery_handover_photo_key": None,
         "buyer_acknowledgment_code": None,
         "created_at": now,
         "at_hub_at": None,
         "routed_at": None,
         "delivered_at": None,
         "confirmation_deadline": None,
+        "buyer_confirmed_at": None,
+        "completed_at": None,
+        "auto_completed_at": None,
+        "payout_flagged_at": None,
+        "payout_released_at": None,
         "refund_status": "none",
         "refund_amount": None,
         "refund_reason": None,
@@ -264,6 +274,8 @@ async def test_payment_capture_opens_seller_readiness_only_when_address_exists(m
     assert txn.status == PAYMENT_CAPTURED
     assert txn.seller_readiness_status == "pending"
     assert txn.seller_response_deadline is not None
+    assert txn.payout_flagged_at is None
+    assert txn.payout_released_at is None
     assert (seller_id, "seller_readiness_required") in notified
     assert (buyer_id, "payment_confirmed") in notified
     assert decisions[0]["metadata"]["stage"] == "payment_webhook"
@@ -339,7 +351,133 @@ async def test_seller_readiness_confirm_mutates_only_structured_state(monkeypatc
     assert txn.seller_readiness_reason is None
     assert txn.seller_responded_at is not None
     assert txn.pickup_ready_at is not None
+    assert txn.payout_flagged_at is None
+    assert txn.payout_released_at is None
     assert (txn.buyer_id, "seller_ready") in notified
+
+
+@pytest.mark.asyncio
+async def test_pickup_completion_does_not_queue_seller_payout(monkeypatch):
+    fe_id = uuid4()
+    txn = _txn(
+        status=PAYMENT_CAPTURED,
+        seller_readiness_status="confirmed",
+        pickup_fe_id=fe_id,
+    )
+    notified = []
+
+    async def fake_notify(_db, user_id, event_type, *_args, **_kwargs):
+        notified.append((user_id, event_type))
+
+    monkeypatch.setattr(offer_service, "_notify", fake_notify)
+
+    out = await logistics_router.fe_complete_pickup(
+        txn.id,
+        logistics_router.CompletePickupRequest(
+            inspection_passed=True,
+            inspection_notes="serial and condition match",
+            inspection_photo_keys=["evidence/pickup.jpg"],
+        ),
+        SimpleNamespace(user_id=fe_id, role="fe"),
+        _DB(get_value=txn),
+    )
+
+    assert out["status"] == AT_HUB
+    assert txn.status == AT_HUB
+    assert txn.at_hub_at is not None
+    assert txn.payout_flagged_at is None
+    assert txn.payout_released_at is None
+    assert (txn.seller_id, "pickup_completed") in notified
+
+
+@pytest.mark.asyncio
+async def test_delivery_completion_still_holds_payout_until_buyer_confirmation(monkeypatch):
+    fe_id = uuid4()
+    txn = _txn(
+        status=DELIVERY_IN_PROGRESS,
+        delivery_fe_id=fe_id,
+        buyer_acknowledgment_code="123456",
+    )
+    notified = []
+
+    async def fake_notify(_db, user_id, event_type, *_args, **_kwargs):
+        notified.append((user_id, event_type))
+
+    monkeypatch.setattr(offer_service, "_notify", fake_notify)
+
+    out = await logistics_router.fe_complete_delivery(
+        txn.id,
+        logistics_router.CompleteDeliveryRequest(
+            handover_photo_key="evidence/delivery.jpg",
+            ack_code="123456",
+        ),
+        SimpleNamespace(user_id=fe_id, role="fe"),
+        _DB(get_value=txn),
+    )
+
+    assert out["status"] == DELIVERED
+    assert txn.status == DELIVERED
+    assert txn.delivered_at is not None
+    assert txn.confirmation_deadline is not None
+    assert txn.payout_flagged_at is None
+    assert txn.payout_released_at is None
+    assert (txn.seller_id, "delivered_awaiting_confirmation") in notified
+
+
+@pytest.mark.asyncio
+async def test_payout_activity_refuses_incomplete_order(monkeypatch):
+    from app.db import session as db_session
+    from app.modules.transactions import activities as transaction_activities
+
+    txn = _txn(status=AT_HUB)
+
+    class FakeSessionFactory:
+        def __call__(self):
+            return self
+
+        async def __aenter__(self):
+            return _DB(get_value=txn)
+
+        async def __aexit__(self, *_args):
+            return False
+
+    monkeypatch.setattr(db_session, "AsyncSessionLocal", FakeSessionFactory())
+
+    out = await transaction_activities.act_trigger_payout_eligibility(
+        transaction_activities.ActivityTransactionInput(transaction_id=str(txn.id))
+    )
+
+    assert out == {"success": False, "reason": "ORDER_NOT_COMPLETE", "status": AT_HUB}
+    assert txn.payout_flagged_at is None
+    assert txn.payout_released_at is None
+
+
+@pytest.mark.asyncio
+async def test_payout_activity_allows_completed_order(monkeypatch):
+    from app.db import session as db_session
+    from app.modules.transactions import activities as transaction_activities
+
+    txn = _txn(status=COMPLETED)
+
+    class FakeSessionFactory:
+        def __call__(self):
+            return self
+
+        async def __aenter__(self):
+            return _DB(get_value=txn)
+
+        async def __aexit__(self, *_args):
+            return False
+
+    monkeypatch.setattr(db_session, "AsyncSessionLocal", FakeSessionFactory())
+
+    out = await transaction_activities.act_trigger_payout_eligibility(
+        transaction_activities.ActivityTransactionInput(transaction_id=str(txn.id))
+    )
+
+    assert out == {"success": True}
+    assert txn.payout_flagged_at is not None
+    assert txn.payout_released_at is None
 
 
 @pytest.mark.asyncio

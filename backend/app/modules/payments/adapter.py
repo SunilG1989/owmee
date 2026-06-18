@@ -25,6 +25,13 @@ from app.core.settings import settings
 logger = structlog.get_logger()
 
 
+# ── Secret validation ───────────────────────────────────────────────────────────
+
+def _missing_payment_secret(value: str | None) -> bool:
+    raw = str(value or "").strip()
+    return not raw or raw.startswith("REPLACE_WITH_")
+
+
 # ── Response types ──────────────────────────────────────────────────────────────
 
 class PaymentLinkResult:
@@ -252,14 +259,12 @@ class _RazorpayAdapter:
             "notify": {"sms": True, "email": False},
             "reminder_enable": False,
             "notes": {"transaction_id": transaction_id},
-            "callback_url": f"{settings.app_base_url}/v1/payments/webhook/razorpay",
-            "callback_method": "get",
         }
         try:
             async with httpx.AsyncClient(auth=self._auth(), timeout=15) as client:
                 resp = await client.post(f"{self.BASE}/payment_links", json=payload)
             data = resp.json()
-            if resp.status_code == 200:
+            if resp.status_code in (200, 201):
                 expires_at = datetime.fromtimestamp(data["expire_by"], tz=timezone.utc)
                 return PaymentLinkResult(
                     success=True,
@@ -284,7 +289,7 @@ class _RazorpayAdapter:
         idempotency_key: str,
         notes: dict | None = None,
     ) -> RefundResult:
-        """Razorpay refund. Idempotent via the X-Razorpay-Idempotency-Key
+        """Razorpay refund. Idempotent via the X-Refund-Idempotency
         header — calling twice with the same key returns the same refund.
 
         Razorpay docs: POST /payments/{id}/refund — body {amount, notes?}.
@@ -294,7 +299,7 @@ class _RazorpayAdapter:
         body = {"amount": amount_paise}
         if notes:
             body["notes"] = notes
-        headers = {"X-Razorpay-Idempotency-Key": idempotency_key}
+        headers = {"X-Refund-Idempotency": idempotency_key}
         try:
             async with httpx.AsyncClient(timeout=15) as client:
                 r = await client.post(url, auth=self._auth(), json=body, headers=headers)
@@ -318,6 +323,9 @@ class _RazorpayAdapter:
 
     def verify_webhook(self, payload_body: bytes, signature: str) -> WebhookVerifyResult:
         import json
+        if _missing_payment_secret(settings.pa_webhook_secret):
+            logger.error("razorpay.webhook_secret_missing")
+            return WebhookVerifyResult(valid=False)
         expected = hmac.new(
             settings.pa_webhook_secret.encode(),
             payload_body,
@@ -363,7 +371,19 @@ def get_payment_adapter() -> PaymentAdapter:
     if provider == "":
         raise RuntimeError("PA_PROVIDER must be set")
     if provider in {"razorpay", "rzp"}:
-        if not settings.pa_key_id or not settings.pa_key_secret:
-            raise RuntimeError("Razorpay payment adapter requires PA_KEY_ID and PA_KEY_SECRET")
+        missing = [
+            name
+            for name, value in {
+                "PA_KEY_ID": settings.pa_key_id,
+                "PA_KEY_SECRET": settings.pa_key_secret,
+                "PA_WEBHOOK_SECRET": settings.pa_webhook_secret,
+            }.items()
+            if _missing_payment_secret(value)
+        ]
+        if missing:
+            raise RuntimeError(
+                "Razorpay payment adapter requires real values for "
+                + ", ".join(missing)
+            )
         return _RazorpayAdapter()
     raise RuntimeError(f"Unsupported PA_PROVIDER={settings.pa_provider!r}")

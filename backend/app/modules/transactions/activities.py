@@ -102,8 +102,11 @@ async def act_trigger_refund(inp: ActivityTransactionInput) -> dict:
 @activity.defn(name="act_trigger_payout_eligibility")
 async def act_trigger_payout_eligibility(inp: ActivityTransactionInput) -> dict:
     """
-    Mark transaction payout as eligible. Queues payout job.
-    In production: calls PA settlement API after TDS computation.
+    Mark transaction payout as eligible after the order is complete.
+
+    Buyer payment capture and FE pickup are not enough to release seller money:
+    the buyer must receive the item and either confirm it, let the confirmation
+    window auto-complete, or lose a dispute.
     """
     from app.db.session import AsyncSessionLocal
     from app.modules.offers.models import Transaction
@@ -117,6 +120,15 @@ async def act_trigger_payout_eligibility(inp: ActivityTransactionInput) -> dict:
         txn = result.scalar_one_or_none()
         if not txn:
             return {"success": False}
+
+        eligible_statuses = {"completed", "auto_completed", "buyer_accepted"}
+        if txn.status not in eligible_statuses:
+            logger.warning(
+                "act_trigger_payout_eligibility.blocked_status",
+                transaction_id=inp.transaction_id,
+                status=txn.status,
+            )
+            return {"success": False, "reason": "ORDER_NOT_COMPLETE", "status": txn.status}
 
         if txn.payout_flagged_at:
             return {"success": True, "already_flagged": True}
