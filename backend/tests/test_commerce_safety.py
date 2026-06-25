@@ -28,7 +28,9 @@ from app.modules.listings.service import create_snapshot
 from app.modules.offers.models import Offer, PaymentLink, Rating, Reservation, Transaction
 from app.modules.offers.service import (
     accept_offer,
+    cancel_unpaid_transaction,
     counter_offer,
+    expire_due_unpaid_transactions,
     make_offer,
     process_payment_paid,
     reject_offer,
@@ -106,6 +108,35 @@ async def _seed_refundable_txn(db: AsyncSession, *, listing_status="reserved"):
     return buyer, seller, listing, txn, pl
 
 
+async def _seed_unpaid_txn(db: AsyncSession):
+    buyer, seller, listing = await _seed_listing_and_users(db)
+    listing.status = "reserved"
+    now = datetime.now(timezone.utc)
+    offer = Offer(listing_id=listing.id, buyer_id=buyer.id, seller_id=seller.id,
+                  offered_price=Decimal("9000"), status="accepted",
+                  expires_at=now + timedelta(hours=24), responded_at=now)
+    db.add(offer)
+    await db.flush()
+    reservation = Reservation(offer_id=offer.id, listing_id=listing.id, buyer_id=buyer.id,
+                              seller_id=seller.id, agreed_price=Decimal("9000"), status="active",
+                              expires_at=now + timedelta(hours=48), activated_at=now)
+    db.add(reservation)
+    await db.flush()
+    snapshot = await create_snapshot(db, listing.id, reservation.id)
+    txn = Transaction(reservation_id=reservation.id, listing_id=listing.id, buyer_id=buyer.id,
+                      seller_id=seller.id, listing_snapshot_id=snapshot.id, transaction_type="shipped",
+                      payment_method="upi", gross_amount=Decimal("9000"), delivery_fee=Decimal("0"),
+                      net_payout=Decimal("9000"), status="payment_pending")
+    db.add(txn)
+    await db.flush()
+    pl = PaymentLink(transaction_id=txn.id, razorpay_link_id=f"order_{uuid4().hex[:12]}",
+                     short_url=None, amount=Decimal("9000"), status="failed",
+                     idempotency_key=uuid4().hex, expires_at=now + timedelta(minutes=30))
+    db.add(pl)
+    await db.flush()
+    return buyer, seller, listing, offer, reservation, txn, pl
+
+
 # ── S7: counter window enforced at accept ────────────────────────────────────
 
 @pytest.mark.asyncio
@@ -131,6 +162,33 @@ async def test_accept_live_counter_still_works(db):
     acc_offer, reservation, txn, _link = await accept_offer(db, offer.id, buyer.id)
     assert acc_offer.status == "accepted"
     assert txn.gross_amount == Decimal("8500")  # agreed counter price, no delivery fee
+
+
+@pytest.mark.asyncio
+async def test_second_buyer_cannot_accept_after_listing_is_reserved(db):
+    buyer, seller, listing = await _seed_listing_and_users(db)
+    buyer2 = User(
+        phone_number=f"+91900000{uuid4().hex[:4]}",
+        phone_verified=True,
+        kyc_status="verified",
+        buyer_eligible=True,
+        seller_tier="full",
+        auth_state="otp_verified",
+    )
+    db.add(buyer2)
+    await db.flush()
+
+    first_offer = await make_offer(db, listing.id, buyer.id, Decimal("9000"))
+    second_offer = await make_offer(db, listing.id, buyer2.id, Decimal("9100"))
+    await db.flush()
+
+    _accepted, _reservation, first_txn, _link = await accept_offer(db, first_offer.id, seller.id)
+    await db.flush()
+
+    assert first_txn.status == "payment_pending"
+    assert listing.status == "reserved"
+    with pytest.raises(ValueError, match="LISTING_NO_LONGER_AVAILABLE"):
+        await accept_offer(db, second_offer.id, seller.id)
 
 
 # ── M6: reject a countered offer ─────────────────────────────────────────────
@@ -246,3 +304,40 @@ async def test_webhook_underpayment_is_held(db):
     out = await process_payment_paid(db, link_id, "pay_x", underpaid)
     assert out is not None
     assert out.status == "payment_capture_uncertain"
+
+
+@pytest.mark.asyncio
+async def test_cancel_unpaid_transaction_releases_reserved_listing(db):
+    buyer, _seller, listing, offer, reservation, txn, payment_attempt = await _seed_unpaid_txn(db)
+
+    out = await cancel_unpaid_transaction(db, txn.id, buyer.id, reason="payment_failed")
+    await db.flush()
+
+    assert out is txn
+    assert txn.status == "cancelled"
+    assert txn.cancelled_reason == "payment_failed"
+    assert listing.status == "active"
+    assert reservation.status == "cancelled"
+    assert reservation.cancelled_at is not None
+    assert offer.status == "cancelled"
+    assert offer.reject_reason == "payment_failed"
+    assert payment_attempt.status == "failed"
+
+
+@pytest.mark.asyncio
+async def test_payment_timeout_sweep_releases_abandoned_order(db):
+    _buyer, _seller, listing, offer, reservation, txn, payment_attempt = await _seed_unpaid_txn(db)
+    payment_attempt.status = "created"
+    payment_attempt.expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+    await db.flush()
+
+    expired = await expire_due_unpaid_transactions(db, limit=10)
+    await db.flush()
+
+    assert expired == 1
+    assert txn.status == "cancelled"
+    assert txn.cancelled_reason == "payment_timeout"
+    assert listing.status == "active"
+    assert reservation.status == "cancelled"
+    assert offer.status == "cancelled"
+    assert payment_attempt.status == "expired"

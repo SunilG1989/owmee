@@ -10,10 +10,17 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { C, T, S, R, Shadow, formatPrice } from '../../utils/tokens';
-import { Addresses, Listings, Orders, type Listing, type UserAddress } from '../../services/api';
+import { Addresses, Listings, Orders, type Listing, type PaymentCheckout, type UserAddress } from '../../services/api';
 import { BackButton, Button } from '../../components/ui';
 import { parseApiError } from '../../utils/errors';
 import { afterInteractions } from '../../utils/schedule';
+import {
+  canOpenRazorpayCheckout,
+  isRazorpayCheckoutExpiredError,
+  isUserCancelledRazorpay,
+  openRazorpayCheckout,
+  razorpayFailureFromError,
+} from '../../utils/razorpayCheckout';
 
 const DELIVERY_FEE_BY_CATEGORY: Record<string, number> = {
   'small-appliances': 100,
@@ -87,11 +94,52 @@ export default function CheckoutScreen({ navigation, route }: any) {
     try {
       const res = await Orders.buyNow(listingId, orderNotes, address?.id);
       const txnId = res.data?.transaction_id;
+      const checkout = res.data?.payment_checkout;
       const paymentLink = res.data?.payment_link;
-      if (paymentLink) {
+
+      if (txnId && canOpenRazorpayCheckout(checkout)) {
+        let payment;
+        try {
+          payment = await openRazorpayCheckout(checkout);
+        } catch (paymentError) {
+          if (isRazorpayCheckoutExpiredError(paymentError)) {
+            Alert.alert(
+              'Payment window expired',
+              'This order can no longer be paid. Please check the order screen for the latest status.',
+            );
+            navigation.replace('TransactionDetail', { transactionId: txnId });
+            return;
+          }
+          if (isUserCancelledRazorpay(paymentError)) {
+            await releaseCancelledCheckout(txnId);
+            showPaymentCancelledOptions(txnId);
+            return;
+          }
+          await reportPaymentFailure(txnId, checkout, paymentError);
+          showPaymentFailedOptions(txnId);
+          return;
+        }
+        try {
+          const confirm = await Orders.confirmPayment(txnId, payment);
+          if (confirm.data?.status !== 'payment_captured') {
+            Alert.alert(
+              'Payment is being verified',
+              'Razorpay accepted the payment. Owmee will update this order as soon as verification completes.',
+            );
+          }
+        } catch {
+          Alert.alert(
+            'Payment is being verified',
+            'Razorpay accepted the payment, but Owmee could not confirm it immediately. The webhook will update this order shortly.',
+          );
+        }
+        navigation.replace('TransactionDetail', { transactionId: txnId });
+      } else if (paymentLink) {
         await Linking.openURL(paymentLink);
-      }
-      if (txnId) {
+        if (txnId) {
+          navigation.replace('TransactionDetail', { transactionId: txnId });
+        }
+      } else if (txnId) {
         navigation.replace('TransactionDetail', { transactionId: txnId });
       } else {
         navigation.replace('OrderConfirmation', {
@@ -103,6 +151,52 @@ export default function CheckoutScreen({ navigation, route }: any) {
     } catch (e: any) {
       Alert.alert('Could not start payment', parseApiError(e, 'Could not create the payment link. Please try again.'));
     } finally { setPaying(false); }
+  };
+
+  const reportPaymentFailure = async (transactionId: string, checkout: PaymentCheckout, error: unknown) => {
+    try {
+      return await Orders.reportPaymentFailure(transactionId, razorpayFailureFromError(checkout, error));
+    } catch {
+      // Webhook/report retry will cover this; don't block the buyer on telemetry.
+      return null;
+    }
+  };
+
+  const releaseCancelledCheckout = async (transactionId: string) => {
+    try {
+      await Orders.cancelUnpaidTransaction(transactionId, 'buyer_cancelled_payment');
+    } catch {
+      // The timeout sweeper still releases abandoned unpaid orders. Keep the
+      // buyer moving to the order screen if this best-effort call fails.
+    }
+  };
+
+  const showPaymentCancelledOptions = (transactionId: string) => {
+    Alert.alert(
+      'Payment cancelled',
+      'No money was collected. Owmee has released the item so other buyers are not blocked.',
+      [
+        {
+          text: 'View listing',
+          onPress: () => navigation.replace('ListingDetail', { listingId }),
+        },
+        { text: 'View order', style: 'cancel', onPress: () => navigation.replace('TransactionDetail', { transactionId }) },
+      ],
+    );
+  };
+
+  const showPaymentFailedOptions = (transactionId: string) => {
+    Alert.alert(
+      'Payment failed',
+      'No money was collected. Owmee has released the item, so you can try again only if it is still available.',
+      [
+        {
+          text: 'View listing',
+          onPress: () => navigation.replace('ListingDetail', { listingId }),
+        },
+        { text: 'View order', style: 'cancel', onPress: () => navigation.replace('TransactionDetail', { transactionId }) },
+      ],
+    );
   };
 
   const categoryEmoji =

@@ -232,6 +232,14 @@ export interface Listing {
   listing_trust_label?: string;
   trust_tier?: 'owmee_reviewed' | 'ai_assisted' | 'seller_confirmed' | 'limited' | string;
   ai_assisted?: boolean;
+  seller_inventory_status?: string | null;
+  seller_inventory_label?: string | null;
+  seller_inventory_detail?: string | null;
+  seller_next_action?: 'manage_listing' | 'open_order' | 'confirm_pickup' | 'none' | string | null;
+  active_transaction_id?: string | null;
+  active_transaction_status?: string | null;
+  seller_readiness_status?: string | null;
+  sold_at?: string | null;
   // Returned by Sprint 8 ai_assistant flow when an IMEI passes CEIR check
   imei_verified?: boolean;
   // Sprint 4 / Pass 3 — set on listings published through the kids
@@ -352,6 +360,7 @@ export interface Offer {
 export interface Transaction {
   id: string; listing_id: string; listing_title: string; buyer_id: string; seller_id: string;
   amount: number; status: string; created_at: string;
+  payment_checkout?: PaymentCheckout | null;
   payment_link?: string; payment_link_status?: string;
   payment_link_expires_at?: string | null;
   seller_readiness_status?: 'pending' | 'confirmed' | 'declined' | 'expired' | string;
@@ -382,6 +391,39 @@ export interface Transaction {
   delivery_fee?: number;
   net_payout?: number;
   tds_withheld?: number;
+}
+
+export interface PaymentCheckout {
+  provider: 'razorpay' | string;
+  key_id: string;
+  order_id: string;
+  amount_paise: number;
+  currency: string;
+  name: string;
+  description?: string;
+  expires_at?: string | null;
+  checkout_timeout_seconds?: number | null;
+  prefill?: {
+    contact?: string;
+    email?: string;
+    name?: string;
+  };
+}
+
+export interface CheckoutPaymentSuccess {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+}
+
+export interface CheckoutPaymentFailure {
+  razorpay_order_id: string;
+  razorpay_payment_id?: string | null;
+  code?: string | null;
+  description?: string | null;
+  source?: string | null;
+  step?: string | null;
+  reason?: string | null;
 }
 
 export interface BrowseParams {
@@ -538,8 +580,10 @@ export const Listings = {
         clearListingCaches();
         return res;
       }),
-  myListings: (statusFilter?: string) =>
-    cachedGet('/v1/listings/me/listings', { params: statusFilter ? { status_filter: statusFilter } : {} }, 20_000),
+  myListings: (statusFilter?: string) => {
+    clearApiCache('/v1/listings/me/listings');
+    return api.get('/v1/listings/me/listings', { params: statusFilter ? { status_filter: statusFilter } : {} });
+  },
   peekMyListings: (statusFilter?: string) =>
     peekCachedGet('/v1/listings/me/listings', { params: statusFilter ? { status_filter: statusFilter } : {} }, true),
 };
@@ -744,11 +788,13 @@ export const Transactions = {
     ...(body || {}),
   }).then((res) => {
     clearApiCaches(['/v1/transactions', `/v1/transactions/${id}`, `/v1/transactions/${id}/tracking`]);
+    clearListingCaches();
     return res;
   }),
   declineSellerReadiness: (id: string, reason: 'sold_elsewhere' | 'item_damaged' | 'changed_mind' | 'cannot_pickup' | 'other') =>
     api.post(`/v1/transactions/${id}/seller-readiness/decline`, { reason }).then((res) => {
       clearApiCaches(['/v1/transactions', `/v1/transactions/${id}`, `/v1/transactions/${id}/tracking`]);
+      clearListingCaches();
       return res;
     }),
   rate: (id: string, stars: number, ok: boolean, note?: string) =>
@@ -819,6 +865,33 @@ export const Orders = {
       listing_id: listingId,
       address_id: addressId || undefined,
       order_notes: orderNotes && orderNotes.trim() ? orderNotes.trim() : undefined,
+    }).then((res) => {
+      clearApiCaches(['/v1/transactions', '/v1/offers']);
+      clearListingCaches();
+      return res;
+    }),
+  confirmPayment: (transactionId: string, payment: CheckoutPaymentSuccess) =>
+    api.post(`/v1/transactions/${transactionId}/payment/confirm`, payment).then((res) => {
+      clearApiCaches(['/v1/transactions', '/v1/offers', `/v1/transactions/${transactionId}`, `/v1/transactions/${transactionId}/tracking`]);
+      clearListingCaches();
+      return res;
+    }),
+  reportPaymentFailure: (transactionId: string, failure: CheckoutPaymentFailure) =>
+    api.post(`/v1/transactions/${transactionId}/payment/failure`, failure).then((res) => {
+      clearApiCaches(['/v1/transactions', '/v1/offers', `/v1/transactions/${transactionId}`, `/v1/transactions/${transactionId}/tracking`]);
+      clearListingCaches();
+      return res;
+    }),
+  cancelUnpaidTransaction: (transactionId: string, reason = 'buyer_cancelled_payment') =>
+    api.post(`/v1/transactions/${transactionId}/payment/cancel`, { reason }).then((res) => {
+      clearApiCaches(['/v1/transactions', '/v1/offers', `/v1/transactions/${transactionId}`, `/v1/transactions/${transactionId}/tracking`]);
+      clearListingCaches();
+      return res;
+    }),
+  createPaymentLinkFallback: (transactionId: string) =>
+    api.post(`/v1/transactions/${transactionId}/payment-link`).then((res) => {
+      clearApiCaches(['/v1/transactions', `/v1/transactions/${transactionId}`, `/v1/transactions/${transactionId}/tracking`]);
+      return res;
     }),
 };
 

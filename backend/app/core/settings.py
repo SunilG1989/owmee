@@ -70,6 +70,8 @@ class Settings(BaseSettings):
     ai_draft_full_fallback_enabled: bool = True
     ai_draft_shadow_full_analysis_enabled: bool = False
     ai_draft_fast_min_category_confidence: float = 0.55
+    payment_timeout_sweeper_interval_seconds: int = 60
+    payment_timeout_sweeper_batch_size: int = 100
 
     # ── Temporal ───────────────────────────────────────────────────────────
     temporal_host: str = "localhost:7233"

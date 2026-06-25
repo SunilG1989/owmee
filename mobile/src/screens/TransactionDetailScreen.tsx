@@ -24,11 +24,19 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { C, T, S, R, formatPrice } from '../utils/tokens';
 import type { RootScreen } from '../navigation/types';
-import { Transactions, Disputes, Returns, Evidence, type TrackingResponse, type Transaction } from '../services/api';
+import { Transactions, Disputes, Returns, Evidence, Orders, type TrackingResponse, type Transaction } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import { BackButton, Button } from '../components/ui';
 import { parseApiError } from '../utils/errors';
 import { afterInteractions } from '../utils/schedule';
+import {
+  canOpenRazorpayCheckout,
+  isPaymentWindowExpired,
+  isRazorpayCheckoutExpiredError,
+  isUserCancelledRazorpay,
+  openRazorpayCheckout,
+  razorpayFailureFromError,
+} from '../utils/razorpayCheckout';
 
 const DISPUTE_REASONS: { key: string; label: string }[] = [
   { key: 'item_not_received', label: 'I never received the item' },
@@ -117,19 +125,157 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
   const isCompleted = status === 'completed';
   const isDisputed = status === 'disputed';
   const isCancelled = status === 'cancelled' || status === 'pickup_rejected';
+  const paymentExpiresAt = txn.payment_checkout?.expires_at || txn.payment_link_expires_at;
+  const paymentWindowExpired = isPaymentPending && isPaymentWindowExpired(paymentExpiresAt);
   const disputeNeedsPhoto = disputeReason === 'item_not_as_described';
   const returnNeedsPhoto = ['item_not_as_described', 'damaged_in_transit', 'wrong_item'].includes(returnReason);
 
   const showAckCode = isBuyer && tracking.ack_code && status === 'delivery_in_progress' && tracking.delivery_mode === 'fe';
 
-  const openPayment = () => {
-    if (!txn.payment_link) {
-      Alert.alert('Payment link unavailable', 'Pull down to refresh, or wait for Owmee to create a new link.');
+  const openWebPayment = async (existingLink?: string | null) => {
+    setActing(true);
+    try {
+      const link = existingLink || (await Orders.createPaymentLinkFallback(transactionId)).data?.payment_link;
+      if (!link) throw new Error('PAYMENT_LINK_UNAVAILABLE');
+      await Linking.openURL(link);
+      await reload();
+    } finally {
+      setActing(false);
+    }
+  };
+
+  const reportPaymentFailure = async (error: unknown) => {
+    if (!txn?.payment_checkout) return;
+    try {
+      return await Orders.reportPaymentFailure(
+        transactionId,
+        razorpayFailureFromError(txn.payment_checkout, error),
+      );
+    } catch {
+      // Webhook/report retry will cover this; don't block buyer recovery.
+      return null;
+    }
+  };
+
+  const cancelUnpaidOrder = async (reason = 'buyer_cancelled_payment') => {
+    setActing(true);
+    try {
+      await Orders.cancelUnpaidTransaction(transactionId, reason);
+      Alert.alert('Order cancelled', 'The item is available again. No money was collected.');
+      await reload();
+    } catch (e) {
+      Alert.alert('Could not cancel order', parseApiError(e, 'Try again in a moment.'));
+    } finally {
+      setActing(false);
+    }
+  };
+
+  const confirmCancelUnpaidOrder = (reason = 'buyer_cancelled_payment') => {
+    Alert.alert(
+      'Release this item?',
+      'This cancels your unpaid order and makes the listing available to other buyers. No refund is needed because payment has not been captured.',
+      [
+        { text: 'Keep order', style: 'cancel' },
+        {
+          text: 'Release item',
+          style: 'destructive',
+          onPress: () => {
+            cancelUnpaidOrder(reason).catch(() => {});
+          },
+        },
+      ],
+    );
+  };
+
+  const showPaymentFailedOptions = () => {
+    Alert.alert(
+      'Payment failed',
+      'No money was collected. Owmee has released the item, so you can try again only if it is still available.',
+      [
+        { text: 'Refresh order', style: 'cancel', onPress: reload },
+        {
+          text: 'View listing',
+          onPress: () => {
+            if (txn?.listing_id) {
+              navigation.navigate('ListingDetail', { listingId: txn.listing_id });
+            } else {
+              reload().catch(() => {});
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const openPayment = async () => {
+    if (acting || !txn) return;
+    if (paymentWindowExpired) {
+      Alert.alert(
+        'Payment window expired',
+        'This unpaid order will be released so the item can become available again.',
+        [
+          { text: 'Refresh', style: 'cancel', onPress: reload },
+          {
+            text: 'Release now',
+            style: 'destructive',
+            onPress: () => {
+              cancelUnpaidOrder('payment_timeout').catch(() => {});
+            },
+          },
+        ],
+      );
       return;
     }
-    Linking.openURL(txn.payment_link).catch(() => {
-      Alert.alert('Could not open payment link', 'Try again in a moment.');
-    });
+
+    if (!canOpenRazorpayCheckout(txn.payment_checkout)) {
+      try {
+        await openWebPayment(txn.payment_link);
+      } catch {
+        Alert.alert('Payment link unavailable', 'Pull down to refresh, or try again in a moment.');
+      }
+      return;
+    }
+
+    setActing(true);
+    try {
+      let payment;
+      try {
+        payment = await openRazorpayCheckout(txn.payment_checkout);
+      } catch (e) {
+        if (isRazorpayCheckoutExpiredError(e)) {
+          Alert.alert(
+            'Payment window expired',
+            'This unpaid order can no longer be paid. Refresh to see the latest status.',
+          );
+          await reload();
+          return;
+        }
+        if (isUserCancelledRazorpay(e)) {
+          await cancelUnpaidOrder('buyer_cancelled_payment');
+        } else {
+          await reportPaymentFailure(e);
+          showPaymentFailedOptions();
+        }
+        return;
+      }
+      try {
+        const confirm = await Orders.confirmPayment(transactionId, payment);
+        if (confirm.data?.status !== 'payment_captured') {
+          Alert.alert(
+            'Payment is being verified',
+            'Razorpay accepted the payment. Owmee will update this order as soon as verification completes.',
+          );
+        }
+      } catch {
+        Alert.alert(
+          'Payment is being verified',
+          'Razorpay accepted the payment, but Owmee could not confirm it immediately. The webhook will update this order shortly.',
+        );
+      }
+      await reload();
+    } finally {
+      setActing(false);
+    }
   };
 
   const confirmReady = () => doAction(
@@ -286,13 +432,27 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
           <View style={s.paymentBox}>
             <Text style={s.paymentTitle}>Complete payment</Text>
             <Text style={s.paymentHint}>
-              Owmee starts seller confirmation and pickup only after payment is captured.
+              {paymentWindowExpired
+                ? 'The payment window expired. Release this order so the item can become available again.'
+                : txn.payment_link_status === 'failed'
+                ? 'The last payment attempt failed. No money was collected. Retry or cancel to release the item.'
+                : 'Owmee starts seller confirmation and pickup only after payment is captured.'}
             </Text>
             <Button
-              label="Open secure payment"
+              label={paymentWindowExpired ? 'Release item' : canOpenRazorpayCheckout(txn.payment_checkout) ? 'Pay securely in Owmee' : 'Open secure payment'}
               variant="primary"
               size="lg"
-              onPress={openPayment}
+              loading={acting}
+              disabled={acting}
+              onPress={paymentWindowExpired ? () => cancelUnpaidOrder('payment_timeout') : openPayment}
+              fullWidth
+            />
+            <Button
+              label="Cancel order"
+              variant="secondary"
+              size="lg"
+              disabled={acting}
+              onPress={() => confirmCancelUnpaidOrder()}
               fullWidth
             />
           </View>

@@ -68,8 +68,11 @@ async def initiate_refund(
 
     pl = (await db.execute(
         select(PaymentLink)
-        .where(PaymentLink.transaction_id == txn.id)
-        .order_by(PaymentLink.created_at.desc())
+        .where(
+            PaymentLink.transaction_id == txn.id,
+            PaymentLink.razorpay_payment_id.is_not(None),
+        )
+        .order_by(PaymentLink.paid_at.desc().nullslast(), PaymentLink.created_at.desc())
     )).scalars().first()
 
     if not pl or not pl.razorpay_payment_id:

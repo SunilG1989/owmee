@@ -35,10 +35,12 @@ from app.modules.offers.models import (
     Rating, Transaction, Wishlist,
 )
 from app.modules.offers.service import (
-    accept_offer, add_to_wishlist, buyer_confirm_deal,
-    confirm_seller_readiness, decline_seller_readiness,
+    accept_offer, add_to_wishlist, buyer_confirm_deal, cancel_unpaid_transaction,
+    confirm_seller_readiness, create_or_get_payment_link_fallback,
+    decline_seller_readiness,
     counter_offer, delivery_fee_for, make_offer,
-    notify_price_drop, process_payment_paid, reject_offer,
+    notify_price_drop, process_checkout_payment_success,
+    process_payment_failed, process_payment_paid, reject_offer,
     remove_from_wishlist, submit_rating, update_offer_price, withdraw_offer,
 )
 from app.modules.listings.models import Listing
@@ -109,6 +111,29 @@ class UpdatePriceRequest(BaseModel):
     new_price: Decimal = Field(..., gt=0, le=10000000)
 
 
+class ConfirmCheckoutPaymentRequest(BaseModel):
+    razorpay_order_id: str = Field(..., min_length=1, max_length=128)
+    razorpay_payment_id: str = Field(..., min_length=1, max_length=128)
+    razorpay_signature: str = Field(..., min_length=1, max_length=256)
+
+
+class ReportCheckoutPaymentFailureRequest(BaseModel):
+    razorpay_order_id: str = Field(..., min_length=1, max_length=128)
+    razorpay_payment_id: str | None = Field(None, max_length=128)
+    code: str | None = Field(None, max_length=120)
+    description: str | None = Field(None, max_length=500)
+    source: str | None = Field(None, max_length=80)
+    step: str | None = Field(None, max_length=80)
+    reason: str | None = Field(None, max_length=120)
+
+
+class CancelUnpaidTransactionRequest(BaseModel):
+    reason: str = Field(
+        default="buyer_cancelled_payment",
+        pattern="^(buyer_cancelled_payment|payment_failed|payment_timeout|changed_mind|duplicate_order|other)$",
+    )
+
+
 # ── Formatters ─────────────────────────────────────────────────────────────────
 
 def _fmt_offer(o: Offer) -> dict:
@@ -155,6 +180,61 @@ def _fmt_txn(t: Transaction) -> dict:
         "payout_flagged_at": t.payout_flagged_at.isoformat() if t.payout_flagged_at else None,
         "created_at": t.created_at.isoformat() if t.created_at else None,
     }
+
+
+def _payment_checkout_key_id() -> str:
+    provider = (settings.pa_provider or "").strip().lower()
+    if settings.env == "development" and provider in {"", "mock", "dev"}:
+        return settings.pa_key_id or "rzp_test_dev"
+    return settings.pa_key_id
+
+
+def _fmt_payment_checkout(
+    pl: PaymentLink | None,
+    *,
+    description: str = "Owmee order",
+    buyer_phone: str | None = None,
+) -> dict | None:
+    if not pl or not pl.razorpay_link_id or not pl.razorpay_link_id.startswith("order_"):
+        return None
+    key_id = _payment_checkout_key_id()
+    if not key_id:
+        return None
+    remaining_seconds = None
+    if pl.expires_at:
+        remaining_seconds = int((pl.expires_at - datetime.now(timezone.utc)).total_seconds())
+        if remaining_seconds <= 0:
+            return None
+    return {
+        "provider": (settings.pa_provider or "razorpay").strip().lower(),
+        "key_id": key_id,
+        "order_id": pl.razorpay_link_id,
+        "amount_paise": int(Decimal(str(pl.amount or 0)) * 100),
+        "currency": pl.currency or "INR",
+        "name": "Owmee",
+        "description": description[:255],
+        "prefill": {
+            "contact": buyer_phone or "",
+        },
+        "expires_at": pl.expires_at.isoformat() if pl.expires_at else None,
+        "checkout_timeout_seconds": min(remaining_seconds or 900, 900),
+    }
+
+
+def _payment_response_message(txn: Transaction) -> str:
+    if txn.status == "payment_captured":
+        return "Payment confirmed."
+    if txn.status == "cancelled" and txn.cancelled_reason == "payment_timeout":
+        return "Payment window expired. The item is available again."
+    return "Payment is being verified."
+
+
+def _payment_failure_response_message(txn: Transaction) -> str:
+    if txn.status == "cancelled" and txn.cancelled_reason == "payment_failed":
+        return "Payment failed. The item is available again."
+    if txn.status == "cancelled" and txn.cancelled_reason == "payment_timeout":
+        return "Payment window expired. The item is available again."
+    return "Payment failed. You can retry or cancel this order."
 
 
 # ── Offer endpoints ─────────────────────────────────────────────────────────────
@@ -279,6 +359,7 @@ async def accept_offer_endpoint(offer_id: UUID, current_user: BasicUser, db: DBS
     if payment_link:
         resp["payment_link"] = payment_link.short_url
         resp["payment_link_expires_at"] = payment_link.expires_at.isoformat() if payment_link.expires_at else None
+        resp["payment_checkout"] = _fmt_payment_checkout(payment_link)
     return resp
 
 
@@ -328,17 +409,159 @@ async def get_transaction(transaction_id: UUID, current_user: BasicUser, db: DBS
         select(PaymentLink).where(PaymentLink.transaction_id == transaction_id)
         .order_by(PaymentLink.created_at.desc())
     )
-    pl = pl_result.scalars().first()
+    payment_attempts = pl_result.scalars().all()
+    order_attempt = next(
+        (pl for pl in payment_attempts if (pl.razorpay_link_id or "").startswith("order_")),
+        None,
+    )
+    link_attempt = next((pl for pl in payment_attempts if pl.short_url), None)
     data = _fmt_txn(txn)
-    if pl:
-        data["payment_link"] = pl.short_url
-        data["payment_link_status"] = pl.status
-        data["payment_link_expires_at"] = pl.expires_at.isoformat() if pl.expires_at else None
+    buyer_phone = None
+    if order_attempt and txn.buyer_id == current_user.user_id:
+        buyer_result = await db.execute(select(User).where(User.id == txn.buyer_id))
+        buyer = buyer_result.scalar_one_or_none()
+        buyer_phone = buyer.phone_number if buyer else None
+    if order_attempt:
+        data["payment_checkout"] = _fmt_payment_checkout(order_attempt, buyer_phone=buyer_phone)
+        data["payment_link_status"] = order_attempt.status
+        data["payment_link_expires_at"] = order_attempt.expires_at.isoformat() if order_attempt.expires_at else None
+    if link_attempt:
+        data["payment_link"] = link_attempt.short_url
+        data["payment_link_status"] = link_attempt.status
+        data["payment_link_expires_at"] = link_attempt.expires_at.isoformat() if link_attempt.expires_at else None
     if txn.seller_id == current_user.user_id:
         data["seller_pickup_address"] = snapshot_summary(txn.seller_pickup_address_snapshot)
     if txn.buyer_id == current_user.user_id:
         data["buyer_delivery_address"] = snapshot_summary(txn.buyer_delivery_address_snapshot)
     return data
+
+
+@router.post("/transactions/{transaction_id}/payment/confirm")
+async def confirm_checkout_payment_endpoint(
+    transaction_id: UUID,
+    body: ConfirmCheckoutPaymentRequest,
+    current_user: BasicUser,
+    db: DBSession,
+):
+    try:
+        txn = await process_checkout_payment_success(
+            db,
+            transaction_id=transaction_id,
+            buyer_id=current_user.user_id,
+            razorpay_order_id=body.razorpay_order_id,
+            razorpay_payment_id=body.razorpay_payment_id,
+            razorpay_signature=body.razorpay_signature,
+        )
+        await db.commit()
+    except ValueError as e:
+        code = str(e).split(":")[0]
+        status_code = 403 if code == "INVALID_PAYMENT_SIGNATURE" else 400
+        raise HTTPException(status_code=status_code, detail={"error": code})
+    return {
+        "transaction": _fmt_txn(txn),
+        "status": txn.status,
+        "message": _payment_response_message(txn),
+    }
+
+
+@router.post("/transactions/{transaction_id}/payment-link")
+async def create_payment_link_fallback_endpoint(
+    transaction_id: UUID,
+    current_user: BasicUser,
+    db: DBSession,
+):
+    try:
+        pl = await create_or_get_payment_link_fallback(db, transaction_id, current_user.user_id)
+        await db.commit()
+    except ValueError as e:
+        code = str(e).split(":")[0]
+        raise HTTPException(status_code=400, detail={"error": code})
+    return {
+        "payment_link": pl.short_url,
+        "payment_link_status": pl.status,
+        "payment_link_expires_at": pl.expires_at.isoformat() if pl.expires_at else None,
+    }
+
+
+@router.post("/transactions/{transaction_id}/payment/failure")
+async def report_checkout_payment_failure_endpoint(
+    transaction_id: UUID,
+    body: ReportCheckoutPaymentFailureRequest,
+    current_user: BasicUser,
+    db: DBSession,
+):
+    txn = (await db.execute(select(Transaction).where(Transaction.id == transaction_id))).scalar_one_or_none()
+    if not txn or txn.buyer_id != current_user.user_id:
+        raise HTTPException(status_code=404, detail={"error": "TRANSACTION_NOT_FOUND"})
+    payment_attempt = (await db.execute(
+        select(PaymentLink).where(
+            PaymentLink.transaction_id == txn.id,
+            PaymentLink.razorpay_link_id == body.razorpay_order_id,
+        )
+    )).scalar_one_or_none()
+    if not payment_attempt:
+        raise HTTPException(status_code=400, detail={"error": "PAYMENT_ORDER_NOT_FOUND"})
+    payload = {
+        "event": "client.payment_failed",
+        "payload": {
+            "payment": {
+                "entity": {
+                    "id": body.razorpay_payment_id,
+                    "order_id": body.razorpay_order_id,
+                    "status": "failed",
+                    "error_code": body.code,
+                    "error_description": body.description,
+                    "error_source": body.source,
+                    "error_step": body.step,
+                    "error_reason": body.reason,
+                }
+            }
+        },
+    }
+    failed_txn = await process_payment_failed(
+        db,
+        razorpay_order_id=body.razorpay_order_id,
+        razorpay_payment_id=body.razorpay_payment_id,
+        webhook_payload=payload,
+    )
+    if not failed_txn:
+        raise HTTPException(status_code=400, detail={"error": "PAYMENT_ORDER_NOT_FOUND"})
+    if failed_txn and failed_txn.id != txn.id:
+        raise HTTPException(status_code=400, detail={"error": "PAYMENT_ORDER_MISMATCH"})
+    await db.commit()
+    final_txn = failed_txn or txn
+    return {
+        "transaction": _fmt_txn(final_txn),
+        "status": final_txn.status,
+        "payment_link_status": payment_attempt.status,
+        "can_retry": final_txn.status == "payment_pending",
+        "message": _payment_failure_response_message(final_txn),
+    }
+
+
+@router.post("/transactions/{transaction_id}/payment/cancel")
+async def cancel_unpaid_transaction_endpoint(
+    transaction_id: UUID,
+    body: CancelUnpaidTransactionRequest,
+    current_user: BasicUser,
+    db: DBSession,
+):
+    try:
+        txn = await cancel_unpaid_transaction(
+            db,
+            transaction_id,
+            current_user.user_id,
+            reason=body.reason,
+        )
+        await db.commit()
+    except ValueError as e:
+        code = str(e).split(":")[0]
+        raise HTTPException(status_code=400, detail={"error": code})
+    return {
+        "transaction": _fmt_txn(txn),
+        "status": txn.status,
+        "message": "Order cancelled. The item is available again.",
+    }
 
 
 @router.post("/transactions/{transaction_id}/seller-readiness/confirm")
@@ -746,6 +969,29 @@ async def razorpay_webhook(request: Request, db: DBSession):
         if txn:
             await db.commit()
 
+    elif verify.event in ("order.paid", "payment.captured") and verify.order_id:
+        import json
+        payload = json.loads(body)
+        txn = await process_payment_paid(
+            db, razorpay_link_id=verify.order_id,
+            razorpay_payment_id=verify.payment_id,
+            webhook_payload=payload,
+        )
+        if txn:
+            await db.commit()
+
+    elif verify.event == "payment.failed" and verify.order_id:
+        import json
+        payload = json.loads(body)
+        txn = await process_payment_failed(
+            db,
+            razorpay_order_id=verify.order_id,
+            razorpay_payment_id=verify.payment_id,
+            webhook_payload=payload,
+        )
+        if txn:
+            await db.commit()
+
     elif verify.event in ("refund.processed", "refund.failed") and verify.refund_id:
         # Async refund completion. Razorpay calls back when their banking
         # partner confirms the refund landed (or failed). We acknowledge
@@ -790,14 +1036,28 @@ async def dev_pay(link_id: str, db: DBSession):
     from app.modules.payments.adapter import get_payment_adapter
     import json
     adapter = get_payment_adapter()
-    payload = adapter.build_dev_paid_webhook(
-        link_id, str(pl.transaction_id), amount_paise=int(Decimal(str(pl.amount or 0)) * 100)
-    )
+    if link_id.startswith("order_") and hasattr(adapter, "build_dev_order_paid_webhook"):
+        payload = adapter.build_dev_order_paid_webhook(
+            link_id, str(pl.transaction_id), amount_paise=int(Decimal(str(pl.amount or 0)) * 100)
+        )
+    else:
+        payload = adapter.build_dev_paid_webhook(
+            link_id, str(pl.transaction_id), amount_paise=int(Decimal(str(pl.amount or 0)) * 100)
+        )
     body = json.dumps(payload).encode()
     verify = adapter.verify_webhook(body, "dev_signature")
     if verify.event == "payment_link.paid":
         txn = await process_payment_paid(
             db, razorpay_link_id=verify.payment_link_id,
+            razorpay_payment_id=verify.payment_id, webhook_payload=payload,
+        )
+        if txn:
+            await db.commit()
+            return {"status": "payment_simulated", "transaction_id": str(txn.id),
+                    "transaction_status": txn.status}
+    if verify.event == "order.paid":
+        txn = await process_payment_paid(
+            db, razorpay_link_id=verify.order_id,
             razorpay_payment_id=verify.payment_id, webhook_payload=payload,
         )
         if txn:
@@ -988,6 +1248,9 @@ async def buy_now(body: BuyNowRequest, current_user: BasicUser, db: DBSession):
             txn.order_notes = body.order_notes.strip() or None
         if txn and checkout_address_snapshot:
             txn.buyer_delivery_address_snapshot = checkout_address_snapshot
+        buyer_result = await db.execute(select(User).where(User.id == current_user.user_id))
+        buyer = buyer_result.scalar_one_or_none()
+        buyer_phone = buyer.phone_number if buyer else None
         await db.commit()
 
         return {
@@ -998,16 +1261,28 @@ async def buy_now(body: BuyNowRequest, current_user: BasicUser, db: DBSession):
             "delivery_fee": str(txn.delivery_fee) if txn else str(delivery_fee_for(category_slug)),
             "status": txn.status if txn else "pending",
             "payment_link": payment_link.short_url if payment_link else None,
+            "payment_checkout": _fmt_payment_checkout(
+                payment_link,
+                description=f"Owmee: {listing.title[:50]}",
+                buyer_phone=buyer_phone,
+            ) if payment_link else None,
             "message": "Order placed successfully.",
         }
-    except Exception as e:
-        # If auto-accept fails, return the offer (seller can accept manually)
-        await db.commit()
-        return {
-            "transaction_id": None,
-            "offer_id": str(offer.id),
-            "amount": str(listing.price),
-            "status": "offer_created",
-            "payment_link": None,
-            "message": "Offer created at listed price. Track the next update in Owmee.",
-        }
+    except ValueError as e:
+        # Buy Now must be atomic. If payment order creation fails after we
+        # prepared an offer/reservation/transaction, rolling back keeps the
+        # listing available instead of stranding inventory in a no-pay state.
+        await db.rollback()
+        code = str(e).split(":")[0]
+        status_code = 503 if code == "PAYMENT_LINK_FAILED" else 400
+        raise HTTPException(
+            status_code=status_code,
+            detail={
+                "error": code,
+                "message": (
+                    "Could not start payment. Please try again."
+                    if code == "PAYMENT_LINK_FAILED"
+                    else code
+                ),
+            },
+        )

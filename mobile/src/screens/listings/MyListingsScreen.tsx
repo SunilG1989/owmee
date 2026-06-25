@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   RefreshControl, Alert, Image, Modal,
@@ -28,16 +28,25 @@ const EDITABLE_STATUSES = new Set(['active', 'pending_review', 'pending_moderati
 // Statuses where Delete is a no-op (already gone or seller can't pull
 // the rug from a buyer mid-transaction).
 const DELETABLE_STATUSES = new Set(['draft', 'pending_review', 'pending_moderation', 'active', 'expired']);
-const LISTING_ROW_HEIGHT = 106;
+const LISTING_ROW_HEIGHT = 126;
 const SKELETON_ROWS = Array.from({ length: 6 }, (_, i) => `my-listing-skeleton-${i}`);
 
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
   draft:              { label: 'Draft',     color: C.text3,  bg: C.bone2        },
   pending_review:     { label: 'In review', color: C.yellow, bg: C.yellowLight  },
   pending_moderation: { label: 'In review', color: C.yellow, bg: C.yellowLight  },
+  available:          { label: 'Active',    color: C.petrol, bg: C.petrolLight  },
   active:             { label: 'Active',    color: C.petrol, bg: C.petrolLight  },
   reserved:           { label: 'Reserved',  color: C.petrol, bg: C.petrolLight  },
+  payment_pending:    { label: 'Payment pending', color: C.yellow, bg: C.yellowLight },
+  payment_review:     { label: 'Payment review', color: C.yellow, bg: C.yellowLight },
+  seller_action_required: { label: 'Paid - confirm pickup', color: C.red, bg: C.redLight },
+  payment_captured:   { label: 'Payment captured', color: C.petrol, bg: C.petrolLight },
+  pickup_pending:     { label: 'Pickup pending', color: C.petrol, bg: C.petrolLight },
+  in_logistics:       { label: 'In logistics', color: C.petrol, bg: C.petrolLight },
+  delivered_waiting_buyer: { label: 'Delivered', color: C.petrol, bg: C.petrolLight },
   sold:               { label: 'Sold',      color: C.text4,  bg: C.bone2        },
+  sold_elsewhere:     { label: 'Sold elsewhere', color: C.text4, bg: C.bone2    },
   expired:            { label: 'Expired',   color: C.red,    bg: C.redLight     },
   removed:            { label: 'Removed',   color: C.text4,  bg: C.bone2        },
 };
@@ -54,10 +63,9 @@ function prefetchThumbs(rows: Listing[]) {
 }
 
 export default function MyListingsScreen({ navigation }: any) {
-  const cachedListings = useMemo(() => listingsFromResponse(Listings.peekMyListings()), []);
-  const [listings, setListings] = useState<Listing[]>(cachedListings);
-  const [loading, setLoading] = useState(cachedListings.length === 0);
-  const [backgroundUpdating, setBackgroundUpdating] = useState(cachedListings.length > 0);
+  const [listings, setListings] = useState<Listing[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [backgroundUpdating, setBackgroundUpdating] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   // Action menu (kebab) + reason sheet state. Both target the same
@@ -86,16 +94,9 @@ export default function MyListingsScreen({ navigation }: any) {
   }, [listings.length]);
 
   useFocusEffect(useCallback(() => {
-    const cached = Listings.peekMyListings();
-    if (cached) {
-      const next = listingsFromResponse(cached);
-      setListings(next);
-      setLoading(false);
-      setBackgroundUpdating(true);
-      prefetchThumbs(next);
-    }
-    return afterInteractions(() => load(!cached));
-  }, [load]));
+    if (listings.length > 0) setBackgroundUpdating(true);
+    return afterInteractions(() => load(listings.length === 0));
+  }, [listings.length, load]));
 
   const openActions = useCallback((listing: Listing) => {
     setSelectedListing(listing);
@@ -182,14 +183,26 @@ export default function MyListingsScreen({ navigation }: any) {
 
   const renderItem = ({ item }: { item: Listing | string }) => {
     if (typeof item === 'string') return <MyListingSkeleton />;
-    const st = STATUS_MAP[item.status] || STATUS_MAP.draft;
+    const inventoryStatus = item.seller_inventory_status || item.status;
+    const st = STATUS_MAP[inventoryStatus] || STATUS_MAP[item.status] || STATUS_MAP.draft;
+    const statusLabel = item.seller_inventory_label || st.label;
     const img = (item.image_urls || item.images)?.[0] || item.thumbnail_url;
+    const opensOrder = !!item.active_transaction_id
+      && item.seller_next_action !== 'manage_listing'
+      && item.seller_next_action !== 'none';
     const showKebab = EDITABLE_STATUSES.has(item.status) || DELETABLE_STATUSES.has(item.status);
+    const openRow = () => {
+      if (opensOrder && item.active_transaction_id) {
+        navigation.navigate('TransactionDetail', { transactionId: item.active_transaction_id });
+        return;
+      }
+      navigation.navigate('ListingDetail', { listingId: item.id, initialListing: item });
+    };
     return (
       <View style={s.card}>
         <TouchableOpacity
           style={s.cardTouch}
-          onPress={() => navigation.navigate('ListingDetail', { listingId: item.id, initialListing: item })}
+          onPress={openRow}
           onLongPress={() => showKebab && openActions(item)}
           activeOpacity={0.85}
         >
@@ -205,11 +218,18 @@ export default function MyListingsScreen({ navigation }: any) {
             <Text style={s.price}>{formatPrice(item.price)}</Text>
             <View style={s.metaRow}>
               <View style={[s.statusBadge, { backgroundColor: st.bg }]}>
-                <Text style={[s.statusText, { color: st.color }]}>{st.label}</Text>
+                <Text style={[s.statusText, { color: st.color }]} numberOfLines={1}>
+                  {statusLabel}
+                </Text>
               </View>
               {item.view_count != null && <Text style={s.views}>{item.view_count} views</Text>}
               {item.created_at && <Text style={s.time}>{timeAgo(item.created_at)}</Text>}
             </View>
+            {item.seller_inventory_detail ? (
+              <Text style={s.inventoryDetail} numberOfLines={1}>
+                {item.seller_inventory_detail}
+              </Text>
+            ) : null}
           </View>
         </TouchableOpacity>
         {showKebab ? (
@@ -427,10 +447,15 @@ const s = StyleSheet.create({
   title: { fontSize: T.size.sm + 1, fontWeight: T.weight.semi, color: C.text, marginBottom: 2 },
   price: { fontSize: T.size.lg - 1, fontWeight: T.weight.bold, color: C.petrol, marginBottom: S.xs },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: S.sm },
-  statusBadge: { paddingHorizontal: S.sm, paddingVertical: 2, borderRadius: R.xs },
+  statusBadge: { maxWidth: 178, paddingHorizontal: S.sm, paddingVertical: 2, borderRadius: R.xs },
   statusText: { fontSize: T.size.xs, fontWeight: T.weight.bold },
   views: { fontSize: T.size.xs, color: C.text3 },
   time: { fontSize: T.size.xs, color: C.text4 },
+  inventoryDetail: {
+    marginTop: S.xs,
+    fontSize: T.size.xs,
+    color: C.text3,
+  },
   arrow: { fontSize: T.size.xl, color: C.text4, marginLeft: S.xs },
   skelBlock: { backgroundColor: '#EFE2D6' },
   skelLine: {

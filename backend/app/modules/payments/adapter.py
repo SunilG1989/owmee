@@ -56,6 +56,30 @@ class PaymentLinkResult:
         self.error = error
 
 
+class PaymentOrderResult:
+    def __init__(
+        self,
+        success: bool,
+        provider_order_id: str = "",
+        provider: str = "",
+        amount_paise: int = 0,
+        currency: str = "INR",
+        status: str = "",
+        key_id: str = "",
+        error: str | None = None,
+    ):
+        self.success = success
+        self.provider = provider
+        self.provider_order_id = provider_order_id
+        # Razorpay-specific compatibility for callers/tests.
+        self.razorpay_order_id = provider_order_id
+        self.amount_paise = amount_paise
+        self.currency = currency
+        self.status = status
+        self.key_id = key_id
+        self.error = error
+
+
 class RefundResult:
     """Adapter response for refund attempts. razorpay_refund_id is the
     payment-partner's id we store for idempotent retries."""
@@ -78,20 +102,51 @@ class RefundResult:
         self.error = error
 
 
+class PaymentStatusResult:
+    def __init__(
+        self,
+        success: bool,
+        provider: str = "",
+        payment_id: str = "",
+        order_id: str = "",
+        status: str = "",
+        amount_paise: int | None = None,
+        created_at: datetime | None = None,
+        error: str | None = None,
+    ):
+        self.success = success
+        self.provider = provider
+        self.payment_id = payment_id
+        self.order_id = order_id
+        self.status = status
+        self.amount_paise = amount_paise
+        self.created_at = created_at
+        self.error = error
+
+
 class WebhookVerifyResult:
     def __init__(
         self, valid: bool, event: str = "",
         payment_link_id: str = "", payment_id: str = "",
-        refund_id: str = "",
+        refund_id: str = "", order_id: str = "",
     ):
         self.valid = valid
         self.event = event
         self.payment_link_id = payment_link_id
+        self.order_id = order_id
         self.refund_id = refund_id
         self.payment_id = payment_id
 
 
 class PaymentAdapter(Protocol):
+    async def create_payment_order(
+        self,
+        amount_paise: int,
+        transaction_id: str,
+        receipt: str,
+        idempotency_key: str,
+    ) -> PaymentOrderResult: ...
+
     async def create_payment_link(
         self,
         amount_paise: int,
@@ -102,7 +157,17 @@ class PaymentAdapter(Protocol):
         expire_minutes: int = 30,
     ) -> PaymentLinkResult: ...
 
+    def verify_checkout_signature(
+        self,
+        *,
+        order_id: str,
+        payment_id: str,
+        signature: str,
+    ) -> bool: ...
+
     def verify_webhook(self, payload_body: bytes, signature: str) -> WebhookVerifyResult: ...
+
+    async def fetch_payment_status(self, payment_id: str) -> PaymentStatusResult: ...
 
     async def refund(
         self,
@@ -120,6 +185,30 @@ class _DevPaymentAdapter:
     Dev mode: returns a mock payment link pointing to localhost.
     Simulates a paid webhook payload for testing.
     """
+
+    async def create_payment_order(
+        self,
+        amount_paise: int,
+        transaction_id: str,
+        receipt: str,
+        idempotency_key: str,
+    ) -> PaymentOrderResult:
+        fake_id = f"order_dev_{uuid4().hex[:12]}"
+        logger.info(
+            "payment_order.dev_created",
+            order_id=fake_id,
+            amount_rupees=amount_paise / 100,
+            transaction_id=transaction_id,
+        )
+        return PaymentOrderResult(
+            success=True,
+            provider="dev",
+            provider_order_id=fake_id,
+            amount_paise=amount_paise,
+            currency="INR",
+            status="created",
+            key_id="rzp_test_dev",
+        )
 
     async def create_payment_link(
         self,
@@ -171,10 +260,31 @@ class _DevPaymentAdapter:
             )
             return WebhookVerifyResult(
                 valid=True, event=event,
-                payment_link_id=pl_id, payment_id=payment_id, refund_id=refund_id,
+                payment_link_id=pl_id,
+                order_id=_extract_order_id(data),
+                payment_id=payment_id,
+                refund_id=refund_id,
             )
         except Exception as e:
             return WebhookVerifyResult(valid=False)
+
+    def verify_checkout_signature(
+        self,
+        *,
+        order_id: str,
+        payment_id: str,
+        signature: str,
+    ) -> bool:
+        return bool(order_id and payment_id and signature)
+
+    async def fetch_payment_status(self, payment_id: str) -> PaymentStatusResult:
+        return PaymentStatusResult(
+            success=True,
+            provider="dev",
+            payment_id=payment_id,
+            status="captured",
+            created_at=datetime.now(timezone.utc),
+        )
 
     async def refund(
         self,
@@ -228,6 +338,32 @@ class _DevPaymentAdapter:
             },
         }
 
+    def build_dev_order_paid_webhook(
+        self, razorpay_order_id: str, transaction_id: str, amount_paise: int = 0
+    ) -> dict:
+        return {
+            "event": "order.paid",
+            "payload": {
+                "order": {
+                    "entity": {
+                        "id": razorpay_order_id,
+                        "receipt": f"txn_{transaction_id}"[:40],
+                        "status": "paid",
+                        "notes": {"transaction_id": transaction_id},
+                    }
+                },
+                "payment": {
+                    "entity": {
+                        "id": f"pay_dev_{uuid4().hex[:12]}",
+                        "order_id": razorpay_order_id,
+                        "amount": int(amount_paise) if amount_paise else 100,
+                        "status": "captured",
+                        "method": "upi",
+                    }
+                },
+            },
+        }
+
 
 # ── Razorpay production adapter ──────────────────────────────────────────────────
 
@@ -237,6 +373,42 @@ class _RazorpayAdapter:
 
     def _auth(self):
         return (settings.pa_key_id, settings.pa_key_secret)
+
+    async def create_payment_order(
+        self,
+        amount_paise: int,
+        transaction_id: str,
+        receipt: str,
+        idempotency_key: str,
+    ) -> PaymentOrderResult:
+        payload = {
+            "amount": amount_paise,
+            "currency": "INR",
+            "receipt": receipt[:40],
+            "notes": {"transaction_id": transaction_id, "idempotency_key": idempotency_key[:64]},
+        }
+        try:
+            async with httpx.AsyncClient(auth=self._auth(), timeout=15) as client:
+                resp = await client.post(f"{self.BASE}/orders", json=payload)
+            data = resp.json() if resp.content else {}
+            if resp.status_code in (200, 201):
+                return PaymentOrderResult(
+                    success=True,
+                    provider="razorpay",
+                    provider_order_id=data["id"],
+                    amount_paise=int(data.get("amount") or amount_paise),
+                    currency=data.get("currency", "INR"),
+                    status=data.get("status", "created"),
+                    key_id=settings.pa_key_id,
+                )
+            return PaymentOrderResult(
+                success=False,
+                provider="razorpay",
+                error=data.get("error", {}).get("description", "Razorpay order error"),
+            )
+        except Exception as e:
+            logger.error("razorpay.payment_order.error", error=str(e))
+            return PaymentOrderResult(success=False, provider="razorpay", error=str(e))
 
     async def create_payment_link(
         self,
@@ -354,10 +526,71 @@ class _RazorpayAdapter:
             )
             return WebhookVerifyResult(
                 valid=True, event=event,
-                payment_link_id=pl_id, payment_id=payment_id, refund_id=refund_id,
+                payment_link_id=pl_id,
+                order_id=_extract_order_id(data),
+                payment_id=payment_id,
+                refund_id=refund_id,
             )
         except Exception:
             return WebhookVerifyResult(valid=False)
+
+    def verify_checkout_signature(
+        self,
+        *,
+        order_id: str,
+        payment_id: str,
+        signature: str,
+    ) -> bool:
+        if _missing_payment_secret(settings.pa_key_secret):
+            logger.error("razorpay.key_secret_missing_for_checkout_verify")
+            return False
+        if not order_id or not payment_id or not signature:
+            return False
+        expected = hmac.new(
+            settings.pa_key_secret.encode(),
+            f"{order_id}|{payment_id}".encode(),
+            hashlib.sha256,
+        ).hexdigest()
+        return hmac.compare_digest(expected, signature)
+
+    async def fetch_payment_status(self, payment_id: str) -> PaymentStatusResult:
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.get(f"{self.BASE}/payments/{payment_id}", auth=self._auth())
+            data = resp.json() if resp.content else {}
+            if resp.status_code == 200:
+                created_at = None
+                if data.get("created_at") is not None:
+                    created_at = datetime.fromtimestamp(int(data["created_at"]), tz=timezone.utc)
+                return PaymentStatusResult(
+                    success=True,
+                    provider="razorpay",
+                    payment_id=data.get("id", payment_id),
+                    order_id=data.get("order_id") or "",
+                    status=data.get("status") or "",
+                    amount_paise=int(data["amount"]) if data.get("amount") is not None else None,
+                    created_at=created_at,
+                )
+            return PaymentStatusResult(
+                success=False,
+                provider="razorpay",
+                payment_id=payment_id,
+                error=data.get("error", {}).get("description", f"HTTP {resp.status_code}"),
+            )
+        except Exception as e:
+            logger.error("razorpay.payment_fetch.error", payment_id=payment_id, error=str(e))
+            return PaymentStatusResult(success=False, provider="razorpay", payment_id=payment_id, error=str(e))
+
+
+def _extract_order_id(data: dict) -> str:
+    payload = data.get("payload", {}) if isinstance(data, dict) else {}
+    order_entity = payload.get("order", {}).get("entity", {})
+    if isinstance(order_entity, dict) and order_entity.get("id"):
+        return order_entity.get("id", "")
+    payment_entity = payload.get("payment", {}).get("entity", {})
+    if isinstance(payment_entity, dict):
+        return payment_entity.get("order_id") or ""
+    return ""
 
 
 # ── Factory ──────────────────────────────────────────────────────────────────────

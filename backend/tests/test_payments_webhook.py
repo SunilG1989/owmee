@@ -7,6 +7,7 @@ import hashlib
 import hmac
 import json
 import time
+from datetime import datetime, timezone
 
 import pytest
 from app.core.settings import settings
@@ -42,6 +43,65 @@ def test_valid_signature_is_accepted_and_parsed(monkeypatch):
     assert res.event == "payment_link.paid"
     assert res.payment_link_id == "plink_1"
     assert res.payment_id == "pay_1"
+
+
+def test_order_paid_signature_is_accepted_and_parses_order(monkeypatch):
+    monkeypatch.setattr(settings, "pa_webhook_secret", "whsec_test", raising=False)
+    body = json.dumps({
+        "event": "order.paid",
+        "payload": {
+            "order": {"entity": {"id": "order_123"}},
+            "payment": {"entity": {"id": "pay_123", "order_id": "order_123"}},
+        },
+    }).encode()
+
+    res = _RazorpayAdapter().verify_webhook(body, _sign("whsec_test", body))
+
+    assert res.valid is True
+    assert res.event == "order.paid"
+    assert res.order_id == "order_123"
+    assert res.payment_id == "pay_123"
+
+
+def test_payment_captured_signature_parses_order_from_payment_entity(monkeypatch):
+    monkeypatch.setattr(settings, "pa_webhook_secret", "whsec_test", raising=False)
+    body = json.dumps({
+        "event": "payment.captured",
+        "payload": {
+            "payment": {"entity": {"id": "pay_123", "order_id": "order_123"}},
+        },
+    }).encode()
+
+    res = _RazorpayAdapter().verify_webhook(body, _sign("whsec_test", body))
+
+    assert res.valid is True
+    assert res.event == "payment.captured"
+    assert res.order_id == "order_123"
+    assert res.payment_id == "pay_123"
+
+
+def test_payment_failed_signature_parses_order_from_payment_entity(monkeypatch):
+    monkeypatch.setattr(settings, "pa_webhook_secret", "whsec_test", raising=False)
+    body = json.dumps({
+        "event": "payment.failed",
+        "payload": {
+            "payment": {
+                "entity": {
+                    "id": "pay_123",
+                    "order_id": "order_123",
+                    "status": "failed",
+                    "error_reason": "payment_failed",
+                }
+            },
+        },
+    }).encode()
+
+    res = _RazorpayAdapter().verify_webhook(body, _sign("whsec_test", body))
+
+    assert res.valid is True
+    assert res.event == "payment.failed"
+    assert res.order_id == "order_123"
+    assert res.payment_id == "pay_123"
 
 
 def test_tampered_signature_is_rejected(monkeypatch):
@@ -82,6 +142,122 @@ def test_razorpay_factory_requires_webhook_secret(monkeypatch):
 
     with pytest.raises(RuntimeError, match="PA_WEBHOOK_SECRET"):
         get_payment_adapter()
+
+
+def test_checkout_signature_verification_uses_order_pipe_payment(monkeypatch):
+    monkeypatch.setattr(settings, "pa_key_secret", "rzp_secret", raising=False)
+    expected = hmac.new(
+        b"rzp_secret",
+        b"order_123|pay_123",
+        hashlib.sha256,
+    ).hexdigest()
+
+    adapter = _RazorpayAdapter()
+
+    assert adapter.verify_checkout_signature(
+        order_id="order_123",
+        payment_id="pay_123",
+        signature=expected,
+    ) is True
+    assert adapter.verify_checkout_signature(
+        order_id="order_123",
+        payment_id="pay_999",
+        signature=expected,
+    ) is False
+
+
+@pytest.mark.asyncio
+async def test_razorpay_payment_order_payload_uses_orders_api(monkeypatch):
+    captured = {}
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            captured["client_kwargs"] = kwargs
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def post(self, url, **kwargs):
+            captured["url"] = url
+            captured["request"] = kwargs
+            return _FakeResponse(
+                data={
+                    "id": "order_test",
+                    "amount": 12345,
+                    "currency": "INR",
+                    "status": "created",
+                }
+            )
+
+    monkeypatch.setattr(settings, "pa_key_id", "rzp_key", raising=False)
+    monkeypatch.setattr(settings, "pa_key_secret", "rzp_secret", raising=False)
+    monkeypatch.setattr(payments_adapter.httpx, "AsyncClient", FakeAsyncClient)
+
+    result = await _RazorpayAdapter().create_payment_order(
+        amount_paise=12345,
+        transaction_id="txn_123",
+        receipt="txn_receipt_1234567890",
+        idempotency_key="idem_1234567890",
+    )
+
+    payload = captured["request"]["json"]
+    assert result.success is True
+    assert result.razorpay_order_id == "order_test"
+    assert captured["url"].endswith("/orders")
+    assert captured["client_kwargs"]["auth"] == ("rzp_key", "rzp_secret")
+    assert payload == {
+        "amount": 12345,
+        "currency": "INR",
+        "receipt": "txn_receipt_1234567890",
+        "notes": {"transaction_id": "txn_123", "idempotency_key": "idem_1234567890"},
+    }
+
+
+@pytest.mark.asyncio
+async def test_razorpay_payment_status_fetch_parses_capture(monkeypatch):
+    captured = {}
+    created_at_ts = int(time.time())
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            captured["client_kwargs"] = kwargs
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def get(self, url, **kwargs):
+            captured["url"] = url
+            captured["request"] = kwargs
+            return _FakeResponse(
+                data={
+                    "id": "pay_123",
+                    "order_id": "order_123",
+                    "amount": 12345,
+                    "status": "captured",
+                    "created_at": created_at_ts,
+                }
+            )
+
+    monkeypatch.setattr(settings, "pa_key_id", "rzp_key", raising=False)
+    monkeypatch.setattr(settings, "pa_key_secret", "rzp_secret", raising=False)
+    monkeypatch.setattr(payments_adapter.httpx, "AsyncClient", FakeAsyncClient)
+
+    result = await _RazorpayAdapter().fetch_payment_status("pay_123")
+
+    assert result.success is True
+    assert result.payment_id == "pay_123"
+    assert result.order_id == "order_123"
+    assert result.status == "captured"
+    assert result.amount_paise == 12345
+    assert result.created_at == datetime.fromtimestamp(created_at_ts, tz=timezone.utc)
+    assert captured["url"].endswith("/payments/pay_123")
+    assert captured["request"]["auth"] == ("rzp_key", "rzp_secret")
 
 
 @pytest.mark.asyncio

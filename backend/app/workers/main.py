@@ -18,6 +18,7 @@ from temporalio.worker import Worker
 from app.core.settings import settings
 from app.modules.ai_assistant.draft_analysis_jobs import run_ai_draft_analysis_worker
 from app.modules.media.hero_cleanup_jobs import run_hero_cleanup_worker
+from app.modules.offers.payment_timeout_jobs import run_payment_timeout_sweeper
 
 logger = structlog.get_logger()
 
@@ -32,6 +33,7 @@ async def main():
         await asyncio.gather(
             run_hero_cleanup_worker(),
             run_ai_draft_analysis_worker(),
+            run_payment_timeout_sweeper(),
         )
         return
 
@@ -135,12 +137,13 @@ async def main():
                 workflows=4, activities=21)
     media_cleanup_task = asyncio.create_task(run_hero_cleanup_worker())
     ai_draft_task = asyncio.create_task(run_ai_draft_analysis_worker())
+    payment_timeout_task = asyncio.create_task(run_payment_timeout_sweeper())
     try:
         await worker.run()
     finally:
-        for task in (media_cleanup_task, ai_draft_task):
+        for task in (media_cleanup_task, ai_draft_task, payment_timeout_task):
             task.cancel()
-        await asyncio.gather(media_cleanup_task, ai_draft_task, return_exceptions=True)
+        await asyncio.gather(media_cleanup_task, ai_draft_task, payment_timeout_task, return_exceptions=True)
 
 
 if __name__ == "__main__":

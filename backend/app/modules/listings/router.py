@@ -364,9 +364,178 @@ def _fmt_detail(listing: Listing, seller: User | None, avg_rating: float | None,
     return base
 
 
-def _fmt_my(listing: Listing) -> dict:
-    """My listings — all statuses including drafts."""
+def _seller_inventory_from_transaction(listing: Listing, txn: Transaction | None) -> dict:
+    if not txn:
+        if listing.status == "active":
+            return {
+                "seller_inventory_status": "available",
+                "seller_inventory_label": "Active",
+                "seller_inventory_detail": "Available for buyers",
+                "seller_next_action": "manage_listing",
+            }
+        if listing.status == "sold":
+            return {
+                "seller_inventory_status": "sold",
+                "seller_inventory_label": "Sold",
+                "seller_inventory_detail": "Sale completed",
+                "seller_next_action": "none",
+            }
+        if listing.status == "sold_elsewhere":
+            return {
+                "seller_inventory_status": "sold_elsewhere",
+                "seller_inventory_label": "Sold elsewhere",
+                "seller_inventory_detail": "Removed from buyer discovery",
+                "seller_next_action": "none",
+            }
+        if listing.status == "reserved":
+            return {
+                "seller_inventory_status": "reserved",
+                "seller_inventory_label": "Reserved",
+                "seller_inventory_detail": "Order is being prepared",
+                "seller_next_action": "none",
+            }
+        return {
+            "seller_inventory_status": listing.status,
+            "seller_inventory_label": listing.status.replace("_", " ").title(),
+            "seller_inventory_detail": None,
+            "seller_next_action": "none",
+        }
+
+    base = {
+        "active_transaction_id": str(txn.id),
+        "active_transaction_status": txn.status,
+        "seller_readiness_status": txn.seller_readiness_status,
+    }
+    if txn.status == "payment_pending":
+        return {
+            **base,
+            "seller_inventory_status": "payment_pending",
+            "seller_inventory_label": "Payment pending",
+            "seller_inventory_detail": "Buyer is paying. Item is hidden from marketplace.",
+            "seller_next_action": "open_order",
+        }
+    if txn.status == "payment_capture_uncertain":
+        return {
+            **base,
+            "seller_inventory_status": "payment_review",
+            "seller_inventory_label": "Payment review",
+            "seller_inventory_detail": "Owmee is checking this payment before pickup.",
+            "seller_next_action": "open_order",
+        }
+    if txn.status == "payment_captured":
+        if txn.seller_readiness_status == "pending":
+            return {
+                **base,
+                "seller_inventory_status": "seller_action_required",
+                "seller_inventory_label": "Paid - confirm pickup",
+                "seller_inventory_detail": "Buyer paid. Confirm item availability.",
+                "seller_next_action": "confirm_pickup",
+            }
+        if txn.seller_readiness_status == "confirmed":
+            return {
+                **base,
+                "seller_inventory_status": "pickup_pending",
+                "seller_inventory_label": "Pickup pending",
+                "seller_inventory_detail": "Owmee will collect and inspect the item.",
+                "seller_next_action": "open_order",
+            }
+        return {
+            **base,
+            "seller_inventory_status": "payment_captured",
+            "seller_inventory_label": "Payment captured",
+            "seller_inventory_detail": "Owmee is preparing the next step.",
+            "seller_next_action": "open_order",
+        }
+    if txn.status in {"at_hub", "delivery_in_progress"}:
+        return {
+            **base,
+            "seller_inventory_status": "in_logistics",
+            "seller_inventory_label": "In Owmee logistics",
+            "seller_inventory_detail": "Item collected. Delivery is in progress.",
+            "seller_next_action": "open_order",
+        }
+    if txn.status == "delivered":
+        return {
+            **base,
+            "seller_inventory_status": "delivered_waiting_buyer",
+            "seller_inventory_label": "Delivered",
+            "seller_inventory_detail": "Waiting for buyer confirmation or auto-complete.",
+            "seller_next_action": "open_order",
+        }
+    if txn.status in {"completed", "auto_completed"}:
+        return {
+            **base,
+            "seller_inventory_status": "sold",
+            "seller_inventory_label": "Sold via Owmee",
+            "seller_inventory_detail": "Sale completed. Payout processing continues as applicable.",
+            "seller_next_action": "open_order",
+            "sold_at": _iso_or_none(txn.completed_at),
+        }
+    if txn.status in {"cancelled", "refunded", "pickup_rejected"}:
+        if listing.status == "active":
+            return {
+                **base,
+                "seller_inventory_status": "available",
+                "seller_inventory_label": "Active",
+                "seller_inventory_detail": "Previous order ended. Available for buyers.",
+                "seller_next_action": "manage_listing",
+            }
+        return {
+            **base,
+            "seller_inventory_status": listing.status,
+            "seller_inventory_label": listing.status.replace("_", " ").title(),
+            "seller_inventory_detail": "Order ended.",
+            "seller_next_action": "open_order",
+        }
     return {
+        **base,
+        "seller_inventory_status": txn.status,
+        "seller_inventory_label": txn.status.replace("_", " ").title(),
+        "seller_inventory_detail": "Open the order for details.",
+        "seller_next_action": "open_order",
+    }
+
+
+_SELLER_INVENTORY_TRANSACTION_STATUSES = (
+    "payment_pending",
+    "payment_capture_uncertain",
+    "payment_captured",
+    "at_hub",
+    "delivery_in_progress",
+    "delivered",
+    "completed",
+    "auto_completed",
+    "cancelled",
+    "refunded",
+    "pickup_rejected",
+)
+
+
+async def _seller_inventory_transactions_by_listing(
+    db: DBSession,
+    seller_id: UUID,
+    listing_ids: list[UUID],
+) -> dict[UUID, Transaction]:
+    if not listing_ids:
+        return {}
+    result = await db.execute(
+        select(Transaction)
+        .where(
+            Transaction.seller_id == seller_id,
+            Transaction.listing_id.in_(listing_ids),
+            Transaction.status.in_(_SELLER_INVENTORY_TRANSACTION_STATUSES),
+        )
+        .order_by(Transaction.created_at.desc())
+    )
+    by_listing: dict[UUID, Transaction] = {}
+    for txn in result.scalars().all():
+        by_listing.setdefault(txn.listing_id, txn)
+    return by_listing
+
+
+def _fmt_my(listing: Listing, active_transaction: Transaction | None = None) -> dict:
+    """My listings — all statuses including drafts."""
+    data = {
         "id": str(listing.id),
         "title": listing.title,
         "price": str(listing.price),
@@ -421,6 +590,8 @@ def _fmt_my(listing: Listing) -> dict:
             else (str(listing.fe_visit_id) if listing.fe_visit_id else None)
         ),
     }
+    data.update(_seller_inventory_from_transaction(listing, active_transaction))
+    return data
 
 
 # ── Helper: get seller rating + deal count ─────────────────────────────────────
@@ -557,9 +728,20 @@ async def seller_dashboard(current_user: VerifiedUser, db: DBSession):
         if t.payout_flagged_at and not t.payout_released_at
     )
     avg_rating = round(sum(r.stars for r in ratings) / len(ratings), 1) if ratings else None
+    txn_by_listing = await _seller_inventory_transactions_by_listing(
+        db,
+        current_user.user_id,
+        [l.id for l in listings],
+    )
     status_counts = {}
+    inventory_status_counts = {}
     for l in listings:
         status_counts[l.status] = status_counts.get(l.status, 0) + 1
+        inventory_status = _seller_inventory_from_transaction(
+            l,
+            txn_by_listing.get(l.id),
+        )["seller_inventory_status"]
+        inventory_status_counts[inventory_status] = inventory_status_counts.get(inventory_status, 0) + 1
 
     return {
         "seller_id": str(current_user.user_id),
@@ -567,6 +749,7 @@ async def seller_dashboard(current_user: VerifiedUser, db: DBSession):
             "total_listings": len(listings),
             "listings_by_status": status_counts,
             "total_views": sum(l.view_count for l in listings),
+            "inventory_by_status": inventory_status_counts,
             "pending_offers": len(pending_offers),
             "completed_deals": len(completed_txns),
             "total_earnings": total_earnings,
@@ -574,7 +757,7 @@ async def seller_dashboard(current_user: VerifiedUser, db: DBSession):
             "avg_rating": avg_rating,
             "ratings_count": len(ratings),
         },
-        "listings": [_fmt_my(l) for l in listings],
+        "listings": [_fmt_my(l, txn_by_listing.get(l.id)) for l in listings],
         "pending_offers": [
             {
                 "id": str(o.id),
@@ -597,7 +780,15 @@ async def my_listings(current_user: BasicUser, db: DBSession,
         query = query.where(Listing.status == status_filter)
     result = await db.execute(query.order_by(Listing.created_at.desc()))
     listings = result.scalars().all()
-    return {"listings": [_fmt_my(l) for l in listings], "count": len(listings)}
+    txn_by_listing = await _seller_inventory_transactions_by_listing(
+        db,
+        current_user.user_id,
+        [l.id for l in listings],
+    )
+    return {
+        "listings": [_fmt_my(l, txn_by_listing.get(l.id)) for l in listings],
+        "count": len(listings),
+    }
 
 
 @router.post(

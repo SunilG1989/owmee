@@ -15,6 +15,10 @@ import pytest
 from fastapi import HTTPException
 
 from app.main import create_app
+from app.modules.listings.router import (
+    _seller_inventory_from_transaction,
+    _seller_inventory_transactions_by_listing,
+)
 from app.modules.notifications.service import BUCKET_MAP
 from app.modules.offers import service as offer_service
 from app.modules.transactions import logistics_router
@@ -57,6 +61,7 @@ class _DB:
         self.get_value = get_value
         self.execute_values = list(execute_values or [])
         self.committed = False
+        self.rolled_back = False
 
     async def get(self, *_args, **_kwargs):
         return self.get_value
@@ -68,6 +73,128 @@ class _DB:
 
     async def commit(self):
         self.committed = True
+
+    async def rollback(self):
+        self.rolled_back = True
+
+
+def test_seller_inventory_available_listing_has_manage_action():
+    listing = SimpleNamespace(status="active")
+
+    out = _seller_inventory_from_transaction(listing, None)
+
+    assert out["seller_inventory_status"] == "available"
+    assert out["seller_inventory_label"] == "Active"
+    assert out["seller_next_action"] == "manage_listing"
+
+
+def test_seller_inventory_payment_pending_keeps_item_hidden():
+    txn_id = uuid4()
+    listing = SimpleNamespace(status="reserved")
+    txn = SimpleNamespace(
+        id=txn_id,
+        status="payment_pending",
+        seller_readiness_status="pending",
+        completed_at=None,
+    )
+
+    out = _seller_inventory_from_transaction(listing, txn)
+
+    assert out["active_transaction_id"] == str(txn_id)
+    assert out["seller_inventory_status"] == "payment_pending"
+    assert out["seller_inventory_label"] == "Payment pending"
+    assert out["seller_next_action"] == "open_order"
+
+
+def test_seller_inventory_paid_order_requires_seller_confirmation():
+    txn_id = uuid4()
+    listing = SimpleNamespace(status="reserved")
+    txn = SimpleNamespace(
+        id=txn_id,
+        status="payment_captured",
+        seller_readiness_status="pending",
+        completed_at=None,
+    )
+
+    out = _seller_inventory_from_transaction(listing, txn)
+
+    assert out["active_transaction_id"] == str(txn_id)
+    assert out["seller_inventory_status"] == "seller_action_required"
+    assert out["seller_inventory_label"] == "Paid - confirm pickup"
+    assert out["seller_next_action"] == "confirm_pickup"
+
+
+def test_seller_inventory_confirmed_order_moves_to_pickup_pending():
+    listing = SimpleNamespace(status="reserved")
+    txn = SimpleNamespace(
+        id=uuid4(),
+        status="payment_captured",
+        seller_readiness_status="confirmed",
+        completed_at=None,
+    )
+
+    out = _seller_inventory_from_transaction(listing, txn)
+
+    assert out["seller_inventory_status"] == "pickup_pending"
+    assert out["seller_inventory_label"] == "Pickup pending"
+    assert out["seller_next_action"] == "open_order"
+
+
+def test_seller_inventory_cancelled_order_returns_active_listing_to_available():
+    listing = SimpleNamespace(status="active")
+    txn = SimpleNamespace(
+        id=uuid4(),
+        status="cancelled",
+        seller_readiness_status="declined",
+        completed_at=None,
+    )
+
+    out = _seller_inventory_from_transaction(listing, txn)
+
+    assert out["seller_inventory_status"] == "available"
+    assert out["seller_inventory_label"] == "Active"
+    assert out["seller_inventory_detail"] == "Previous order ended. Available for buyers."
+    assert out["seller_next_action"] == "manage_listing"
+
+
+def test_seller_inventory_completed_order_surfaces_sold_at():
+    completed_at = datetime.now(timezone.utc)
+    listing = SimpleNamespace(status="sold")
+    txn = SimpleNamespace(
+        id=uuid4(),
+        status="completed",
+        seller_readiness_status="confirmed",
+        completed_at=completed_at,
+    )
+
+    out = _seller_inventory_from_transaction(listing, txn)
+
+    assert out["seller_inventory_status"] == "sold"
+    assert out["seller_inventory_label"] == "Sold via Owmee"
+    assert out["sold_at"] == completed_at.isoformat()
+
+
+@pytest.mark.asyncio
+async def test_seller_inventory_transaction_lookup_uses_latest_transaction_per_listing():
+    listing_id = uuid4()
+    seller_id = uuid4()
+    latest = SimpleNamespace(
+        id=uuid4(),
+        listing_id=listing_id,
+        status="payment_captured",
+        created_at=datetime.now(timezone.utc),
+    )
+    older = SimpleNamespace(
+        id=uuid4(),
+        listing_id=listing_id,
+        status="cancelled",
+        created_at=datetime.now(timezone.utc) - timedelta(minutes=5),
+    )
+    db = _DB(execute_values=[[latest, older]])
+
+    out = await _seller_inventory_transactions_by_listing(db, seller_id, [listing_id])
+
+    assert out[listing_id] is latest
 
 
 def _address(user_id, role: str, name: str = "Test User") -> dict:
@@ -151,6 +278,10 @@ def test_order_routes_are_registered_and_no_direct_handoff_routes_return():
     required = {
         "/v1/transactions/{transaction_id}/seller-readiness/confirm",
         "/v1/transactions/{transaction_id}/seller-readiness/decline",
+        "/v1/transactions/{transaction_id}/payment/confirm",
+        "/v1/transactions/{transaction_id}/payment/failure",
+        "/v1/transactions/{transaction_id}/payment/cancel",
+        "/v1/transactions/{transaction_id}/payment-link",
         "/v1/admin/logistics/seller-readiness-queue",
         "/v1/admin/logistics/transactions/{transaction_id}/expire-seller-readiness",
         "/v1/admin/logistics/pickup-queue",
@@ -167,9 +298,13 @@ def test_order_routes_are_registered_and_no_direct_handoff_routes_return():
 def test_order_notification_events_stay_transaction_bucket_only():
     required_events = {
         "seller_readiness_required",
+        "payment_failed",
+        "payment_cancelled",
+        "payment_late_capture_refund",
         "seller_ready",
         "seller_unavailable_refund",
         "seller_timeout_refund",
+        "buyer_payment_not_completed",
         "pickup_assigned",
         "pickup_completed",
         "item_at_hub",
@@ -247,7 +382,7 @@ async def test_payment_capture_opens_seller_readiness_only_when_address_exists(m
 
     buyer_id = uuid4()
     seller_id = uuid4()
-    txn = _txn(buyer_id=buyer_id, seller_id=seller_id)
+    txn = _txn(buyer_id=buyer_id, seller_id=seller_id, status="payment_pending")
     pl = SimpleNamespace(
         status="created",
         paid_at=None,
@@ -300,6 +435,7 @@ async def test_payment_capture_without_buyer_address_holds_ops_flow(monkeypatch)
     txn = _txn(
         buyer_id=buyer_id,
         seller_id=seller_id,
+        status="payment_pending",
         buyer_delivery_address_snapshot=None,
     )
     pl = SimpleNamespace(
@@ -337,6 +473,85 @@ async def test_payment_capture_without_buyer_address_holds_ops_flow(monkeypatch)
     assert txn.seller_response_deadline is None
     assert (buyer_id, "delivery_address_required") in notified
     assert (seller_id, "seller_readiness_required") not in notified
+
+
+@pytest.mark.asyncio
+async def test_checkout_failure_report_rejects_unknown_order_before_mutation(monkeypatch):
+    from app.modules.offers import router as offers_router
+
+    buyer_id = uuid4()
+    txn = _txn(buyer_id=buyer_id, status="payment_pending")
+    db = _DB(execute_values=[txn, None])
+
+    async def fail_if_called(*_args, **_kwargs):
+        raise AssertionError("failure mutation should not run for an unknown order")
+
+    monkeypatch.setattr(offers_router, "process_payment_failed", fail_if_called)
+
+    with pytest.raises(HTTPException) as exc:
+        await offers_router.report_checkout_payment_failure_endpoint(
+            txn.id,
+            offers_router.ReportCheckoutPaymentFailureRequest(
+                razorpay_order_id="order_belongs_to_someone_else",
+            ),
+            SimpleNamespace(user_id=buyer_id),
+            db,
+        )
+
+    assert exc.value.status_code == 400
+    assert exc.value.detail["error"] == "PAYMENT_ORDER_NOT_FOUND"
+    assert db.committed is False
+
+
+@pytest.mark.asyncio
+async def test_buy_now_payment_start_failure_rolls_back_without_partial_offer(monkeypatch):
+    from app.core import zones
+    from app.modules.identity_auth import user_location
+    from app.modules.offers import router as offers_router
+    from app.modules.verification import service as verification_service
+
+    buyer_id = uuid4()
+    seller_id = uuid4()
+    listing_id = uuid4()
+    listing = SimpleNamespace(
+        id=listing_id,
+        seller_id=seller_id,
+        category_id=uuid4(),
+        status="active",
+        price=Decimal("9000"),
+        title="Test phone",
+    )
+    db = _DB(execute_values=[listing, "phones"])
+
+    async def fake_eval(*_args, **_kwargs):
+        return verification_service.allow("BUYER_OK")
+
+    async def fake_location(*_args, **_kwargs):
+        return 12.9716, 77.5946, "Bengaluru", "Karnataka"
+
+    async def fake_make_offer(**_kwargs):
+        return SimpleNamespace(id=uuid4())
+
+    async def fake_accept_offer(**_kwargs):
+        raise ValueError("PAYMENT_LINK_FAILED")
+
+    monkeypatch.setattr(offers_router, "evaluate_user_action", fake_eval)
+    monkeypatch.setattr(user_location, "get_user_location", fake_location)
+    monkeypatch.setattr(zones, "is_in_service_area", lambda *_args: True)
+    monkeypatch.setattr(offer_service, "make_offer", fake_make_offer)
+    monkeypatch.setattr(offer_service, "accept_offer", fake_accept_offer)
+
+    with pytest.raises(HTTPException) as exc:
+        await offers_router.buy_now(
+            offers_router.BuyNowRequest(listing_id=str(listing_id)),
+            SimpleNamespace(user_id=buyer_id),
+            db,
+        )
+
+    assert exc.value.status_code == 503
+    assert exc.value.detail["error"] == "PAYMENT_LINK_FAILED"
+    assert db.rolled_back is True
+    assert db.committed is False
 
 
 @pytest.mark.asyncio

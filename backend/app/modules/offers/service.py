@@ -103,6 +103,23 @@ def _payment_link_expiry_minutes(amount: Decimal) -> int:
     return 30 if amount < 5000 else 1440
 
 
+def _payment_attempt_amount_paise(amount: Decimal) -> int:
+    return int(Decimal(str(amount)) * 100)
+
+
+def _payment_attempt_receipt(transaction_id: UUID) -> str:
+    # Razorpay receipt is unique and capped at 40 ASCII chars.
+    return f"txn_{str(transaction_id).replace('-', '')}"[:40]
+
+
+def _payment_order_idempotency_key(transaction_id: UUID) -> str:
+    return hashlib.sha256(f"txn:{transaction_id}:checkout-order:v1".encode()).hexdigest()[:64]
+
+
+def _payment_link_idempotency_key(transaction_id: UUID) -> str:
+    return hashlib.sha256(f"txn:{transaction_id}:payment-link-fallback:v1".encode()).hexdigest()[:64]
+
+
 # ── Notification helpers ────────────────────────────────────────────────────────
 
 async def _prefs(db: AsyncSession, user_id: UUID) -> NotificationPreference | None:
@@ -530,34 +547,28 @@ async def accept_offer(
         },
     )
 
-    # Create payment link for UPI transactions
+    # Create Razorpay Order for in-app Checkout. The table/column names are
+    # legacy "payment link" names; the row is now a provider payment attempt.
     payment_link = None
     if payment_method == "upi":
         from app.modules.payments.adapter import get_payment_adapter
-        from app.modules.identity_auth.models import User
-        buyer_result = await db.execute(select(User).where(User.id == offer.buyer_id))
-        buyer = buyer_result.scalar_one_or_none()
-        buyer_phone = buyer.phone_number if buyer else ""
 
-        idempotency_key = hashlib.sha256(f"txn:{txn.id}:v1".encode()).hexdigest()[:64]
+        idempotency_key = _payment_order_idempotency_key(txn.id)
         adapter = get_payment_adapter()
         expiry_minutes = _payment_link_expiry_minutes(buyer_pays)
-        link_result = await adapter.create_payment_link(
-            # buyer pays gross_amount = agreed_price + delivery_fee
-            amount_paise=int(buyer_pays * 100),
+        order_result = await adapter.create_payment_order(
+            amount_paise=_payment_attempt_amount_paise(buyer_pays),
             transaction_id=str(txn.id),
-            description=f"Owmee: {listing.title[:50]}",
-            buyer_phone=buyer_phone,
             idempotency_key=idempotency_key,
-            expire_minutes=expiry_minutes,
+            receipt=_payment_attempt_receipt(txn.id),
         )
-        if not link_result.success:
+        if not order_result.success:
             raise ValueError("PAYMENT_LINK_FAILED")
 
         payment_link = PaymentLink(
             transaction_id=txn.id,
-            razorpay_link_id=link_result.razorpay_link_id,
-            short_url=link_result.short_url,
+            razorpay_link_id=order_result.razorpay_order_id,
+            short_url=None,
             amount=buyer_pays,
             status="created",
             idempotency_key=idempotency_key,
@@ -646,6 +657,79 @@ def _extract_paid_amount_paise(webhook_payload) -> int | None:
         return None
 
 
+def _payment_failure_reason(webhook_payload) -> str:
+    if not isinstance(webhook_payload, dict):
+        return "payment_failed"
+    entity = (
+        webhook_payload.get("payload", {})
+        .get("payment", {})
+        .get("entity", {})
+    )
+    if not isinstance(entity, dict):
+        return "payment_failed"
+    return (
+        entity.get("error_description")
+        or entity.get("error_reason")
+        or entity.get("error_code")
+        or "payment_failed"
+    )
+
+
+def _extract_payment_created_at(webhook_payload) -> datetime | None:
+    if not isinstance(webhook_payload, dict):
+        return None
+    raw = (
+        webhook_payload.get("payload", {})
+        .get("payment", {})
+        .get("entity", {})
+        .get("created_at")
+    )
+    if raw is None:
+        raw = webhook_payload.get("created_at")
+    try:
+        return datetime.fromtimestamp(int(raw), tz=timezone.utc)
+    except (TypeError, ValueError, OSError):
+        return None
+
+
+def _payment_window_expired_for_capture(pl: PaymentLink, webhook_payload) -> bool:
+    expires_at = getattr(pl, "expires_at", None)
+    if not expires_at:
+        return False
+    payment_created_at = _extract_payment_created_at(webhook_payload)
+    if payment_created_at:
+        return payment_created_at > expires_at
+    return datetime.now(timezone.utc) > expires_at
+
+
+async def _refund_payment_captured_after_unpaid_release(
+    db: AsyncSession,
+    txn: Transaction,
+    *,
+    reason: str,
+) -> None:
+    try:
+        from app.modules.transactions.refund_service import initiate_refund
+        await initiate_refund(
+            db,
+            txn,
+            reason=reason,
+            initiated_by="system_late_capture",
+        )
+        await _notify(
+            db, txn.buyer_id, "payment_late_capture_refund",
+            "Payment refund started",
+            "Payment came through after this order was no longer payable. Owmee has started the refund.",
+            "transaction", str(txn.id),
+        )
+    except ValueError as exc:
+        logger.warning(
+            "payment.late_capture_refund_skipped",
+            transaction_id=str(txn.id),
+            error=str(exc),
+        )
+
+
 async def process_payment_paid(db, razorpay_link_id, razorpay_payment_id, webhook_payload):
     # Lock the PaymentLink row so the (status check → status write)
     # sequence is atomic. Razorpay delivers `payment.captured` more than
@@ -674,6 +758,48 @@ async def process_payment_paid(db, razorpay_link_id, razorpay_payment_id, webhoo
     txn = txn_result.scalar_one_or_none()
     if not txn:
         return None
+    if txn.status == "payment_pending" and _payment_window_expired_for_capture(pl, webhook_payload):
+        await _release_unpaid_transaction(db, txn, reason="payment_timeout", notify=False)
+        await _notify(
+            db, txn.seller_id, "buyer_payment_not_completed",
+            "Item is available again",
+            "Payment arrived after the Owmee payment window, so Owmee released the item and started refund handling.",
+            "transaction", str(txn.id),
+        )
+        await _refund_payment_captured_after_unpaid_release(
+            db,
+            txn,
+            reason="Payment captured after payment window expired",
+        )
+        logger.warning(
+            "payment.capture_after_window_refund_started",
+            transaction_id=str(txn.id),
+            link_id=razorpay_link_id,
+            expires_at=(
+                getattr(pl, "expires_at", None).isoformat()
+                if getattr(pl, "expires_at", None)
+                else None
+            ),
+        )
+        return txn
+    if txn.status != "payment_pending":
+        # Late capture after a buyer/system cancelled an unpaid order must not
+        # revive the sale or keep the listing locked. Refund the captured money
+        # and leave the transaction in its terminal/manual-review state.
+        if txn.status == "cancelled":
+            await _refund_payment_captured_after_unpaid_release(
+                db,
+                txn,
+                reason="Payment captured after order cancellation",
+            )
+        else:
+            logger.info(
+                "payment.paid_ignored_for_status",
+                transaction_id=str(txn.id),
+                status=txn.status,
+                link_id=razorpay_link_id,
+            )
+        return txn
 
     # Money-safety: never advance to captured on an underpayment. The link is
     # created with accept_partial=False, but we still cross-check the captured
@@ -779,6 +905,374 @@ async def process_payment_paid(db, razorpay_link_id, razorpay_payment_id, webhoo
         f"₹{txn.gross_amount:,.0f} sent. Track delivery in Owmee.",
         "transaction", str(txn.id))
     logger.info("payment.confirmed", transaction_id=str(txn.id))
+    return txn
+
+
+async def process_payment_failed(
+    db: AsyncSession,
+    *,
+    razorpay_order_id: str,
+    razorpay_payment_id: str | None = None,
+    webhook_payload: dict | None = None,
+) -> Transaction | None:
+    """Record a failed payment attempt and release the item hold.
+
+    Owmee uses BookMyShow-style inventory semantics: checkout creates a
+    temporary hold, successful capture confirms the order, and a definitive
+    failed attempt releases the item so another buyer can try. Razorpay can
+    still late-authorize an earlier failed attempt; process_payment_paid handles
+    that by refunding without reviving the released sale.
+    """
+    pl = (await db.execute(
+        select(PaymentLink)
+        .where(PaymentLink.razorpay_link_id == razorpay_order_id)
+        .with_for_update()
+    )).scalar_one_or_none()
+    if not pl:
+        logger.warning("payment.failed_unknown_order", order_id=razorpay_order_id)
+        return None
+    previous_status = pl.status
+    if previous_status in {"paid", "cancelled", "expired"}:
+        return None
+
+    pl.status = "failed"
+    if razorpay_payment_id:
+        pl.razorpay_payment_id = razorpay_payment_id
+    if webhook_payload is not None:
+        pl.webhook_payload = webhook_payload
+
+    txn = (await db.execute(select(Transaction).where(Transaction.id == pl.transaction_id))).scalar_one_or_none()
+    if not txn:
+        return None
+    if txn.status == "payment_pending":
+        reason = _payment_failure_reason(webhook_payload or {})
+        if previous_status != "failed":
+            logger.info(
+                "payment.failed_recorded",
+                transaction_id=str(txn.id),
+                order_id=razorpay_order_id,
+                payment_id=razorpay_payment_id,
+                reason=reason,
+            )
+        return await _release_unpaid_transaction(
+            db,
+            txn,
+            reason="payment_failed",
+            notify=previous_status != "failed",
+        )
+    return txn
+
+
+async def create_or_get_payment_link_fallback(
+    db: AsyncSession,
+    transaction_id: UUID,
+    buyer_id: UUID,
+) -> PaymentLink:
+    """Create a browser Payment Link only when the native Checkout path fails.
+
+    Keeping fallback creation on demand prevents every order from having two
+    simultaneously visible payment instruments, but still gives support and
+    older clients a recovery path.
+    """
+    txn = (await db.execute(
+        select(Transaction).where(Transaction.id == transaction_id).with_for_update()
+    )).scalar_one_or_none()
+    if not txn or txn.buyer_id != buyer_id:
+        raise ValueError("TRANSACTION_NOT_FOUND")
+    if txn.status != "payment_pending":
+        raise ValueError(f"INVALID_STATUS:{txn.status}")
+
+    latest_attempt = (await db.execute(
+        select(PaymentLink)
+        .where(PaymentLink.transaction_id == txn.id)
+        .order_by(PaymentLink.created_at.desc())
+    )).scalars().first()
+    latest_expires_at = getattr(latest_attempt, "expires_at", None)
+    if latest_attempt and latest_expires_at and latest_expires_at <= datetime.now(timezone.utc):
+        await _release_unpaid_transaction(db, txn, reason="payment_timeout", notify=True)
+        raise ValueError("PAYMENT_WINDOW_EXPIRED")
+
+    existing = (await db.execute(
+        select(PaymentLink)
+        .where(
+            PaymentLink.transaction_id == txn.id,
+            PaymentLink.short_url.is_not(None),
+            PaymentLink.status == "created",
+        )
+        .order_by(PaymentLink.created_at.desc())
+    )).scalars().first()
+    if existing:
+        return existing
+
+    listing = (await db.execute(select(Listing).where(Listing.id == txn.listing_id))).scalar_one_or_none()
+    from app.modules.identity_auth.models import User
+    buyer = (await db.execute(select(User).where(User.id == txn.buyer_id))).scalar_one_or_none()
+
+    from app.modules.payments.adapter import get_payment_adapter
+    adapter = get_payment_adapter()
+    expiry_minutes = _payment_link_expiry_minutes(Decimal(str(txn.gross_amount or 0)))
+    idempotency_key = _payment_link_idempotency_key(txn.id)
+    result = await adapter.create_payment_link(
+        amount_paise=_payment_attempt_amount_paise(Decimal(str(txn.gross_amount or 0))),
+        transaction_id=str(txn.id),
+        buyer_phone=buyer.phone_number if buyer else "",
+        description=f"Owmee: {(listing.title if listing else 'Order')[:50]}",
+        idempotency_key=idempotency_key,
+        expire_minutes=expiry_minutes,
+    )
+    if not result.success:
+        raise ValueError("PAYMENT_LINK_FAILED")
+
+    payment_link = PaymentLink(
+        transaction_id=txn.id,
+        razorpay_link_id=result.razorpay_link_id,
+        short_url=result.short_url,
+        amount=txn.gross_amount,
+        status="created",
+        idempotency_key=idempotency_key,
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=expiry_minutes),
+    )
+    db.add(payment_link)
+    return payment_link
+
+
+async def process_checkout_payment_success(
+    db: AsyncSession,
+    *,
+    transaction_id: UUID,
+    buyer_id: UUID,
+    razorpay_order_id: str,
+    razorpay_payment_id: str,
+    razorpay_signature: str,
+):
+    txn = (await db.execute(
+        select(Transaction).where(Transaction.id == transaction_id)
+    )).scalar_one_or_none()
+    if not txn or txn.buyer_id != buyer_id:
+        raise ValueError("TRANSACTION_NOT_FOUND")
+    if txn.status == "payment_captured":
+        return txn
+    if txn.status != "payment_pending":
+        raise ValueError(f"INVALID_STATUS:{txn.status}")
+
+    pl = (await db.execute(
+        select(PaymentLink)
+        .where(
+            PaymentLink.transaction_id == txn.id,
+            PaymentLink.razorpay_link_id == razorpay_order_id,
+        )
+        .order_by(PaymentLink.created_at.desc())
+    )).scalars().first()
+    if not pl:
+        raise ValueError("PAYMENT_ORDER_NOT_FOUND")
+    if pl.status == "paid":
+        return txn
+
+    from app.modules.payments.adapter import get_payment_adapter
+    adapter = get_payment_adapter()
+    if not adapter.verify_checkout_signature(
+        order_id=pl.razorpay_link_id,
+        payment_id=razorpay_payment_id,
+        signature=razorpay_signature,
+    ):
+        raise ValueError("INVALID_PAYMENT_SIGNATURE")
+
+    status = await adapter.fetch_payment_status(razorpay_payment_id)
+    if status.success:
+        if status.order_id and status.order_id != pl.razorpay_link_id:
+            raise ValueError("PAYMENT_ORDER_MISMATCH")
+        if status.status and status.status != "captured":
+            expires_at = getattr(pl, "expires_at", None)
+            if expires_at and expires_at <= datetime.now(timezone.utc):
+                return await expire_unpaid_transaction(db, txn)
+            logger.warning(
+                "payment.checkout_not_captured_yet",
+                transaction_id=str(txn.id),
+                payment_id=razorpay_payment_id,
+                payment_status=status.status,
+            )
+            return txn
+    else:
+        logger.warning(
+            "payment.checkout_fetch_failed_waiting_for_webhook",
+            transaction_id=str(txn.id),
+            payment_id=razorpay_payment_id,
+            error=status.error,
+        )
+        return txn
+
+    expected_paise = _payment_attempt_amount_paise(Decimal(str(pl.amount or 0)))
+    if status.amount_paise is None:
+        logger.warning(
+            "payment.checkout_missing_amount_waiting_for_webhook",
+            transaction_id=str(txn.id),
+            payment_id=razorpay_payment_id,
+        )
+        return txn
+    if expected_paise > 0 and status.amount_paise < expected_paise:
+        logger.error(
+            "payment.checkout_amount_mismatch",
+            transaction_id=str(txn.id),
+            expected_paise=expected_paise,
+            paid_paise=status.amount_paise,
+        )
+        raise ValueError("PAYMENT_AMOUNT_MISMATCH")
+
+    payload = {
+        "event": "checkout.success",
+        "payload": {
+            "order": {"entity": {"id": pl.razorpay_link_id, "status": "paid"}},
+            "payment": {
+                "entity": {
+                    "id": razorpay_payment_id,
+                    "order_id": pl.razorpay_link_id,
+                    "amount": status.amount_paise,
+                    "status": status.status or "captured",
+                    "created_at": int(status.created_at.timestamp()) if status.created_at else None,
+                }
+            },
+        },
+    }
+    return await process_payment_paid(
+        db,
+        razorpay_link_id=pl.razorpay_link_id,
+        razorpay_payment_id=razorpay_payment_id,
+        webhook_payload=payload,
+    )
+
+
+async def cancel_unpaid_transaction(
+    db: AsyncSession,
+    transaction_id: UUID,
+    buyer_id: UUID,
+    *,
+    reason: str = "buyer_cancelled_payment",
+) -> Transaction:
+    txn = (await db.execute(
+        select(Transaction).where(Transaction.id == transaction_id).with_for_update()
+    )).scalar_one_or_none()
+    if not txn or txn.buyer_id != buyer_id:
+        raise ValueError("TRANSACTION_NOT_FOUND")
+    if txn.status == "cancelled":
+        return txn
+    if txn.status != "payment_pending":
+        raise ValueError(f"INVALID_STATUS:{txn.status}")
+    return await _release_unpaid_transaction(db, txn, reason=reason, notify=True)
+
+
+async def expire_unpaid_transaction(db: AsyncSession, txn: Transaction) -> Transaction:
+    if txn.status != "payment_pending":
+        raise ValueError(f"INVALID_STATUS:{txn.status}")
+    latest_attempt = (await db.execute(
+        select(PaymentLink)
+        .where(PaymentLink.transaction_id == txn.id)
+        .order_by(PaymentLink.created_at.desc())
+    )).scalars().first()
+    if latest_attempt and latest_attempt.expires_at and latest_attempt.expires_at > datetime.now(timezone.utc):
+        raise ValueError("PAYMENT_WINDOW_NOT_EXPIRED")
+    return await _release_unpaid_transaction(db, txn, reason="payment_timeout", notify=True)
+
+
+async def expire_due_unpaid_transactions(db: AsyncSession, *, limit: int = 100) -> int:
+    now = datetime.now(timezone.utc)
+    candidates = (await db.execute(
+        select(Transaction)
+        .join(PaymentLink, PaymentLink.transaction_id == Transaction.id)
+        .where(
+            Transaction.status == "payment_pending",
+            PaymentLink.expires_at.is_not(None),
+            PaymentLink.expires_at <= now,
+        )
+        .order_by(PaymentLink.expires_at.asc())
+        .limit(limit)
+    )).scalars().all()
+
+    expired = 0
+    seen: set[UUID] = set()
+    for txn in candidates:
+        if txn.id in seen:
+            continue
+        seen.add(txn.id)
+        try:
+            await expire_unpaid_transaction(db, txn)
+            expired += 1
+        except ValueError as exc:
+            if str(exc) != "PAYMENT_WINDOW_NOT_EXPIRED":
+                logger.warning(
+                    "payment.timeout_sweep_skip",
+                    transaction_id=str(txn.id),
+                    error=str(exc),
+                )
+    return expired
+
+
+async def _release_unpaid_transaction(
+    db: AsyncSession,
+    txn: Transaction,
+    *,
+    reason: str,
+    notify: bool,
+) -> Transaction:
+    now = datetime.now(timezone.utc)
+    txn.status = "cancelled"
+    txn.cancelled_at = now
+    txn.cancelled_reason = reason[:100]
+    txn.seller_response_deadline = None
+
+    attempts = (await db.execute(
+        select(PaymentLink).where(PaymentLink.transaction_id == txn.id)
+    )).scalars().all()
+    for attempt in attempts:
+        if attempt.status != "paid":
+            if reason == "payment_timeout":
+                attempt.status = "expired"
+            elif reason == "payment_failed" and attempt.status == "failed":
+                attempt.status = "failed"
+            else:
+                attempt.status = "cancelled"
+
+    reservation = (await db.execute(
+        select(Reservation).where(Reservation.id == txn.reservation_id)
+    )).scalar_one_or_none()
+    if reservation:
+        reservation.status = "cancelled"
+        reservation.cancelled_at = now
+        offer = (await db.execute(select(Offer).where(Offer.id == reservation.offer_id))).scalar_one_or_none()
+        if offer and offer.status == "accepted":
+            offer.status = "cancelled"
+            offer.reject_reason = reason[:100]
+            offer.responded_at = now
+
+    listing = (await db.execute(select(Listing).where(Listing.id == txn.listing_id))).scalar_one_or_none()
+    if listing and listing.status == "reserved":
+        listing.status = "active"
+
+    if notify:
+        if reason == "payment_failed":
+            buyer_event = "payment_failed"
+            buyer_title = "Payment failed"
+            buyer_body = "No money was collected. Owmee released the item so another buyer can try."
+        elif reason == "payment_timeout":
+            buyer_event = "payment_cancelled"
+            buyer_title = "Payment window expired"
+            buyer_body = "The payment window expired. Owmee released the item. No money was collected."
+        else:
+            buyer_event = "payment_cancelled"
+            buyer_title = "Order cancelled"
+            buyer_body = "The item has been released. No money was collected."
+        await _notify(
+            db, txn.buyer_id, buyer_event,
+            buyer_title,
+            buyer_body,
+            "transaction", str(txn.id),
+        )
+        await _notify(
+            db, txn.seller_id, "buyer_payment_not_completed",
+            "Item is available again",
+            "The buyer did not complete payment, so Owmee released the item for other buyers.",
+            "transaction", str(txn.id),
+        )
+    logger.info("payment.unpaid_order_released", transaction_id=str(txn.id), reason=reason)
     return txn
 
 
