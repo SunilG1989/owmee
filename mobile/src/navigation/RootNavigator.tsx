@@ -8,9 +8,9 @@
  */
 import React, { useEffect, useState } from 'react';
 import {
-  NativeModules, Platform, StatusBar, View, Text, StyleSheet, TouchableOpacity,
+  ActivityIndicator, NativeModules, Platform, StatusBar, View, Text, StyleSheet, TouchableOpacity,
 } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { enableFreeze } from 'react-native-screens';
@@ -28,6 +28,11 @@ import { useAuthStore } from '../store/authStore';
 import { ONBOARDING_SEEN_KEY } from '../utils/storageKeys';
 import { C, T, S, R, Shadow } from '../utils/tokens';
 import SplashScreen from '../components/SplashScreen';
+import { Button } from '../components/ui';
+import {
+  ADDRESS_GATE_RETRY_DELAYS_MS,
+  resolveAddressGate,
+} from './addressGate';
 
 import type { RootStackParams, AuthStackParams, TabParams } from './types';
 
@@ -171,30 +176,64 @@ function AuthFlowNavigator() {
  * LocationDetect screen with returnTo=MainTabs; AddressDetailsScreen
  * then resets back here on save.
  *
- * The check fires once per authenticated session via a ref. Logging
- * out resets the ref (via the isAuthenticated transition) so re-login
- * re-checks. Errors don't gate — if the API is down we let the user
- * into MainTabs and surface the prompt later via Profile (Phase 2).
+ * The check fires once per authenticated user. It only marks complete after a
+ * successful backend response and retries short transient failures; this keeps
+ * fresh signups from missing the address flow during the OTP/auth handoff.
  */
 function MainTabsWithAddressGate() {
-  const { isAuthenticated } = useAuthStore();
-  const navigation = require('@react-navigation/native').useNavigation();
-  const checkedRef = React.useRef(false);
+  const { isAuthenticated, userId } = useAuthStore();
+  const navigation = useNavigation<any>();
+  const checkedUserRef = React.useRef<string | null>(null);
+  const retryTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryCountRef = React.useRef(0);
+  const [checking, setChecking] = React.useState(false);
+  const [gateFailedOpen, setGateFailedOpen] = React.useState(false);
+  const [gateError, setGateError] = React.useState(false);
+  const [retryTick, setRetryTick] = React.useState(0);
+
+  const authUserKey = isAuthenticated && userId ? userId : null;
 
   React.useEffect(() => {
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+
     // Reset the gate on logout so the next sign-in re-checks.
-    if (!isAuthenticated) {
-      checkedRef.current = false;
+    if (!authUserKey) {
+      checkedUserRef.current = null;
+      retryCountRef.current = 0;
+      setChecking(false);
+      setGateFailedOpen(false);
+      setGateError(false);
       return;
     }
-    if (checkedRef.current) return;
-    checkedRef.current = true;
+
+    if (checkedUserRef.current === authUserKey) {
+      setChecking(false);
+      setGateFailedOpen(false);
+      setGateError(false);
+      return;
+    }
+
+    let cancelled = false;
+    setChecking(true);
+    setGateFailedOpen(false);
+    setGateError(false);
 
     (async () => {
       try {
-        const { Addresses } = require('../services/api');
-        const res = await Addresses.list();
-        if (Array.isArray(res.data) && res.data.length === 0) {
+        const { Addresses, clearApiCache } = require('../services/api');
+        const decision = await resolveAddressGate({
+          listAddresses: Addresses.list,
+          clearAddressCache: () => clearApiCache('/v1/users/me/addresses'),
+        });
+
+        if (cancelled) return;
+        checkedUserRef.current = authUserKey;
+        retryCountRef.current = 0;
+
+        if (decision === 'needs_address') {
           navigation.reset({
             index: 0,
             routes: [
@@ -203,12 +242,107 @@ function MainTabsWithAddressGate() {
           });
         }
       } catch {
-        // Silent — don't gate on transient API failures.
+        if (cancelled) return;
+
+        checkedUserRef.current = null;
+        const retryIndex = retryCountRef.current;
+        const delay = ADDRESS_GATE_RETRY_DELAYS_MS[retryIndex];
+        if (delay != null) {
+          retryCountRef.current = retryIndex + 1;
+          retryTimerRef.current = setTimeout(() => {
+            retryTimerRef.current = null;
+            setRetryTick((v) => v + 1);
+          }, delay);
+          return;
+        }
+
+        // Do not silently skip the signup address flow. A final failure becomes
+        // an explicit recovery choice so users can retry or consciously browse
+        // without a saved address until the backend is reachable.
+        setGateError(true);
+      } finally {
+        if (!cancelled) setChecking(false);
       }
     })();
-  }, [isAuthenticated, navigation]);
+
+    return () => {
+      cancelled = true;
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
+    };
+  }, [authUserKey, navigation, retryTick]);
+
+  const retryAddressGate = () => {
+    retryCountRef.current = 0;
+    setGateError(false);
+    setChecking(true);
+    setRetryTick((v) => v + 1);
+  };
+
+  const continueWithoutLocation = () => {
+    if (authUserKey) checkedUserRef.current = authUserKey;
+    setGateFailedOpen(true);
+    setGateError(false);
+    setChecking(false);
+  };
+
+  if (gateError && authUserKey) {
+    return (
+      <AddressGateRecovery
+        onRetry={retryAddressGate}
+        onContinue={continueWithoutLocation}
+      />
+    );
+  }
+
+  const needsGate =
+    !!authUserKey &&
+    checkedUserRef.current !== authUserKey &&
+    !gateFailedOpen;
+
+  if (checking || needsGate) {
+    return <AddressGateLoading />;
+  }
 
   return <MainTabs />;
+}
+
+function AddressGateLoading() {
+  return (
+    <View style={st.addressGate}>
+      <ActivityIndicator color={C.ctaPrimary} />
+      <Text style={st.addressGateText}>Preparing your Owmee account...</Text>
+    </View>
+  );
+}
+
+function AddressGateRecovery({
+  onRetry,
+  onContinue,
+}: {
+  onRetry: () => void;
+  onContinue: () => void;
+}) {
+  return (
+    <View style={st.addressGate}>
+      <Text style={st.addressGateTitle}>Could not check your saved address</Text>
+      <Text style={st.addressGateHint}>
+        Please retry. You can continue for now, but Owmee will ask for your
+        address before checkout, pickup, or delivery.
+      </Text>
+      <View style={st.addressGateActions}>
+        <Button label="Retry" onPress={onRetry} fullWidth />
+        <Button
+          label="Continue for now"
+          variant="ghost"
+          onPress={onContinue}
+          fullWidth
+        />
+      </View>
+    </View>
+  );
 }
 
 /**
@@ -473,6 +607,39 @@ export default function RootNavigator() {
 }
 
 const st = StyleSheet.create({
+  addressGate: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: S.sm,
+    backgroundColor: C.bone,
+    paddingHorizontal: S.xl,
+  },
+  addressGateText: {
+    fontSize: T.size.base,
+    fontWeight: T.weight.medium,
+    color: C.text3,
+    textAlign: 'center',
+  },
+  addressGateTitle: {
+    fontSize: T.size.xl,
+    fontWeight: T.weight.bold,
+    color: C.text,
+    textAlign: 'center',
+  },
+  addressGateHint: {
+    maxWidth: 340,
+    fontSize: T.size.base,
+    color: C.text3,
+    textAlign: 'center',
+    lineHeight: 21,
+  },
+  addressGateActions: {
+    width: '100%',
+    maxWidth: 280,
+    gap: S.sm,
+    marginTop: S.sm,
+  },
   tabBar: {
     flexDirection: 'row',
     backgroundColor: C.surface,

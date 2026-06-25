@@ -161,10 +161,18 @@ export default function AddressDetailsScreen({
     }
   };
 
+  const handleBack = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    navigation.reset({ index: 0, routes: [{ name: 'LocationDetect' as never }] });
+  };
+
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.headerRow}>
-        <BackButton onPress={() => navigation.goBack()} />
+        <BackButton onPress={handleBack} />
         <Text style={s.headerTitle}>{isEdit ? 'Edit address' : 'Add your address'}</Text>
       </View>
 

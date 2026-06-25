@@ -8,6 +8,7 @@
     "android": "react-native run-android",
     "ios": "react-native run-ios",
     "tsc": "tsc --noEmit",
+    "test:address-gate": "node scripts/test-address-gate.js",
     "lint:design": "bash scripts/lint-design.sh",
     "clean": "bash scripts/clean-rebuild.sh"
   },

@@ -101,7 +101,7 @@ export default function FeVisitHistoryScreen({ navigation }: RootScreen<'FeVisit
 const st = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bone },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: S.lg },
-  headerSpacer: { width: 24 },
+  headerSpacer: { width: 48 },
   h1: { fontSize: T.h3, fontWeight: T.weight.semi, color: C.text },
   listPadding: { padding: S.lg },
   card: { backgroundColor: C.surface, borderRadius: R.lg, padding: S.lg, marginBottom: S.md, ...Shadow.glow },

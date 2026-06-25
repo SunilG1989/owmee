@@ -37,6 +37,7 @@ export default function LocationDetectScreen({
 }: RootScreen<'LocationDetect'>) {
   const [probing, setProbing] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
+  const showBack = navigation.canGoBack();
 
   const goToMap = (
     lat: number,
@@ -45,7 +46,7 @@ export default function LocationDetectScreen({
     gpsAccuracy?: number,
   ) => {
     setProbing(false);
-    navigation.replace('LocationMap', {
+    navigation.navigate('LocationMap', {
       initialLat: lat,
       initialLng: lng,
       source,
@@ -81,7 +82,7 @@ export default function LocationDetectScreen({
   return (
     <SafeAreaView style={s.safe}>
       <View style={s.headerRow}>
-        <BackButton onPress={() => navigation.goBack()} />
+        {showBack ? <BackButton onPress={() => navigation.goBack()} /> : null}
       </View>
 
       <View style={s.body}>

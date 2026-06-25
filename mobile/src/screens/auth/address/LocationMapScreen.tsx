@@ -173,10 +173,18 @@ export default function LocationMapScreen({
     })();
   };
 
+  const handleBack = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    navigation.reset({ index: 0, routes: [{ name: 'LocationDetect' as never }] });
+  };
+
   const onConfirm = async () => {
     if (reviewAddress) {
       if (pinMovedFromReview) {
-        navigation.replace('AddressDetails', {
+        navigation.navigate('AddressDetails', {
           lat: center.lat,
           lng: center.lng,
           source: reviewSource,
@@ -209,7 +217,7 @@ export default function LocationMapScreen({
       return;
     }
 
-    navigation.replace('AddressDetails', {
+    navigation.navigate('AddressDetails', {
       lat: center.lat,
       lng: center.lng,
       source: source ?? 'manual',
@@ -226,7 +234,7 @@ export default function LocationMapScreen({
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.headerRow}>
-        <BackButton onPress={() => navigation.goBack()} />
+        <BackButton onPress={handleBack} />
         <Text style={s.headerTitle}>{reviewAddress ? 'Confirm address location' : 'Set precise location'}</Text>
       </View>
 

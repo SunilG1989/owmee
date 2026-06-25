@@ -640,7 +640,7 @@ const st = StyleSheet.create({
   flex: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: S.lg, backgroundColor: C.bone },
-  headerSpacer: { width: 24 },
+  headerSpacer: { width: 48 },
   h1: { fontSize: T.h3, fontWeight: T.weight.semi, color: C.text },
   scrollPad: { padding: S.lg, paddingBottom: 180 },
   section: { backgroundColor: C.surface, borderRadius: R.lg, padding: S.lg, marginBottom: S.md, ...Shadow.glow },

@@ -6,10 +6,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle, Defs, LinearGradient, RadialGradient, Rect, Stop } from 'react-native-svg';
 import {
-  ArrowLeft, MapPin, SlidersHorizontal, Sparkles, X,
+  MapPin, SlidersHorizontal, Sparkles, X,
 } from 'lucide-react-native';
 import { C, T, S, R, Shadow } from '../utils/tokens';
-import { Button, Chip, IconButton } from '../components/ui';
+import { BackButton, Button, Chip, IconButton } from '../components/ui';
 import type { TabScreen } from '../navigation/types';
 import { Listings, type BrowseParams, type Listing } from '../services/api';
 import { useAuthStore } from '../store/authStore';
@@ -178,15 +178,7 @@ export default function SearchScreen({ navigation, route }: TabScreen<'Search'>)
       </Svg>
       <View style={s.top}>
         <View style={s.searchRow}>
-          <TouchableOpacity
-            activeOpacity={0.76}
-            onPress={() => navigation.goBack()}
-            style={s.topIconBtn}
-            accessibilityRole="button"
-            accessibilityLabel="Back"
-          >
-            <ArrowLeft size={21} strokeWidth={2.2} color={C.text} />
-          </TouchableOpacity>
+          <BackButton onPress={() => navigation.goBack()} />
           <TextInput
             style={s.input}
             placeholder="Search mobiles, laptops, toys..."

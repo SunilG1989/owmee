@@ -1105,7 +1105,7 @@ const st = StyleSheet.create({
     backgroundColor: C.surface,
     borderBottomWidth: 0.5, borderBottomColor: C.border,
   },
-  topSpacer: { width: 24 },
+  topSpacer: { width: 48 },
   dots: { flex: 1, flexDirection: 'row', justifyContent: 'center', gap: S.md },
   dw: { alignItems: 'center', gap: 3 },
   d: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.border },

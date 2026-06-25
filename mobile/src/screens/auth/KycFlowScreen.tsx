@@ -392,7 +392,7 @@ const s = StyleSheet.create({
     borderBottomWidth: 0.5, borderBottomColor: C.border,
   },
   topT: { fontSize: T.size.lg - 1, fontWeight: T.weight.semi, color: C.text },
-  topSpacer: { width: 24 },
+  topSpacer: { width: 48 },
 
   progress: {
     flexDirection: 'row', justifyContent: 'center',
