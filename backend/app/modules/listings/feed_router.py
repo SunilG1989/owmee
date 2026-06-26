@@ -78,9 +78,6 @@ def _first_display_image_url(thumbnail_key: str | None, image_keys: list[str] | 
     return _img_url(next(iter(image_keys or []), None) or thumbnail_key)
 
 
-def _thumbnail_image_url(thumbnail_key: str | None, image_keys: list[str] | None) -> str | None:
-    return _img_url(thumbnail_key or next(iter(image_keys or []), None))
-
 router = APIRouter(prefix="/v1/feed", tags=["feed"])
 log = logging.getLogger(__name__)
 
@@ -166,7 +163,6 @@ def _serialize_row(r, distance_km):
     created_at = r.get("created_at")
     seller_created_at = r.get("seller_created_at")
     hero_url = _first_display_image_url(r.get("thumbnail_url"), r.get("image_urls") or [])
-    thumb_url = _thumbnail_image_url(r.get("thumbnail_url"), r.get("image_urls") or [])
     return {
         "id": str(r["id"]),
         "title": r.get("title"),
@@ -178,7 +174,7 @@ def _serialize_row(r, distance_km):
         # Feed cards only render one image; detail fetches the full gallery.
         # Use the display hero so horizontal cards do not stretch thumbnails.
         "image_urls": [hero_url] if hero_url else [],
-        "thumbnail_url": thumb_url,
+        "thumbnail_url": hero_url,
         "city": r.get("city"),
         "state": r.get("state"),
         "category_slug": category_slug,
@@ -384,22 +380,24 @@ async def explore_feed(
         listing_reviewed = reviewed_by in {"fe", "ops", "fe_and_ops"}
         trust = 1.0 if (seller_verified or listing_reviewed) else 0.0
 
+        row = dict(r)
         score = 0.30 * freshness + 0.40 * proximity + 0.20 * deal + 0.10 * trust
-        scored.append((score, _serialize_row(dict(r), d_km)))
+        scored.append((score, str(row["id"]), row, d_km))
 
-    scored.sort(key=lambda t: (-t[0], t[1]["id"]))
+    scored.sort(key=lambda t: (-t[0], t[1]))
 
     if cursor_score is not None and cursor_id is not None:
-        scored = [t for t in scored if (t[0], t[1]["id"]) < (cursor_score, cursor_id)]
+        cursor_key = (-cursor_score, cursor_id)
+        scored = [t for t in scored if (-t[0], t[1]) > cursor_key]
 
     page_items = scored[:20]
     next_cursor = None
     if len(scored) > 20 and page_items:
-        last_score, last_item = page_items[-1]
-        next_cursor = base64.urlsafe_b64encode(f"{last_score}:{last_item['id']}".encode()).decode()
+        last_score, last_id, _last_row, _last_distance = page_items[-1]
+        next_cursor = base64.urlsafe_b64encode(f"{last_score}:{last_id}".encode()).decode()
 
     return {
-        "items": [item for _, item in page_items],
+        "items": [_serialize_row(row, distance_km) for _score, _id, row, distance_km in page_items],
         "next_cursor": next_cursor,
         "current_radius_km": radius_km,
         "page": page,

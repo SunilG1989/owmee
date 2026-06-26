@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
 
 from app.core.storage import ProcessedListingImage
 from app.modules.ai_assistant import router
@@ -51,6 +52,23 @@ class _FakeDB:
 
     async def commit(self) -> None:
         self.commits += 1
+
+
+def _toy_publish_fields() -> dict:
+    return {
+        "age_suitability": "5-7 years",
+        "hygiene_status": "Cleaned",
+        "category_specifics": {
+            "missing_parts_status": "Complete / no parts missing",
+            "safety_status": "No visible safety issue",
+            "working_status": "Not applicable",
+        },
+        "kids_safety_checklist": {
+            "no_small_parts": True,
+            "no_loose_batteries": True,
+            "no_sharp_edges": True,
+        },
+    }
 
 
 @pytest.mark.asyncio
@@ -493,7 +511,11 @@ async def test_create_from_draft_enqueues_hero_cleanup_after_commit(monkeypatch)
                 return _Result(
                     row=SimpleNamespace(
                         user_id=user_id,
-                        photo_urls=["ai-drafts/u/draft_0.jpg.display.webp"],
+                        photo_urls=[
+                            "ai-drafts/u/draft_0.jpg.display.webp",
+                            "ai-drafts/u/draft_1.jpg.display.webp",
+                            "ai-drafts/u/draft_2.jpg.display.webp",
+                        ],
                         expires_at=datetime(2099, 5, 17, tzinfo=timezone.utc),
                         status="open",
                         ai_response={"mrp_inr": 650, "mrp_source": "market_anchor"},
@@ -538,6 +560,7 @@ async def test_create_from_draft_enqueues_hero_cleanup_after_commit(monkeypatch)
             category_slug="kids-utility",
             brand="Milton",
             model="School bottle",
+            **_toy_publish_fields(),
         ),
         user=SimpleNamespace(user_id=user_id),
         db=db,
@@ -558,6 +581,66 @@ async def test_create_from_draft_enqueues_hero_cleanup_after_commit(monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_create_from_draft_rejects_when_review_removes_below_photo_floor(monkeypatch):
+    user_id = uuid4()
+    draft_id = uuid4()
+    category_id = uuid4()
+
+    class _CreateDB:
+        async def execute(self, stmt, params=None):
+            sql = str(stmt)
+            if "SELECT user_id, photo_urls, expires_at, status" in sql:
+                return _Result(
+                    row=SimpleNamespace(
+                        user_id=user_id,
+                        photo_urls=[
+                            "ai-drafts/u/draft_0.jpg.display.webp",
+                            "ai-drafts/u/draft_1.jpg.display.webp",
+                            "ai-drafts/u/draft_2.jpg.display.webp",
+                        ],
+                        expires_at=datetime(2099, 5, 17, tzinfo=timezone.utc),
+                        status="open",
+                        ai_response={},
+                    )
+                )
+            if "SELECT id FROM categories" in sql:
+                return _Result(category_id)
+            return _Result(None)
+
+        async def commit(self) -> None:
+            raise AssertionError("create_from_draft should not commit")
+
+    async def fake_get_user_location(db, user_id):
+        return (12.9, 77.6, "Bengaluru", "Karnataka")
+
+    import app.core.zones as zones
+    import app.modules.identity_auth.user_location as user_location
+
+    monkeypatch.setattr(user_location, "get_user_location", fake_get_user_location)
+    monkeypatch.setattr(zones, "is_in_service_area", lambda lat, lng: True)
+
+    with pytest.raises(HTTPException) as exc:
+        await router.create_from_draft(
+            payload=CreateFromDraftRequest(
+                draft_id=draft_id,
+                title="Kids puzzle set",
+                price=450,
+                condition="good",
+                category_slug="kids-utility",
+                model="Puzzle",
+                removed_photo_indices=[1, 2],
+                **_toy_publish_fields(),
+            ),
+            user=SimpleNamespace(user_id=user_id),
+            db=_CreateDB(),
+        )
+
+    assert exc.value.status_code == 400
+    assert exc.value.detail["error"] == "MIN_PHOTOS_REQUIRED"
+    assert exc.value.detail["photos_uploaded"] == 1
+
+
+@pytest.mark.asyncio
 async def test_create_from_draft_does_not_publish_unconfirmed_draft_mrp(monkeypatch):
     user_id = uuid4()
     draft_id = uuid4()
@@ -573,7 +656,11 @@ async def test_create_from_draft_does_not_publish_unconfirmed_draft_mrp(monkeypa
                 return _Result(
                     row=SimpleNamespace(
                         user_id=user_id,
-                        photo_urls=["ai-drafts/u/draft_0.jpg.display.webp"],
+                        photo_urls=[
+                            "ai-drafts/u/draft_0.jpg.display.webp",
+                            "ai-drafts/u/draft_1.jpg.display.webp",
+                            "ai-drafts/u/draft_2.jpg.display.webp",
+                        ],
                         expires_at=datetime(2099, 5, 17, tzinfo=timezone.utc),
                         status="open",
                         ai_response={"mrp_inr": 1200, "mrp_source": "market_anchor"},
@@ -610,6 +697,7 @@ async def test_create_from_draft_does_not_publish_unconfirmed_draft_mrp(monkeypa
             condition="good",
             category_slug="kids-utility",
             model="Puzzle",
+            **_toy_publish_fields(),
         ),
         user=SimpleNamespace(user_id=user_id),
         db=db,
@@ -635,7 +723,11 @@ async def test_create_from_draft_drops_mrp_that_cannot_discount(monkeypatch):
                 return _Result(
                     row=SimpleNamespace(
                         user_id=user_id,
-                        photo_urls=["ai-drafts/u/draft_0.jpg.display.webp"],
+                        photo_urls=[
+                            "ai-drafts/u/draft_0.jpg.display.webp",
+                            "ai-drafts/u/draft_1.jpg.display.webp",
+                            "ai-drafts/u/draft_2.jpg.display.webp",
+                        ],
                         expires_at=datetime(2099, 5, 17, tzinfo=timezone.utc),
                         status="open",
                         ai_response={"mrp_inr": 300},
@@ -673,6 +765,7 @@ async def test_create_from_draft_drops_mrp_that_cannot_discount(monkeypatch):
             condition="good",
             category_slug="kids-utility",
             model="Puzzle",
+            **_toy_publish_fields(),
         ),
         user=SimpleNamespace(user_id=user_id),
         db=db,

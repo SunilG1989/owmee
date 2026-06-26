@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from time import monotonic
-from typing import Optional
+from typing import Any, Optional
 from urllib.parse import unquote, urlparse
 """
 Listings router — Epic 3 + Epic 5 + UI v3 fixes + Sprint 4 Pass 3
@@ -99,7 +99,17 @@ def _fe_inspection_required(price) -> bool:
     return (price if isinstance(price, _D) else _D(str(price))) > _D("1000")
 from app.modules.listings.models import Category, Listing, ListingImage
 from app.modules.listings.service import (
-    add_image_record, create_draft, get_all_categories, publish_listing,
+    MIN_PHOTOS_REQUIRED, add_image_record, create_draft, get_all_categories,
+    hash_imei, publish_listing,
+)
+from app.modules.ai_assistant import ceir_client
+from app.modules.ai_assistant.category_taxonomy import (
+    category_family_for,
+    clean_category_specifics,
+    required_category_specific_fields,
+    requires_appliance_pickup_status,
+    requires_book_set_status,
+    requires_powered_toy_status,
 )
 from app.modules.offers.models import Offer, Rating, Transaction
 from app.modules.identity_auth.models import User
@@ -107,6 +117,124 @@ from app.modules.verification.service import ACTION_PUBLISH_LISTING, evaluate_us
 
 router = APIRouter()
 logger = structlog.get_logger()
+
+
+_PUBLIC_LISTING_STATUSES = {"active"}
+_IMEI_LOCK_STATUSES = {"active", "reserved", "sold", "pending_moderation"}
+
+
+def _can_view_listing_detail(listing: Listing, current_user: OptionalUser) -> bool:
+    if listing.status in _PUBLIC_LISTING_STATUSES:
+        return True
+    return bool(current_user and str(listing.seller_id) == str(current_user.user_id))
+
+
+def _min_photo_detail(photo_count: int) -> dict:
+    return {
+        "error": "MIN_PHOTOS_REQUIRED",
+        "message": (
+            f"Listings need at least {MIN_PHOTOS_REQUIRED} photos - "
+            f"you have {photo_count}. Add more to build buyer trust."
+        ),
+        "photos_uploaded": photo_count,
+        "photos_required": MIN_PHOTOS_REQUIRED,
+    }
+
+
+def _specific_present(value) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, bool):
+        return True
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return True
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, list):
+        return any(_specific_present(item) for item in value)
+    return bool(value)
+
+
+def _clean_manual_category_specifics(
+    category_slug: str,
+    body: "CreateListingRequest",
+) -> tuple[str, dict[str, Any], dict | None]:
+    family = category_family_for(
+        category_slug,
+        detected_item_type=body.model,
+        title=body.title,
+        model=body.model,
+    )
+    specifics = clean_category_specifics(family, body.category_specifics)
+    if family == "toy" and not _specific_present(specifics.get("toy_type")) and body.model:
+        specifics["toy_type"] = body.model
+    if family == "book" and not _specific_present(specifics.get("book_type")) and body.model:
+        specifics["book_type"] = body.model
+    if family == "appliance" and not _specific_present(specifics.get("appliance_type")) and body.model:
+        specifics["appliance_type"] = body.model
+
+    kids_checklist = None
+    if isinstance(body.kids_safety_checklist, dict):
+        kids_checklist = {
+            str(key): bool(value)
+            for key, value in body.kids_safety_checklist.items()
+            if isinstance(value, bool)
+        } or None
+    return family, specifics, kids_checklist
+
+
+def _manual_category_specifics_rejection(
+    *,
+    category_slug: str,
+    family: str,
+    specifics: dict[str, Any],
+    kids_checklist: dict | None,
+    body: "CreateListingRequest",
+) -> dict | None:
+    if family not in {"toy", "book", "appliance"}:
+        return None
+
+    missing: list[str] = []
+    for field in required_category_specific_fields(family):
+        if not _specific_present(specifics.get(field)):
+            missing.append(field)
+
+    if family == "toy":
+        if not _specific_present(body.age_suitability):
+            missing.append("age_suitability")
+        if not _specific_present(body.hygiene_status):
+            missing.append("hygiene_status")
+        if requires_powered_toy_status(body.model, body.title) and not (
+            _specific_present(specifics.get("working_status"))
+            or _specific_present(specifics.get("battery_status"))
+        ):
+            missing.append("battery_or_working_status")
+        if category_slug == "kids-utility":
+            required_checklist = ("no_small_parts", "no_loose_batteries", "no_sharp_edges")
+            if not all(key in (kids_checklist or {}) for key in required_checklist):
+                missing.append("kids_safety_checklist")
+
+    if family == "book" and requires_book_set_status(body.model, body.title):
+        if not _specific_present(specifics.get("set_status")):
+            missing.append("set_status")
+
+    if family == "appliance":
+        if not _specific_present(specifics.get("appliance_type")):
+            missing.append("appliance_type")
+        if requires_appliance_pickup_status(body.model, body.title):
+            if not _specific_present(specifics.get("pickup_complexity")):
+                missing.append("pickup_complexity")
+
+    deduped = list(dict.fromkeys(missing))
+    if not deduped:
+        return None
+
+    return {
+        "error": "CATEGORY_REQUIREMENTS_REQUIRED",
+        "category_family": family,
+        "missing_fields": deduped,
+        "message": "Complete category-specific buyer details before publishing.",
+    }
 
 
 def _card_image_urls(listing: Listing) -> list[str]:
@@ -215,6 +343,8 @@ class CreateListingRequest(BaseModel):
     serial_number: str | None = Field(None, max_length=50)
     # Sprint 4 / Pass 3: kids safety checklist
     kids_safety_checklist: dict | None = None
+    category_family: str | None = None
+    category_specifics: dict[str, Any] | None = None
     # P1 (2026-05-03) — Cashify-floor listing fields. All optional;
     # mobile router enforces required where category-specific.
     has_box: bool | None = None
@@ -266,11 +396,21 @@ def _listing_trust_label(listing: Listing) -> tuple[str, str]:
     return "Seller confirmed", "seller_confirmed"
 
 
+def _seller_confirmed_snapshot(listing: Listing) -> dict:
+    snapshot = getattr(listing, "seller_review_snapshot", None)
+    if not isinstance(snapshot, dict):
+        return {}
+    confirmed = snapshot.get("seller_confirmed")
+    return confirmed if isinstance(confirmed, dict) else {}
+
+
 def _fmt_card(listing: Listing, seller_verified: bool = False) -> dict:
     """Minimal format for browse/search listing cards — includes seller_verified for UI badge."""
     listing_verified = _listing_verified(listing)
     listing_trust_label, trust_tier = _listing_trust_label(listing)
     seller_trust_label = "KYC verified" if seller_verified else "Seller self-listed"
+    seller_confirmed = _seller_confirmed_snapshot(listing)
+    card_images = _card_image_urls(listing)
     return {
         "id": str(listing.id),
         "title": listing.title,
@@ -281,8 +421,8 @@ def _fmt_card(listing: Listing, seller_verified: bool = False) -> dict:
         "locality": listing.locality,
         "category_id": str(listing.category_id),
         "category_slug": _category_slug(listing),
-        "image_urls": _card_image_urls(listing),
-        "thumbnail_url": _img_url(listing.thumbnail_url),
+        "image_urls": card_images,
+        "thumbnail_url": card_images[0] if card_images else None,
         "view_count": listing.view_count,
         "seller_verified": seller_verified,
         "seller_trust_label": seller_trust_label,
@@ -317,6 +457,8 @@ def _fmt_card(listing: Listing, seller_verified: bool = False) -> dict:
         "has_earphones": getattr(listing, "has_earphones", None),
         "water_damage_history": getattr(listing, "water_damage_history", None),
         "seller_functional_attestation": getattr(listing, "seller_functional_attestation", None),
+        "category_family": seller_confirmed.get("category_family"),
+        "category_specifics": seller_confirmed.get("category_specifics"),
         "published_at": _iso_or_none(getattr(listing, "published_at", None)),
         "created_at": _iso_or_none(getattr(listing, "created_at", None)),
         "listing_state": getattr(listing, "listing_state", None),
@@ -535,6 +677,7 @@ async def _seller_inventory_transactions_by_listing(
 
 def _fmt_my(listing: Listing, active_transaction: Transaction | None = None) -> dict:
     """My listings — all statuses including drafts."""
+    card_images = _card_image_urls(listing)
     data = {
         "id": str(listing.id),
         "title": listing.title,
@@ -545,8 +688,8 @@ def _fmt_my(listing: Listing, active_transaction: Transaction | None = None) -> 
         "city": listing.city,
         "category_id": str(listing.category_id),
         "category_slug": _category_slug(listing),
-        "image_urls": _card_image_urls(listing),
-        "thumbnail_url": _img_url(listing.thumbnail_url),
+        "image_urls": card_images,
+        "thumbnail_url": card_images[0] if card_images else None,
         "view_count": listing.view_count,
         "is_kids_item": listing.is_kids_item,
         "is_negotiable": listing.is_negotiable,
@@ -801,11 +944,56 @@ async def create_listing(body: CreateListingRequest, current_user: BasicUser, db
     category = result.scalar_one_or_none()
     if not category:
         raise HTTPException(status_code=400, detail={"error": "CATEGORY_NOT_FOUND"})
-    if category.imei_required and not body.imei:
+    category_family, category_specifics, kids_checklist = _clean_manual_category_specifics(category.slug, body)
+    category_rejection = _manual_category_specifics_rejection(
+        category_slug=category.slug,
+        family=category_family,
+        specifics=category_specifics,
+        kids_checklist=kids_checklist,
+        body=body,
+    )
+    if category_rejection:
+        raise HTTPException(status_code=400, detail=category_rejection)
+    normalized_imei = body.imei.strip() if body.imei else None
+    imei_verification_status = None
+    if category.imei_required and not normalized_imei:
         raise HTTPException(status_code=400, detail={
             "error": "IMEI_REQUIRED",
             "message": f"IMEI is required for {category.name} listings.",
         })
+    if normalized_imei:
+        if not normalized_imei.isdigit() or len(normalized_imei) != 15:
+            raise HTTPException(status_code=400, detail={
+                "error": "IMEI_INVALID",
+                "message": "IMEI must be exactly 15 digits.",
+            })
+        if not ceir_client.luhn_valid(normalized_imei):
+            raise HTTPException(status_code=400, detail={
+                "error": "IMEI_LUHN_FAILED",
+                "message": "IMEI checksum failed. Please recheck the digits on the device or box.",
+            })
+        dup = await db.execute(
+            select(Listing.id)
+            .where(
+                or_(
+                    Listing.imei_1 == normalized_imei,
+                    Listing.imei_2 == normalized_imei,
+                    Listing.imei_hash == hash_imei(normalized_imei),
+                ),
+                Listing.status.in_(_IMEI_LOCK_STATUSES),
+            )
+            .limit(1)
+        )
+        if dup.scalar() is not None:
+            raise HTTPException(status_code=409, detail={
+                "error": "IMEI_ALREADY_LISTED",
+                "imei": normalized_imei,
+                "message": "This IMEI is already on an active Owmee listing.",
+            })
+        ceir = await ceir_client.check(normalized_imei)
+        if ceir.get("status") == "blacklisted":
+            raise HTTPException(status_code=400, detail={"error": "IMEI_BLACKLISTED"})
+        imei_verification_status = "verified" if ceir.get("status") == "clean" else "pending"
 
     # Sprint trust pillar: enforce hyperlocal pilot zones. Without lat/lng
     # we can't route an FE; without the address being inside a zone, FE
@@ -820,7 +1008,7 @@ async def create_listing(body: CreateListingRequest, current_user: BasicUser, db
             category_id=body.category_id, title=body.title,
             description=body.description, price=body.price,
             condition=body.condition, city=body.city, state=body.state,
-            locality=body.locality, imei=body.imei, lat=body.lat, lng=body.lng,
+            locality=body.locality, imei=normalized_imei, lat=body.lat, lng=body.lng,
         )
         # Set UI v3 fields
         listing.accessories = body.accessories
@@ -844,8 +1032,11 @@ async def create_listing(body: CreateListingRequest, current_user: BasicUser, db
         listing.defects = body.defects
         listing.original_price = body.original_price
         listing.serial_number = body.serial_number
+        if normalized_imei:
+            listing.imei_1 = normalized_imei
+            listing.verification_status = imei_verification_status
         # Sprint 4 / Pass 3
-        listing.kids_safety_checklist = body.kids_safety_checklist
+        listing.kids_safety_checklist = kids_checklist
         # P1 (2026-05-03) — listing-quality floor
         listing.has_box = body.has_box
         listing.has_bill = body.has_bill
@@ -854,6 +1045,29 @@ async def create_listing(body: CreateListingRequest, current_user: BasicUser, db
         listing.min_acceptable_price = body.min_acceptable_price
         listing.water_damage_history = body.water_damage_history
         listing.seller_functional_attestation = body.seller_functional_attestation
+        listing.seller_review_snapshot = {
+            "confirmed_at": datetime.now(timezone.utc).isoformat(),
+            "source": "manual_listing",
+            "seller_confirmed": {
+                "category_slug": category.slug,
+                "category_family": category_family,
+                "category_specifics": category_specifics,
+                "title": body.title,
+                "condition": body.condition,
+                "price": float(body.price),
+                "brand": body.brand,
+                "model": body.model,
+                "age_suitability": body.age_suitability,
+                "hygiene_status": body.hygiene_status,
+                "kids_safety_checklist": kids_checklist,
+                "has_box": body.has_box,
+                "has_bill": body.has_bill,
+                "has_charger": body.has_charger,
+                "has_earphones": body.has_earphones,
+                "water_damage_history": body.water_damage_history,
+                "seller_functional_attestation": body.seller_functional_attestation,
+            },
+        }
         # Sprint 6a: snapshot seller KYC state at listing creation
         listing.seller_kyc_verified_at_listing_time = (
             getattr(current_user, "kyc_status", None) == "verified"
@@ -957,18 +1171,10 @@ async def publish(listing_id: UUID, current_user: BasicUser, db: DBSession):
             raise HTTPException(status_code=400, detail={"error": "INVALID_STATUS"})
         if code.startswith("MIN_PHOTOS_REQUIRED:"):
             parts = code.split(":")
-            have, need = int(parts[1]), int(parts[2])
-            raise HTTPException(status_code=400, detail={
-                "error": "MIN_PHOTOS_REQUIRED",
-                "message": f"Listings need at least {need} photos — you have {have}. Add more to build buyer trust.",
-                "photos_uploaded": have,
-                "photos_required": need,
-            })
+            have = int(parts[1])
+            raise HTTPException(status_code=400, detail=_min_photo_detail(have))
         if code == "NO_IMAGES":
-            raise HTTPException(status_code=400, detail={
-                "error": "NO_IMAGES",
-                "message": "Add at least 3 photos before publishing.",
-            })
+            raise HTTPException(status_code=400, detail=_min_photo_detail(0))
         raise HTTPException(status_code=400, detail={"error": code})
 
     # Check for duplicate warning flag
@@ -1268,12 +1474,12 @@ async def price_suggestion(
 
 
 @router.get("/{listing_id}")
-async def get_listing(listing_id: UUID, db: DBSession):
+async def get_listing(listing_id: UUID, db: DBSession, current_user: OptionalUser = None):
     result = await db.execute(
         select(Listing).options(selectinload(Listing.category)).where(Listing.id == listing_id)
     )
     listing = result.scalar_one_or_none()
-    if not listing:
+    if not listing or not _can_view_listing_detail(listing, current_user):
         raise HTTPException(status_code=404, detail={"error": "LISTING_NOT_FOUND"})
 
     # Increment view count for active listings

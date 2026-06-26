@@ -19,6 +19,15 @@ multiple original photos in memory.
    fallback, and marks the draft `open`.
 7. Mobile polls `GET /v1/listings/draft/{draft_id}/analysis/status` until the
    draft is `ready`, `failed`, or `expired`.
+8. Mobile review derives the deterministic `category_family` requirement layer
+   (`device`, `appliance`, `toy`, `book`, `other`) from the launch
+   `category_slug`, item type, and title.
+9. Seller confirms family-specific buyer facts before publishing. Books,
+   toys/kids items, and home appliances use compact local choice sets; no
+   extra LLM call is made.
+10. Backend re-derives and validates the same category-family requirements in
+    `POST /v1/listings/from-draft`, then persists seller-confirmed facts in
+    `listings.seller_review_snapshot`.
 
 ## Scaling Rules
 
@@ -57,6 +66,11 @@ multiple original photos in memory.
   captures latency, input/output/cached token counts, model, prompt version, and
   a `provider_metrics` JSON block with total/thought tokens and media settings
   when the SDK returns them.
+- Category-specific requirements for toys, books, and home appliances are
+  intentionally deterministic. Gemini may pre-fill `category_family` and
+  `category_specifics`, but backend and mobile do not trust the LLM alone; the
+  seller must confirm required facts before publish. See
+  `docs/LISTING_CATEGORY_REQUIREMENTS.md`.
 - The legacy multipart endpoint remains for development fallback, but new app
   builds should use direct R2 upload plus async analysis.
 - `R2_PUBLIC_ENDPOINT` must be the S3 API endpoint, for example

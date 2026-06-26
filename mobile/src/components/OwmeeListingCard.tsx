@@ -7,7 +7,7 @@
  *
  * Reads from the FeedListing type returned by /v1/feed/* endpoints.
  */
-import React from 'react';
+import React, { memo } from 'react';
 import {
   View, Text, StyleSheet, Image, TouchableOpacity, type ImageSourcePropType,
 } from 'react-native';
@@ -86,7 +86,7 @@ function fallbackImageForCategory(slug?: string | null): ImageSourcePropType {
 const TITLE_COLORS = [
   'black', 'blue', 'brown', 'cream', 'gold', 'green', 'grey', 'gray', 'orange',
   'pink', 'purple', 'red', 'silver', 'white', 'yellow', 'space grey', 'space gray',
-];
+].sort((a, b) => b.length - a.length);
 
 function titleCaseWords(value: string): string {
   return value
@@ -116,9 +116,7 @@ function cleanListingTitle(title: string): string {
 
   cleaned = titleCaseWords(cleaned || title);
   const lower = cleaned.toLowerCase();
-  const color = TITLE_COLORS
-    .sort((a, b) => b.length - a.length)
-    .find(c => lower.endsWith(` ${c}`));
+  const color = TITLE_COLORS.find(c => lower.endsWith(` ${c}`));
 
   if (!color) return cleaned;
   const base = cleaned.slice(0, cleaned.length - color.length).trim();
@@ -183,7 +181,7 @@ function dealSignal(listing: FeedListing): string | null {
 
 // ── DEAL VARIANT ─────────────────────────────────────────────────────────────
 
-export function DealCard({ listing, onPress, index = 0 }: Props) {
+function DealCardBase({ listing, onPress, index = 0 }: Props) {
   const img = firstImage(listing);
   const bg = pickCardBg(index);
   const fallbackImage = fallbackImageForCategory(listing.category_slug);
@@ -238,7 +236,7 @@ export function DealCard({ listing, onPress, index = 0 }: Props) {
 
 // ── FEED VARIANT (horizontal catalog row) ────────────────────────────────────
 
-export function FeedCard({
+function FeedCardBase({
   listing, onPress, onMakeOffer, onWishlist, isWishlisted = false, index = 0,
 }: Props) {
   const img = firstImage(listing);
@@ -412,12 +410,17 @@ export function FeedCard({
   );
 }
 
+export const DealCard = memo(DealCardBase);
+export const FeedCard = memo(FeedCardBase);
+
 // ── DEFAULT EXPORT ───────────────────────────────────────────────────────────
 
-export default function OwmeeListingCard(props: Props) {
+function OwmeeListingCard(props: Props) {
   if (props.variant === 'deal') return <DealCard {...props} />;
   return <FeedCard {...props} />;
 }
+
+export default memo(OwmeeListingCard);
 
 const s = StyleSheet.create({
   // shared

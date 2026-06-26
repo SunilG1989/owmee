@@ -11,7 +11,7 @@ Key endpoints:
   GET  /v1/users/me/reputation             — seller reputation ladder
   PUT  /v1/notifications/preferences       — notification bucket preferences
   GET  /v1/listings/activity               — activity ticker for home screen
-  POST /v1/listings/{id}/mark-sold         — sold on owmee or sold elsewhere
+  POST /v1/listings/{id}/mark-sold         — seller removes after selling elsewhere
   PUT  /v1/listings/{id}/price             — update price (triggers wishlist notifications)
 
 Removed (Sprint 6c — managed-logistics mandate):
@@ -104,7 +104,7 @@ class NotificationPreferencesRequest(BaseModel):
 
 
 class MarkSoldRequest(BaseModel):
-    sold_where: str = Field(..., pattern="^(on_owmee|elsewhere)$")
+    sold_where: str = Field(..., pattern="^elsewhere$")
 
 
 class UpdatePriceRequest(BaseModel):
@@ -697,8 +697,9 @@ async def update_listing_price(listing_id: UUID, body: UpdatePriceRequest,
 async def mark_sold(listing_id: UUID, body: MarkSoldRequest,
                     current_user: BasicUser, db: DBSession):
     """
-    Seller marks item as sold — on Owmee or elsewhere.
-    Clears active offers, notifies buyers, reopens (sold_elsewhere) or closes (on_owmee).
+    Seller marks item as sold elsewhere.
+    Owmee sales are transaction-led only: payment + logistics completion marks
+    the listing sold. This route is only for removing off-platform sales.
     """
     result = await db.execute(select(Listing).where(
         Listing.id == listing_id, Listing.seller_id == current_user.user_id))
@@ -708,8 +709,7 @@ async def mark_sold(listing_id: UUID, body: MarkSoldRequest,
     if listing.status != "active":
         raise HTTPException(status_code=400, detail={"error": "INVALID_STATUS"})
 
-    new_status = "sold" if body.sold_where == "on_owmee" else "sold_elsewhere"
-    listing.status = new_status
+    listing.status = "sold_elsewhere"
 
     # Cancel all pending offers and notify buyers
     offers_result = await db.execute(
@@ -732,9 +732,9 @@ async def mark_sold(listing_id: UUID, body: MarkSoldRequest,
     await db.commit()
     return {
         "listing_id": str(listing_id),
-        "status": new_status,
+        "status": "sold_elsewhere",
         "offers_cancelled": len(offers),
-        "message": f"Listing marked as {new_status.replace('_', ' ')}. {len(offers)} open offer(s) cancelled.",
+        "message": f"Listing marked as sold elsewhere. {len(offers)} open offer(s) cancelled.",
     }
 
 

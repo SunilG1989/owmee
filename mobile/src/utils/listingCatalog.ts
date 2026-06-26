@@ -1,4 +1,5 @@
 export type ListingCategoryKind = 'phone' | 'laptop' | 'tablet' | 'appliance' | 'kids' | 'other' | 'generic';
+export type ListingRequirementFamily = 'device' | 'appliance' | 'toy' | 'book' | 'other';
 
 export const CATEGORY_PICKS = [
   { slug: 'smartphones', label: 'Smartphone' },
@@ -250,13 +251,115 @@ const APPLIANCE_TYPES = [
 const KIDS_ITEM_TYPES = [
   'Stroller', 'Car seat', 'High chair', 'Baby carrier', 'Crib', 'Walker',
   'Ride-on toy', 'LEGO set', 'Board game', 'STEM kit', 'Learning tablet',
-  'School bag', 'Baby monitor', 'Sterilizer', 'Toy kitchen', 'Other',
+  'Puzzle', 'Doll / action figure', 'Blocks', 'School bag', 'Baby monitor',
+  'Sterilizer', 'Toy kitchen', 'Flashcards', 'Kids book set', 'Other',
 ];
 
 const OTHER_ITEM_TYPES = [
   'Headphones', 'Speaker', 'Camera', 'Watch', 'Monitor', 'Keyboard',
-  'Furniture', 'Book', 'Sports item', 'Fashion item', 'Accessory',
-  'Home item', 'Other / not sure',
+  'Furniture', 'Book', 'Book set', 'Toy / game', 'Home appliance',
+  'Sports item', 'Fashion item', 'Accessory', 'Home item', 'Other / not sure',
+];
+
+export const TOY_MISSING_PARTS_OPTIONS = [
+  'Complete / no parts missing',
+  'Minor missing parts disclosed',
+  'Major parts missing',
+  'Not sure',
+];
+
+export const TOY_SAFETY_STATUS_OPTIONS = [
+  'No visible safety issue',
+  'Issue disclosed',
+  'Needs buyer review',
+  'Not sure',
+];
+
+export const TOY_POWER_STATUS_OPTIONS = [
+  'Works as expected',
+  'Partially working',
+  'Not working',
+  'Not tested',
+  'Not applicable',
+];
+
+export const BOOK_TYPE_OPTIONS = [
+  'Textbook',
+  'Story book',
+  'Novel',
+  'Comic / manga',
+  'Workbook',
+  'Flashcards',
+  'Reference book',
+  'Book set',
+  'Other',
+];
+
+export const BOOK_LANGUAGE_OPTIONS = [
+  'English',
+  'Hindi',
+  'Kannada',
+  'Tamil',
+  'Telugu',
+  'Malayalam',
+  'Marathi',
+  'Other',
+];
+
+export const BOOK_PAGE_CONDITION_OPTIONS = [
+  'Pages clean',
+  'Minor wear',
+  'Some tears disclosed',
+  'Water damage disclosed',
+  'Not checked',
+];
+
+export const BOOK_MARKING_OPTIONS = [
+  'No markings',
+  'Light pencil marks',
+  'Notes/highlights disclosed',
+  'Heavy markings',
+  'Not checked',
+];
+
+export const BOOK_COMPLETENESS_OPTIONS = [
+  'All pages present',
+  'Missing pages disclosed',
+  'Not checked',
+];
+
+export const BOOK_SET_STATUS_OPTIONS = [
+  'Complete set',
+  'Partial set disclosed',
+  'Single book only',
+  'Not sure',
+];
+
+export const APPLIANCE_WORKING_OPTIONS = [
+  'Fully working',
+  'Partially working',
+  'Not working',
+  'Not tested',
+];
+
+export const APPLIANCE_ACCESSORY_OPTIONS = [
+  'All key accessories included',
+  'Some accessories missing',
+  'No accessories',
+  'Not applicable',
+];
+
+export const APPLIANCE_DEFECT_OPTIONS = [
+  'No known defects',
+  'Defects disclosed',
+  'Not tested',
+];
+
+export const APPLIANCE_PICKUP_OPTIONS = [
+  'Easy self pickup',
+  'Needs two people',
+  'Needs disconnection/install help',
+  'Not sure',
 ];
 
 export function getCategoryKind(slug?: string | null): ListingCategoryKind {
@@ -268,6 +371,63 @@ export function getCategoryKind(slug?: string | null): ListingCategoryKind {
   if (canonical === 'kids-utility') return 'kids';
   if (canonical === 'others') return 'other';
   return 'generic';
+}
+
+const textToken = (...values: (string | null | undefined)[]) =>
+  values.filter(Boolean).join(' ').toLowerCase().replace(/[^a-z0-9]+/g, '');
+
+const BOOK_TOKENS = [
+  'book', 'books', 'bookset', 'textbook', 'workbook', 'storybook', 'comic',
+  'novel', 'manga', 'magazine', 'dictionary', 'encyclopedia', 'flashcard',
+  'reader',
+];
+
+const TOY_TOKENS = [
+  'toy', 'toys', 'lego', 'duplo', 'doll', 'puzzle', 'boardgame', 'game',
+  'stem', 'playset', 'blocks', 'rideon', 'remotecontrol', 'learningtablet',
+  'stroller', 'carseat', 'highchair', 'carrier', 'crib', 'walker', 'baby',
+];
+
+const APPLIANCE_TOKENS = [
+  'appliance', 'airconditioner', 'airpurifier', 'mixer', 'grinder',
+  'mixergrinder', 'microwave', 'oven', 'washingmachine', 'washer',
+  'refrigerator', 'fridge', 'waterpurifier', 'vacuum', 'geyser', 'induction',
+  'cooktop', 'airfryer', 'coffeemaker', 'iron', 'fan', 'toaster',
+  'foodprocessor', 'chimney', 'dishwasher',
+];
+
+const POWERED_TOY_TOKENS = ['battery', 'electronic', 'remote', 'learningtablet', 'rideon', 'musical', 'monitor'];
+const BOOK_SET_TOKENS = ['set', 'series', 'box', 'boxed', 'bundle', 'combo'];
+const LARGE_APPLIANCE_TOKENS = ['airconditioner', 'washingmachine', 'refrigerator', 'fridge', 'dishwasher', 'chimney', 'geyser'];
+
+const hasAnyToken = (source: string, tokens: string[]) => tokens.some((token) => source.includes(token));
+
+export function getListingRequirementFamily(
+  slug?: string | null,
+  itemType?: string | null,
+  title?: string | null,
+): ListingRequirementFamily {
+  const kind = getCategoryKind(slug);
+  const source = textToken(itemType, title);
+  if (kind === 'phone' || kind === 'laptop' || kind === 'tablet') return 'device';
+  if (kind === 'appliance') return 'appliance';
+  if (kind === 'kids') return hasAnyToken(source, BOOK_TOKENS) ? 'book' : 'toy';
+  if (hasAnyToken(source, BOOK_TOKENS)) return 'book';
+  if (hasAnyToken(source, APPLIANCE_TOKENS)) return 'appliance';
+  if (hasAnyToken(source, TOY_TOKENS)) return 'toy';
+  return 'other';
+}
+
+export function listingNeedsPoweredToyStatus(itemType?: string | null, title?: string | null): boolean {
+  return hasAnyToken(textToken(itemType, title), POWERED_TOY_TOKENS);
+}
+
+export function listingNeedsBookSetStatus(itemType?: string | null, title?: string | null): boolean {
+  return hasAnyToken(textToken(itemType, title), BOOK_SET_TOKENS);
+}
+
+export function listingNeedsAppliancePickupStatus(itemType?: string | null, title?: string | null): boolean {
+  return hasAnyToken(textToken(itemType, title), LARGE_APPLIANCE_TOKENS);
 }
 
 export function getBrandsForCategory(slug?: string | null): string[] {

@@ -39,6 +39,8 @@ class AIDetected(BaseModel):
     category_resolution: str | None = None     # canonical | alias | fallback_others | unresolved
     category_confidence: float = 0.0
     category_rationale: str | None = None      # short LLM/backend reason for category choice
+    category_family: str | None = None         # device | appliance | toy | book | other
+    category_specifics: dict[str, Any] = Field(default_factory=dict)
     detected_item_type: str | None = None      # "wireless headphones", "office chair", etc.
     brand: str | None = None
     model: str | None = None
@@ -191,6 +193,8 @@ class DraftPriceRefreshRequest(BaseModel):
     processor: str | None = None
     screen_size: str | None = None
     detected_item_type: str | None = None
+    category_family: str | None = None
+    category_specifics: dict[str, Any] | None = None
     condition: str | None = None
     purchase_year: int | None = Field(None, ge=2000, le=2030)
     screen_condition: str | None = Field(None, pattern="^(flawless|minor_scratches|cracked)$")
@@ -249,6 +253,8 @@ class CreateFromDraftRequest(BaseModel):
     water_damage_history: bool | None = None
     seller_functional_attestation: bool | None = None
     kids_safety_checklist: dict[str, Any] | None = None
+    category_family: str | None = None
+    category_specifics: dict[str, Any] | None = None
     description: str | None = None
     mrp_source: str | None = None
     mrp_confidence: float | None = Field(None, ge=0, le=1)
@@ -309,6 +315,15 @@ class EditListingRequest(BaseModel):
     warranty_status: str | None = None
     age_suitability: str | None = None
     hygiene_status: str | None = None
+    screen_condition: str | None = None
+    body_condition: str | None = None
+    defects: list[str] | None = None
+    has_box: bool | None = None
+    has_bill: bool | None = None
+    has_charger: bool | None = None
+    has_earphones: bool | None = None
+    water_damage_history: bool | None = None
+    seller_functional_attestation: bool | None = None
 
 
 class EditListingResponse(BaseModel):

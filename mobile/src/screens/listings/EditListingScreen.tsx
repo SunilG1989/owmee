@@ -33,6 +33,20 @@ import type { RootScreen } from '../../navigation/types';
 
 const EDITABLE_STATES = new Set(['draft_ai', 'pending_buyer']);
 
+type MaybeBool = boolean | null;
+
+const SCREEN_CONDITION_OPTIONS = [
+  { key: 'flawless', label: 'Flawless' },
+  { key: 'minor_scratches', label: 'Minor scratches' },
+  { key: 'cracked', label: 'Cracked' },
+];
+
+const BODY_CONDITION_OPTIONS = [
+  { key: 'flawless', label: 'Flawless' },
+  { key: 'minor_dents', label: 'Minor dents' },
+  { key: 'major_damage', label: 'Major damage' },
+];
+
 export default function EditListingScreen({ route, navigation }: RootScreen<'EditListing'>) {
   const { listingId } = route.params;
 
@@ -50,6 +64,15 @@ export default function EditListingScreen({ route, navigation }: RootScreen<'Edi
   const [color, setColor] = useState('');
   const [accessories, setAccessories] = useState('');
   const [condition, setCondition] = useState<'like_new' | 'good' | 'fair'>('good');
+  const [screenCondition, setScreenCondition] = useState('');
+  const [bodyCondition, setBodyCondition] = useState('');
+  const [defectsText, setDefectsText] = useState('');
+  const [hasBox, setHasBox] = useState<MaybeBool>(null);
+  const [hasBill, setHasBill] = useState<MaybeBool>(null);
+  const [hasCharger, setHasCharger] = useState<MaybeBool>(null);
+  const [hasEarphones, setHasEarphones] = useState<MaybeBool>(null);
+  const [waterDamageHistory, setWaterDamageHistory] = useState<MaybeBool>(null);
+  const [functionalAttestation, setFunctionalAttestation] = useState<MaybeBool>(null);
 
   const isEditable = EDITABLE_STATES.has(listingState) ||
     (legacyStatus === 'active' && !listingState);  // legacy listings without listing_state
@@ -70,6 +93,15 @@ export default function EditListingScreen({ route, navigation }: RootScreen<'Edi
       setColor(l.color || '');
       setAccessories(l.accessories || '');
       setCondition((l.condition as any) || 'good');
+      setScreenCondition(l.screen_condition || '');
+      setBodyCondition(l.body_condition || '');
+      setDefectsText(Array.isArray(l.defects) ? l.defects.join(', ') : '');
+      setHasBox(typeof l.has_box === 'boolean' ? l.has_box : null);
+      setHasBill(typeof l.has_bill === 'boolean' ? l.has_bill : null);
+      setHasCharger(typeof l.has_charger === 'boolean' ? l.has_charger : null);
+      setHasEarphones(typeof l.has_earphones === 'boolean' ? l.has_earphones : null);
+      setWaterDamageHistory(typeof l.water_damage_history === 'boolean' ? l.water_damage_history : null);
+      setFunctionalAttestation(typeof l.seller_functional_attestation === 'boolean' ? l.seller_functional_attestation : null);
       setLegacyStatus(l.status || 'active');
       setListingState(l.listing_state || '');
     } catch (e) {
@@ -98,6 +130,16 @@ export default function EditListingScreen({ route, navigation }: RootScreen<'Edi
       if (color) fields.color = color;
       if (accessories) fields.accessories = accessories;
       if (condition) fields.condition = condition;
+      if (screenCondition) fields.screen_condition = screenCondition;
+      if (bodyCondition) fields.body_condition = bodyCondition;
+      const defects = defectsText.split(',').map((item) => item.trim()).filter(Boolean);
+      fields.defects = defects;
+      if (hasBox !== null) fields.has_box = hasBox;
+      if (hasBill !== null) fields.has_bill = hasBill;
+      if (hasCharger !== null) fields.has_charger = hasCharger;
+      if (hasEarphones !== null) fields.has_earphones = hasEarphones;
+      if (waterDamageHistory !== null) fields.water_damage_history = waterDamageHistory;
+      if (functionalAttestation !== null) fields.seller_functional_attestation = functionalAttestation;
 
       const { data } = await AIListing.edit(listingId, fields);
       if (data?.locked_reason) {
@@ -110,7 +152,30 @@ export default function EditListingScreen({ route, navigation }: RootScreen<'Edi
       Alert.alert('Could not save', parseApiError(e));
     }
     setSaving(false);
-  }, [saving, isEditable, title, description, price, brand, model, storage, color, accessories, condition, listingId, navigation]);
+  }, [
+    saving,
+    isEditable,
+    title,
+    description,
+    price,
+    brand,
+    model,
+    storage,
+    color,
+    accessories,
+    condition,
+    screenCondition,
+    bodyCondition,
+    defectsText,
+    hasBox,
+    hasBill,
+    hasCharger,
+    hasEarphones,
+    waterDamageHistory,
+    functionalAttestation,
+    listingId,
+    navigation,
+  ]);
 
   const regenerate = useCallback(async () => {
     setSaving(true);
@@ -122,6 +187,40 @@ export default function EditListingScreen({ route, navigation }: RootScreen<'Edi
     }
     setSaving(false);
   }, [listingId]);
+
+  const BooleanChoice = ({
+    label,
+    value,
+    onChange,
+  }: {
+    label: string;
+    value: MaybeBool;
+    onChange: (next: MaybeBool) => void;
+  }) => (
+    <View style={st.field}>
+      <Text style={st.label}>{label}</Text>
+      <View style={st.chipRow}>
+        {[
+          { key: true, label: 'Yes' },
+          { key: false, label: 'No' },
+        ].map((option) => (
+          <TouchableOpacity
+            key={String(option.key)}
+            onPress={() => isEditable && onChange(option.key)}
+            style={[
+              st.chip,
+              value === option.key && st.chipActive,
+              !isEditable && { opacity: 0.5 },
+            ]}
+            disabled={!isEditable}>
+            <Text style={[st.chipText, value === option.key && st.chipTextActive]}>
+              {option.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
 
   if (loading) {
     return (
@@ -222,6 +321,40 @@ export default function EditListingScreen({ route, navigation }: RootScreen<'Edi
           </View>
 
           <View style={st.field}>
+            <Text style={st.label}>Screen condition</Text>
+            <View style={st.chipRow}>
+              {SCREEN_CONDITION_OPTIONS.map((option) => (
+                <TouchableOpacity
+                  key={option.key}
+                  onPress={() => isEditable && setScreenCondition(option.key)}
+                  style={[st.chip, screenCondition === option.key && st.chipActive, !isEditable && { opacity: 0.5 }]}
+                  disabled={!isEditable}>
+                  <Text style={[st.chipText, screenCondition === option.key && st.chipTextActive]}>
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          <View style={st.field}>
+            <Text style={st.label}>Body condition</Text>
+            <View style={st.chipRow}>
+              {BODY_CONDITION_OPTIONS.map((option) => (
+                <TouchableOpacity
+                  key={option.key}
+                  onPress={() => isEditable && setBodyCondition(option.key)}
+                  style={[st.chip, bodyCondition === option.key && st.chipActive, !isEditable && { opacity: 0.5 }]}
+                  disabled={!isEditable}>
+                  <Text style={[st.chipText, bodyCondition === option.key && st.chipTextActive]}>
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          <View style={st.field}>
             <Text style={st.label}>Brand</Text>
             <TextInput
               style={st.input}
@@ -282,6 +415,30 @@ export default function EditListingScreen({ route, navigation }: RootScreen<'Edi
               placeholderTextColor={C.text4}
             />
           </View>
+
+          <View style={st.field}>
+            <Text style={st.label}>Known defects</Text>
+            <TextInput
+              style={st.input}
+              value={defectsText}
+              editable={isEditable}
+              onChangeText={setDefectsText}
+              placeholder="Screen scratch, battery issue"
+              placeholderTextColor={C.text4}
+            />
+            <Text style={st.hint}>Separate multiple defects with commas.</Text>
+          </View>
+
+          <BooleanChoice label="Original box included?" value={hasBox} onChange={setHasBox} />
+          <BooleanChoice label="Original bill included?" value={hasBill} onChange={setHasBill} />
+          <BooleanChoice label="Charger included?" value={hasCharger} onChange={setHasCharger} />
+          <BooleanChoice label="Earphones included?" value={hasEarphones} onChange={setHasEarphones} />
+          <BooleanChoice label="Any water damage history?" value={waterDamageHistory} onChange={setWaterDamageHistory} />
+          <BooleanChoice
+            label="Everything else works as expected?"
+            value={functionalAttestation}
+            onChange={setFunctionalAttestation}
+          />
         </ScrollView>
 
         {isEditable && (
@@ -361,7 +518,7 @@ const st = StyleSheet.create({
   inputMulti: { minHeight: 100, textAlignVertical: 'top' },
   hint: { marginTop: 4, color: C.text3, fontSize: T.size.sm },
 
-  chipRow: { flexDirection: 'row', gap: S.sm },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: S.sm },
   chip: {
     paddingHorizontal: S.md,
     paddingVertical: S.sm,
@@ -371,7 +528,7 @@ const st = StyleSheet.create({
     backgroundColor: C.surface,
   },
   chipActive: { backgroundColor: C.petrolLight, borderColor: C.petrol },
-  chipText: { color: C.text2, fontSize: T.size.base, fontWeight: T.weight.medium },
+  chipText: { color: C.text2, fontSize: T.size.sm, fontWeight: T.weight.medium },
   chipTextActive: { color: C.petrolText, fontWeight: T.weight.bold },
 
   row2: { flexDirection: 'row' },

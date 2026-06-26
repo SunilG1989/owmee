@@ -150,7 +150,7 @@ export default function MyListingsScreen({ navigation }: any) {
     navigation.navigate('EditListing', { listingId: selectedListing.id });
   }, [selectedListing, navigation]);
 
-  const markSold = useCallback(async (where: 'on_owmee' | 'elsewhere') => {
+  const markSold = useCallback(async (where: 'elsewhere') => {
     if (!selectedListing) return;
     setShowActions(false);
     try {
@@ -162,19 +162,16 @@ export default function MyListingsScreen({ navigation }: any) {
     }
   }, [selectedListing, load]);
 
-  const confirmMarkSold = useCallback((where: 'on_owmee' | 'elsewhere') => {
+  const confirmMarkSold = useCallback((where: 'elsewhere') => {
     if (!selectedListing) return;
-    const soldOnOwmee = where === 'on_owmee';
     Alert.alert(
-      soldOnOwmee ? 'Mark sold on Owmee?' : 'Mark sold elsewhere?',
-      soldOnOwmee
-        ? 'This will move the listing out of the active marketplace.'
-        : 'This will remove the listing from buyer discovery because it sold outside Owmee.',
+      'Mark sold elsewhere?',
+      'This will remove the listing from buyer discovery because it sold outside Owmee.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Mark sold',
-          style: soldOnOwmee ? 'default' : 'destructive',
+          style: 'destructive',
           onPress: () => markSold(where),
         },
       ],
@@ -324,22 +321,13 @@ export default function MyListingsScreen({ navigation }: any) {
               </TouchableOpacity>
             ) : null}
             {canMarkSold ? (
-              <>
-                <TouchableOpacity style={s.actionItem} onPress={() => confirmMarkSold('on_owmee')}>
-                  <Text style={s.actionEmoji}>✅</Text>
-                  <View style={s.actionTextWrap}>
-                    <Text style={s.actionTitle}>Mark sold on Owmee</Text>
-                    <Text style={s.actionSub}>You sold it through Owmee</Text>
-                  </View>
-                </TouchableOpacity>
-                <TouchableOpacity style={s.actionItem} onPress={() => confirmMarkSold('elsewhere')}>
-                  <Text style={s.actionEmoji}>🛒</Text>
-                  <View style={s.actionTextWrap}>
-                    <Text style={s.actionTitle}>Mark sold elsewhere</Text>
-                    <Text style={s.actionSub}>You sold it outside Owmee</Text>
-                  </View>
-                </TouchableOpacity>
-              </>
+              <TouchableOpacity style={s.actionItem} onPress={() => confirmMarkSold('elsewhere')}>
+                <Text style={s.actionEmoji}>🛒</Text>
+                <View style={s.actionTextWrap}>
+                  <Text style={s.actionTitle}>Mark sold elsewhere</Text>
+                  <Text style={s.actionSub}>You sold it outside Owmee</Text>
+                </View>
+              </TouchableOpacity>
             ) : null}
             {canDelete ? (
               <TouchableOpacity style={s.actionItem} onPress={startDelete}>

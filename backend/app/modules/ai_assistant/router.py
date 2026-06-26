@@ -52,8 +52,14 @@ from app.modules.ai_assistant.category_taxonomy import (
     CATEGORY_ALIASES,
     IDENTIFIER_CATEGORIES,
     canonical_category_slug,
+    category_family_for,
     category_token,
+    clean_category_specifics,
     is_meaningful_other_detail,
+    required_category_specific_fields,
+    requires_appliance_pickup_status,
+    requires_book_set_status,
+    requires_powered_toy_status,
 )
 from app.modules.ai_assistant.identifier_extraction import normalize_serial_number
 from app.modules.ai_assistant.schemas import (
@@ -74,6 +80,7 @@ from app.modules.ai_assistant.schemas import (
     SellerInfoNeededResponse,
     SellerInfoRequest,
 )
+from app.modules.listings.service import MIN_PHOTOS_REQUIRED
 from app.modules.media.image_cleanup import (
     clean_hero_background,
     move_hero_first,
@@ -119,6 +126,18 @@ _VALID_BODY_CONDITIONS = {"flawless", "minor_dents", "major_damage"}
 _PRICE_REFRESH_MRP_SOURCES = {"visible_mrp", "receipt_or_bill", "market_anchor", "seller_entered"}
 
 
+def _min_photo_detail(photo_count: int) -> dict:
+    return {
+        "error": "MIN_PHOTOS_REQUIRED",
+        "message": (
+            f"Listings need at least {MIN_PHOTOS_REQUIRED} photos - "
+            f"you have {photo_count}. Add more to build buyer trust."
+        ),
+        "photos_uploaded": photo_count,
+        "photos_required": MIN_PHOTOS_REQUIRED,
+    }
+
+
 def _canonical_category_slug(slug: str | None, *, fallback_empty_to_others: bool = True) -> str | None:
     return canonical_category_slug(slug, fallback_empty_to_others=fallback_empty_to_others)
 
@@ -151,11 +170,20 @@ def _with_canonical_category(detected):
         if not rationale:
             rationale = "Product is sellable but outside Owmee's structured launch categories."
 
+    category_family = category_family_for(
+        canonical,
+        detected_item_type=detected.detected_item_type,
+        title=detected.title_suggestion,
+        model=detected.model,
+    )
+
     return detected.model_copy(update={
         "category_slug": canonical,
         "raw_category_slug": raw if raw != canonical else None,
         "category_resolution": resolution,
         "category_rationale": rationale,
+        "category_family": category_family,
+        "category_specifics": clean_category_specifics(category_family, detected.category_specifics),
         "seller_edit_fields": seller_edit_fields,
     })
 
@@ -249,6 +277,95 @@ def _publish_detail_rejection(category_slug: str, payload: CreateFromDraftReques
     return None
 
 
+def _specific_present(value) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, bool):
+        return True
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return True
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, list):
+        return any(_specific_present(item) for item in value)
+    return bool(value)
+
+
+def _with_seeded_category_specifics(
+    *,
+    category_family: str,
+    payload: CreateFromDraftRequest,
+    draft_ai_response: dict,
+) -> dict:
+    # Publish uses seller-confirmed fields only. AI output can prefill the UI,
+    # but it must not silently satisfy buyer-critical safety/completeness gates.
+    raw_specifics = payload.category_specifics if isinstance(payload.category_specifics, dict) else {}
+    specifics = clean_category_specifics(category_family, raw_specifics)
+
+    if category_family == "toy" and not _specific_present(specifics.get("toy_type")) and payload.model:
+        specifics["toy_type"] = payload.model
+    if category_family == "book" and not _specific_present(specifics.get("book_type")) and payload.model:
+        specifics["book_type"] = payload.model
+    if category_family == "appliance" and not _specific_present(specifics.get("appliance_type")) and payload.model:
+        specifics["appliance_type"] = payload.model
+
+    return specifics
+
+
+def _publish_category_specifics_rejection(
+    *,
+    category_slug: str,
+    category_family: str,
+    category_specifics: dict,
+    kids_safety_checklist: dict | None,
+    payload: CreateFromDraftRequest,
+) -> dict | None:
+    if category_family not in {"toy", "book", "appliance"}:
+        return None
+
+    missing: list[str] = []
+    for field in required_category_specific_fields(category_family):
+        if not _specific_present(category_specifics.get(field)):
+            missing.append(field)
+
+    if category_family == "toy":
+        if not _specific_present(payload.age_suitability):
+            missing.append("age_suitability")
+        if not _specific_present(payload.hygiene_status):
+            missing.append("hygiene_status")
+        if requires_powered_toy_status(payload.model, payload.title) and not (
+            _specific_present(category_specifics.get("working_status"))
+            or _specific_present(category_specifics.get("battery_status"))
+        ):
+            missing.append("battery_or_working_status")
+        if category_slug == "kids-utility":
+            required_checklist = ("no_small_parts", "no_loose_batteries", "no_sharp_edges")
+            if not all(key in (kids_safety_checklist or {}) for key in required_checklist):
+                missing.append("kids_safety_checklist")
+
+    if category_family == "book" and requires_book_set_status(payload.model, payload.title):
+        if not _specific_present(category_specifics.get("set_status")):
+            missing.append("set_status")
+
+    if category_family == "appliance":
+        if not _specific_present(category_specifics.get("appliance_type")):
+            missing.append("appliance_type")
+        if requires_appliance_pickup_status(payload.model, payload.title):
+            if not _specific_present(category_specifics.get("pickup_complexity")):
+                missing.append("pickup_complexity")
+
+    deduped = list(dict.fromkeys(missing))
+    if not deduped:
+        return None
+
+    return {
+        "error": "CATEGORY_REQUIREMENTS_REQUIRED",
+        "category_family": category_family,
+        "missing_fields": deduped,
+        "message": "Complete category-specific buyer details before publishing.",
+    }
+
+
 def _clean_condition_choice(value: str | None, allowed: set[str]) -> str | None:
     cleaned = (value or "").strip().lower()
     return cleaned if cleaned in allowed else None
@@ -329,6 +446,8 @@ def _seller_review_snapshot(
         "removed_photo_indices": payload.removed_photo_indices or [],
         "ai_detected": {
             "category_slug": draft_ai_response.get("category_slug"),
+            "category_family": draft_ai_response.get("category_family"),
+            "category_specifics": draft_ai_response.get("category_specifics") or {},
             "brand": draft_ai_response.get("brand"),
             "model": draft_ai_response.get("model"),
             "condition_guess": draft_ai_response.get("condition_guess"),
@@ -356,6 +475,25 @@ def _seller_review_snapshot(
             "seller_mrp_confirmed": bool(payload.seller_mrp_confirmed),
         },
     }
+
+
+def _seller_review_snapshot_after_edit(raw_snapshot: dict | None, updates: dict) -> dict | None:
+    if not isinstance(raw_snapshot, dict):
+        return None
+    confirmed = raw_snapshot.get("seller_confirmed")
+    if not isinstance(confirmed, dict):
+        return None
+
+    next_snapshot = dict(raw_snapshot)
+    next_confirmed = dict(confirmed)
+    for key, value in updates.items():
+        snapshot_key = "warranty_status" if key == "warranty_info" else key
+        next_confirmed[snapshot_key] = float(value) if key == "price" and value is not None else value
+
+    next_snapshot["seller_confirmed"] = next_confirmed
+    next_snapshot["last_edited_at"] = datetime.now(timezone.utc).isoformat()
+    return next_snapshot
+
 
 # Listing states that allow seller edits.
 EDITABLE_STATES = {"draft_ai", "pending_buyer"}
@@ -1196,6 +1334,15 @@ def _draft_with_seller_price_inputs(detected: AIDetected, payload: DraftPriceRef
     category = _canonical_category_slug(payload.category_slug, fallback_empty_to_others=False)
     if category:
         updates["category_slug"] = category
+    family = category_family_for(
+        category or detected.category_slug,
+        detected_item_type=payload.detected_item_type or detected.detected_item_type,
+        title=detected.title_suggestion,
+        model=payload.model or detected.model,
+    )
+    updates["category_family"] = family
+    raw_specifics = payload.category_specifics if isinstance(payload.category_specifics, dict) else detected.category_specifics
+    updates["category_specifics"] = clean_category_specifics(family, raw_specifics)
     for field in ("brand", "model", "storage", "ram", "processor", "screen_size", "detected_item_type"):
         value = _safe_text(getattr(payload, field), max_len=120)
         if value:
@@ -2156,6 +2303,12 @@ async def create_from_draft(
     detail_rejection = _publish_detail_rejection(category_slug, payload)
     if detail_rejection:
         raise HTTPException(status_code=400, detail=detail_rejection)
+    category_family = category_family_for(
+        category_slug,
+        detected_item_type=payload.model or draft_ai_response.get("detected_item_type"),
+        title=payload.title or draft_ai_response.get("title_suggestion"),
+        model=payload.model or draft_ai_response.get("model"),
+    )
 
     # Start from the draft's canonical photo keys. The review screen can remove
     # accidental/bad photos and choose a hero by original index; extra images
@@ -2169,14 +2322,8 @@ async def create_from_draft(
         for u in payload.image_urls:
             if u not in photo_urls:
                 photo_urls.append(u)
-    if not photo_urls:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "error": "PHOTO_REQUIRED",
-                "message": "At least one product photo is required to publish.",
-            },
-        )
+    if len(photo_urls) < MIN_PHOTOS_REQUIRED:
+        raise HTTPException(status_code=400, detail=_min_photo_detail(len(photo_urls)))
 
     original_price = _clean_original_price_for_listing(
         asking_price=payload.price,
@@ -2205,8 +2352,24 @@ async def create_from_draft(
         except (TypeError, ValueError):
             battery_health = None
     kids_safety_checklist = _clean_kids_safety_checklist(payload.kids_safety_checklist)
+    category_specifics = _with_seeded_category_specifics(
+        category_family=category_family,
+        payload=payload,
+        draft_ai_response=draft_ai_response,
+    )
+    category_specific_rejection = _publish_category_specifics_rejection(
+        category_slug=category_slug,
+        category_family=category_family,
+        category_specifics=category_specifics,
+        kids_safety_checklist=kids_safety_checklist,
+        payload=payload,
+    )
+    if category_specific_rejection:
+        raise HTTPException(status_code=400, detail=category_specific_rejection)
     final_review_fields = {
         "category_slug": category_slug,
+        "category_family": category_family,
+        "category_specifics": category_specifics,
         "title": payload.title,
         "condition": payload.condition,
         "brand": payload.brand,
@@ -2508,7 +2671,7 @@ async def edit_listing(
     """
     row = await db.execute(
         text("""
-            SELECT seller_id, listing_state, status
+            SELECT seller_id, listing_state, status, seller_review_snapshot
             FROM listings WHERE id = :id
         """),
         {"id": listing_id},
@@ -2548,6 +2711,15 @@ async def edit_listing(
         "warranty_info": payload.warranty_status,
         "age_suitability": payload.age_suitability,
         "hygiene_status": payload.hygiene_status,
+        "screen_condition": payload.screen_condition,
+        "body_condition": payload.body_condition,
+        "defects": payload.defects,
+        "has_box": payload.has_box,
+        "has_bill": payload.has_bill,
+        "has_charger": payload.has_charger,
+        "has_earphones": payload.has_earphones,
+        "water_damage_history": payload.water_damage_history,
+        "seller_functional_attestation": payload.seller_functional_attestation,
     }
     updates = {k: v for k, v in field_map.items() if v is not None}
 
@@ -2558,8 +2730,20 @@ async def edit_listing(
             listing_state=listing_state,
         )
 
-    set_clause = ", ".join(f"{k} = :{k}" for k in updates)
-    params = {**updates, "id": listing_id}
+    set_parts: list[str] = []
+    params: dict = {"id": listing_id}
+    for key, value in updates.items():
+        if key == "defects":
+            set_parts.append("defects = CAST(:defects AS JSONB)")
+            params["defects"] = json.dumps(value)
+            continue
+        set_parts.append(f"{key} = :{key}")
+        params[key] = value
+    next_snapshot = _seller_review_snapshot_after_edit(rec.seller_review_snapshot, updates)
+    if next_snapshot is not None:
+        set_parts.append("seller_review_snapshot = CAST(:seller_review_snapshot AS JSONB)")
+        params["seller_review_snapshot"] = json.dumps(next_snapshot)
+    set_clause = ", ".join(set_parts)
     await db.execute(text(f"UPDATE listings SET {set_clause} WHERE id = :id"), params)
     await db.commit()
 

@@ -67,23 +67,35 @@ def test_feed_resigns_legacy_owmee_media_urls(monkeypatch):
 
 def test_feed_cards_use_display_hero_not_thumbnail(monkeypatch):
     feed_router._IMG_URL_CACHE.clear()
+
+    signed_keys: list[str] = []
+
+    def fake_presign(key, expires_in=0):
+        signed_keys.append(key)
+        return f"https://fresh.test/{key}?sig=new"
+
     monkeypatch.setattr(
         feed_router,
         "generate_presigned_download_url",
-        lambda key, expires_in=0: f"https://fresh.test/{key}?sig=new",
+        fake_presign,
     )
 
-    hero = feed_router._first_display_image_url(
-        "listings/listing-1/hero.jpg.thumb.webp",
-        ["listings/listing-1/hero.jpg.display.webp"],
-    )
-    thumb = feed_router._thumbnail_image_url(
-        "listings/listing-1/hero.jpg.thumb.webp",
-        ["listings/listing-1/hero.jpg.display.webp"],
+    card = feed_router._serialize_row(
+        {
+            "id": "listing-1",
+            "seller_id": "seller-1",
+            "price": 1200,
+            "thumbnail_url": "listings/listing-1/hero.jpg.thumb.webp",
+            "image_urls": ["listings/listing-1/hero.jpg.display.webp"],
+        },
+        distance_km=None,
     )
 
-    assert hero == "https://fresh.test/listings/listing-1/hero.jpg.display.webp?sig=new"
-    assert thumb == "https://fresh.test/listings/listing-1/hero.jpg.thumb.webp?sig=new"
+    assert card["image_urls"] == [
+        "https://fresh.test/listings/listing-1/hero.jpg.display.webp?sig=new"
+    ]
+    assert card["thumbnail_url"] == card["image_urls"][0]
+    assert signed_keys == ["listings/listing-1/hero.jpg.display.webp"]
 
 
 def test_listing_card_urls_prefer_display_hero(monkeypatch):

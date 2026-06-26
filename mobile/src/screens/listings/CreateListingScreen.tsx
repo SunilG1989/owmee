@@ -25,15 +25,35 @@ import { Listings } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { useLocation } from '../../hooks/useLocation';
 import {
+  APPLIANCE_ACCESSORY_OPTIONS,
+  APPLIANCE_DEFECT_OPTIONS,
+  APPLIANCE_PICKUP_OPTIONS,
+  APPLIANCE_WORKING_OPTIONS,
+  BOOK_COMPLETENESS_OPTIONS,
+  BOOK_LANGUAGE_OPTIONS,
+  BOOK_MARKING_OPTIONS,
+  BOOK_PAGE_CONDITION_OPTIONS,
+  BOOK_SET_STATUS_OPTIONS,
+  BOOK_TYPE_OPTIONS,
   COLOR_OPTIONS,
+  HYGIENE_OPTIONS as LISTING_HYGIENE_OPTIONS,
+  KIDS_AGE_OPTIONS,
   PROCESSOR_OPTIONS,
   RAM_OPTIONS,
   SCREEN_SIZE_OPTIONS,
   STORAGE_OPTIONS,
+  TOY_MISSING_PARTS_OPTIONS,
+  TOY_POWER_STATUS_OPTIONS,
+  TOY_SAFETY_STATUS_OPTIONS,
   getBrandsForCategory,
   getCategoryKind,
+  getListingRequirementFamily,
   getModelSuggestions,
+  listingNeedsAppliancePickupStatus,
+  listingNeedsBookSetStatus,
+  listingNeedsPoweredToyStatus,
 } from '../../utils/listingCatalog';
+import type { ListingRequirementFamily } from '../../utils/listingCatalog';
 import { afterInteractions } from '../../utils/schedule';
 
 // ── Reference data ───────────────────────────────────────────────
@@ -63,6 +83,15 @@ const SCREEN_CONDITIONS = [
   { key: 'cracked', label: 'Cracked/Damaged', desc: 'Visible cracks or deep scratches' },
 ];
 
+const KIDS_SAFETY_ITEMS = [
+  { key: 'cleaned', label: 'Cleaned' },
+  { key: 'no_small_parts', label: 'No unsafe small parts' },
+  { key: 'no_loose_batteries', label: 'No loose batteries' },
+  { key: 'no_sharp_edges', label: 'No sharp edges' },
+  { key: 'age_label_correct', label: 'Age label checked' },
+  { key: 'working_condition', label: 'Works as expected' },
+];
+
 const BODY_CONDITIONS = [
   { key: 'flawless', label: 'Flawless', desc: 'No dents or scratches' },
   { key: 'minor_dents', label: 'Minor wear', desc: 'Small dents or scratches' },
@@ -71,10 +100,61 @@ const BODY_CONDITIONS = [
 
 const PURCHASE_YEARS = Array.from({ length: 8 }, (_, i) => 2026 - i);
 
-const KIDS_AGE_RANGES = ['0-1 year', '1-3 years', '3-5 years', '5-8 years', '8-12 years', '12+ years'];
-const HYGIENE_OPTIONS = ['Cleaned and sanitised', 'Gently used', 'Needs cleaning'];
+const KIDS_AGE_RANGES = KIDS_AGE_OPTIONS;
+const HYGIENE_OPTIONS = LISTING_HYGIENE_OPTIONS;
 
 type Category = { id: string; slug: string; name: string; imei_required?: boolean };
+
+function isValidImei(value: string): boolean {
+  if (!/^\d{15}$/.test(value)) return false;
+  let total = 0;
+  value
+    .split('')
+    .reverse()
+    .forEach((ch, i) => {
+      let n = Number(ch);
+      if (i % 2 === 1) {
+        n *= 2;
+        if (n > 9) n -= 9;
+      }
+      total += n;
+    });
+  return total % 10 === 0;
+}
+
+const cleanText = (value?: string | null) => {
+  const cleaned = (value || '').replace(/\s+/g, ' ').trim();
+  return cleaned.length ? cleaned : null;
+};
+
+const hasSpecificValue = (specifics: Record<string, any>, key: string) => {
+  const raw = specifics[key];
+  if (raw === true || raw === false || typeof raw === 'number') return true;
+  return Boolean(cleanText(raw == null ? '' : String(raw)));
+};
+
+const categorySpecificsForPayload = (
+  family: ListingRequirementFamily,
+  specifics: Record<string, any>,
+  seed: { model?: string | null; age?: string | null; hygiene?: string | null },
+) => {
+  const allowed: Record<ListingRequirementFamily, string[]> = {
+    device: [],
+    other: [],
+    toy: ['toy_type', 'missing_parts_status', 'safety_status', 'battery_status', 'working_status'],
+    book: ['book_type', 'language', 'page_condition', 'markings_status', 'pages_complete', 'set_status'],
+    appliance: ['appliance_type', 'working_status', 'accessories_status', 'defects_disclosed', 'pickup_complexity'],
+  };
+  const payload: Record<string, any> = {};
+  allowed[family].forEach((key) => {
+    const value = cleanText(specifics[key] == null ? '' : String(specifics[key]));
+    if (value) payload[key] = value;
+  });
+  if (family === 'toy' && seed.model && !payload.toy_type) payload.toy_type = seed.model;
+  if (family === 'book' && seed.model && !payload.book_type) payload.book_type = seed.model;
+  if (family === 'appliance' && seed.model && !payload.appliance_type) payload.appliance_type = seed.model;
+  return Object.keys(payload).length ? payload : null;
+};
 
 // ── Component ────────────────────────────────────────────────────
 export default function CreateListingScreen({ navigation }: any) {
@@ -123,6 +203,8 @@ export default function CreateListingScreen({ navigation }: any) {
   const [warrantyInfo, setWarrantyInfo] = useState('');
   const [ageSuitability, setAgeSuitability] = useState('');
   const [hygiene, setHygiene] = useState('');
+  const [categorySpecifics, setCategorySpecifics] = useState<Record<string, any>>({});
+  const [kidsSafetyChecklist, setKidsSafetyChecklist] = useState<Record<string, boolean | null>>({});
 
   // Structured accessory presence (P1.3) — replaces free-text "accessories"
   // with explicit yes/no for the items India buyers ask about most often.
@@ -150,6 +232,55 @@ export default function CreateListingScreen({ navigation }: any) {
   const valid = photos.filter(Boolean) as string[];
   const catType = getCategoryKind(cat?.slug);
   const categorySlug = cat?.slug;
+  const categoryFamily = getListingRequirementFamily(categorySlug, model, title);
+  const poweredToyStatusRequired = categoryFamily === 'toy' && listingNeedsPoweredToyStatus(model, title);
+  const bookSetStatusRequired = categoryFamily === 'book' && listingNeedsBookSetStatus(model, title);
+  const appliancePickupRequired = categoryFamily === 'appliance' && listingNeedsAppliancePickupStatus(model, title);
+
+  useEffect(() => {
+    setCategorySpecifics({});
+    setKidsSafetyChecklist({});
+  }, [cat?.id]);
+
+  const setCategorySpecific = (key: string, value: any) => {
+    setCategorySpecifics(prev => ({ ...prev, [key]: value }));
+  };
+
+  const categorySpecificIssues = () => {
+    const issues: string[] = [];
+    if (categoryFamily === 'toy') {
+      if (!ageSuitability) issues.push('age suitability');
+      if (!hygiene) issues.push('cleanliness');
+      if (!hasSpecificValue(categorySpecifics, 'missing_parts_status')) issues.push('parts completeness');
+      if (!hasSpecificValue(categorySpecifics, 'safety_status')) issues.push('safety status');
+      if (poweredToyStatusRequired && !(
+        hasSpecificValue(categorySpecifics, 'working_status')
+        || hasSpecificValue(categorySpecifics, 'battery_status')
+      )) issues.push('battery/working status');
+      if (catType === 'kids') {
+        const requiredSafety = ['no_small_parts', 'no_loose_batteries', 'no_sharp_edges'];
+        if (!requiredSafety.every(key => kidsSafetyChecklist[key] !== null && kidsSafetyChecklist[key] !== undefined)) {
+          issues.push('kids safety checklist');
+        }
+      }
+    }
+    if (categoryFamily === 'book') {
+      if (!hasSpecificValue(categorySpecifics, 'book_type') && !model.trim()) issues.push('book type');
+      if (!hasSpecificValue(categorySpecifics, 'language')) issues.push('language');
+      if (!hasSpecificValue(categorySpecifics, 'page_condition')) issues.push('page condition');
+      if (!hasSpecificValue(categorySpecifics, 'markings_status')) issues.push('markings');
+      if (!hasSpecificValue(categorySpecifics, 'pages_complete')) issues.push('page completeness');
+      if (bookSetStatusRequired && !hasSpecificValue(categorySpecifics, 'set_status')) issues.push('set completeness');
+    }
+    if (categoryFamily === 'appliance') {
+      if (!hasSpecificValue(categorySpecifics, 'appliance_type') && !model.trim()) issues.push('appliance type');
+      if (!hasSpecificValue(categorySpecifics, 'working_status')) issues.push('working status');
+      if (!hasSpecificValue(categorySpecifics, 'accessories_status')) issues.push('accessories');
+      if (!hasSpecificValue(categorySpecifics, 'defects_disclosed')) issues.push('defects');
+      if (appliancePickupRequired && !hasSpecificValue(categorySpecifics, 'pickup_complexity')) issues.push('pickup effort');
+    }
+    return issues;
+  };
 
   // Auto-generate title from brand + model until the seller edits it.
   useEffect(() => {
@@ -310,15 +441,15 @@ export default function CreateListingScreen({ navigation }: any) {
     setDefects(prev => prev.includes(key) ? prev.filter(d => d !== key) : [...prev, key]);
   };
 
-  // Smartphone IMEI is required and must be exactly 15 digits — matching the
-  // AI flow's validation in AIListingIdentifierScreen. Without this, manual
-  // listings let stolen / spoofed IMEIs through.
+  // Smartphone IMEI is required and must pass the same Luhn checksum used by
+  // AIListingIdentifierScreen. Without this, manual fallback becomes a weaker
+  // path than AI-assisted listing.
   const imeiRequired = catType === 'phone';
-  const imeiValid = !imeiRequired || /^\d{15}$/.test(imei);
+  const imeiValid = !imeiRequired || isValidImei(imei);
 
   const submit = async () => {
     if (imeiRequired && !imeiValid) {
-      Alert.alert('Invalid IMEI', 'IMEI must be exactly 15 digits. Dial *#06# on the phone to read it.');
+      Alert.alert('Invalid IMEI', 'IMEI must be exactly 15 digits and pass checksum. Dial *#06# on the phone to read it.');
       return;
     }
     if (defects.length > 0 && condition === 'like_new') {
@@ -326,6 +457,11 @@ export default function CreateListingScreen({ navigation }: any) {
         'Condition mismatch',
         '"Like new" can\'t be paired with reported defects. Pick "Good" or "Fair", or remove the defects.',
       );
+      return;
+    }
+    const requirementIssues = categorySpecificIssues();
+    if (requirementIssues.length > 0) {
+      Alert.alert('Complete item details', `Please complete: ${requirementIssues.join(', ')}.`);
       return;
     }
     if ((catType === 'phone' || catType === 'laptop' || catType === 'tablet')) {
@@ -381,6 +517,12 @@ export default function CreateListingScreen({ navigation }: any) {
         imei: imei || undefined,
         accessories: accessories || undefined,
         warranty_info: warrantyInfo || undefined,
+        category_family: categoryFamily,
+        category_specifics: categorySpecificsForPayload(categoryFamily, categorySpecifics, {
+          model,
+          age: ageSuitability,
+          hygiene,
+        }) || undefined,
         has_box: hasStructuredIncludes ? hasBox : undefined,
         has_bill: hasStructuredIncludes ? hasBill : undefined,
         has_charger: hasStructuredIncludes ? hasCharger : undefined,
@@ -391,10 +533,19 @@ export default function CreateListingScreen({ navigation }: any) {
         age_suitability: ageSuitability || undefined,
         hygiene_status: hygiene || undefined,
         is_kids_item: catType === 'kids',
+        kids_safety_checklist: catType === 'kids' && categoryFamily === 'toy'
+          ? Object.fromEntries(
+            KIDS_SAFETY_ITEMS
+              .filter(item => kidsSafetyChecklist[item.key] !== null && kidsSafetyChecklist[item.key] !== undefined)
+              .map(item => [item.key, Boolean(kidsSafetyChecklist[item.key])]),
+          )
+          : undefined,
       });
       const lid = res.data.listing_id || res.data.id;
 
-      // Upload images (3-step: request presigned URL → PUT file → confirm)
+      // Upload images (3-step: request presigned URL -> PUT file -> confirm).
+      // Publish only after every required photo has been confirmed.
+      let uploadedCount = 0;
       for (let i = 0; i < valid.length; i++) {
         try {
           const reqRes = await Listings.requestImageUpload(lid);
@@ -409,6 +560,7 @@ export default function CreateListingScreen({ navigation }: any) {
             xhr.send({ uri: valid[i], type: 'image/jpeg', name: `photo_${i}.jpg` } as any);
           });
           await Listings.confirmImageUpload(lid, r2_key, i === 0);
+          uploadedCount += 1;
         } catch (imgErr: any) {
           // Fix #9: Surface actual error — not generic message
           const status = imgErr?.message?.match(/Upload (\d+)/)?.[1];
@@ -417,8 +569,12 @@ export default function CreateListingScreen({ navigation }: any) {
             : imgErr?.message === 'Upload network error' ? 'Network error — check WiFi'
             : `Upload failed (${status || 'unknown'})`;
           console.warn('Image upload failed for index', i, imgErr);
-          Alert.alert('Photo upload failed', `Photo ${i + 1}: ${detail}`);
+          throw new Error(`Photo ${i + 1}: ${detail}`);
         }
+      }
+
+      if (uploadedCount < 3) {
+        throw new Error(`Only ${uploadedCount} photos uploaded. Add at least 3 photos before publishing.`);
       }
 
       await Listings.publish(lid);
@@ -458,9 +614,14 @@ export default function CreateListingScreen({ navigation }: any) {
       if (catType === 'phone' || catType === 'laptop' || catType === 'tablet' || catType === 'appliance') {
         return brand.trim().length > 0 && model.trim().length > 0;
       }
+      if (catType === 'kids') {
+        if (!model.trim()) return false;
+        if (categoryFamily === 'toy' && (!ageSuitability || !hygiene)) return false;
+      }
+      if (catType === 'other') return model.trim().length > 0;
       return true;
     }
-    if (step === 3) return !!condition;
+    if (step === 3) return !!condition && categorySpecificIssues().length === 0;
     if (step === 4) return !!price && parseFloat(price) > 0;
     return true;
   };
@@ -667,10 +828,35 @@ export default function CreateListingScreen({ navigation }: any) {
                   placeholder="Stroller, STEM kit, LEGO set..."
                   suggestions={getModelSuggestions(categorySlug, brand)}
                 />
-                <Text style={st.lbl}>Age Suitability</Text>
-                <Chips options={KIDS_AGE_RANGES} selected={ageSuitability} onSelect={setAgeSuitability} />
-                <Text style={st.lbl}>Hygiene Status</Text>
-                <Chips options={HYGIENE_OPTIONS} selected={hygiene} onSelect={setHygiene} />
+                {categoryFamily === 'toy' && (
+                  <>
+                    <Text style={st.lbl}>Age Suitability</Text>
+                    <Chips options={KIDS_AGE_RANGES} selected={ageSuitability} onSelect={setAgeSuitability} />
+                    <Text style={st.lbl}>Hygiene Status</Text>
+                    <Chips options={HYGIENE_OPTIONS} selected={hygiene} onSelect={setHygiene} />
+                  </>
+                )}
+              </>
+            )}
+
+            {/* ── Other ── */}
+            {catType === 'other' && (
+              <>
+                <SuggestedInput
+                  label="Brand"
+                  value={brand}
+                  onChangeText={setBrand}
+                  placeholder="Optional"
+                  suggestions={getBrandsForCategory(categorySlug)}
+                />
+                <SuggestedInput
+                  label="Item type / product name"
+                  required
+                  value={model}
+                  onChangeText={setModel}
+                  placeholder="Book set, headphones, toy, chair..."
+                  suggestions={getModelSuggestions(categorySlug, brand)}
+                />
               </>
             )}
 
@@ -801,6 +987,150 @@ export default function CreateListingScreen({ navigation }: any) {
             </>
           )}
 
+          {(categoryFamily === 'toy' || categoryFamily === 'book' || categoryFamily === 'appliance') && (
+            <View style={st.requirementPanel}>
+              <Text style={st.requirementTitle}>
+                {categoryFamily === 'toy' ? 'Toy / kids item details' : categoryFamily === 'book' ? 'Book details' : 'Appliance details'}
+              </Text>
+              <Text style={st.requirementSub}>These details prevent buyer disputes later.</Text>
+              {categoryFamily === 'toy' && (
+                <>
+                  {catType !== 'kids' && (
+                    <>
+                      <Text style={st.lbl}>Age Suitability</Text>
+                      <Chips options={KIDS_AGE_RANGES} selected={ageSuitability} onSelect={setAgeSuitability} />
+                      <Text style={st.lbl}>Hygiene Status</Text>
+                      <Chips options={HYGIENE_OPTIONS} selected={hygiene} onSelect={setHygiene} />
+                    </>
+                  )}
+                  <RequirementChoiceGroup
+                    label="Parts"
+                    value={categorySpecifics.missing_parts_status}
+                    options={TOY_MISSING_PARTS_OPTIONS}
+                    onSelect={(value) => setCategorySpecific('missing_parts_status', value)}
+                  />
+                  <RequirementChoiceGroup
+                    label="Safety"
+                    value={categorySpecifics.safety_status}
+                    options={TOY_SAFETY_STATUS_OPTIONS}
+                    onSelect={(value) => setCategorySpecific('safety_status', value)}
+                  />
+                  <RequirementChoiceGroup
+                    label="Power / working"
+                    value={categorySpecifics.working_status || categorySpecifics.battery_status}
+                    options={TOY_POWER_STATUS_OPTIONS}
+                    onSelect={(value) => {
+                      setCategorySpecific('working_status', value);
+                      setCategorySpecific('battery_status', value);
+                    }}
+                  />
+                  {catType === 'kids' && (
+                    <View style={st.kidsSafetyBox}>
+                      <Text style={st.requirementMiniTitle}>Kids safety checklist</Text>
+                      {KIDS_SAFETY_ITEMS.map((item) => {
+                        const value = kidsSafetyChecklist[item.key];
+                        return (
+                          <View key={item.key} style={st.safetyRow}>
+                            <Text style={st.safetyLabel}>{item.label}</Text>
+                            <View style={st.safetyChoices}>
+                              {[true, false].map((choice) => (
+                                <TouchableOpacity
+                                  key={`${item.key}-${choice ? 'yes' : 'no'}`}
+                                  onPress={() => setKidsSafetyChecklist(prev => ({ ...prev, [item.key]: choice }))}
+                                  activeOpacity={0.78}
+                                  style={[st.safetyChoice, value === choice && st.safetyChoiceOn]}
+                                >
+                                  <Text style={[st.safetyChoiceText, value === choice && st.safetyChoiceTextOn]}>
+                                    {choice ? 'Yes' : 'No'}
+                                  </Text>
+                                </TouchableOpacity>
+                              ))}
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
+                </>
+              )}
+              {categoryFamily === 'book' && (
+                <>
+                  <RequirementChoiceGroup
+                    label="Type"
+                    value={categorySpecifics.book_type || model}
+                    options={BOOK_TYPE_OPTIONS}
+                    onSelect={(value) => setCategorySpecific('book_type', value)}
+                  />
+                  <RequirementChoiceGroup
+                    label="Language"
+                    value={categorySpecifics.language}
+                    options={BOOK_LANGUAGE_OPTIONS}
+                    onSelect={(value) => setCategorySpecific('language', value)}
+                  />
+                  <RequirementChoiceGroup
+                    label="Pages"
+                    value={categorySpecifics.page_condition}
+                    options={BOOK_PAGE_CONDITION_OPTIONS}
+                    onSelect={(value) => setCategorySpecific('page_condition', value)}
+                  />
+                  <RequirementChoiceGroup
+                    label="Markings"
+                    value={categorySpecifics.markings_status}
+                    options={BOOK_MARKING_OPTIONS}
+                    onSelect={(value) => setCategorySpecific('markings_status', value)}
+                  />
+                  <RequirementChoiceGroup
+                    label="Completeness"
+                    value={categorySpecifics.pages_complete}
+                    options={BOOK_COMPLETENESS_OPTIONS}
+                    onSelect={(value) => setCategorySpecific('pages_complete', value)}
+                  />
+                  {bookSetStatusRequired && (
+                    <RequirementChoiceGroup
+                      label="Set"
+                      value={categorySpecifics.set_status}
+                      options={BOOK_SET_STATUS_OPTIONS}
+                      onSelect={(value) => setCategorySpecific('set_status', value)}
+                    />
+                  )}
+                </>
+              )}
+              {categoryFamily === 'appliance' && (
+                <>
+                  <RequirementChoiceGroup
+                    label="Working"
+                    value={categorySpecifics.working_status}
+                    options={APPLIANCE_WORKING_OPTIONS}
+                    onSelect={(value) => setCategorySpecific('working_status', value)}
+                  />
+                  <RequirementChoiceGroup
+                    label="Accessories"
+                    value={categorySpecifics.accessories_status}
+                    options={APPLIANCE_ACCESSORY_OPTIONS}
+                    onSelect={(value) => setCategorySpecific('accessories_status', value)}
+                  />
+                  <RequirementChoiceGroup
+                    label="Defects"
+                    value={categorySpecifics.defects_disclosed}
+                    options={APPLIANCE_DEFECT_OPTIONS}
+                    onSelect={(value) => setCategorySpecific('defects_disclosed', value)}
+                  />
+                  {appliancePickupRequired && (
+                    <RequirementChoiceGroup
+                      label="Pickup"
+                      value={categorySpecifics.pickup_complexity}
+                      options={APPLIANCE_PICKUP_OPTIONS}
+                      onSelect={(value) => setCategorySpecific('pickup_complexity', value)}
+                    />
+                  )}
+                </>
+              )}
+              {categorySpecificIssues().length > 0 && (
+                <Text style={st.errText}>Required before listing: {categorySpecificIssues().join(', ')}.</Text>
+              )}
+            </View>
+          )}
+
           {/* Accessories + Warranty */}
           <Text style={[st.lbl, st.lblSpaced]}>Anything else included?</Text>
           <TextInput style={st.inp} placeholder="e.g. case, screen guard, extra cable" placeholderTextColor={C.text4} value={accessories} onChangeText={setAccessories} />
@@ -904,6 +1234,24 @@ export default function CreateListingScreen({ navigation }: any) {
                 ['Model', model],
                 ...(catType === 'phone' ? [['Storage', storage], ['RAM', ram], ['Color', color], ['Battery', batteryHealth ? `${batteryHealth}%` : '']] : []),
                 ...(catType === 'laptop' || catType === 'tablet' ? [['Processor', processor], ['RAM', ram], ['Storage', storage], ['Screen', screenSize]] : []),
+                ...(categoryFamily === 'toy' ? [
+                  ['Age', ageSuitability],
+                  ['Cleanliness', hygiene],
+                  ['Parts', categorySpecifics.missing_parts_status],
+                  ['Safety', categorySpecifics.safety_status],
+                ] : []),
+                ...(categoryFamily === 'book' ? [
+                  ['Book type', categorySpecifics.book_type || model],
+                  ['Language', categorySpecifics.language],
+                  ['Pages', categorySpecifics.page_condition],
+                  ['Markings', categorySpecifics.markings_status],
+                  ['Completeness', categorySpecifics.pages_complete],
+                ] : []),
+                ...(categoryFamily === 'appliance' ? [
+                  ['Working', categorySpecifics.working_status],
+                  ['Accessories', categorySpecifics.accessories_status],
+                  ['Defects', categorySpecifics.defects_disclosed],
+                ] : []),
                 ['Condition', CONDITION_OPTIONS.find(c => c.key === condition)?.label],
                 ['Location', location?.city || 'Not set'],
               ].filter(([, v]) => v).map(([k, v]) => (
@@ -959,6 +1307,42 @@ function Includes({ label, on, onToggle }: { label: string; on: boolean; onToggl
       </View>
       <Text style={[st.includesLbl, on && st.includesLblOn]}>{label}</Text>
     </TouchableOpacity>
+  );
+}
+
+function RequirementChoiceGroup({
+  label,
+  value,
+  options,
+  onSelect,
+}: {
+  label: string;
+  value?: any;
+  options: string[];
+  onSelect: (value: string) => void;
+}) {
+  const selected = value == null ? '' : String(value);
+  return (
+    <View style={st.requirementGroup}>
+      <Text style={st.requirementLabel}>{label}</Text>
+      <View style={st.requirementChoices}>
+        {options.map(option => {
+          const active = selected === option;
+          return (
+            <TouchableOpacity
+              key={option}
+              onPress={() => onSelect(option)}
+              activeOpacity={0.78}
+              style={[st.requirementChip, active && st.requirementChipOn]}
+            >
+              <Text style={[st.requirementChipText, active && st.requirementChipTextOn]} numberOfLines={2}>
+                {option}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
   );
 }
 
@@ -1223,6 +1607,111 @@ const st = StyleSheet.create({
   chipActive: { backgroundColor: C.ctaPrimarySoft, borderColor: C.ctaPrimary },
   chipText: { fontSize: T.size.base, color: C.text2 },
   chipTextActive: { color: C.ctaPrimary, fontWeight: T.weight.semi },
+  requirementPanel: {
+    marginTop: S.lg,
+    padding: S.md,
+    borderRadius: R.md,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.bone,
+  },
+  requirementTitle: {
+    fontSize: T.size.base,
+    fontWeight: T.weight.bold,
+    color: C.text,
+  },
+  requirementSub: {
+    marginTop: 2,
+    marginBottom: S.sm,
+    fontSize: T.size.sm,
+    color: C.text3,
+  },
+  requirementMiniTitle: {
+    marginTop: S.md,
+    fontSize: T.size.sm,
+    fontWeight: T.weight.bold,
+    color: C.text,
+  },
+  requirementGroup: {
+    marginTop: S.sm,
+  },
+  requirementLabel: {
+    fontSize: T.size.xs,
+    fontWeight: T.weight.bold,
+    color: C.text3,
+    textTransform: 'uppercase',
+    marginBottom: S.xs,
+  },
+  requirementChoices: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: S.xs,
+  },
+  requirementChip: {
+    minHeight: 34,
+    maxWidth: '48%',
+    paddingHorizontal: S.sm,
+    paddingVertical: 7,
+    borderRadius: R.md,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.surface,
+    justifyContent: 'center',
+  },
+  requirementChipOn: {
+    backgroundColor: C.ctaPrimarySoft,
+    borderColor: C.ctaPrimary,
+  },
+  requirementChipText: {
+    fontSize: T.size.xs,
+    color: C.text2,
+    fontWeight: T.weight.semi,
+    lineHeight: T.size.xs + 4,
+  },
+  requirementChipTextOn: {
+    color: C.ctaPrimary,
+  },
+  kidsSafetyBox: {
+    marginTop: S.sm,
+    paddingTop: S.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: C.border,
+  },
+  safetyRow: {
+    marginTop: S.sm,
+    gap: S.xs,
+  },
+  safetyLabel: {
+    fontSize: T.size.sm,
+    color: C.text2,
+    fontWeight: T.weight.semi,
+  },
+  safetyChoices: {
+    flexDirection: 'row',
+    gap: S.xs,
+  },
+  safetyChoice: {
+    minWidth: 64,
+    alignItems: 'center',
+    paddingHorizontal: S.sm,
+    paddingVertical: 7,
+    borderRadius: R.pill,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.surface,
+  },
+  safetyChoiceOn: {
+    borderColor: C.ctaPrimary,
+    backgroundColor: C.ctaPrimarySoft,
+  },
+  safetyChoiceText: {
+    fontSize: T.size.xs,
+    color: C.text2,
+    fontWeight: T.weight.semi,
+  },
+  safetyChoiceTextOn: {
+    color: C.ctaPrimary,
+  },
   suggestionWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',

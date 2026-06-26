@@ -240,6 +240,8 @@ export interface Listing {
   active_transaction_status?: string | null;
   seller_readiness_status?: string | null;
   sold_at?: string | null;
+  category_family?: 'device' | 'appliance' | 'toy' | 'book' | 'other' | string | null;
+  category_specifics?: Record<string, any> | null;
   // Returned by Sprint 8 ai_assistant flow when an IMEI passes CEIR check
   imei_verified?: boolean;
   // Sprint 4 / Pass 3 — set on listings published through the kids
@@ -562,12 +564,23 @@ export const Listings = {
     battery_health: number;
     accessories: string;
     warranty_status: string;
+    age_suitability: string;
+    hygiene_status: string;
+    screen_condition: string;
+    body_condition: string;
+    defects: string[];
+    has_box: boolean;
+    has_bill: boolean;
+    has_charger: boolean;
+    has_earphones: boolean;
+    water_damage_history: boolean;
+    seller_functional_attestation: boolean;
   }>) =>
     api.patch(`/v1/listings/${id}/ai`, fields).then((res) => {
       clearListingCaches();
       return res;
     }),
-  markSold: (id: string, soldWhere: string = 'on_owmee') =>
+  markSold: (id: string, soldWhere: 'elsewhere' = 'elsewhere') =>
     api.post(`/v1/listings/${id}/mark-sold`, { sold_where: soldWhere }).then((res) => {
       clearListingCaches();
       return res;
@@ -1173,6 +1186,8 @@ export interface AIDetectedFields {
   category_resolution?: string | null;
   category_confidence: number;
   category_rationale?: string | null;
+  category_family?: 'device' | 'appliance' | 'toy' | 'book' | 'other' | string | null;
+  category_specifics?: Record<string, any>;
   detected_item_type?: string | null;
   brand: string | null;
   model: string | null;
@@ -1262,6 +1277,8 @@ export interface AIDraftPriceRefreshRequest {
   processor?: string | null;
   screen_size?: string | null;
   detected_item_type?: string | null;
+  category_family?: string | null;
+  category_specifics?: Record<string, any> | null;
   condition?: string | null;
   purchase_year?: number | null;
   screen_condition?: string | null;
@@ -1314,6 +1331,8 @@ export interface AICreateFromDraftRequest {
   water_damage_history?: boolean | null;
   seller_functional_attestation?: boolean | null;
   kids_safety_checklist?: Record<string, boolean> | null;
+  category_family?: string | null;
+  category_specifics?: Record<string, any> | null;
   description?: string | null;
   mrp_source?: string | null;
   mrp_confidence?: number | null;

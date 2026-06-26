@@ -19,7 +19,7 @@ Pass 3 changes:
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional
 from uuid import UUID
 
@@ -45,7 +45,16 @@ from app.modules.field_executive.workflows import (
     VisitOutcomeSignal,
 )
 from app.modules.identity_auth.models import User
+from app.modules.ai_assistant.category_taxonomy import (
+    category_family_for,
+    clean_category_specifics,
+    required_category_specific_fields,
+    requires_appliance_pickup_status,
+    requires_book_set_status,
+    requires_powered_toy_status,
+)
 from app.modules.listings.models import Category, Listing
+from app.modules.listings.service import MIN_PHOTOS_REQUIRED
 
 logger = structlog.get_logger()
 
@@ -174,6 +183,8 @@ class SubmitListingRequest(BaseModel):
     accessories: Optional[str] = None
     warranty_info: Optional[str] = None
     battery_health: Optional[int] = None
+    age_suitability: Optional[str] = None
+    hygiene_status: Optional[str] = None
     serial_number: Optional[str] = None
     image_urls: list[str] = Field(default_factory=list)
     city: str
@@ -181,6 +192,155 @@ class SubmitListingRequest(BaseModel):
     # Pass 3 / 3h: kids safety checklist
     kids_safety_checklist: Optional[dict] = None
     is_kids_item: bool = False
+    category_family: Optional[str] = None
+    category_specifics: Optional[dict[str, Any]] = None
+
+
+_FE_REQUIRED_SPEC_CATEGORIES = {"smartphones", "laptops", "tablets", "appliances"}
+
+
+def _clean_non_empty(value: Optional[str]) -> str:
+    return (value or "").strip()
+
+
+def _specific_present(value) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, bool):
+        return True
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return True
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, list):
+        return any(_specific_present(item) for item in value)
+    return bool(value)
+
+
+def _clean_fe_category_specifics(
+    category: Category,
+    body: SubmitListingRequest,
+) -> tuple[str, dict[str, Any], dict | None]:
+    family = category_family_for(
+        category.slug,
+        detected_item_type=body.model,
+        title=body.title,
+        model=body.model,
+    )
+    specifics = clean_category_specifics(family, body.category_specifics)
+    if family == "toy" and not _specific_present(specifics.get("toy_type")) and body.model:
+        specifics["toy_type"] = body.model
+    if family == "book" and not _specific_present(specifics.get("book_type")) and body.model:
+        specifics["book_type"] = body.model
+    if family == "appliance" and not _specific_present(specifics.get("appliance_type")) and body.model:
+        specifics["appliance_type"] = body.model
+
+    kids_checklist = None
+    if isinstance(body.kids_safety_checklist, dict):
+        kids_checklist = {
+            str(key): bool(value)
+            for key, value in body.kids_safety_checklist.items()
+            if isinstance(value, bool)
+        } or None
+    return family, specifics, kids_checklist
+
+
+def _fe_category_specifics_rejection(
+    *,
+    category_slug: str,
+    family: str,
+    specifics: dict[str, Any],
+    kids_checklist: dict | None,
+    body: SubmitListingRequest,
+) -> dict | None:
+    if family not in {"toy", "book", "appliance"}:
+        return None
+
+    missing: list[str] = []
+    for field in required_category_specific_fields(family):
+        if not _specific_present(specifics.get(field)):
+            missing.append(field)
+
+    if family == "toy":
+        if not _specific_present(body.age_suitability):
+            missing.append("age_suitability")
+        if not _specific_present(body.hygiene_status):
+            missing.append("hygiene_status")
+        if requires_powered_toy_status(body.model, body.title) and not (
+            _specific_present(specifics.get("working_status"))
+            or _specific_present(specifics.get("battery_status"))
+        ):
+            missing.append("battery_or_working_status")
+        if category_slug == "kids-utility":
+            required_checklist = ("no_small_parts", "no_loose_batteries", "no_sharp_edges")
+            if not all(key in (kids_checklist or {}) for key in required_checklist):
+                missing.append("kids_safety_checklist")
+
+    if family == "book" and requires_book_set_status(body.model, body.title):
+        if not _specific_present(specifics.get("set_status")):
+            missing.append("set_status")
+
+    if family == "appliance":
+        if not _specific_present(specifics.get("appliance_type")):
+            missing.append("appliance_type")
+        if requires_appliance_pickup_status(body.model, body.title):
+            if not _specific_present(specifics.get("pickup_complexity")):
+                missing.append("pickup_complexity")
+
+    deduped = list(dict.fromkeys(missing))
+    if not deduped:
+        return None
+    return {
+        "error": "CATEGORY_REQUIREMENTS_REQUIRED",
+        "category_family": family,
+        "missing_fields": deduped,
+        "message": "Complete category-specific buyer details before submitting this listing.",
+    }
+
+
+def _validate_listing_package(category: Category, body: SubmitListingRequest) -> None:
+    photo_count = len(body.image_urls or [])
+    if photo_count < MIN_PHOTOS_REQUIRED:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "MIN_PHOTOS_REQUIRED",
+                "message": (
+                    f"Listings need at least {MIN_PHOTOS_REQUIRED} photos - "
+                    f"you have {photo_count}."
+                ),
+                "photos_uploaded": photo_count,
+                "photos_required": MIN_PHOTOS_REQUIRED,
+            },
+        )
+
+    category_slug = (category.slug or "").strip().lower()
+    if category_slug in _FE_REQUIRED_SPEC_CATEGORIES:
+        missing: list[str] = []
+        if not _clean_non_empty(body.brand):
+            missing.append("brand")
+        if not _clean_non_empty(body.model):
+            missing.append("model")
+        if missing:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "MISSING_REQUIRED_SPECS",
+                    "missing_fields": missing,
+                    "message": "Brand and model are required for this category.",
+                },
+            )
+
+    family, specifics, kids_checklist = _clean_fe_category_specifics(category, body)
+    category_rejection = _fe_category_specifics_rejection(
+        category_slug=category_slug,
+        family=family,
+        specifics=specifics,
+        kids_checklist=kids_checklist,
+        body=body,
+    )
+    if category_rejection:
+        raise HTTPException(status_code=400, detail=category_rejection)
 
 
 class CreateFERequest(BaseModel):
@@ -1126,8 +1286,11 @@ async def submit_listing(
             },
         )
 
-    # Verify category exists (fast fail with a clean error)
-    await _load_category(db, resolved_category_id)
+    # Verify category exists and validate the listing-quality package before
+    # creating any listing row.
+    category = await _load_category(db, resolved_category_id)
+    _validate_listing_package(category, body)
+    category_family, category_specifics, kids_checklist = _clean_fe_category_specifics(category, body)
 
     # Build listing
     listing = Listing(
@@ -1152,6 +1315,8 @@ async def submit_listing(
         accessories=body.accessories,
         warranty_info=body.warranty_info,
         battery_health=body.battery_health,
+        age_suitability=body.age_suitability,
+        hygiene_status=body.hygiene_status,
         serial_number=body.serial_number,
         city=body.city,
         locality=body.locality,
@@ -1160,7 +1325,25 @@ async def submit_listing(
         created_via_fe_visit_id=visit.id,  # Concierge Phase 4 timeline
         reviewed_by="fe",
         is_kids_item=bool(body.is_kids_item),
-        kids_safety_checklist=body.kids_safety_checklist,
+        kids_safety_checklist=kids_checklist,
+        seller_review_snapshot={
+            "confirmed_at": datetime.now(timezone.utc).isoformat(),
+            "source": "fe_assisted",
+            "fe_visit_id": str(visit.id),
+            "seller_confirmed": {
+                "category_slug": category.slug,
+                "category_family": category_family,
+                "category_specifics": category_specifics,
+                "title": body.title,
+                "condition": body.condition,
+                "price": float(body.price),
+                "brand": body.brand,
+                "model": body.model,
+                "age_suitability": body.age_suitability,
+                "hygiene_status": body.hygiene_status,
+                "kids_safety_checklist": kids_checklist,
+            },
+        },
     )
     db.add(listing)
     await db.flush()
@@ -1749,4 +1932,3 @@ async def admin_reassign(
     await db.commit()
     await db.refresh(visit)
     return await _visit_to_response(db, visit)
-

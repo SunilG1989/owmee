@@ -31,6 +31,27 @@ import { FE, Listings, FEVisits } from '../../services/api';
 import { C, S, R, T, Shadow } from '../../utils/tokens';
 import { Button, IconButton } from '../../components/ui';
 import type { RootScreen } from '../../navigation/types';
+import {
+  APPLIANCE_ACCESSORY_OPTIONS,
+  APPLIANCE_DEFECT_OPTIONS,
+  APPLIANCE_PICKUP_OPTIONS,
+  APPLIANCE_WORKING_OPTIONS,
+  BOOK_COMPLETENESS_OPTIONS,
+  BOOK_LANGUAGE_OPTIONS,
+  BOOK_MARKING_OPTIONS,
+  BOOK_PAGE_CONDITION_OPTIONS,
+  BOOK_SET_STATUS_OPTIONS,
+  HYGIENE_OPTIONS,
+  KIDS_AGE_OPTIONS,
+  TOY_MISSING_PARTS_OPTIONS,
+  TOY_POWER_STATUS_OPTIONS,
+  TOY_SAFETY_STATUS_OPTIONS,
+  getListingRequirementFamily,
+  listingNeedsAppliancePickupStatus,
+  listingNeedsBookSetStatus,
+  listingNeedsPoweredToyStatus,
+  type ListingRequirementFamily,
+} from '../../utils/listingCatalog';
 // Concierge Phase 3
 import ExpertPricingPanel from '../../components/concierge/ExpertPricingPanel';
 
@@ -143,6 +164,8 @@ export default function FeCaptureScreen({ route, navigation }: RootScreen<'FeCap
   const [accessories, setAccessories] = useState('');
   const [warrantyInfo, setWarrantyInfo] = useState('');
   const [batteryHealth, setBatteryHealth] = useState('');
+  const [ageSuitability, setAgeSuitability] = useState('');
+  const [hygieneStatus, setHygieneStatus] = useState('');
   const [serialNumber, setSerialNumber] = useState('');
   const [notes, setNotes] = useState('');
 
@@ -155,6 +178,7 @@ export default function FeCaptureScreen({ route, navigation }: RootScreen<'FeCap
 
   // Kids checklist
   const [kidsChecklist, setKidsChecklist] = useState<Record<string, boolean>>({});
+  const [categorySpecifics, setCategorySpecifics] = useState<Record<string, string>>({});
 
   // Photos — captured = uploaded + confirmed
   const [photos, setPhotos] = useState<Array<CapturedPhoto | undefined>>([]);
@@ -163,6 +187,64 @@ export default function FeCaptureScreen({ route, navigation }: RootScreen<'FeCap
   const [submitting, setSubmitting] = useState(false);
 
   const isKidsCategory = selectedCategorySlug === 'kids-utility';
+  const categoryFamily: ListingRequirementFamily = useMemo(
+    () => getListingRequirementFamily(selectedCategorySlug, model, title),
+    [selectedCategorySlug, model, title],
+  );
+  const needsPoweredToyStatus = categoryFamily === 'toy' && listingNeedsPoweredToyStatus(model, title);
+  const needsBookSetStatus = categoryFamily === 'book' && listingNeedsBookSetStatus(model, title);
+  const needsAppliancePickupStatus = categoryFamily === 'appliance' && listingNeedsAppliancePickupStatus(model, title);
+
+  useEffect(() => {
+    setCategorySpecifics({});
+    setAgeSuitability('');
+    setHygieneStatus('');
+    setKidsChecklist({});
+  }, [selectedCategorySlug]);
+
+  const updateSpecific = (key: string, value: string) => {
+    setCategorySpecifics((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const categorySpecificIssues = useMemo(() => {
+    const missing: string[] = [];
+    const has = (key: string) => !!categorySpecifics[key]?.trim();
+    if (categoryFamily === 'toy') {
+      if (!ageSuitability) missing.push('age suitability');
+      if (!hygieneStatus) missing.push('cleanliness');
+      if (!has('missing_parts_status')) missing.push('parts status');
+      if (!has('safety_status')) missing.push('safety status');
+      if (needsPoweredToyStatus && !has('working_status')) missing.push('working status');
+      if (isKidsCategory) {
+        const requiredChecklist = ['no_small_parts', 'no_loose_batteries', 'no_sharp_edges'];
+        if (!requiredChecklist.every((key) => key in kidsChecklist)) {
+          missing.push('kids safety checklist');
+        }
+      }
+    } else if (categoryFamily === 'book') {
+      if (!has('language')) missing.push('language');
+      if (!has('page_condition')) missing.push('page condition');
+      if (!has('markings_status')) missing.push('writing/highlights');
+      if (!has('pages_complete')) missing.push('page completeness');
+      if (needsBookSetStatus && !has('set_status')) missing.push('set completeness');
+    } else if (categoryFamily === 'appliance') {
+      if (!has('working_status')) missing.push('working status');
+      if (!has('accessories_status')) missing.push('accessories status');
+      if (!has('defects_disclosed')) missing.push('defects disclosure');
+      if (needsAppliancePickupStatus && !has('pickup_complexity')) missing.push('pickup complexity');
+    }
+    return missing;
+  }, [
+    ageSuitability,
+    categoryFamily,
+    categorySpecifics,
+    hygieneStatus,
+    isKidsCategory,
+    kidsChecklist,
+    needsAppliancePickupStatus,
+    needsBookSetStatus,
+    needsPoweredToyStatus,
+  ]);
 
   // Load categories + visit detail (for city and category_hint matching) on mount
   useEffect(() => {
@@ -323,10 +405,17 @@ export default function FeCaptureScreen({ route, navigation }: RootScreen<'FeCap
     const p = parseFloat(priceRupees);
     if (!isFinite(p) || p <= 0) return false;
     if (photosCount < 3) return false;
+    if (categorySpecificIssues.length > 0) return false;
     return true;
-  }, [title, brand, model, priceRupees, photosCount, selectedCategoryId]);
+  }, [title, brand, model, priceRupees, photosCount, selectedCategoryId, categorySpecificIssues]);
 
   const buildPayload = () => {
+    const specifics: Record<string, string> = {
+      ...categorySpecifics,
+    };
+    if (categoryFamily === 'toy') specifics.toy_type = model.trim();
+    if (categoryFamily === 'book') specifics.book_type = model.trim();
+    if (categoryFamily === 'appliance') specifics.appliance_type = model.trim();
     const payload: any = {
       title: title.trim(),
       category_id: selectedCategoryId,
@@ -342,20 +431,31 @@ export default function FeCaptureScreen({ route, navigation }: RootScreen<'FeCap
       accessories: accessories.trim() || undefined,
       warranty_info: warrantyInfo.trim() || undefined,
       battery_health: batteryHealth ? parseInt(batteryHealth, 10) : undefined,
+      age_suitability: categoryFamily === 'toy' ? ageSuitability : undefined,
+      hygiene_status: categoryFamily === 'toy' ? hygieneStatus : undefined,
       serial_number: serialNumber.trim() || undefined,
       condition: screenCondition,
       image_urls: realPhotos.map((p) => p.r2Key),
       city: cityOfVisit || 'Bengaluru',
       description: notes.trim() || undefined,
       is_kids_item: isKidsCategory,
+      category_family: categoryFamily,
+      category_specifics: specifics,
     };
-    if (isKidsCategory) {
+    if (isKidsCategory && categoryFamily === 'toy') {
       payload.kids_safety_checklist = kidsChecklist;
     }
     return payload;
   };
 
   const submitListing = async () => {
+    if (categorySpecificIssues.length > 0) {
+      Alert.alert(
+        'Complete item details',
+        `Add ${categorySpecificIssues.join(', ')} before seller approval.`,
+      );
+      return;
+    }
     if (!canSubmit) {
       Alert.alert(
         'Incomplete',
@@ -517,8 +617,110 @@ export default function FeCaptureScreen({ route, navigation }: RootScreen<'FeCap
             <LabeledInput label="Asking price (₹)" value={priceRupees} onChangeText={setPriceRupees} placeholder="35000" keyboardType="number-pad" />
           </View>
 
+          {categoryFamily !== 'device' && categoryFamily !== 'other' && (
+            <View style={st.section}>
+              <Text style={st.sectionTitle}>Item-specific checks</Text>
+              <Text style={st.sectionHint}>Capture the buyer-critical facts before seller approval.</Text>
+
+              {categoryFamily === 'toy' && (
+                <>
+                  <ChoiceRow label="Age suitability" value={ageSuitability} options={KIDS_AGE_OPTIONS} onChange={setAgeSuitability} />
+                  <ChoiceRow label="Cleanliness" value={hygieneStatus} options={HYGIENE_OPTIONS} onChange={setHygieneStatus} />
+                  <ChoiceRow
+                    label="Parts"
+                    value={categorySpecifics.missing_parts_status || ''}
+                    options={TOY_MISSING_PARTS_OPTIONS}
+                    onChange={(value) => updateSpecific('missing_parts_status', value)}
+                  />
+                  <ChoiceRow
+                    label="Safety"
+                    value={categorySpecifics.safety_status || ''}
+                    options={TOY_SAFETY_STATUS_OPTIONS}
+                    onChange={(value) => updateSpecific('safety_status', value)}
+                  />
+                  {needsPoweredToyStatus && (
+                    <ChoiceRow
+                      label="Power / working"
+                      value={categorySpecifics.working_status || ''}
+                      options={TOY_POWER_STATUS_OPTIONS}
+                      onChange={(value) => updateSpecific('working_status', value)}
+                    />
+                  )}
+                </>
+              )}
+
+              {categoryFamily === 'book' && (
+                <>
+                  <ChoiceRow
+                    label="Language"
+                    value={categorySpecifics.language || ''}
+                    options={BOOK_LANGUAGE_OPTIONS}
+                    onChange={(value) => updateSpecific('language', value)}
+                  />
+                  <ChoiceRow
+                    label="Pages"
+                    value={categorySpecifics.page_condition || ''}
+                    options={BOOK_PAGE_CONDITION_OPTIONS}
+                    onChange={(value) => updateSpecific('page_condition', value)}
+                  />
+                  <ChoiceRow
+                    label="Writing / highlights"
+                    value={categorySpecifics.markings_status || ''}
+                    options={BOOK_MARKING_OPTIONS}
+                    onChange={(value) => updateSpecific('markings_status', value)}
+                  />
+                  <ChoiceRow
+                    label="Completeness"
+                    value={categorySpecifics.pages_complete || ''}
+                    options={BOOK_COMPLETENESS_OPTIONS}
+                    onChange={(value) => updateSpecific('pages_complete', value)}
+                  />
+                  {needsBookSetStatus && (
+                    <ChoiceRow
+                      label="Set"
+                      value={categorySpecifics.set_status || ''}
+                      options={BOOK_SET_STATUS_OPTIONS}
+                      onChange={(value) => updateSpecific('set_status', value)}
+                    />
+                  )}
+                </>
+              )}
+
+              {categoryFamily === 'appliance' && (
+                <>
+                  <ChoiceRow
+                    label="Working status"
+                    value={categorySpecifics.working_status || ''}
+                    options={APPLIANCE_WORKING_OPTIONS}
+                    onChange={(value) => updateSpecific('working_status', value)}
+                  />
+                  <ChoiceRow
+                    label="Accessories"
+                    value={categorySpecifics.accessories_status || ''}
+                    options={APPLIANCE_ACCESSORY_OPTIONS}
+                    onChange={(value) => updateSpecific('accessories_status', value)}
+                  />
+                  <ChoiceRow
+                    label="Known defects"
+                    value={categorySpecifics.defects_disclosed || ''}
+                    options={APPLIANCE_DEFECT_OPTIONS}
+                    onChange={(value) => updateSpecific('defects_disclosed', value)}
+                  />
+                  {needsAppliancePickupStatus && (
+                    <ChoiceRow
+                      label="Pickup"
+                      value={categorySpecifics.pickup_complexity || ''}
+                      options={APPLIANCE_PICKUP_OPTIONS}
+                      onChange={(value) => updateSpecific('pickup_complexity', value)}
+                    />
+                  )}
+                </>
+              )}
+            </View>
+          )}
+
           {/* Kids safety checklist */}
-          {isKidsCategory && (
+          {isKidsCategory && categoryFamily === 'toy' && (
             <View style={st.section}>
               <Text style={st.sectionTitle}>Kids safety checklist</Text>
               <Text style={st.sectionHint}>Check every item you have personally verified.</Text>

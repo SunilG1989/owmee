@@ -128,6 +128,8 @@ def test_draft_response_exposes_new_ai_review_fields():
         raw_category_slug="collectibles",
         category_resolution="fallback_others",
         category_rationale="Outside launch categories.",
+        category_family="other",
+        category_specifics={"ignored": "value"},
         detected_item_type="vintage wall clock",
         seller_edit_fields=["title", "brand", "model"],
         field_confidence={"title": 0.88},
@@ -144,6 +146,8 @@ def test_draft_response_exposes_new_ai_review_fields():
     payload = response.model_dump()
 
     assert payload["detected"]["detected_item_type"] == "vintage wall clock"
+    assert payload["detected"]["category_family"] == "other"
+    assert payload["detected"]["category_specifics"] == {"ignored": "value"}
     assert payload["detected"]["seller_edit_fields"] == ["title", "brand", "model"]
     assert payload["detected"]["field_confidence"] == {"title": 0.88}
     assert payload["photo_urls"] == ["ai-drafts/test.jpg", "ai-drafts/test-2.jpg"]

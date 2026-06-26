@@ -52,7 +52,11 @@ SAFETY / BLOCKING FLAGS
 FAST EXTRACTION RULES
 - Use all photos together, but keep the answer short.
 - category_slug must be one of the taxonomy values or null.
+- category_family must follow the taxonomy family rules.
 - detected_item_type is required for "others" and useful for everyday items.
+- category_specifics should include visible family facts only. Prefer null or
+  seller_edit_fields when the seller must confirm completeness, working status,
+  safety, pages, markings, or accessories.
 - brand/model may use strong visual evidence, but exact variants need visible
   text or unmistakable product identity.
 - storage may be returned only when directly visible.
@@ -371,12 +375,46 @@ Look for storage, battery health, screen cracks, back glass damage, camera area 
 Laptops/tablets:
 Look for RAM/storage/processor, charger, keyboard damage, screen damage, dents, hinge damage, box/bill.
 
-Small appliances:
-Look for brand/model, working indicator, attachments, cracks/dents, warranty/bill, hygiene or usage concerns.
+Small appliances / home appliances:
+Set category_family="appliance". Look for appliance_type, brand/model, capacity
+or size, power/working indicator, accessories/attachments, cracks/dents,
+missing jars/trays/filters, bill/warranty, hygiene/usage concerns, and whether
+the item looks bulky or installation-heavy. In category_specifics, include:
+- appliance_type
+- working_status only if evidenced, else null
+- accessories_status only for visible included/missing accessories, else null
+- defects_disclosed from visible defects
+- pickup_complexity for AC, refrigerator, washing machine, geyser, chimney,
+  dishwasher, or similarly bulky appliances
+Do not claim fully working, serviced, under warranty, defect-free, or ready for
+installation unless directly evidenced.
 
-Kids-utility:
-Look for item type, age range, full set vs partial set, missing parts, structural safety, cleanliness concerns, page condition, box/manual, battery/electronic working evidence if visible.
-Do not claim sanitized, safety-certified, non-recalled, complete set, or working electronics unless directly visible or explicitly evidenced in the photos.
+Toys / kids utility:
+Set category_family="toy" unless the visible item is clearly a book/flashcard
+set. Look for item type, age range, full set vs partial set, missing pieces,
+small parts, loose batteries, sharp edges, cracks, cleanliness, box/manual, and
+battery/electronic working evidence if visible. In category_specifics, include:
+- toy_type
+- missing_parts_status
+- safety_status
+- battery_status / working_status when relevant
+Do not claim sanitized, safety-certified, non-recalled, complete set, or working
+electronics unless directly visible or explicitly evidenced.
+
+Books / study material:
+Set category_family="book" for books, textbooks, comics, story books,
+workbooks, flashcards, boxed reading sets, or school learning material. Look for
+book_type, title/subject, language, author/publisher, class/grade, edition/year,
+page condition, cover condition, markings/highlights, missing/torn pages, water
+damage, and whether a set/series is complete. In category_specifics, include:
+- book_type
+- language
+- page_condition
+- markings_status
+- pages_complete
+- set_status when it is a set/series/box
+Do not claim all pages complete, no markings, latest edition, or set complete
+unless visible.
 
 ==================================================
 ACCESSORIES

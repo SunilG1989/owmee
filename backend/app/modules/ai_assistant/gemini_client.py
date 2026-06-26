@@ -176,6 +176,8 @@ class _GeminiVisionOut(BaseModel):
                                       # others | None
     category_confidence: float = 0.0
     category_rationale: str | None = None
+    category_family: str | None = None
+    category_specifics: dict[str, Any] = {}
     detected_item_type: str | None = None
     brand: str | None = None
     model: str | None = None
@@ -233,6 +235,8 @@ class _GeminiVisionFastOut(BaseModel):
     category_slug: str | None = None
     category_confidence: float = 0.0
     category_rationale: str | None = None
+    category_family: str | None = None
+    category_specifics: dict[str, Any] = {}
     detected_item_type: str | None = None
     brand: str | None = None
     model: str | None = None
@@ -777,6 +781,8 @@ def _translate_vision_response(parsed: "_GeminiVisionOut") -> AIDetected:
         category_slug=parsed.category_slug,
         category_confidence=float(parsed.category_confidence or 0.0),
         category_rationale=parsed.category_rationale,
+        category_family=parsed.category_family,
+        category_specifics=_to_dict(parsed.category_specifics),
         detected_item_type=parsed.detected_item_type,
         brand=parsed.brand,
         model=parsed.model,

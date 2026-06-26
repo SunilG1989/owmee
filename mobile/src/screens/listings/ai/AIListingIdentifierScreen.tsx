@@ -39,6 +39,7 @@ import { parseApiError } from '../../../utils/errors';
 import type { RootScreen } from '../../../navigation/types';
 
 const SMARTPHONE = 'smartphones';
+const MIN_PUBLISH_PHOTOS = 3;
 
 function isValidImei(value: string): boolean {
   if (!/^\d{15}$/.test(value)) return false;
@@ -82,6 +83,9 @@ export default function AIListingIdentifierScreen({
 }: RootScreen<'AIListingIdentifier'>) {
   const { draft, finalFields } = route.params;
   const isSmartphone = finalFields.category_slug === SMARTPHONE;
+  const reviewPhotoCount = (
+    draft.photo_urls && draft.photo_urls.length > 0 ? draft.photo_urls : [draft.photo_url]
+  ).filter(Boolean).filter((_: string, index: number) => !(finalFields.removed_photo_indices || []).includes(index)).length;
 
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [extracting, setExtracting] = useState(false);
@@ -185,6 +189,13 @@ export default function AIListingIdentifierScreen({
 
   const submit = useCallback(async () => {
     if (submitting) return;
+    if (reviewPhotoCount < MIN_PUBLISH_PHOTOS) {
+      Alert.alert(
+        'Add more photos',
+        `Listings need at least ${MIN_PUBLISH_PHOTOS} clear photos. Go back and retake the item photos.`,
+      );
+      return;
+    }
 
     if (isSmartphone) {
       if (!imei || imei.length !== 15 || !/^\d+$/.test(imei)) {
@@ -225,7 +236,7 @@ export default function AIListingIdentifierScreen({
       Alert.alert('Could not list', parseApiError(e));
       setSubmitting(false);
     }
-  }, [imei, serial, isSmartphone, finalFields, submitting]);
+  }, [imei, serial, isSmartphone, finalFields, submitting, reviewPhotoCount]);
 
   // Success state
   if (success) {

@@ -232,17 +232,17 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
     lastLocationKey.current = key;
   }, [location, loadFeed]);
 
-  const handleCardPress = (l: FeedListing) => {
+  const handleCardPress = useCallback((l: FeedListing) => {
     navigation.navigate('ListingDetail', { listingId: l.id, initialListing: l });
-  };
+  }, [navigation]);
 
-  const handleMakeOffer = (l: FeedListing) => {
+  const handleMakeOffer = useCallback((l: FeedListing) => {
     if (!isAuthenticated) {
       navigation.navigate('AuthFlow');
       return;
     }
     navigation.navigate('ListingDetail', { listingId: l.id, openOffer: true, initialListing: l });
-  };
+  }, [isAuthenticated, navigation]);
 
   const handleWishlistPress = useCallback(async (l: FeedListing) => {
     if (!isAuthenticated) {
@@ -318,6 +318,20 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
       animated: true,
     });
   };
+
+  const feedKeyExtractor = useCallback((item: FeedListing) => item.id, []);
+
+  const renderFeedItem = useCallback(({ item, index }: { item: FeedListing; index: number }) => (
+    <FeedCard
+      listing={item}
+      variant="feed"
+      index={index}
+      onPress={() => handleCardPress(item)}
+      onMakeOffer={() => handleMakeOffer(item)}
+      onWishlist={() => handleWishlistPress(item)}
+      isWishlisted={savedIds.has(item.id)}
+    />
+  ), [handleCardPress, handleMakeOffer, handleWishlistPress, savedIds]);
 
   // Location label — show the saved address area, not just the city, so
   // users can see that their updated address actually took effect.
@@ -517,23 +531,12 @@ export default function HomeScreen({ navigation }: TabScreen<'Home'>) {
       <FlatList
         ref={listRef}
         data={feedItems}
-        keyExtractor={item => item.id}
+        keyExtractor={feedKeyExtractor}
         ListHeaderComponent={Header}
         ListFooterComponent={Footer}
         ListEmptyComponent={EmptyState}
-        renderItem={({ item, index }) => (
-          <>
-            <FeedCard
-              listing={item}
-              variant="feed"
-              index={index}
-              onPress={() => handleCardPress(item)}
-              onMakeOffer={() => handleMakeOffer(item)}
-              onWishlist={() => handleWishlistPress(item)}
-              isWishlisted={savedIds.has(item.id)}
-            />
-          </>
-        )}
+        renderItem={renderFeedItem}
+        extraData={savedIds}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

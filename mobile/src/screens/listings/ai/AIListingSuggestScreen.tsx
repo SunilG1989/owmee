@@ -45,24 +45,44 @@ import EditDetailsSheet from './shared/EditDetailsSheet';
 import PriceSheet from './shared/PriceSheet';
 import ComparablesSheet from './shared/ComparablesSheet';
 import {
+  APPLIANCE_ACCESSORY_OPTIONS,
+  APPLIANCE_DEFECT_OPTIONS,
+  APPLIANCE_PICKUP_OPTIONS,
+  APPLIANCE_WORKING_OPTIONS,
+  BOOK_COMPLETENESS_OPTIONS,
+  BOOK_LANGUAGE_OPTIONS,
+  BOOK_MARKING_OPTIONS,
+  BOOK_PAGE_CONDITION_OPTIONS,
+  BOOK_SET_STATUS_OPTIONS,
+  BOOK_TYPE_OPTIONS,
   CATEGORY_PICKS,
   HYGIENE_OPTIONS,
   KIDS_AGE_OPTIONS,
+  TOY_MISSING_PARTS_OPTIONS,
+  TOY_POWER_STATUS_OPTIONS,
+  TOY_SAFETY_STATUS_OPTIONS,
   canonicalCategorySlug,
   findCatalogOption,
   getBrandsForCategory,
   getCategoryKind,
   getCategoryLabel,
+  getListingRequirementFamily,
   getModelSuggestions,
   getRamOptionsForCategory,
   getStorageOptionsForCategory,
+  listingNeedsAppliancePickupStatus,
+  listingNeedsBookSetStatus,
+  listingNeedsPoweredToyStatus,
 } from '../../../utils/listingCatalog';
+import type { ListingRequirementFamily } from '../../../utils/listingCatalog';
 
 const CONDITION_OPTIONS: { key: 'like_new' | 'good' | 'fair'; label: string; multiplier: number }[] = [
   { key: 'like_new', label: 'Like new', multiplier: 1.0 },
   { key: 'good', label: 'Good', multiplier: 0.85 },
   { key: 'fair', label: 'Fair', multiplier: 0.70 },
 ];
+
+const MIN_PUBLISH_PHOTOS = 3;
 
 // Categories that need an IMEI/serial sub-step before listing goes live
 const IDENTIFIER_CATEGORIES = new Set(['smartphones', 'laptops', 'tablets']);
@@ -133,6 +153,7 @@ type DetailOverrides = {
   water_damage_history?: boolean | null;
   seller_functional_attestation?: boolean | null;
   category_slug?: string;
+  category_specifics?: Record<string, any>;
 };
 
 type KidsSafetyState = Record<string, boolean | null>;
@@ -152,6 +173,7 @@ type InlineField =
   | 'has_earphones'
   | 'water_damage_history'
   | 'seller_functional_attestation'
+  | 'category_specifics'
   | 'screen_condition'
   | 'body_condition'
   | null;
@@ -225,6 +247,79 @@ const conditionLabel = (value?: string | null) => {
   return all.find((option) => option.value === value)?.label || '';
 };
 
+const specificValue = (specifics: Record<string, any>, key: string) => {
+  const raw = specifics[key];
+  if (raw === true || raw === false) return raw;
+  if (typeof raw === 'number') return raw;
+  return cleanText(raw == null ? '' : String(raw)) || '';
+};
+
+const hasSpecificValue = (specifics: Record<string, any>, key: string) => {
+  const raw = specificValue(specifics, key);
+  if (raw === true || raw === false || typeof raw === 'number') return true;
+  return Boolean(raw);
+};
+
+const categorySpecificsForPayload = (
+  family: ListingRequirementFamily,
+  specifics: Record<string, any>,
+  seed: { model?: string; age?: string; hygiene?: string },
+) => {
+  const allowed: Record<ListingRequirementFamily, string[]> = {
+    device: [],
+    other: [],
+    toy: [
+      'toy_type',
+      'missing_parts_status',
+      'safety_status',
+      'battery_status',
+      'working_status',
+      'box_or_manual',
+      'recall_checked',
+      'notes',
+    ],
+    book: [
+      'book_type',
+      'language',
+      'page_condition',
+      'markings_status',
+      'pages_complete',
+      'set_status',
+      'set_count',
+      'author_or_publisher',
+      'edition',
+      'class_or_grade',
+      'cover_condition',
+      'notes',
+    ],
+    appliance: [
+      'appliance_type',
+      'working_status',
+      'accessories_status',
+      'defects_disclosed',
+      'pickup_complexity',
+      'installation_status',
+      'bill_or_warranty',
+      'hygiene_status',
+      'capacity_or_size',
+      'notes',
+    ],
+  };
+  const payload: Record<string, any> = {};
+  allowed[family].forEach((key) => {
+    const value = specificValue(specifics, key);
+    if (value !== '') payload[key] = value;
+  });
+  if (family === 'toy') {
+    if (!payload.toy_type && seed.model) payload.toy_type = seed.model;
+    if (seed.age) payload.age_suitability = seed.age;
+    if (seed.hygiene) payload.hygiene_status = seed.hygiene;
+  }
+  if (family === 'book' && !payload.book_type && seed.model) payload.book_type = seed.model;
+  if (family === 'appliance' && !payload.appliance_type && seed.model) payload.appliance_type = seed.model;
+  return Object.keys(payload).length ? payload : null;
+};
+
 export default function AIListingSuggestScreen({
   route,
   navigation,
@@ -249,6 +344,7 @@ export default function AIListingSuggestScreen({
   const [defects, setDefects] = useState<string[]>(normalizeDefects(initialDraft.detected.defects));
   const [newDefect, setNewDefect] = useState('');
   const [kidsSafetyChecklist, setKidsSafetyChecklist] = useState<KidsSafetyState>(() => ({}));
+  const [categorySpecifics, setCategorySpecifics] = useState<Record<string, any>>({});
   const [removedPhotoIndices, setRemovedPhotoIndices] = useState<number[]>([]);
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(
     typeof initialDraft.detected.hero_image_index === 'number' ? initialDraft.detected.hero_image_index : 0,
@@ -268,6 +364,7 @@ export default function AIListingSuggestScreen({
   const compsToPriceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const priceRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastPriceRefreshKey = useRef<string>('');
+  const previousCategoryFamily = useRef<string | null>(null);
   useEffect(() => {
     return () => {
       if (compsToPriceTimer.current) clearTimeout(compsToPriceTimer.current);
@@ -277,6 +374,10 @@ export default function AIListingSuggestScreen({
 
   const applyOverrides = useCallback((patch: Partial<DetailOverrides>) => {
     setOverrides((prev) => ({ ...prev, ...patch }));
+  }, []);
+
+  const setCategorySpecific = useCallback((key: string, value: any) => {
+    setCategorySpecifics((prev) => ({ ...prev, [key]: value }));
   }, []);
 
   // Effective fields (overrides win over AI)
@@ -290,6 +391,36 @@ export default function AIListingSuggestScreen({
   const modelOptions = useMemo(() => getModelSuggestions(categorySlug, brand), [categorySlug, brand]);
   const rawModel = overrides.model ?? draft.detected.model ?? draft.detected.detected_item_type ?? '';
   const model = findCatalogOption(rawModel, modelOptions) || rawModel;
+  const titleForFamily = overrides.title ?? draft.detected.title_suggestion ?? '';
+  const categoryFamily = useMemo(
+    () => getListingRequirementFamily(categorySlug, model || draft.detected.detected_item_type, titleForFamily),
+    [categorySlug, draft.detected.detected_item_type, model, titleForFamily],
+  );
+  useEffect(() => {
+    if (previousCategoryFamily.current === null) {
+      previousCategoryFamily.current = categoryFamily;
+      return;
+    }
+    if (previousCategoryFamily.current !== categoryFamily) {
+      previousCategoryFamily.current = categoryFamily;
+      setCategorySpecifics({});
+    }
+  }, [categoryFamily]);
+  const categoryFamilyLabel = categoryFamily === 'toy'
+    ? 'Toy / kids item'
+    : categoryFamily === 'book'
+      ? 'Book / study material'
+      : categoryFamily === 'appliance'
+        ? 'Home appliance'
+        : categoryFamily === 'device'
+          ? 'Device'
+          : 'Other item';
+  const poweredToyStatusRequired = categoryFamily === 'toy'
+    && listingNeedsPoweredToyStatus(model || draft.detected.detected_item_type, titleForFamily);
+  const bookSetStatusRequired = categoryFamily === 'book'
+    && listingNeedsBookSetStatus(model || draft.detected.detected_item_type, titleForFamily);
+  const appliancePickupRequired = categoryFamily === 'appliance'
+    && listingNeedsAppliancePickupStatus(model || draft.detected.detected_item_type, titleForFamily);
   const storageOptions = useMemo(() => getStorageOptionsForCategory(categorySlug), [categorySlug]);
   const ramOptions = useMemo(() => getRamOptionsForCategory(categorySlug), [categorySlug]);
   const evidence = draft.detected.field_evidence || {};
@@ -324,6 +455,7 @@ export default function AIListingSuggestScreen({
     () => reviewPhotos.map((_, index) => index).filter((index) => !removedPhotoIndices.includes(index)),
     [removedPhotoIndices, reviewPhotos],
   );
+  const hasEnoughPhotos = activePhotoIndexes.length >= MIN_PUBLISH_PHOTOS;
   const selectedPhotoUrl = reviewPhotos[selectedPhotoIndex] && !removedPhotoIndices.includes(selectedPhotoIndex)
     ? reviewPhotos[selectedPhotoIndex]
     : reviewPhotos[activePhotoIndexes[0] ?? 0] || draft.photo_url;
@@ -372,6 +504,46 @@ export default function AIListingSuggestScreen({
   const sellerFunctionalAttestation = Object.prototype.hasOwnProperty.call(overrides, 'seller_functional_attestation')
     ? overrides.seller_functional_attestation ?? null
     : null;
+  const categorySpecificIssues = useMemo(() => {
+    const issues: string[] = [];
+    if (categoryFamily === 'toy') {
+      if (!findCatalogOption(ageSuitability, KIDS_AGE_OPTIONS)) issues.push('age suitability');
+      if (!findCatalogOption(hygieneStatus, HYGIENE_OPTIONS)) issues.push('cleanliness');
+      if (!hasSpecificValue(categorySpecifics, 'missing_parts_status')) issues.push('parts completeness');
+      if (!hasSpecificValue(categorySpecifics, 'safety_status')) issues.push('safety status');
+      if (poweredToyStatusRequired && !(
+        hasSpecificValue(categorySpecifics, 'working_status')
+        || hasSpecificValue(categorySpecifics, 'battery_status')
+      )) {
+        issues.push('battery/working status');
+      }
+    }
+    if (categoryFamily === 'book') {
+      if (!hasSpecificValue(categorySpecifics, 'book_type') && !model) issues.push('book type');
+      if (!hasSpecificValue(categorySpecifics, 'language')) issues.push('language');
+      if (!hasSpecificValue(categorySpecifics, 'page_condition')) issues.push('page condition');
+      if (!hasSpecificValue(categorySpecifics, 'markings_status')) issues.push('markings');
+      if (!hasSpecificValue(categorySpecifics, 'pages_complete')) issues.push('page completeness');
+      if (bookSetStatusRequired && !hasSpecificValue(categorySpecifics, 'set_status')) issues.push('set completeness');
+    }
+    if (categoryFamily === 'appliance') {
+      if (!hasSpecificValue(categorySpecifics, 'appliance_type') && !model) issues.push('appliance type');
+      if (!hasSpecificValue(categorySpecifics, 'working_status')) issues.push('working status');
+      if (!hasSpecificValue(categorySpecifics, 'accessories_status')) issues.push('accessories');
+      if (!hasSpecificValue(categorySpecifics, 'defects_disclosed')) issues.push('defects');
+      if (appliancePickupRequired && !hasSpecificValue(categorySpecifics, 'pickup_complexity')) issues.push('pickup effort');
+    }
+    return issues;
+  }, [
+    ageSuitability,
+    appliancePickupRequired,
+    bookSetStatusRequired,
+    categoryFamily,
+    categorySpecifics,
+    hygieneStatus,
+    model,
+    poweredToyStatusRequired,
+  ]);
   const detailReviewIssues = useMemo(() => {
     const issues: string[] = [];
     if (!categorySlug) {
@@ -382,16 +554,14 @@ export default function AIListingSuggestScreen({
       const otherTitle = (overrides.title ?? draft.detected.title_suggestion ?? '').trim();
       if (otherTitle.length < 4 || /^used item$/i.test(otherTitle)) issues.push('title');
       if (!isMeaningfulOtherDetail(model)) issues.push('product type');
+      categorySpecificIssues.forEach((issue) => issues.push(issue));
       return issues;
     }
     if (!isElectronic) {
       if ((categoryKind === 'appliance' || categoryKind === 'kids') && modelOptions.length > 0 && !findCatalogOption(model, modelOptions)) {
         issues.push('item type');
       }
-      if (categoryKind === 'kids') {
-        if (!findCatalogOption(ageSuitability, KIDS_AGE_OPTIONS)) issues.push('age suitability');
-        if (!findCatalogOption(hygieneStatus, HYGIENE_OPTIONS)) issues.push('cleanliness');
-      }
+      categorySpecificIssues.forEach((issue) => issues.push(issue));
       return issues;
     }
     if (!findCatalogOption(brand, brandOptions)) issues.push('brand');
@@ -417,7 +587,11 @@ export default function AIListingSuggestScreen({
     isElectronic,
     isOther,
     ageSuitability,
+    appliancePickupRequired,
+    bookSetStatusRequired,
+    categoryFamily,
     hygieneStatus,
+    categorySpecificIssues,
     model,
     modelOptions,
     draft.detected.title_suggestion,
@@ -437,6 +611,7 @@ export default function AIListingSuggestScreen({
       const otherTitle = (overrides.title ?? draft.detected.title_suggestion ?? '').trim();
       if (otherTitle.length < 4 || /^used item$/i.test(otherTitle)) return 'title';
       if (!isMeaningfulOtherDetail(model)) return 'model';
+      if (categorySpecificIssues.length > 0) return 'category_specifics';
       return null;
     }
     if (!isElectronic) {
@@ -447,6 +622,7 @@ export default function AIListingSuggestScreen({
         if (!findCatalogOption(ageSuitability, KIDS_AGE_OPTIONS)) return 'age_suitability';
         if (!findCatalogOption(hygieneStatus, HYGIENE_OPTIONS)) return 'hygiene_status';
       }
+      if (categorySpecificIssues.length > 0) return 'category_specifics';
       return null;
     }
     if (!findCatalogOption(brand, brandOptions)) return 'brand';
@@ -473,6 +649,7 @@ export default function AIListingSuggestScreen({
     isElectronic,
     isOther,
     ageSuitability,
+    categorySpecificIssues,
     hygieneStatus,
     model,
     modelOptions,
@@ -519,6 +696,7 @@ export default function AIListingSuggestScreen({
         has_earphones: nextKind === 'phone' ? prev.has_earphones ?? null : null,
       };
     });
+    setCategorySpecifics({});
     setInlineField(null);
   }, [draft.detected.brand, draft.detected.ram, draft.detected.storage]);
 
@@ -578,7 +756,7 @@ export default function AIListingSuggestScreen({
     return pct > 0 ? pct : null;
   }, [effectivePrice, originalPrice]);
 
-  const kidsSafetyIncomplete = categoryKind === 'kids'
+  const kidsSafetyIncomplete = categoryKind === 'kids' && categoryFamily === 'toy'
     && KIDS_SAFETY_ITEMS.some((item) => kidsSafetyChecklist[item.key] === null || kidsSafetyChecklist[item.key] === undefined);
 
   const conditionReviewIssues = useMemo(() => {
@@ -590,12 +768,13 @@ export default function AIListingSuggestScreen({
         issues.push('what is not working');
       }
     }
-    if (categoryKind === 'kids' && kidsSafetyIncomplete) {
+    if (categoryKind === 'kids' && categoryFamily === 'toy' && kidsSafetyIncomplete) {
       issues.push('kids safety checklist');
     }
     return issues;
   }, [
     bodyCondition,
+    categoryFamily,
     categoryKind,
     defects.length,
     isElectronic,
@@ -647,7 +826,13 @@ export default function AIListingSuggestScreen({
     has_earphones: categoryKind === 'phone' ? hasEarphones : null,
     water_damage_history: waterDamageHistory,
     seller_functional_attestation: sellerFunctionalAttestation,
-    kids_safety_checklist: categoryKind === 'kids'
+    category_family: categoryFamily,
+    category_specifics: categorySpecificsForPayload(categoryFamily, categorySpecifics, {
+      model,
+      age: cleanText(ageSuitability) || undefined,
+      hygiene: cleanText(hygieneStatus) || undefined,
+    }),
+    kids_safety_checklist: categoryKind === 'kids' && categoryFamily === 'toy'
       ? Object.fromEntries(
         KIDS_SAFETY_ITEMS
           .filter((item) => kidsSafetyChecklist[item.key] !== null && kidsSafetyChecklist[item.key] !== undefined)
@@ -661,6 +846,8 @@ export default function AIListingSuggestScreen({
     brand,
     bodyCondition,
     categoryKind,
+    categoryFamily,
+    categorySpecifics,
     color,
     defects,
     draft.detected.battery_health,
@@ -711,6 +898,12 @@ export default function AIListingSuggestScreen({
     processor: cleanText(processor),
     screen_size: cleanText(screenSize),
     detected_item_type: cleanText(model || draft.detected.detected_item_type),
+    category_family: categoryFamily,
+    category_specifics: categorySpecificsForPayload(categoryFamily, categorySpecifics, {
+      model,
+      age: cleanText(ageSuitability) || undefined,
+      hygiene: cleanText(hygieneStatus) || undefined,
+    }),
     condition,
     purchase_year: purchaseYear || null,
     screen_condition: cleanText(screenCondition),
@@ -722,13 +915,17 @@ export default function AIListingSuggestScreen({
   }), [
     bodyCondition,
     brand,
+    categoryFamily,
     categorySlug,
+    categorySpecifics,
     condition,
     confirmedOriginalPrice,
     defects,
     draft.detected.detected_item_type,
     draft.detected.mrp_confidence,
     model,
+    ageSuitability,
+    hygieneStatus,
     mrpReviewed,
     mrpSource,
     processor,
@@ -795,6 +992,14 @@ export default function AIListingSuggestScreen({
 
   const submit = useCallback(async () => {
     if (submitting) return;
+    if (!hasEnoughPhotos) {
+      Alert.alert(
+        'Add more photos',
+        `Listings need at least ${MIN_PUBLISH_PHOTOS} clear photos. Retake the item so buyers can see front, back, and condition details.`,
+        [{ text: 'Retake', onPress: retakeHeroPhoto }],
+      );
+      return;
+    }
     if (photosBlocked) {
       Alert.alert(
         'Retake photos',
@@ -905,6 +1110,7 @@ export default function AIListingSuggestScreen({
     titleGuess,
     navigation,
     submitting,
+    hasEnoughPhotos,
     finalDetails,
     mrpSource,
     mrpReviewed,
@@ -915,7 +1121,9 @@ export default function AIListingSuggestScreen({
     retakeHeroPhoto,
   ]);
 
-  const ctaLabel = photosBlocked || heroCleanupNeedsRetake
+  const ctaLabel = !hasEnoughPhotos
+    ? 'Add photos'
+    : photosBlocked || heroCleanupNeedsRetake
     ? 'Retake photos'
     : needsDetailsReview
       ? 'Complete item details'
@@ -926,7 +1134,7 @@ export default function AIListingSuggestScreen({
           : needsConditionReview
             ? 'Confirm condition'
             : 'Publish listing';
-  const ctaOnPress = photosBlocked || heroCleanupNeedsRetake
+  const ctaOnPress = !hasEnoughPhotos || photosBlocked || heroCleanupNeedsRetake
     ? retakeHeroPhoto
     : needsDetailsReview
       ? openFirstRequiredField
@@ -1075,6 +1283,10 @@ export default function AIListingSuggestScreen({
           onClose={() => setInlineField(null)}
         />
       );
+    }
+
+    if (inlineField === 'category_specifics') {
+      return null;
     }
 
     const booleanConfig: Partial<Record<Exclude<InlineField, null>, { title: string; helper: string; value: boolean | null }>> = {
@@ -1227,8 +1439,11 @@ export default function AIListingSuggestScreen({
                   {reviewPhotos.length > 1 ? (
                     <TouchableOpacity
                       onPress={() => {
-                        if (!removed && activePhotoIndexes.length <= 1) {
-                          Alert.alert('Keep one photo', 'At least one product photo is required.');
+                        if (!removed && activePhotoIndexes.length <= MIN_PUBLISH_PHOTOS) {
+                          Alert.alert(
+                            'Keep three photos',
+                            `Listings need at least ${MIN_PUBLISH_PHOTOS} product photos. Retake if one of these is not usable.`,
+                          );
                           return;
                         }
                         setRemovedPhotoIndices((prev) => (
@@ -1275,8 +1490,14 @@ export default function AIListingSuggestScreen({
           <Text style={st.checklistTitle}>Publish checklist</Text>
           <ChecklistRow
             label="Photos"
-            ready={!photosBlocked && !heroCleanupNeedsRetake && activePhotoIndexes.length > 0}
-            hint={photosBlocked || heroCleanupNeedsRetake ? 'Retake required' : `${activePhotoIndexes.length} ready`}
+            ready={!photosBlocked && !heroCleanupNeedsRetake && hasEnoughPhotos}
+            hint={
+              photosBlocked || heroCleanupNeedsRetake
+                ? 'Retake required'
+                : hasEnoughPhotos
+                  ? `${activePhotoIndexes.length} ready`
+                  : `${MIN_PUBLISH_PHOTOS - activePhotoIndexes.length} more needed`
+            }
           />
           <ChecklistRow
             label="Item identity"
@@ -1408,6 +1629,19 @@ export default function AIListingSuggestScreen({
                 </>
               ) : null}
             </View>
+            {categoryFamily === 'toy' || categoryFamily === 'book' || categoryFamily === 'appliance' ? (
+              <CategorySpecificsPanel
+                family={categoryFamily}
+                model={model}
+                categorySpecifics={categorySpecifics}
+                categoryFamilyLabel={categoryFamilyLabel}
+                poweredToyStatusRequired={poweredToyStatusRequired}
+                bookSetStatusRequired={bookSetStatusRequired}
+                appliancePickupRequired={appliancePickupRequired}
+                highlighted={inlineField === 'category_specifics' || categorySpecificIssues.length > 0}
+                onSelect={setCategorySpecific}
+              />
+            ) : null}
             {detailReviewIssues.length > 0 ? (
               <Text style={st.detailIssue}>
                 Required before listing: {detailReviewIssues.join(', ')}.
@@ -1574,7 +1808,7 @@ export default function AIListingSuggestScreen({
               </View>
             </>
           ) : null}
-          {categoryKind === 'kids' ? (
+          {categoryKind === 'kids' && categoryFamily === 'toy' ? (
             <View style={st.kidsSafetyBox}>
               <Text style={st.issueLabel}>Kids safety declarations</Text>
               {KIDS_SAFETY_ITEMS.map((item) => {
@@ -1681,10 +1915,12 @@ export default function AIListingSuggestScreen({
             category_slug: categorySlug,
           }}
           onSave={(next) => {
+            const nextCategorySlug = canonicalCategorySlug(next.category_slug);
             setOverrides({
               ...next,
-              category_slug: canonicalCategorySlug(next.category_slug),
+              category_slug: nextCategorySlug,
             });
+            if (nextCategorySlug !== categorySlug) setCategorySpecifics({});
             setEditSheet(false);
           }}
           onClose={() => setEditSheet(false)}
@@ -1850,6 +2086,194 @@ function InlineChoicePanel({
       ) : (
         <Text style={st.inlineEmpty}>{emptyText || 'No options available yet.'}</Text>
       )}
+    </View>
+  );
+}
+
+function RequirementChoiceGroup({
+  label,
+  value,
+  options,
+  required,
+  onSelect,
+}: {
+  label: string;
+  value?: any;
+  options: string[];
+  required?: boolean;
+  onSelect: (value: string) => void;
+}) {
+  const selected = value == null ? '' : String(value);
+  const missing = required && !selected;
+  return (
+    <View style={st.requirementGroup}>
+      <Text style={[st.requirementLabel, missing && st.requirementMissingText]}>
+        {label}{required ? ' *' : ''}
+      </Text>
+      <View style={st.requirementChoices}>
+        {options.map((option) => {
+          const active = selected === option;
+          return (
+            <TouchableOpacity
+              key={option}
+              onPress={() => onSelect(option)}
+              activeOpacity={0.82}
+              style={[st.requirementChip, active && st.requirementChipActive, missing && st.requirementChipMissing]}>
+              <Text style={[st.requirementChipText, active && st.requirementChipTextActive]} numberOfLines={2}>
+                {option}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+function CategorySpecificsPanel({
+  family,
+  model,
+  categorySpecifics,
+  categoryFamilyLabel,
+  poweredToyStatusRequired,
+  bookSetStatusRequired,
+  appliancePickupRequired,
+  highlighted,
+  onSelect,
+}: {
+  family: ListingRequirementFamily;
+  model: string;
+  categorySpecifics: Record<string, any>;
+  categoryFamilyLabel: string;
+  poweredToyStatusRequired: boolean;
+  bookSetStatusRequired: boolean;
+  appliancePickupRequired: boolean;
+  highlighted?: boolean;
+  onSelect: (key: string, value: any) => void;
+}) {
+  if (family !== 'toy' && family !== 'book' && family !== 'appliance') return null;
+  return (
+    <View style={[st.requirementPanel, highlighted && st.requirementPanelWarn]}>
+      <View style={st.requirementPanelHeader}>
+        <View>
+          <Text style={st.requirementTitle}>{categoryFamilyLabel}</Text>
+          <Text style={st.requirementHelper}>Buyer-critical details for this item type.</Text>
+        </View>
+        {model ? <Text style={st.requirementModel} numberOfLines={1}>{model}</Text> : null}
+      </View>
+
+      {family === 'toy' ? (
+        <>
+          <RequirementChoiceGroup
+            label="Parts"
+            required
+            value={categorySpecifics.missing_parts_status}
+            options={TOY_MISSING_PARTS_OPTIONS}
+            onSelect={(value) => onSelect('missing_parts_status', value)}
+          />
+          <RequirementChoiceGroup
+            label="Safety"
+            required
+            value={categorySpecifics.safety_status}
+            options={TOY_SAFETY_STATUS_OPTIONS}
+            onSelect={(value) => onSelect('safety_status', value)}
+          />
+          <RequirementChoiceGroup
+            label="Power / working"
+            required={poweredToyStatusRequired}
+            value={categorySpecifics.working_status || categorySpecifics.battery_status}
+            options={TOY_POWER_STATUS_OPTIONS}
+            onSelect={(value) => {
+              onSelect('working_status', value);
+              onSelect('battery_status', value);
+            }}
+          />
+        </>
+      ) : null}
+
+      {family === 'book' ? (
+        <>
+          <RequirementChoiceGroup
+            label="Type"
+            required
+            value={categorySpecifics.book_type || model}
+            options={BOOK_TYPE_OPTIONS}
+            onSelect={(value) => onSelect('book_type', value)}
+          />
+          <RequirementChoiceGroup
+            label="Language"
+            required
+            value={categorySpecifics.language}
+            options={BOOK_LANGUAGE_OPTIONS}
+            onSelect={(value) => onSelect('language', value)}
+          />
+          <RequirementChoiceGroup
+            label="Pages"
+            required
+            value={categorySpecifics.page_condition}
+            options={BOOK_PAGE_CONDITION_OPTIONS}
+            onSelect={(value) => onSelect('page_condition', value)}
+          />
+          <RequirementChoiceGroup
+            label="Markings"
+            required
+            value={categorySpecifics.markings_status}
+            options={BOOK_MARKING_OPTIONS}
+            onSelect={(value) => onSelect('markings_status', value)}
+          />
+          <RequirementChoiceGroup
+            label="Completeness"
+            required
+            value={categorySpecifics.pages_complete}
+            options={BOOK_COMPLETENESS_OPTIONS}
+            onSelect={(value) => onSelect('pages_complete', value)}
+          />
+          {bookSetStatusRequired ? (
+            <RequirementChoiceGroup
+              label="Set"
+              required
+              value={categorySpecifics.set_status}
+              options={BOOK_SET_STATUS_OPTIONS}
+              onSelect={(value) => onSelect('set_status', value)}
+            />
+          ) : null}
+        </>
+      ) : null}
+
+      {family === 'appliance' ? (
+        <>
+          <RequirementChoiceGroup
+            label="Working"
+            required
+            value={categorySpecifics.working_status}
+            options={APPLIANCE_WORKING_OPTIONS}
+            onSelect={(value) => onSelect('working_status', value)}
+          />
+          <RequirementChoiceGroup
+            label="Accessories"
+            required
+            value={categorySpecifics.accessories_status}
+            options={APPLIANCE_ACCESSORY_OPTIONS}
+            onSelect={(value) => onSelect('accessories_status', value)}
+          />
+          <RequirementChoiceGroup
+            label="Defects"
+            required
+            value={categorySpecifics.defects_disclosed}
+            options={APPLIANCE_DEFECT_OPTIONS}
+            onSelect={(value) => onSelect('defects_disclosed', value)}
+          />
+          {appliancePickupRequired ? (
+            <RequirementChoiceGroup
+              label="Pickup"
+              required
+              value={categorySpecifics.pickup_complexity}
+              options={APPLIANCE_PICKUP_OPTIONS}
+              onSelect={(value) => onSelect('pickup_complexity', value)}
+            />
+          ) : null}
+        </>
+      ) : null}
     </View>
   );
 }
@@ -2245,6 +2669,90 @@ const st = StyleSheet.create({
     fontSize: T.size.sm,
     color: C.text3,
     fontWeight: T.weight.medium,
+  },
+  requirementPanel: {
+    marginTop: S.md,
+    padding: S.md,
+    borderRadius: R.md,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.bone,
+  },
+  requirementPanelWarn: {
+    borderColor: C.amberBorder,
+    backgroundColor: C.amberSoft,
+  },
+  requirementPanelHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: S.md,
+    marginBottom: S.sm,
+  },
+  requirementTitle: {
+    fontSize: T.size.base,
+    fontWeight: T.weight.bold,
+    color: C.text,
+  },
+  requirementHelper: {
+    marginTop: 2,
+    fontSize: T.size.xs,
+    color: C.text3,
+  },
+  requirementModel: {
+    maxWidth: 128,
+    paddingHorizontal: S.sm,
+    paddingVertical: 4,
+    borderRadius: R.pill,
+    backgroundColor: C.surface,
+    color: C.text2,
+    fontSize: T.size.xs,
+    fontWeight: T.weight.semi,
+  },
+  requirementGroup: {
+    marginTop: S.sm,
+  },
+  requirementLabel: {
+    color: C.text2,
+    fontSize: T.size.xs,
+    fontWeight: T.weight.bold,
+    textTransform: 'uppercase',
+  },
+  requirementMissingText: {
+    color: C.amberDeep,
+  },
+  requirementChoices: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: S.xs,
+    marginTop: S.xs,
+  },
+  requirementChip: {
+    minHeight: 34,
+    maxWidth: '48%',
+    paddingHorizontal: S.sm,
+    paddingVertical: 7,
+    borderRadius: R.md,
+    borderWidth: 1,
+    borderColor: C.border2,
+    backgroundColor: C.surface,
+    justifyContent: 'center',
+  },
+  requirementChipMissing: {
+    borderColor: C.amberBorder,
+  },
+  requirementChipActive: {
+    backgroundColor: C.ctaPrimary,
+    borderColor: C.ctaPrimary,
+  },
+  requirementChipText: {
+    color: C.text2,
+    fontSize: T.size.xs,
+    fontWeight: T.weight.semi,
+    lineHeight: T.size.xs + 4,
+  },
+  requirementChipTextActive: {
+    color: C.surface,
   },
   detailIssue: {
     marginTop: S.md,

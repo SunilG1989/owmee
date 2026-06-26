@@ -32,6 +32,8 @@ export type ListingDisplayItem = {
   water_damage_history?: boolean | null;
   seller_functional_attestation?: boolean | null;
   kids_safety_checklist?: Record<string, unknown> | null;
+  category_family?: string | null;
+  category_specifics?: Record<string, unknown> | null;
 };
 
 export type ProductFact = {
@@ -132,6 +134,54 @@ function knownIssues(value: string[] | null | undefined): string | null {
   return cleaned.length ? cleaned.join(', ') : null;
 }
 
+function categorySpecificValue(value: unknown): string | null {
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  if (Array.isArray(value)) {
+    const cleaned = value.map(cleanListingFact).filter(Boolean) as string[];
+    return cleaned.length ? cleaned.join(', ') : null;
+  }
+  return cleanListingFact(value);
+}
+
+function buildCategorySpecificFacts(item: ListingDisplayItem): ProductFact[] {
+  const family = String(item.category_family || '').toLowerCase();
+  const specifics = item.category_specifics;
+  if (!specifics || typeof specifics !== 'object') return [];
+
+  const labelsByFamily: Record<string, Array<[string, string]>> = {
+    toy: [
+      ['toy_type', 'Toy type'],
+      ['missing_parts_status', 'Parts'],
+      ['safety_status', 'Safety'],
+      ['working_status', 'Working status'],
+      ['battery_status', 'Battery'],
+      ['material', 'Material'],
+      ['recall_status', 'Recall'],
+    ],
+    book: [
+      ['book_type', 'Book type'],
+      ['language', 'Language'],
+      ['page_condition', 'Page condition'],
+      ['markings_status', 'Writing / highlights'],
+      ['pages_complete', 'Completeness'],
+      ['set_status', 'Set'],
+      ['edition', 'Edition'],
+    ],
+    appliance: [
+      ['appliance_type', 'Appliance type'],
+      ['working_status', 'Working status'],
+      ['accessories_status', 'Accessories'],
+      ['defects_disclosed', 'Known defects'],
+      ['pickup_complexity', 'Pickup'],
+    ],
+  };
+
+  const labels = labelsByFamily[family] || [];
+  return labels
+    .map(([key, label]) => ({ label, value: categorySpecificValue(specifics[key]) }))
+    .filter((fact): fact is ProductFact => !!fact.value);
+}
+
 export function buildListingFactChips(item: ListingDisplayItem, options: ChipOptions = {}): string[] {
   const {
     conditionLabel,
@@ -147,8 +197,20 @@ export function buildListingFactChips(item: ListingDisplayItem, options: ChipOpt
   const hasBill = item.has_bill ?? item.bill_available;
   const hasBox = item.has_box ?? item.box_available;
   const activeWarranty = item.warranty_active || (warranty && !/no warranty|none|expired/i.test(warranty)) ? 'Warranty' : null;
+  const familySpecifics = item.category_specifics || {};
 
   if (includeCondition) addUnique(chips, conditionLabel || cleanListingFact(item.condition));
+  if (item.category_family === 'book') {
+    addUnique(chips, categorySpecificValue(familySpecifics.book_type));
+    addUnique(chips, categorySpecificValue(familySpecifics.language));
+    addUnique(chips, categorySpecificValue(familySpecifics.pages_complete));
+  } else if (item.category_family === 'toy') {
+    addUnique(chips, categorySpecificValue(familySpecifics.missing_parts_status));
+    addUnique(chips, categorySpecificValue(familySpecifics.safety_status));
+  } else if (item.category_family === 'appliance') {
+    addUnique(chips, categorySpecificValue(familySpecifics.working_status));
+    addUnique(chips, categorySpecificValue(familySpecifics.pickup_complexity));
+  }
 
   if (kind === 'phone' || kind === 'tablet') {
     addUnique(chips, identityLabel(item, displayTitle));
@@ -174,7 +236,10 @@ export function buildListingFactChips(item: ListingDisplayItem, options: ChipOpt
   }
 
   if (kind === 'appliance') {
+    const specifics = item.category_specifics || {};
     addUnique(chips, model && !titleAlreadyHas(displayTitle, model) ? titleCaseWords(model) : null);
+    addUnique(chips, categorySpecificValue(specifics.working_status));
+    addUnique(chips, categorySpecificValue(specifics.pickup_complexity));
     addUnique(chips, brand && !titleAlreadyHas(displayTitle, brand) ? brand : null);
     addUnique(chips, activeWarranty);
     if (hasBill) addUnique(chips, 'Bill');
@@ -184,8 +249,16 @@ export function buildListingFactChips(item: ListingDisplayItem, options: ChipOpt
   }
 
   if (kind === 'kids') {
+    const specifics = item.category_specifics || {};
+    if (item.category_family === 'book') {
+      addUnique(chips, categorySpecificValue(specifics.book_type));
+      addUnique(chips, categorySpecificValue(specifics.language));
+      addUnique(chips, categorySpecificValue(specifics.pages_complete));
+      return chips.slice(0, max);
+    }
     addUnique(chips, cleanListingFact(item.age_suitability));
     addUnique(chips, model && !titleAlreadyHas(displayTitle, model) ? titleCaseWords(model) : null);
+    addUnique(chips, categorySpecificValue(specifics.missing_parts_status));
     addUnique(chips, cleanListingFact(item.hygiene_status));
     addUnique(chips, brand && !titleAlreadyHas(displayTitle, brand) ? brand : null);
     if (safetyChecklistCount(item) > 0) addUnique(chips, 'Safety checked');
@@ -207,6 +280,8 @@ export function buildListingProductFacts(
   conditionLabel?: string,
 ): ProductFact[] {
   const kind = listingCategoryKind(item);
+  const categorySpecificRows = buildCategorySpecificFacts(item)
+    .map((fact) => [fact.label, fact.value] as [string, string | null]);
   const defects = knownIssues(item.defects);
   const warranty = item.warranty_active ? 'Warranty' : cleanListingFact(item.warranty_status || item.warranty_info);
   const hasBill = item.has_bill ?? item.bill_available;
@@ -298,7 +373,7 @@ export function buildListingProductFacts(
   };
 
   const seen = new Set<string>();
-  return rowsByKind[kind]
+  return [...categorySpecificRows, ...rowsByKind[kind]]
     .filter(([, value]) => !!value)
     .filter(([label]) => {
       if (seen.has(label)) return false;
