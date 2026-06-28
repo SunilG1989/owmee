@@ -85,10 +85,12 @@ const variantStyles: Record<BackButtonVariant, { container: ViewStyle; fg: strin
   },
   floating: {
     container: {
-      backgroundColor: 'rgba(15, 26, 31, 0.55)',
-      ...Shadow.subtle,
+      backgroundColor: 'rgba(255, 253, 248, 0.94)',
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: 'rgba(207, 227, 222, 0.92)',
+      ...Shadow.card,
     },
-    fg: C.bone,
+    fg: C.petrolDeep,
   },
   onDark: {
     container: { backgroundColor: 'transparent' },

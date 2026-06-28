@@ -11,7 +11,7 @@ import {
 } from '../../utils/tokens';
 import { Listings, Offers, Reports, Wishlist, type Listing } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
-import { BackButton, Button, IconButton } from '../../components/ui';
+import { Button, IconButton } from '../../components/ui';
 import { parseApiError } from '../../utils/errors';
 import { afterInteractions } from '../../utils/schedule';
 import type { RootScreen } from '../../navigation/types';
@@ -306,25 +306,34 @@ export default function ListingDetailScreen({ navigation, route }: RootScreen<'L
             </View>
           )}
 
-          <View style={s.backBtnWrap}>
-            <BackButton variant="floating" onPress={() => navigation.goBack()} />
-          </View>
-
-          <View style={s.shareBtnWrap}>
-            <IconButton icon="↗" onPress={onShare} a11y="Share listing" variant="outlined" />
-          </View>
-
-          {!isOwn && (
-            <View style={s.wishBtnWrap}>
+          <View pointerEvents="box-none" style={s.heroControls}>
+            <IconButton
+              icon="←"
+              onPress={() => navigation.goBack()}
+              a11y="Back"
+              variant="floating"
+              size="overlay"
+            />
+            <View style={s.heroActions}>
               <IconButton
-                icon={wishlisted ? '♥' : '♡'}
-                onPress={toggleWish}
-                a11y={wishlisted ? 'Remove from wishlist' : 'Add to wishlist'}
-                variant="outlined"
-                style={wishlisted ? s.wishActiveBg : undefined}
+                icon="↗"
+                onPress={onShare}
+                a11y="Share listing"
+                variant="floating"
+                size="overlay"
               />
+              {!isOwn && (
+                <IconButton
+                  icon={wishlisted ? '♥' : '♡'}
+                  onPress={toggleWish}
+                  a11y={wishlisted ? 'Remove from wishlist' : 'Add to wishlist'}
+                  variant="floating"
+                  size="overlay"
+                  style={wishlisted ? s.wishActiveBg : undefined}
+                />
+              )}
             </View>
-          )}
+          </View>
         </View>
 
         {/* Info */}
@@ -611,10 +620,20 @@ const s = StyleSheet.create({
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.4)' },
   dotOn: { backgroundColor: C.white, width: 18, borderRadius: 3 },
 
-  backBtnWrap:  { position: 'absolute', top: S.md, left: S.md },
-  shareBtnWrap: { position: 'absolute', top: S.md, right: S.xxxl + S.xxxl },
-  wishBtnWrap:  { position: 'absolute', top: S.md, right: S.lg },
-  wishActiveBg: { backgroundColor: 'rgba(255,255,255,0.95)' },
+  heroControls: {
+    position: 'absolute',
+    top: S.md,
+    left: S.lg,
+    right: S.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  heroActions: { flexDirection: 'row', alignItems: 'center', gap: S.sm },
+  wishActiveBg: {
+    backgroundColor: 'rgba(234, 244, 241, 0.96)',
+    borderColor: C.petrolGlow,
+  },
 
   info: { paddingHorizontal: S.xl, paddingTop: S.lg },
   title: {
