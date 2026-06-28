@@ -13,6 +13,7 @@ import app.modules.admin.models  # noqa
 import app.modules.community.models  # noqa
 import app.modules.compliance.models  # noqa
 import app.modules.disputes.models  # noqa
+import app.modules.direct_acquisition.models  # noqa
 import app.modules.field_executive.models  # noqa
 import app.modules.identity_auth.models  # noqa
 import app.modules.kyc.models  # noqa

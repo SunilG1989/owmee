@@ -63,6 +63,7 @@ const getOrderConfirmationScreen = screen(() => require('../screens/purchase/Ord
 const getFeHomeScreen = screen(() => require('../screens/fe/FeHomeScreen'));
 const getFeOpsScreen = screen(() => require('../screens/fe/FeOpsScreen'));
 const getFeVisitDetailScreen = screen(() => require('../screens/fe/FeVisitDetailScreen'));
+const getFeDirectBookingDetailScreen = screen(() => require('../screens/fe/FeDirectBookingDetailScreen'));
 const getFeCaptureScreen = screen(() => require('../screens/fe/FeCaptureScreen'));
 const getFeVisitHistoryScreen = screen(() => require('../screens/fe/FeVisitHistoryScreen'));
 const getSellerApprovalScreen = screen(() => require('../screens/fe/SellerApprovalScreen'));
@@ -438,6 +439,7 @@ function FeRootStack() {
         <FeStack.Screen name="FeHome" getComponent={getFeHomeScreen} />
         <FeStack.Screen name="FeOps" getComponent={getFeOpsScreen} options={{ animation: 'slide_from_right' }} />
         <FeStack.Screen name="FeVisitDetail" getComponent={getFeVisitDetailScreen} options={{ animation: 'slide_from_right' }} />
+        <FeStack.Screen name="FeDirectBookingDetail" getComponent={getFeDirectBookingDetailScreen} options={{ animation: 'slide_from_right' }} />
         <FeStack.Screen name="FeCapture" getComponent={getFeCaptureScreen} options={{ animation: 'slide_from_right' }} />
         <FeStack.Screen name="FeVisitHistory" getComponent={getFeVisitHistoryScreen} options={{ animation: 'slide_from_right' }} />
         {/* Concierge Phase 3 — specialist excellence */}

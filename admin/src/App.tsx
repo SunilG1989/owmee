@@ -10,6 +10,7 @@ import FeList from './pages/FeList';
 import FeAssistedListings from './pages/FeAssistedListings';
 import AuditLogPage from './pages/AuditLog';
 import AnalyticsPage from './pages/Analytics';
+import DirectAcquisitionQueue from './pages/DirectAcquisitionQueue';
 
 export default function App() {
   const { session, loading } = useAuth();
@@ -36,6 +37,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/dispatch" replace />} />
         <Route path="/dispatch" element={<DispatchQueue />} />
+        <Route path="/direct-acquisitions" element={<DirectAcquisitionQueue />} />
         <Route path="/dispatch/:visitId" element={<VisitDetail />} />
         <Route path="/fes" element={<FeList />} />
         <Route path="/listings" element={<FeAssistedListings />} />

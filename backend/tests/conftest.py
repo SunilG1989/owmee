@@ -42,6 +42,7 @@ def _preload_all_models():  # noqa: D401
     import app.modules.community.models  # noqa: F401
     import app.modules.compliance.models  # noqa: F401
     import app.modules.disputes.models  # noqa: F401
+    import app.modules.direct_acquisition.models  # noqa: F401
     import app.modules.field_executive.models  # noqa: F401
     import app.modules.identity_auth.models  # noqa: F401
     import app.modules.kyc.models  # noqa: F401

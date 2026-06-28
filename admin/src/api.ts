@@ -207,6 +207,35 @@ export const AdminListings = {
     req('POST', `/v1/admin/listings/${listingId}/reject`, { flag, reason }),
 };
 
+export const DirectOps = {
+  listBookings: (statusFilter?: string) =>
+    req('GET', `/v1/ops/bookings${statusFilter ? `?status=${statusFilter}` : ''}`),
+  assignFe: (bookingId: string, feId: string) =>
+    req('POST', `/v1/ops/bookings/${bookingId}/assign-fe`, {
+      fe_id: feId,
+      assignment_method: 'ops_manual',
+    }),
+  priceApprovals: (status = 'pending') =>
+    req('GET', `/v1/ops/price-approvals?status=${status}`),
+  approvePrice: (approvalId: string, note?: string) =>
+    req('POST', `/v1/ops/price-approvals/${approvalId}/approve`, { note }),
+  rejectPrice: (approvalId: string, note?: string) =>
+    req('POST', `/v1/ops/price-approvals/${approvalId}/reject`, { note }),
+  listingApprovals: (status = 'pending') =>
+    req('GET', `/v1/admin/listing-approvals?status=${status}`),
+  approveListing: (itemId: string, note?: string, salePriceInr?: number) =>
+    req('POST', `/v1/admin/listing-approvals/${itemId}/approve`, {
+      note,
+      sale_price_inr: salePriceInr,
+    }),
+  sendBackListing: (itemId: string, note?: string) =>
+    req('POST', `/v1/admin/listing-approvals/${itemId}/send-back`, { note }),
+  quarantineListing: (itemId: string, note?: string) =>
+    req('POST', `/v1/admin/listing-approvals/${itemId}/quarantine`, { note }),
+  rejectListing: (itemId: string, note?: string) =>
+    req('POST', `/v1/admin/listing-approvals/${itemId}/reject`, { note }),
+};
+
 export const Listings = {
   categories: () => req('GET', '/v1/listings/categories'),
 };

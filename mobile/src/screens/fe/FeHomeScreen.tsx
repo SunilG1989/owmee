@@ -16,17 +16,32 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { FE, type FEVisit } from '../../services/api';
+import { FE, type DirectAcquisitionBooking, type FEVisit } from '../../services/api';
 import { Button, Chip, IconButton } from '../../components/ui';
 import { C, S, R, T, Shadow } from '../../utils/tokens';
 import type { RootScreen } from '../../navigation/types';
 import { useAuthStore } from '../../store/authStore';
 
 type Tab = 'active' | 'scheduled' | 'completed';
+type WorkItem =
+  | { kind: 'direct'; id: string; booking: DirectAcquisitionBooking }
+  | { kind: 'legacy'; id: string; visit: FEVisit };
 
 function visitBucket(v: FEVisit): Tab {
   if (v.status === 'in_progress') return 'active';
   if (v.status === 'scheduled') return 'scheduled';
+  return 'completed';
+}
+
+function directBucket(b: DirectAcquisitionBooking): Tab {
+  if ([
+    'fe_arrived',
+    'seller_verified',
+    'pickup_qc_in_progress',
+    'seller_final_acceptance',
+    'payout_completed',
+  ].includes(String(b.status))) return 'active';
+  if (['assigned_to_fe', 'fe_en_route'].includes(String(b.status))) return 'scheduled';
   return 'completed';
 }
 
@@ -62,6 +77,7 @@ function StatusPill({ status }: { status: FEVisit['status'] }) {
 
 export default function FeHomeScreen({ navigation }: RootScreen<'FeHome'>) {
   const [visits, setVisits] = useState<FEVisit[]>([]);
+  const [directBookings, setDirectBookings] = useState<DirectAcquisitionBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [tab, setTab] = useState<Tab>('active');
@@ -72,8 +88,12 @@ export default function FeHomeScreen({ navigation }: RootScreen<'FeHome'>) {
   const load = useCallback(async () => {
     try {
       setError(null);
-      const res = await FE.assignedVisits();
-      setVisits(res.data || []);
+      const [visitRes, directRes] = await Promise.all([
+        FE.assignedVisits(),
+        FE.directBookings(),
+      ]);
+      setVisits(visitRes.data || []);
+      setDirectBookings(directRes.data?.bookings || []);
     } catch (e: any) {
       setError(e?.response?.data?.detail?.message || 'Could not load assigned visits.');
     } finally {
@@ -89,12 +109,23 @@ export default function FeHomeScreen({ navigation }: RootScreen<'FeHome'>) {
     load();
   };
 
-  const filtered = visits.filter((v) => visitBucket(v) === tab);
+  const filteredVisits = visits.filter((v) => visitBucket(v) === tab);
+  const filteredDirect = directBookings.filter((b) => directBucket(b) === tab);
+  const workItems: WorkItem[] = [
+    ...filteredDirect.map((booking) => ({ kind: 'direct' as const, id: `direct:${booking.id}`, booking })),
+    ...filteredVisits.map((visit) => ({ kind: 'legacy' as const, id: `legacy:${visit.id}`, visit })),
+  ];
 
   const counts: Record<Tab, number> = {
-    active: visits.filter((v) => visitBucket(v) === 'active').length,
-    scheduled: visits.filter((v) => visitBucket(v) === 'scheduled').length,
-    completed: visits.filter((v) => visitBucket(v) === 'completed').length,
+    active:
+      visits.filter((v) => visitBucket(v) === 'active').length +
+      directBookings.filter((b) => directBucket(b) === 'active').length,
+    scheduled:
+      visits.filter((v) => visitBucket(v) === 'scheduled').length +
+      directBookings.filter((b) => directBucket(b) === 'scheduled').length,
+    completed:
+      visits.filter((v) => visitBucket(v) === 'completed').length +
+      directBookings.filter((b) => directBucket(b) === 'completed').length,
   };
 
   return (
@@ -146,38 +177,65 @@ export default function FeHomeScreen({ navigation }: RootScreen<'FeHome'>) {
           <Text style={st.err}>{error}</Text>
           <Button label="Try again" variant="primary" onPress={load} style={st.retryBtn} />
         </View>
-      ) : filtered.length === 0 ? (
+      ) : workItems.length === 0 ? (
         <View style={st.centerFill}>
           <Text style={st.empty}>No {tab} visits.</Text>
         </View>
       ) : (
         <FlatList
-          data={filtered}
-          keyExtractor={(v) => v.id}
+          data={workItems}
+          keyExtractor={(item) => item.id}
           contentContainerStyle={st.listPadding}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.petrol} />}
-          renderItem={({ item }) => (
+          renderItem={({ item }) => item.kind === 'direct' ? (
+            <TouchableOpacity
+              style={[st.card, st.directCard]}
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate('FeDirectBookingDetail', { bookingId: item.booking.id })}
+            >
+              <View style={st.cardTop}>
+                <View style={{ flex: 1, marginRight: S.sm }}>
+                  <Text style={st.directKicker}>Owmee Direct</Text>
+                  <Text style={st.cardTitle}>{item.booking.booking_code}</Text>
+                </View>
+                <View style={st.directStatus}>
+                  <Text style={st.directStatusText}>{String(item.booking.status).replace(/_/g, ' ')}</Text>
+                </View>
+              </View>
+              <Text style={st.cardAddr} numberOfLines={2}>
+                {[item.booking.pickup_locality, item.booking.pickup_address?.city, item.booking.pickup_pincode]
+                  .filter(Boolean)
+                  .join(', ') || '—'}
+              </Text>
+              <Text style={st.cardSlot}>
+                {formatSlot(item.booking.slot_start)} – {formatSlot(item.booking.slot_end)}
+              </Text>
+              <Text style={st.cardNotes} numberOfLines={2}>
+                {item.booking.item_count} item{item.booking.item_count === 1 ? '' : 's'} · Estimated payout ₹{item.booking.estimated_total_offer_inr}
+              </Text>
+            </TouchableOpacity>
+          ) : (
             <TouchableOpacity
               style={st.card}
               activeOpacity={0.8}
-              onPress={() => navigation.navigate('FeVisitDetail', { visitId: item.id })}
+              onPress={() => navigation.navigate('FeVisitDetail', { visitId: item.visit.id })}
             >
               <View style={st.cardTop}>
-                <Text style={st.cardTitle}>{item.category_hint}</Text>
-                <StatusPill status={item.status} />
+                <Text style={st.cardTitle}>{item.visit.category_hint}</Text>
+                <StatusPill status={item.visit.status} />
               </View>
               <Text style={st.cardAddr} numberOfLines={2}>
-                {[item.address?.locality, item.address?.city].filter(Boolean).join(', ') || '—'}
+                {[item.visit.address?.locality, item.visit.address?.city].filter(Boolean).join(', ') || '—'}
               </Text>
-              {item.scheduled_slot_start ? (
+              {item.visit.scheduled_slot_start ? (
                 <Text style={st.cardSlot}>
-                  {formatSlot(item.scheduled_slot_start)} – {formatSlot(item.scheduled_slot_end)}
+                  {formatSlot(item.visit.scheduled_slot_start)} – {formatSlot(item.visit.scheduled_slot_end)}
                 </Text>
               ) : (
-                <Text style={st.cardSlot}>Requested: {formatSlot(item.requested_slot_start)}</Text>
+                <Text style={st.cardSlot}>Requested: {formatSlot(item.visit.requested_slot_start)}</Text>
               )}
-              {item.item_notes ? (
-                <Text style={st.cardNotes} numberOfLines={2}>{item.item_notes}</Text>
+              {item.visit.item_notes ? (
+                <Text style={st.cardNotes} numberOfLines={2}>{item.visit.item_notes}</Text>
               ) : null}
             </TouchableOpacity>
           )}
@@ -205,7 +263,20 @@ const st = StyleSheet.create({
     padding: S.lg, marginBottom: S.md,
     ...Shadow.glow,
   },
+  directCard: {
+    borderWidth: 1,
+    borderColor: C.petrolGlow,
+  },
   cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  directKicker: { fontSize: T.small, color: C.petrolDeep, fontWeight: T.weight.bold, marginBottom: 2 },
+  directStatus: {
+    backgroundColor: C.petrolLight,
+    borderRadius: R.pill,
+    paddingHorizontal: S.sm,
+    paddingVertical: 4,
+    maxWidth: 142,
+  },
+  directStatusText: { color: C.petrolDeep, fontSize: T.small, fontWeight: T.weight.semi, textTransform: 'capitalize' },
   cardTitle: { fontSize: T.h3, fontWeight: T.weight.semi, color: C.text, flex: 1, marginRight: S.sm },
   cardAddr: { fontSize: T.body, color: C.text2, marginTop: S.xs },
   cardSlot: { fontSize: T.body, color: C.petrolText, fontWeight: T.weight.medium, marginTop: S.xs },

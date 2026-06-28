@@ -20,6 +20,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </div>
             <nav className="flex gap-1 flex-wrap">
               <Tab to="/dispatch">Dispatch</Tab>
+              <Tab to="/direct-acquisitions">Direct acquisitions</Tab>
               <Tab to="/fes">Field executives</Tab>
               <Tab to="/listings">FE-assisted listings</Tab>
               <Tab to="/stuck-workflows">Stuck workflows</Tab>

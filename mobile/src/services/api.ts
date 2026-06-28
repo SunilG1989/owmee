@@ -460,6 +460,81 @@ export interface FEVisit {
   completed_at: string | null;
 }
 
+export type DirectBookingStatus =
+  | 'pending_fe_assignment'
+  | 'assigned_to_fe'
+  | 'fe_en_route'
+  | 'fe_arrived'
+  | 'seller_verified'
+  | 'pickup_qc_in_progress'
+  | 'seller_final_acceptance'
+  | 'payout_completed'
+  | 'booking_completed'
+  | 'seller_cancelled_before_visit'
+  | 'seller_no_show'
+  | 'fe_no_show'
+  | 'item_rejected_by_fe'
+  | 'seller_rejected_revised_offer'
+  | 'payout_failed'
+  | 'admin_cancelled'
+  | 'fraud_review'
+  | string;
+
+export interface DirectAcquisitionItem {
+  id: string;
+  category: 'toys' | 'books' | string;
+  item_type: string;
+  item_title: string;
+  seller_photos: string[];
+  pickup_photos: string[];
+  seller_check_answers: Record<string, any>;
+  ai_detected_type: string;
+  policy_status: string;
+  direct_eligibility_status: string;
+  blocked_item_warnings: string[];
+  qc_checklist_template_id: string;
+  required_pickup_photos: string[];
+  owmee_suggested_offer_inr: number;
+  fe_final_offer_inr: number | null;
+  price_change_percent: number | null;
+  price_change_reason_code: string | null;
+  approval_required: boolean;
+  approval_status: string;
+  qc_status: string;
+  qc_answers: Record<string, any>;
+  qc_notes: string | null;
+  item_status: string;
+}
+
+export interface DirectAcquisitionBooking {
+  id: string;
+  booking_code: string;
+  seller_user_id: string;
+  seller_account_id: string;
+  pickup_address_id: string;
+  pickup_address: any;
+  pickup_locality: string;
+  pickup_pincode: string;
+  slot_start: string;
+  slot_end: string;
+  status: DirectBookingStatus;
+  assigned_fe_id: string | null;
+  fe_code: string | null;
+  assignment_method: string | null;
+  item_count: number;
+  estimated_total_offer_inr: number;
+  final_total_payout_inr: number | null;
+  verified_at?: string | null;
+  seller_final_accepted_at?: string | null;
+  payout_completed_at?: string | null;
+  handover_completed_at?: string | null;
+  warehouse_inbound_id: string | null;
+  seller_otp?: string | null;
+  items: DirectAcquisitionItem[];
+  created_at: string | null;
+  updated_at: string | null;
+}
+
 /** Concierge Phase 1 booking request — replaces the legacy embedded address payload. */
 export interface ConciergeBookingRequest {
   requested_slot_start: string;  // ISO
@@ -467,6 +542,31 @@ export interface ConciergeBookingRequest {
   address_id: string;
   notes?: string | null;
   notes_tags?: string[];
+}
+
+export interface DirectAcquisitionBookingRequest {
+  pickup_address_id: string;
+  slot_start: string;
+  slot_end: string;
+  seller_ownership_declaration: boolean;
+  estimated_visit_duration_minutes?: number;
+  assignment_priority?: string | null;
+  items: Array<{
+    category: 'toys' | 'books';
+    item_type: string;
+    item_title: string;
+    seller_photos: string[];
+    seller_check_answers?: Record<string, any>;
+    ai_detected_type: string;
+    policy_status?: string;
+    direct_eligibility_status?: string;
+    owmee_suggested_offer_inr: number;
+    offer_valid_until?: string;
+    max_fe_auto_increase_allowed?: number;
+    qc_checklist_template_id: string;
+    required_pickup_photos?: string[];
+    blocked_item_warnings?: string[];
+  }>;
 }
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
@@ -1004,11 +1104,66 @@ export const FEVisits = {
     ),
 };
 
+export const DirectSell = {
+  pickupSlots: (addressId: string) =>
+    api.get<{ address_id: string; slots: Array<{ slot_start: string; slot_end: string; available: boolean }> }>(
+      `/v1/direct-sell/pickup-slots?address_id=${encodeURIComponent(addressId)}`,
+    ),
+  createBooking: (body: DirectAcquisitionBookingRequest) =>
+    api.post<DirectAcquisitionBooking>('/v1/direct-sell/bookings', body),
+  getBooking: (id: string) =>
+    api.get<DirectAcquisitionBooking>(`/v1/direct-sell/bookings/${id}`),
+  cancelBooking: (id: string, reason: string) =>
+    api.post<DirectAcquisitionBooking>(`/v1/direct-sell/bookings/${id}/cancel`, { reason }),
+};
+
 // ── Sprint 4 / Pass 2: FE-role endpoints ─────────────────────────────
 export const FE = {
   assignedVisits: () => api.get('/v1/fe/visits/assigned'),
   getVisit: (id: string) => api.get(`/v1/fe/visits/${id}`),
   startVisit: (id: string) => api.post(`/v1/fe/visits/${id}/start`),
+  directBookings: (status?: string) =>
+    api.get<{ bookings: DirectAcquisitionBooking[] }>(
+      `/v1/fe/bookings${status ? `?status=${encodeURIComponent(status)}` : ''}`,
+    ),
+  directBooking: (id: string) =>
+    api.get<DirectAcquisitionBooking>(`/v1/fe/bookings/${id}`),
+  startDirectBooking: (id: string) =>
+    api.post<DirectAcquisitionBooking>(`/v1/fe/bookings/${id}/start`),
+  verifyDirectSellerOtp: (id: string, otp: string) =>
+    api.post<DirectAcquisitionBooking>(`/v1/fe/bookings/${id}/verify-seller-otp`, { otp }),
+  addDirectItemPhotos: (bookingId: string, itemId: string, photoKeys: string[]) =>
+    api.post(`/v1/fe/bookings/${bookingId}/items/${itemId}/photos`, { photo_keys: photoKeys }),
+  requestDirectItemPhotoUpload: (bookingId: string, itemId: string, contentType: string = 'image/jpeg') =>
+    api.post<{ upload_url: string; r2_key: string; expires_in_seconds: number }>(
+      `/v1/fe/bookings/${bookingId}/items/${itemId}/photos/request`,
+      { content_type: contentType },
+    ),
+  directItemQc: (bookingId: string, itemId: string, payload: {
+    qc_answers?: Record<string, any>;
+    qc_notes?: string;
+    pickup_photos?: string[];
+  }) => api.post(`/v1/fe/bookings/${bookingId}/items/${itemId}/qc`, payload),
+  reviseDirectItemOffer: (bookingId: string, itemId: string, payload: {
+    revised_offer_inr: number;
+    reason_code: string;
+    evidence_photos?: string[];
+  }) => api.post(`/v1/fe/bookings/${bookingId}/items/${itemId}/revise-offer`, payload),
+  rejectDirectItem: (bookingId: string, itemId: string, payload: {
+    reason_code: string;
+    notes?: string;
+    evidence_photos?: string[];
+  }) => api.post(`/v1/fe/bookings/${bookingId}/items/${itemId}/reject`, payload),
+  directSellerFinalAcceptance: (bookingId: string, accepted = true, otp?: string) =>
+    api.post<DirectAcquisitionBooking>(`/v1/fe/bookings/${bookingId}/seller-final-acceptance`, {
+      accepted,
+      method: 'otp',
+      otp,
+    }),
+  triggerDirectPayout: (bookingId: string) =>
+    api.post<DirectAcquisitionBooking>(`/v1/fe/bookings/${bookingId}/trigger-payout`),
+  completeDirectHandover: (bookingId: string) =>
+    api.post<DirectAcquisitionBooking>(`/v1/fe/bookings/${bookingId}/complete-handover`),
   // Concierge Phase 2 trust theater — N4 + N5 trigger endpoints.
   startRoute: (id: string) => api.post(`/v1/fe/visits/${id}/start-route`),
   arrivingSoon: (id: string) => api.post(`/v1/fe/visits/${id}/arriving-soon`),

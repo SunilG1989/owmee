@@ -29,6 +29,7 @@ export type RootStackParams = {
   FeHome: undefined;
   FeOps: undefined;  // Sprint 6c: post-purchase pickups + deliveries
   FeVisitDetail: { visitId: string };
+  FeDirectBookingDetail: { bookingId: string };
   FeCapture: { visitId: string };
   FeVisitHistory: undefined;
   // Concierge Phase 3 — specialist excellence (FE app)

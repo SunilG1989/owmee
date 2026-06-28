@@ -93,6 +93,12 @@ def create_app() -> FastAPI:
         admin_router as fe_admin_router,
     )
     from app.modules.field_executive.dev_router import router as fe_dev_router
+    from app.modules.direct_acquisition.router import (
+        seller_router as direct_seller_router,
+        fe_router as direct_fe_router,
+        ops_router as direct_ops_router,
+        admin_router as direct_admin_router,
+    )
     # Sprint 7 / Phase 1: Community module
     from app.modules.community.router import router as community_router
     from app.modules.community.admin_router import router as community_admin_router
@@ -137,6 +143,11 @@ def create_app() -> FastAPI:
     app.include_router(fe_fe_router, prefix="/v1/fe/visits", tags=["fe-visits-fe"])
     app.include_router(fe_admin_router, prefix="/v1/admin/fe-visits", tags=["fe-visits-admin"])
     app.include_router(fe_dev_router, prefix="/v1", tags=["fe-dev"])
+    # Owmee Direct acquisition: seller books, FE QCs, Ops/Admin approve before buyer-live inventory.
+    app.include_router(direct_seller_router, prefix="/v1/direct-sell", tags=["direct-sell"])
+    app.include_router(direct_fe_router, prefix="/v1/fe", tags=["direct-acquisition-fe"])
+    app.include_router(direct_ops_router, prefix="/v1/ops", tags=["direct-acquisition-ops"])
+    app.include_router(direct_admin_router, prefix="/v1/admin", tags=["direct-acquisition-admin"])
     # Sprint 7 / Phase 1: Community module
     app.include_router(community_router, prefix="/v1/community", tags=["community"])
     app.include_router(community_admin_router, prefix="/v1/admin/community", tags=["admin-community"])
