@@ -140,7 +140,7 @@ def test_mrp_anchor_price_fallback_uses_valid_mrp_and_condition():
         condition_guess="good",
         mrp_inr=60000,
         mrp_confidence=0.7,
-        mrp_source="market_anchor",
+        mrp_source="visible_mrp",
         flags=[],
     )
 
@@ -168,6 +168,33 @@ def test_mrp_anchor_price_fallback_rejects_unclear_condition():
         condition_guess=None,
         mrp_inr=60000,
         mrp_confidence=0.7,
+        mrp_source="visible_mrp",
+        flags=[],
+    )
+
+    result = router._apply_price_fallbacks(
+        {
+            "price": None,
+            "source": "none",
+            "reasoning": "no price",
+            "comparables": [],
+            "comparables_count": 0,
+        },
+        detected,
+    )
+
+    assert result["source"] == "none"
+    assert result["price"] is None
+
+
+def test_mrp_anchor_price_fallback_rejects_market_anchor_mrp():
+    detected = AIDetected(
+        category_slug="smartphones",
+        brand="Apple",
+        model="iPhone 13",
+        condition_guess="good",
+        mrp_inr=60000,
+        mrp_confidence=0.9,
         mrp_source="market_anchor",
         flags=[],
     )
@@ -185,6 +212,24 @@ def test_mrp_anchor_price_fallback_rejects_unclear_condition():
 
     assert result["source"] == "none"
     assert result["price"] is None
+
+
+def test_price_result_merge_rejects_market_anchor_mrp():
+    detected = AIDetected(category_slug="smartphones", suggested_price_inr=28000)
+
+    merged = router._merge_mrp_from_price_result(
+        detected,
+        {
+            "price": 28000,
+            "source": "ai",
+            "mrp_inr": 69900,
+            "mrp_source": "market_anchor",
+            "mrp_confidence": 0.95,
+        },
+    )
+
+    assert merged.mrp_inr is None
+    assert merged.mrp_source is None
 
 
 @pytest.mark.asyncio

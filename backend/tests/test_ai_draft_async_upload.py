@@ -254,9 +254,10 @@ async def test_refresh_ai_draft_price_recovers_from_seller_confirmed_details(mon
     assert response.price_source == "ai"
     assert response.detected.model == "iPhone 13"
     assert response.detected.storage == "128GB"
-    assert response.detected.mrp_inr == 69900
-    assert response.detected.mrp_source == "market_anchor"
+    assert response.detected.mrp_inr is None
+    assert response.detected.mrp_source is None
     assert updates[0]["price"] == 28000
     saved_ai = json.loads(updates[0]["ai_response"])
     assert saved_ai["_owmee_price_source"] == "ai"
-    assert saved_ai["mrp_inr"] == 69900
+    assert saved_ai["mrp_inr"] is None
+    assert saved_ai["mrp_source"] is None

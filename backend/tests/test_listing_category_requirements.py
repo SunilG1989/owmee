@@ -5,6 +5,8 @@ from uuid import uuid4
 from app.modules.ai_assistant.category_taxonomy import (
     category_family_for,
     clean_category_specifics,
+    has_issue_disclosure_detail,
+    requires_issue_disclosure_detail,
 )
 from app.modules.ai_assistant.router import (
     _publish_category_specifics_rejection,
@@ -46,6 +48,20 @@ def test_category_family_infers_books_toys_and_appliances_without_new_db_categor
     assert category_family_for("others", model="Wireless headphones") == "other"
 
 
+def test_issue_disclosure_detector_separates_safe_vague_and_detailed_values():
+    assert not requires_issue_disclosure_detail("toy", {
+        "missing_parts_status": "Complete / no parts missing",
+        "safety_status": "No visible safety issue",
+    })
+    assert requires_issue_disclosure_detail("book", {
+        "markings_status": "Notes/highlights disclosed",
+    })
+    assert requires_issue_disclosure_detail("appliance", {
+        "defects_disclosed": "Defects disclosed",
+    })
+    assert has_issue_disclosure_detail("One jar has a visible crack near the handle.")
+
+
 def test_toy_publish_requires_age_cleanliness_parts_safety_and_checklist():
     payload = _payload()
     specifics = _with_seeded_category_specifics(
@@ -59,6 +75,7 @@ def test_toy_publish_requires_age_cleanliness_parts_safety_and_checklist():
         category_family="toy",
         category_specifics=specifics,
         kids_safety_checklist=None,
+        description=payload.description,
         payload=payload,
     )
 
@@ -74,6 +91,39 @@ def test_toy_publish_requires_age_cleanliness_parts_safety_and_checklist():
 
 
 def test_toy_publish_allows_honest_negative_disclosures():
+    payload = _payload(
+        age_suitability="5-7 years",
+        hygiene_status="Needs cleaning",
+        description="Disclosure: one wheel clip is missing and one edge needs buyer review.",
+        category_specifics={
+            "missing_parts_status": "Minor missing parts disclosed",
+            "safety_status": "Issue disclosed",
+        },
+    )
+    specifics = _with_seeded_category_specifics(
+        category_family="toy",
+        payload=payload,
+        draft_ai_response={},
+    )
+
+    rejection = _publish_category_specifics_rejection(
+        category_slug="kids-utility",
+        category_family="toy",
+        category_specifics=specifics,
+        kids_safety_checklist={
+            "no_small_parts": False,
+            "no_loose_batteries": True,
+            "no_sharp_edges": False,
+        },
+        description=payload.description,
+        payload=payload,
+    )
+
+    assert rejection is None
+    assert specifics["toy_type"] == "LEGO set"
+
+
+def test_toy_negative_disclosure_requires_buyer_facing_detail():
     payload = _payload(
         age_suitability="5-7 years",
         hygiene_status="Needs cleaning",
@@ -97,11 +147,12 @@ def test_toy_publish_allows_honest_negative_disclosures():
             "no_loose_batteries": True,
             "no_sharp_edges": False,
         },
+        description=payload.description,
         payload=payload,
     )
 
-    assert rejection is None
-    assert specifics["toy_type"] == "LEGO set"
+    assert rejection is not None
+    assert "issue_disclosure" in rejection["missing_fields"]
 
 
 def test_powered_toy_requires_working_or_battery_status():
@@ -125,6 +176,7 @@ def test_powered_toy_requires_working_or_battery_status():
             "no_loose_batteries": True,
             "no_sharp_edges": True,
         },
+        description=payload.description,
         payload=payload,
     )
 
@@ -151,16 +203,44 @@ def test_book_publish_requires_page_and_marking_disclosures():
         category_family="book",
         category_specifics=clean_category_specifics("book", payload.category_specifics),
         kids_safety_checklist=None,
+        description=payload.description,
         payload=payload,
     )
 
     assert rejection is not None
-    assert rejection["missing_fields"] == ["set_status"]
+    assert rejection["missing_fields"] == [
+        "set_status",
+        "class_board_edition",
+        "issue_disclosure",
+    ]
 
-    complete = payload.model_copy(update={
+    placeholder = payload.model_copy(update={
         "category_specifics": {
             **payload.category_specifics,
             "set_status": "Partial set disclosed",
+            "class_board_edition": "Class/board/edition shown",
+        },
+    })
+    placeholder_rejection = _publish_category_specifics_rejection(
+        category_slug="others",
+        category_family="book",
+        category_specifics=clean_category_specifics("book", placeholder.category_specifics),
+        kids_safety_checklist=None,
+        description=placeholder.description,
+        payload=placeholder,
+    )
+    assert placeholder_rejection is not None
+    assert placeholder_rejection["missing_fields"] == [
+        "class_board_edition",
+        "issue_disclosure",
+    ]
+
+    complete = payload.model_copy(update={
+        "description": "Disclosure: light notes are present on the first two chapters.",
+        "category_specifics": {
+            **payload.category_specifics,
+            "set_status": "Partial set disclosed",
+            "class_board_edition": "Class 4 CBSE 2025 edition",
         },
     })
     assert _publish_category_specifics_rejection(
@@ -168,6 +248,7 @@ def test_book_publish_requires_page_and_marking_disclosures():
         category_family="book",
         category_specifics=clean_category_specifics("book", complete.category_specifics),
         kids_safety_checklist=None,
+        description=complete.description,
         payload=complete,
     ) is None
 
@@ -193,16 +274,18 @@ def test_bulky_appliance_requires_pickup_complexity():
             draft_ai_response={},
         ),
         kids_safety_checklist=None,
+        description=payload.description,
         payload=payload,
     )
 
     assert rejection is not None
-    assert rejection["missing_fields"] == ["pickup_complexity"]
+    assert rejection["missing_fields"] == ["pickup_complexity", "installation_status"]
 
     complete = payload.model_copy(update={
         "category_specifics": {
             **payload.category_specifics,
             "pickup_complexity": "Needs two people",
+            "installation_status": "Needs disconnection/install help",
         },
     })
     assert _publish_category_specifics_rejection(
@@ -214,7 +297,34 @@ def test_bulky_appliance_requires_pickup_complexity():
             draft_ai_response={},
         ),
         kids_safety_checklist=None,
+        description=complete.description,
         payload=complete,
+    ) is None
+
+
+def test_safe_category_disclosures_do_not_require_issue_detail():
+    payload = _payload(
+        title="Wooden stacking toy",
+        model="Stacking toy",
+        age_suitability="3-5 years",
+        hygiene_status="Cleaned",
+        category_specifics={
+            "missing_parts_status": "Complete / no parts missing",
+            "safety_status": "No visible safety issue",
+        },
+    )
+
+    assert _publish_category_specifics_rejection(
+        category_slug="kids-utility",
+        category_family="toy",
+        category_specifics=clean_category_specifics("toy", payload.category_specifics),
+        kids_safety_checklist={
+            "no_small_parts": True,
+            "no_loose_batteries": True,
+            "no_sharp_edges": True,
+        },
+        description=payload.description,
+        payload=payload,
     ) is None
 
 
@@ -255,7 +365,7 @@ def test_manual_listing_accepts_other_book_set_with_page_disclosures():
     body = CreateListingRequest(
         category_id=uuid4(),
         title="Class 5 science book set",
-        description=None,
+        description="Disclosure: light notes are present on the first two chapters.",
         price=700,
         condition="good",
         city="Bengaluru",
@@ -267,6 +377,7 @@ def test_manual_listing_accepts_other_book_set_with_page_disclosures():
             "markings_status": "Notes/highlights disclosed",
             "pages_complete": "All pages present",
             "set_status": "Complete set",
+            "class_board_edition": "Class 5 CBSE 2025 edition",
         },
     )
     family, specifics, kids_checklist = _clean_manual_category_specifics("others", body)
@@ -280,6 +391,37 @@ def test_manual_listing_accepts_other_book_set_with_page_disclosures():
         kids_checklist=kids_checklist,
         body=body,
     ) is None
+
+
+def test_manual_listing_rejects_vague_appliance_defect_disclosure():
+    body = CreateListingRequest(
+        category_id=uuid4(),
+        title="Mixer grinder",
+        description=None,
+        price=900,
+        condition="fair",
+        city="Bengaluru",
+        state="Karnataka",
+        model="Mixer grinder",
+        category_specifics={
+            "working_status": "Not working",
+            "accessories_status": "Jar included",
+            "defects_disclosed": "Defects disclosed",
+        },
+    )
+    family, specifics, kids_checklist = _clean_manual_category_specifics("small-appliances", body)
+
+    rejection = _manual_category_specifics_rejection(
+        category_slug="small-appliances",
+        family=family,
+        specifics=specifics,
+        kids_checklist=kids_checklist,
+        body=body,
+    )
+
+    assert family == "appliance"
+    assert rejection is not None
+    assert "issue_disclosure" in rejection["missing_fields"]
 
 
 def test_edit_listing_request_accepts_mobile_edit_fields():
@@ -380,6 +522,7 @@ def test_fe_listing_accepts_book_with_complete_page_disclosures():
             "markings_status": "Light pencil marks",
             "pages_complete": "All pages present",
             "set_status": "Complete set",
+            "class_board_edition": "Class 5 CBSE 2025 edition",
         },
     )
     category = type("Category", (), {"slug": "kids-utility"})()

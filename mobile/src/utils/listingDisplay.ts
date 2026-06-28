@@ -137,10 +137,18 @@ function knownIssues(value: string[] | null | undefined): string | null {
 function categorySpecificValue(value: unknown): string | null {
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
   if (Array.isArray(value)) {
-    const cleaned = value.map(cleanListingFact).filter(Boolean) as string[];
+    const cleaned = value.map(categorySpecificValue).filter(Boolean) as string[];
     return cleaned.length ? cleaned.join(', ') : null;
   }
-  return cleanListingFact(value);
+  const cleaned = String(value ?? '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned || /^(n\/a|na|none|null|unknown|other)$/i.test(cleaned)) return null;
+  return cleaned
+    .replace(/\bgb\b/gi, 'GB')
+    .replace(/\btb\b/gi, 'TB')
+    .replace(/\bmah\b/gi, 'mAh');
 }
 
 function buildCategorySpecificFacts(item: ListingDisplayItem): ProductFact[] {
@@ -151,11 +159,16 @@ function buildCategorySpecificFacts(item: ListingDisplayItem): ProductFact[] {
   const labelsByFamily: Record<string, Array<[string, string]>> = {
     toy: [
       ['toy_type', 'Toy type'],
+      ['age_suitability', 'Age suitability'],
+      ['hygiene_status', 'Cleanliness'],
       ['missing_parts_status', 'Parts'],
       ['safety_status', 'Safety'],
       ['working_status', 'Working status'],
       ['battery_status', 'Battery'],
       ['material', 'Material'],
+      ['set_count', 'Set count'],
+      ['part_count', 'Parts count'],
+      ['box_or_manual', 'Box / manual'],
       ['recall_status', 'Recall'],
     ],
     book: [
@@ -165,14 +178,26 @@ function buildCategorySpecificFacts(item: ListingDisplayItem): ProductFact[] {
       ['markings_status', 'Writing / highlights'],
       ['pages_complete', 'Completeness'],
       ['set_status', 'Set'],
+      ['class_board_edition', 'Class / board / edition'],
+      ['class_or_grade', 'Class / grade'],
+      ['board', 'Board'],
+      ['subject', 'Subject'],
       ['edition', 'Edition'],
+      ['author_or_publisher', 'Publisher'],
+      ['cover_condition', 'Cover'],
+      ['isbn', 'ISBN'],
     ],
     appliance: [
       ['appliance_type', 'Appliance type'],
+      ['capacity_or_size', 'Capacity'],
       ['working_status', 'Working status'],
       ['accessories_status', 'Accessories'],
       ['defects_disclosed', 'Known defects'],
       ['pickup_complexity', 'Pickup'],
+      ['installation_status', 'Power / installation'],
+      ['power_requirement', 'Power requirement'],
+      ['bill_or_warranty', 'Bill / warranty'],
+      ['material', 'Material'],
     ],
   };
 

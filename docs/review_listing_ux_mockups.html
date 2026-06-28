@@ -1,0 +1,1396 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Owmee Review Listing UX Mockups</title>
+  <style>
+    :root {
+      --bg: #f6f8fb;
+      --surface: #ffffff;
+      --ink: #152033;
+      --muted: #657086;
+      --line: #dfe5ee;
+      --blue: #1657d8;
+      --blue-soft: #eaf1ff;
+      --green: #16794a;
+      --green-soft: #e9f8ef;
+      --amber: #a86405;
+      --amber-soft: #fff4db;
+      --red: #c83737;
+      --red-soft: #fff0f0;
+      --shadow: 0 14px 40px rgba(17, 30, 55, 0.10);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+    }
+    header {
+      padding: 28px 32px 14px;
+      max-width: 1680px;
+      margin: 0 auto;
+    }
+    h1 {
+      margin: 0;
+      font-size: 30px;
+      letter-spacing: 0;
+    }
+    .intro {
+      margin: 8px 0 0;
+      color: var(--muted);
+      max-width: 900px;
+      line-height: 1.45;
+    }
+    .grid {
+      max-width: 1680px;
+      margin: 0 auto;
+      padding: 16px 28px 40px;
+      display: grid;
+      grid-template-columns: repeat(5, minmax(280px, 1fr));
+      gap: 22px;
+      align-items: start;
+    }
+    .focus {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 16px 28px 44px;
+      display: grid;
+      grid-template-columns: minmax(320px, 380px) minmax(320px, 1fr);
+      gap: 24px;
+      align-items: start;
+    }
+    .concept {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 16px;
+      box-shadow: var(--shadow);
+    }
+    .concept h2 {
+      margin: 0;
+      font-size: 17px;
+    }
+    .concept p {
+      margin: 6px 0 14px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .phone {
+      width: 100%;
+      max-width: 340px;
+      margin: 0 auto;
+      aspect-ratio: 9 / 19.5;
+      border-radius: 32px;
+      padding: 10px;
+      background: #101828;
+      box-shadow: 0 18px 48px rgba(10, 22, 40, 0.22);
+    }
+    .screen {
+      height: 100%;
+      overflow: hidden;
+      border-radius: 24px;
+      background: #f7f9fc;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      display: flex;
+      flex-direction: column;
+    }
+    .topbar {
+      height: 54px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 14px;
+    }
+    .back {
+      width: 32px;
+      height: 32px;
+      border-radius: 16px;
+      background: #eef3ff;
+      color: var(--blue);
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+      flex: 0 0 auto;
+    }
+    .topcopy { min-width: 0; flex: 1; }
+    .tiny-score {
+      width: 34px;
+      height: 34px;
+      border-radius: 17px;
+      display: grid;
+      place-items: center;
+      background: var(--green-soft);
+      color: var(--green);
+      border: 1px solid #bfe8cf;
+      font-size: 11px;
+      font-weight: 950;
+      flex: 0 0 auto;
+    }
+    .title {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 800;
+    }
+    .subtitle {
+      margin: 1px 0 0;
+      color: var(--muted);
+      font-size: 10px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .content {
+      padding: 10px;
+      overflow: hidden;
+      flex: 1;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px;
+      margin-bottom: 8px;
+    }
+    .hero {
+      display: grid;
+      grid-template-columns: 68px minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+    }
+    .photo {
+      width: 68px;
+      height: 68px;
+      border-radius: 10px;
+      background:
+        radial-gradient(circle at 35px 16px, #f6d365 0 11px, transparent 12px),
+        radial-gradient(circle at 36px 36px, #54b96f 0 18px, transparent 19px),
+        linear-gradient(135deg, #e6efff, #fff7df);
+      border: 1px solid #d9e1ec;
+      position: relative;
+    }
+    .photo::after {
+      content: "3 photos";
+      position: absolute;
+      left: 6px;
+      bottom: 5px;
+      padding: 2px 5px;
+      border-radius: 8px;
+      background: rgba(16, 24, 40, 0.74);
+      color: white;
+      font-size: 8px;
+      font-weight: 700;
+    }
+    .name {
+      margin: 0;
+      font-weight: 850;
+      font-size: 14px;
+      line-height: 1.18;
+    }
+    .price {
+      color: var(--green);
+      font-size: 16px;
+      font-weight: 900;
+      margin-top: 4px;
+    }
+    .price-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .price-row .price {
+      margin-top: 0;
+    }
+    .meta {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1.35;
+    }
+    .pillrow {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 8px;
+    }
+    .pill {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 4px 7px;
+      font-size: 9px;
+      font-weight: 700;
+      color: #334155;
+      background: #f9fbff;
+    }
+    .pill.green {
+      color: var(--green);
+      background: var(--green-soft);
+      border-color: #bfe8cf;
+    }
+    .pill.warn {
+      color: var(--amber);
+      background: var(--amber-soft);
+      border-color: #f3d492;
+    }
+    .pill.red {
+      color: var(--red);
+      background: var(--red-soft);
+      border-color: #f0b9b9;
+    }
+    .section-title {
+      margin: 0 0 6px;
+      font-size: 12px;
+      font-weight: 850;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .small-link {
+      color: var(--blue);
+      font-size: 10px;
+      font-weight: 800;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 18px minmax(0, 1fr) auto;
+      gap: 7px;
+      align-items: center;
+      min-height: 31px;
+      border-top: 1px solid #eef2f7;
+      padding-top: 6px;
+      margin-top: 6px;
+    }
+    .dot {
+      width: 18px;
+      height: 18px;
+      border-radius: 9px;
+      display: grid;
+      place-items: center;
+      font-size: 10px;
+      font-weight: 900;
+      background: var(--green-soft);
+      color: var(--green);
+    }
+    .dot.warn {
+      background: var(--amber-soft);
+      color: var(--amber);
+    }
+    .dot.red {
+      background: var(--red-soft);
+      color: var(--red);
+    }
+    .rowtext strong {
+      display: block;
+      font-size: 10.5px;
+      line-height: 1.2;
+    }
+    .rowtext span {
+      display: block;
+      color: var(--muted);
+      font-size: 9px;
+      margin-top: 1px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .action {
+      font-size: 9.5px;
+      color: var(--blue);
+      font-weight: 850;
+    }
+    .facts {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .fact {
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      padding: 7px;
+      min-height: 42px;
+      background: #fbfcff;
+    }
+    .fact label {
+      display: block;
+      color: var(--muted);
+      font-size: 8px;
+      font-weight: 750;
+      text-transform: uppercase;
+    }
+    .fact span {
+      display: block;
+      margin-top: 2px;
+      font-size: 10px;
+      font-weight: 850;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .rail {
+      display: flex;
+      gap: 6px;
+      overflow: hidden;
+    }
+    .thumb {
+      width: 56px;
+      height: 46px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #dbeafe, #fef3c7);
+      border: 1px solid #d8e2ef;
+      flex: 0 0 auto;
+    }
+    .tabs {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 4px;
+      padding: 4px;
+      background: #edf2fb;
+      border-radius: 12px;
+      margin-bottom: 8px;
+    }
+    .tab {
+      text-align: center;
+      padding: 7px 2px;
+      border-radius: 9px;
+      font-size: 9px;
+      font-weight: 850;
+      color: var(--muted);
+    }
+    .tab.active {
+      background: white;
+      color: var(--blue);
+      box-shadow: 0 2px 8px rgba(21, 87, 216, 0.12);
+    }
+    .banner {
+      border-radius: 11px;
+      padding: 9px;
+      font-size: 10px;
+      line-height: 1.35;
+      font-weight: 750;
+      margin-bottom: 8px;
+    }
+    .banner.green {
+      color: var(--green);
+      background: var(--green-soft);
+      border: 1px solid #bfe8cf;
+    }
+    .banner.warn {
+      color: var(--amber);
+      background: var(--amber-soft);
+      border: 1px solid #f1d59b;
+    }
+    .pending-card {
+      border-color: #f1d59b;
+      background: #fffaf0;
+    }
+    .review-card {
+      border-color: #bfe8cf;
+      background: #f7fff9;
+    }
+    .compact-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      padding: 7px 0;
+      border-top: 1px solid #eef2f7;
+      font-size: 10px;
+    }
+    .compact-row:first-of-type { border-top: 0; }
+    .compact-row strong {
+      display: block;
+      color: var(--ink);
+      font-size: 10.5px;
+    }
+    .compact-row span {
+      display: block;
+      color: var(--muted);
+      margin-top: 1px;
+      line-height: 1.25;
+    }
+    .state {
+      border-radius: 999px;
+      padding: 4px 7px;
+      font-size: 9px;
+      font-weight: 850;
+      white-space: nowrap;
+    }
+    .state.ok {
+      background: var(--green-soft);
+      color: var(--green);
+    }
+    .state.todo {
+      background: var(--amber-soft);
+      color: var(--amber);
+    }
+    .state.view {
+      background: var(--blue-soft);
+      color: var(--blue);
+    }
+    .side-panel {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 18px;
+      box-shadow: var(--shadow);
+    }
+    .side-panel h2 {
+      margin: 0;
+      font-size: 20px;
+    }
+    .side-panel p {
+      color: var(--muted);
+      line-height: 1.5;
+      margin: 8px 0 16px;
+    }
+    .principle-list {
+      display: grid;
+      gap: 10px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .principle-list li {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 11px 12px;
+      background: #fbfcff;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .principle-list strong {
+      display: block;
+      color: var(--ink);
+      margin-bottom: 2px;
+    }
+    .matrix {
+      margin-top: 16px;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .matrix-card {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 11px;
+      background: #fbfcff;
+    }
+    .matrix-card h3 {
+      margin: 0 0 7px;
+      font-size: 13px;
+    }
+    .matrix-card div {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .preview {
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      background: white;
+    }
+    .preview-img {
+      height: 108px;
+      background:
+        radial-gradient(circle at 45% 26%, #f4c95d 0 18px, transparent 19px),
+        radial-gradient(circle at 48% 58%, #42a66b 0 36px, transparent 37px),
+        linear-gradient(135deg, #e9f0ff, #fff9e8);
+    }
+    .preview-copy {
+      padding: 10px;
+    }
+    .sticky {
+      margin-top: auto;
+      background: white;
+      border-top: 1px solid var(--line);
+      padding: 9px 10px 10px;
+    }
+    .primary {
+      width: 100%;
+      border: 0;
+      border-radius: 11px;
+      background: var(--blue);
+      color: white;
+      height: 40px;
+      font-weight: 900;
+      font-size: 12px;
+    }
+    .secondary {
+      margin-top: 6px;
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: white;
+      color: var(--ink);
+      height: 34px;
+      font-weight: 850;
+      font-size: 11px;
+    }
+    .bottomsheet {
+      margin-top: 8px;
+      border-radius: 16px 16px 0 0;
+      background: white;
+      border: 1px solid var(--line);
+      padding: 10px;
+      box-shadow: 0 -10px 22px rgba(15, 23, 42, 0.08);
+    }
+    .option {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 8px;
+      margin-top: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 10px;
+      font-weight: 750;
+    }
+    .radio {
+      width: 15px;
+      height: 15px;
+      border-radius: 8px;
+      border: 2px solid #b7c1d0;
+    }
+    .option.selected {
+      border-color: #9dc2ff;
+      background: var(--blue-soft);
+    }
+    .option.selected .radio {
+      border-color: var(--blue);
+      box-shadow: inset 0 0 0 3px white;
+      background: var(--blue);
+    }
+    .score {
+      width: 46px;
+      height: 46px;
+      border-radius: 23px;
+      background: var(--green-soft);
+      color: var(--green);
+      display: grid;
+      place-items: center;
+      font-weight: 950;
+      font-size: 14px;
+      flex: 0 0 auto;
+    }
+    .two-col {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+    }
+    .legacy { display: none; }
+    @media (max-width: 1500px) {
+      .grid { grid-template-columns: repeat(3, minmax(280px, 1fr)); }
+    }
+    @media (max-width: 980px) {
+      .grid { grid-template-columns: repeat(2, minmax(260px, 1fr)); }
+      .focus { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 640px) {
+      header { padding: 22px 18px 8px; }
+      .grid { grid-template-columns: 1fr; padding: 12px 14px 32px; }
+      .focus { padding: 12px 14px 32px; }
+      .matrix { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Recommended Review Listing Mock</h1>
+    <p class="intro">
+      Selected direction: category-aware fast lane. The main screen stays simple, readiness is a small signal,
+      pending work is explicit, and the seller reviews the buyer-facing summary before publishing.
+    </p>
+  </header>
+
+  <main class="focus">
+    <section class="concept">
+      <h2>Category-Aware Fast Lane</h2>
+      <p>Compact first screen, guided missing details, then buyer preview before publish.</p>
+      <div class="phone">
+        <div class="screen">
+          <div class="topbar">
+            <div class="back">‹</div>
+            <div class="topcopy">
+              <p class="title">Review listing</p>
+              <p class="subtitle">3 pending • buyer review next</p>
+            </div>
+          </div>
+          <div class="content">
+            <div class="card hero">
+              <div class="photo"></div>
+              <div>
+                <p class="name">Philips air fryer</p>
+                <div class="price-row">
+                  <div class="price">₹3,200</div>
+                  <div class="tiny-score">88%</div>
+                </div>
+                <div class="meta">Kitchen appliance • Condition checked partly • Indiranagar</div>
+                <div class="pillrow">
+                  <span class="pill green">Photos ready</span>
+                  <span class="pill green">Price ready</span>
+                  <span class="pill warn">Condition details</span>
+                  <span class="pill warn">3 pending</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="card pending-card">
+              <p class="section-title">Pending before publish <span class="small-link">3 left</span></p>
+              <div class="row">
+                <div class="dot warn">!</div>
+                <div class="rowtext"><strong>Condition details</strong><span>Working, visible wear, defects, proof</span></div>
+                <div class="action">Review</div>
+              </div>
+              <div class="row">
+                <div class="dot warn">!</div>
+                <div class="rowtext"><strong>Accessories included</strong><span>Basket, tray, manual, bill or warranty</span></div>
+                <div class="action">Add</div>
+              </div>
+              <div class="row">
+                <div class="dot warn">!</div>
+                <div class="rowtext"><strong>Pickup effort</strong><span>Confirm easy pickup or large-item handling</span></div>
+                <div class="action">Set</div>
+              </div>
+            </div>
+
+            <div class="card">
+              <p class="section-title">Captured for this category <span class="small-link">Edit</span></p>
+              <div class="compact-row">
+                <div><strong>Product identity</strong><span>Philips air fryer • Kitchen appliance</span></div>
+                <div class="state ok">Set</div>
+              </div>
+              <div class="compact-row">
+                <div><strong>Price</strong><span>₹3,200 • Owmee estimate accepted</span></div>
+                <div class="state ok">Set</div>
+              </div>
+              <div class="compact-row">
+                <div><strong>Condition summary</strong><span>Good • works, cosmetic wear not confirmed</span></div>
+                <div class="state todo">Review</div>
+              </div>
+              <div class="compact-row">
+                <div><strong>Location & delivery</strong><span>Indiranagar • Owmee pickup</span></div>
+                <div class="state ok">Set</div>
+              </div>
+              <div class="compact-row">
+                <div><strong>Category details</strong><span>Capacity, power, accessories, pickup effort</span></div>
+                <div class="state todo">2 missing</div>
+              </div>
+            </div>
+
+            <div class="card">
+              <p class="section-title">Condition breakdown <span class="small-link">Edit</span></p>
+              <div class="facts">
+                <div class="fact"><label>Overall</label><span>Good</span></div>
+                <div class="fact"><label>Working</label><span>Works</span></div>
+                <div class="fact"><label>Wear</label><span style="color:var(--amber)">Confirm</span></div>
+                <div class="fact"><label>Defects</label><span style="color:var(--amber)">Confirm</span></div>
+              </div>
+            </div>
+
+            <div class="card review-card">
+              <p class="section-title">Review before publish <span class="small-link">Preview</span></p>
+              <div class="compact-row">
+                <div><strong>Buyer card</strong><span>Check title, price, photos, condition and delivery</span></div>
+                <div class="state view">Next</div>
+              </div>
+              <div class="compact-row">
+                <div><strong>Trust & handover</strong><span>Payment on Owmee • pickup proof saved</span></div>
+                <div class="state ok">Ready</div>
+              </div>
+            </div>
+
+            <div class="bottomsheet">
+              <p class="section-title">Guided detail: condition</p>
+              <div class="option selected"><span class="radio"></span> Works well, light normal wear</div>
+              <div class="option"><span class="radio"></span> Works, visible wear to show</div>
+              <div class="option"><span class="radio"></span> Has issue buyer must know</div>
+              <button class="primary" style="margin-top:10px;">Save & continue</button>
+            </div>
+          </div>
+          <div class="sticky">
+            <button class="primary">Complete 3 pending details</button>
+            <button class="secondary">Preview buyer card</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="side-panel">
+      <h2>How this solves the screen</h2>
+      <p>
+        The seller sees only the important listing summary first. Everything else is either marked as captured,
+        listed as pending, or moved into guided sheets. Publish stays blocked until required category data is complete.
+      </p>
+      <ul class="principle-list">
+        <li><strong>Small readiness signal</strong> The 88% score is useful, but no longer dominates the page.</li>
+        <li><strong>Pending is obvious</strong> The seller knows exactly what is blocking publish: condition details, accessories and pickup effort.</li>
+        <li><strong>Condition is first-class</strong> Buyers see overall grade, working status, visible wear, defects and proof where relevant.</li>
+        <li><strong>No data loss</strong> Captured groups show product identity, price, condition, category details, location, delivery, trust and handover.</li>
+        <li><strong>Guided capture</strong> Each missing field opens as a short choice sheet, not a long form.</li>
+        <li><strong>Final review</strong> After pending fields are done, the next step is buyer preview before publish.</li>
+      </ul>
+
+      <div class="matrix">
+        <div class="matrix-card">
+          <h3>Toys</h3>
+          <div>Condition = cleanliness, parts complete, safety, age suitability, battery/working if powered, material, box/manual.</div>
+        </div>
+        <div class="matrix-card">
+          <h3>Books</h3>
+          <div>Condition = pages complete, torn pages, markings, cover state, set completeness, language, class/board/edition.</div>
+        </div>
+        <div class="matrix-card">
+          <h3>Appliances</h3>
+          <div>Condition = working status, visible wear, defects, accessories, capacity, power/install, pickup effort, bill/warranty.</div>
+        </div>
+        <div class="matrix-card">
+          <h3>Electronics</h3>
+          <div>Condition = screen, body, battery, functional status, water damage, repairs, box/bill/charger, defects.</div>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <main class="grid legacy">
+    <section class="concept">
+      <h2>1. Smart Snapshot + Guided Fix</h2>
+      <p>The strongest base: one clear item snapshot, readiness score, buyer preview, and only the missing details as guided fixes.</p>
+      <div class="phone">
+        <div class="screen">
+          <div class="topbar">
+            <div class="back">‹</div>
+            <div class="topcopy">
+              <p class="title">Review listing</p>
+              <p class="subtitle">86% ready • 3 details left</p>
+            </div>
+          </div>
+          <div class="content">
+            <div class="card hero">
+              <div class="photo"></div>
+              <div>
+                <p class="name">Wooden stacking toy</p>
+                <div class="price">₹450</div>
+                <div class="meta">Toys & Kids • Good • Koramangala</div>
+                <div class="pillrow">
+                  <span class="pill green">Buyer preview ready</span>
+                  <span class="pill warn">Age needed</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="card two-col">
+              <div class="score">86%</div>
+              <div>
+                <p class="name">Almost ready</p>
+                <div class="meta">Name, photos, price, status and delivery are set. Complete 3 safety details.</div>
+              </div>
+            </div>
+
+            <div class="card">
+              <p class="section-title">Key details <span class="small-link">Edit all</span></p>
+              <div class="facts">
+                <div class="fact"><label>Product</label><span>Stacking toy</span></div>
+                <div class="fact"><label>Type</label><span>Wooden toy</span></div>
+                <div class="fact"><label>Status</label><span>Good</span></div>
+                <div class="fact"><label>Delivery</label><span>Owmee pickup</span></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <p class="section-title">Finish before publish</p>
+              <div class="row">
+                <div class="dot warn">!</div>
+                <div class="rowtext"><strong>Age range</strong><span>Needed for toy listings</span></div>
+                <div class="action">Choose</div>
+              </div>
+              <div class="row">
+                <div class="dot warn">?</div>
+                <div class="rowtext"><strong>Parts & safety</strong><span>Confirm no missing or unsafe parts</span></div>
+                <div class="action">Confirm</div>
+              </div>
+              <div class="row">
+                <div class="dot warn">!</div>
+                <div class="rowtext"><strong>Cleanliness</strong><span>Tell buyer if cleaned</span></div>
+                <div class="action">Set</div>
+              </div>
+            </div>
+
+            <div class="bottomsheet">
+              <p class="section-title">Guided fix: age range</p>
+              <div class="option selected"><span class="radio"></span> 3 to 5 years</div>
+              <div class="option"><span class="radio"></span> 5 to 8 years</div>
+              <button class="primary" style="margin-top:10px;">Save & next</button>
+            </div>
+          </div>
+          <div class="sticky">
+            <button class="primary">Finish 3 details</button>
+            <button class="secondary">Preview as buyer</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="concept">
+      <h2>2. Buyer Preview + Completeness Panel</h2>
+      <p>Best for seller confidence. The buyer-facing card is first, with a compact completeness panel below it.</p>
+      <div class="phone">
+        <div class="screen">
+          <div class="topbar">
+            <div class="back">‹</div>
+            <div class="topcopy">
+              <p class="title">Buyer preview</p>
+              <p class="subtitle">92% ready • 2 checks left</p>
+            </div>
+          </div>
+          <div class="content">
+            <div class="preview">
+              <div class="preview-img"></div>
+              <div class="preview-copy">
+                <p class="name">Class 4 Maths books set</p>
+                <div class="price">₹320</div>
+                <div class="meta">Books • English • Complete set • Whitefield</div>
+                <div class="pillrow">
+                  <span class="pill green">Pages complete</span>
+                  <span class="pill green">Light pencil marks</span>
+                  <span class="pill warn">Board needed</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="card two-col" style="margin-top:8px;">
+              <div class="score">92%</div>
+              <div>
+                <p class="name">Looks good to buyers</p>
+                <div class="meta">Add board/edition and pickup slot before publishing.</div>
+              </div>
+            </div>
+
+            <div class="card">
+              <p class="section-title">Captured details <span class="small-link">Edit</span></p>
+              <div class="facts">
+                <div class="fact"><label>Category</label><span>Books</span></div>
+                <div class="fact"><label>Class</label><span>Class 4</span></div>
+                <div class="fact"><label>Language</label><span>English</span></div>
+                <div class="fact"><label>Pages</label><span>Complete</span></div>
+                <div class="fact"><label>Set</label><span>All books</span></div>
+                <div class="fact"><label>Board</label><span style="color:var(--amber)">Select</span></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <p class="section-title">Trust checks</p>
+              <div class="row">
+                <div class="dot">✓</div>
+                <div class="rowtext"><strong>Payment protected</strong><span>Paid through Owmee</span></div>
+                <div class="action">Done</div>
+              </div>
+              <div class="row">
+                <div class="dot warn">!</div>
+                <div class="rowtext"><strong>Pickup slot</strong><span>Needed for handover</span></div>
+                <div class="action">Set</div>
+              </div>
+            </div>
+          </div>
+          <div class="sticky">
+            <button class="primary">Complete 2 checks</button>
+            <button class="secondary">Save draft</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="concept">
+      <h2>3. Readiness Dashboard + Sections</h2>
+      <p>A score-led page with three simple sections: Item, Trust, Preview. Good when the seller wants structure without many screens.</p>
+      <div class="phone">
+        <div class="screen">
+          <div class="topbar">
+            <div class="back">‹</div>
+            <div class="topcopy">
+              <p class="title">Ready to publish?</p>
+              <p class="subtitle">Item • Trust • Preview</p>
+            </div>
+          </div>
+          <div class="content">
+            <div class="card two-col">
+              <div class="score">78%</div>
+              <div>
+                <p class="name">Needs appliance details</p>
+                <div class="meta">Price and photos are ready. Confirm working, accessories, and pickup effort.</div>
+              </div>
+            </div>
+
+            <div class="card hero">
+              <div class="photo"></div>
+              <div>
+                <p class="name">Samsung mixer grinder</p>
+                <div class="price">₹1,250</div>
+                <div class="meta">Home appliance • Bengaluru</div>
+                <div class="pillrow">
+                  <span class="pill warn">Working?</span>
+                  <span class="pill warn">Accessories?</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="tabs">
+              <div class="tab active">Item</div>
+              <div class="tab">Trust</div>
+              <div class="tab">Preview</div>
+            </div>
+
+            <div class="card">
+              <p class="section-title">Item checks</p>
+              <div class="row">
+                <div class="dot warn">!</div>
+                <div class="rowtext"><strong>Working condition</strong><span>Works fully, has issue, or not working</span></div>
+                <div class="action">Set</div>
+              </div>
+              <div class="row">
+                <div class="dot warn">!</div>
+                <div class="rowtext"><strong>Accessories</strong><span>Jar, lid, blades, manual</span></div>
+                <div class="action">Add</div>
+              </div>
+              <div class="row">
+                <div class="dot warn">!</div>
+                <div class="rowtext"><strong>Pickup effort</strong><span>Easy pickup or heavy item</span></div>
+                <div class="action">Set</div>
+              </div>
+            </div>
+
+            <div class="banner green">Buyer preview updates as each answer is saved.</div>
+          </div>
+          <div class="sticky">
+            <button class="primary">Continue guided review</button>
+            <button class="secondary">Preview buyer card</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="concept">
+      <h2>4. Minimal Main Page + Detail Sheets</h2>
+      <p>The cleanest main screen. It shows only product, score, preview, and missing groups; all detailed capture happens in sheets.</p>
+      <div class="phone">
+        <div class="screen">
+          <div class="topbar">
+            <div class="back">‹</div>
+            <div class="topcopy">
+              <p class="title">Review listing</p>
+              <p class="subtitle">Simple view • details in sheets</p>
+            </div>
+          </div>
+          <div class="content">
+            <div class="card hero">
+              <div class="photo"></div>
+              <div>
+                <p class="name">iPhone 13, 128GB</p>
+                <div class="price">₹28,500</div>
+                <div class="meta">Apple • Good • Battery 86%</div>
+                <div class="pillrow">
+                  <span class="pill green">Photos ready</span>
+                  <span class="pill green">Battery captured</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="card two-col">
+              <div class="score">95%</div>
+              <div>
+                <p class="name">One check left</p>
+                <div class="meta">Confirm screen/body condition before publishing.</div>
+              </div>
+            </div>
+
+            <div class="card">
+              <p class="section-title">What buyers see <span class="small-link">Open</span></p>
+              <div class="facts">
+                <div class="fact"><label>Brand</label><span>Apple</span></div>
+                <div class="fact"><label>Model</label><span>iPhone 13</span></div>
+                <div class="fact"><label>Storage</label><span>128GB</span></div>
+                <div class="fact"><label>Battery</label><span>86%</span></div>
+              </div>
+            </div>
+
+            <div class="bottomsheet">
+              <p class="section-title">Guided check: condition</p>
+              <div class="option selected"><span class="radio"></span> Screen clean, body has light wear</div>
+              <div class="option"><span class="radio"></span> Visible scratches</div>
+              <div class="option"><span class="radio"></span> Issue to disclose</div>
+              <button class="primary" style="margin-top:10px;">Save & publish</button>
+            </div>
+          </div>
+          <div class="sticky">
+            <button class="primary">Confirm condition</button>
+            <button class="secondary">Save draft</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="concept">
+      <h2>5. Category-Aware Fast Lane</h2>
+      <p>Most scalable direction. Same screen pattern, but the check cards change by category: toys, books, appliances, electronics.</p>
+      <div class="phone">
+        <div class="screen">
+          <div class="topbar">
+            <div class="back">‹</div>
+            <div class="topcopy">
+              <p class="title">Fast review</p>
+              <p class="subtitle">Category checks only</p>
+            </div>
+          </div>
+          <div class="content">
+            <div class="card hero">
+              <div class="photo"></div>
+              <div>
+                <p class="name">Philips air fryer</p>
+                <div class="price">₹3,200</div>
+                <div class="meta">Kitchen appliance • Good • Indiranagar</div>
+                <div class="pillrow">
+                  <span class="pill green">Price ready</span>
+                  <span class="pill green">Preview ready</span>
+                  <span class="pill warn">Pickup</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="card two-col">
+              <div class="score">88%</div>
+              <div>
+                <p class="name">Fast lane active</p>
+                <div class="meta">Only appliance-specific checks are shown. Other data is already captured.</div>
+              </div>
+            </div>
+
+            <div class="card">
+              <p class="section-title">Required by category</p>
+              <div class="row">
+                <div class="dot">✓</div>
+                <div class="rowtext"><strong>Product identity</strong><span>Philips air fryer</span></div>
+                <div class="action">Edit</div>
+              </div>
+              <div class="row">
+                <div class="dot">✓</div>
+                <div class="rowtext"><strong>Working status</strong><span>Works as expected</span></div>
+                <div class="action">Edit</div>
+              </div>
+              <div class="row">
+                <div class="dot warn">!</div>
+                <div class="rowtext"><strong>Accessories</strong><span>Basket, tray, manual, bill</span></div>
+                <div class="action">Add</div>
+              </div>
+              <div class="row">
+                <div class="dot warn">!</div>
+                <div class="rowtext"><strong>Pickup effort</strong><span>Easy pickup or large item</span></div>
+                <div class="action">Set</div>
+              </div>
+            </div>
+
+            <div class="card">
+              <p class="section-title">Trust + handover</p>
+              <div class="facts">
+                <div class="fact"><label>Payment</label><span>Owmee protected</span></div>
+                <div class="fact"><label>Delivery</label><span>Owmee pickup</span></div>
+                <div class="fact"><label>Location</label><span>Indiranagar</span></div>
+                <div class="fact"><label>Disputes</label><span>Photos saved</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="sticky">
+            <button class="primary">Complete appliance checks</button>
+            <button class="secondary">Buyer preview</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <main class="grid legacy">
+    <section class="concept">
+      <h2>1. Snapshot + Fix Queue</h2>
+      <p>Best all-rounder. Shows only the core listing first, then a short queue for missing or low-confidence details.</p>
+      <div class="phone">
+        <div class="screen">
+          <div class="topbar">
+            <div class="back">‹</div>
+            <div class="topcopy">
+              <p class="title">Review listing</p>
+              <p class="subtitle">3 details left • about 45 sec</p>
+            </div>
+          </div>
+          <div class="content">
+            <div class="card hero">
+              <div class="photo"></div>
+              <div>
+                <p class="name">Wooden stacking toy</p>
+                <div class="price">₹450</div>
+                <div class="meta">Toys & Kids • Good • Koramangala</div>
+                <div class="pillrow">
+                  <span class="pill green">Good condition</span>
+                  <span class="pill warn">Age needed</span>
+                  <span class="pill green">Pickup + delivery</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <p class="section-title">Finish before publish <span class="small-link">Why?</span></p>
+              <div class="row">
+                <div class="dot warn">!</div>
+                <div class="rowtext"><strong>Age suitability</strong><span>Needed for toy safety</span></div>
+                <div class="action">Add</div>
+              </div>
+              <div class="row">
+                <div class="dot warn">?</div>
+                <div class="rowtext"><strong>Parts & safety</strong><span>AI thinks complete, confirm once</span></div>
+                <div class="action">Review</div>
+              </div>
+              <div class="row">
+                <div class="dot warn">!</div>
+                <div class="rowtext"><strong>Pickup / delivery</strong><span>Confirm seller pickup slot</span></div>
+                <div class="action">Set</div>
+              </div>
+            </div>
+
+            <div class="card">
+              <p class="section-title">Product details <span class="small-link">Edit</span></p>
+              <div class="facts">
+                <div class="fact"><label>Brand / type</label><span>Wooden toy</span></div>
+                <div class="fact"><label>Status</label><span>Good</span></div>
+                <div class="fact"><label>Cleanliness</label><span>Cleaned</span></div>
+                <div class="fact"><label>Material</label><span>Wood</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="sticky">
+            <button class="primary">Finish required details</button>
+            <button class="secondary">Save draft</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="concept">
+      <h2>2. Buyer Preview First</h2>
+      <p>Seller sees exactly what buyers will see. Missing seller inputs sit below as compact corrections.</p>
+      <div class="phone">
+        <div class="screen">
+          <div class="topbar">
+            <div class="back">‹</div>
+            <div class="topcopy">
+              <p class="title">Buyer preview</p>
+              <p class="subtitle">Review the live listing card</p>
+            </div>
+          </div>
+          <div class="content">
+            <div class="preview">
+              <div class="preview-img"></div>
+              <div class="preview-copy">
+                <p class="name">Wooden stacking toy</p>
+                <div class="price">₹450</div>
+                <div class="meta">Good condition • Pickup + Owmee delivery</div>
+                <div class="pillrow">
+                  <span class="pill green">Cleaned</span>
+                  <span class="pill">Wood</span>
+                  <span class="pill warn">Age not set</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="card" style="margin-top:8px;">
+              <p class="section-title">Needed from you</p>
+              <div class="row">
+                <div class="dot warn">!</div>
+                <div class="rowtext"><strong>Who is it for?</strong><span>Choose age range</span></div>
+                <div class="action">Choose</div>
+              </div>
+              <div class="row">
+                <div class="dot warn">?</div>
+                <div class="rowtext"><strong>Any missing pieces?</strong><span>Buyer-visible answer</span></div>
+                <div class="action">Confirm</div>
+              </div>
+            </div>
+
+            <div class="card">
+              <p class="section-title">Hidden support details</p>
+              <div class="facts">
+                <div class="fact"><label>MRP</label><span>Reference only</span></div>
+                <div class="fact"><label>AI confidence</label><span>High</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="sticky">
+            <button class="primary">Complete preview</button>
+            <button class="secondary">Edit product details</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="concept">
+      <h2>3. Three Compact Tabs</h2>
+      <p>One page, but mentally split into Item, Trust, and Photos. Good when data volume varies by category.</p>
+      <div class="phone">
+        <div class="screen">
+          <div class="topbar">
+            <div class="back">‹</div>
+            <div class="topcopy">
+              <p class="title">Review listing</p>
+              <p class="subtitle">Item tab active • 2 missing</p>
+            </div>
+          </div>
+          <div class="content">
+            <div class="tabs">
+              <div class="tab active">Item</div>
+              <div class="tab">Trust</div>
+              <div class="tab">Photos</div>
+            </div>
+            <div class="card hero">
+              <div class="photo"></div>
+              <div>
+                <p class="name">Wooden stacking toy</p>
+                <div class="price">₹450</div>
+                <div class="meta">Toys & Kids • Good condition</div>
+              </div>
+            </div>
+            <div class="card">
+              <p class="section-title">Item facts <span class="small-link">Edit</span></p>
+              <div class="facts">
+                <div class="fact"><label>Product</label><span>Stacking toy</span></div>
+                <div class="fact"><label>Type</label><span>Wooden toy</span></div>
+                <div class="fact"><label>Price</label><span>₹450</span></div>
+                <div class="fact"><label>Status</label><span>Good</span></div>
+                <div class="fact"><label>Age</label><span style="color:var(--amber)">Select</span></div>
+                <div class="fact"><label>Battery</label><span>Not needed</span></div>
+              </div>
+            </div>
+            <div class="banner warn">Next: confirm age suitability and parts. Other optional details can wait.</div>
+          </div>
+          <div class="sticky">
+            <button class="primary">Continue to Trust</button>
+            <button class="secondary">Save draft</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="concept">
+      <h2>4. Readiness Score</h2>
+      <p>Useful for confidence. The seller sees a simple score and only the actions that move the listing to publish.</p>
+      <div class="phone">
+        <div class="screen">
+          <div class="topbar">
+            <div class="back">‹</div>
+            <div class="topcopy">
+              <p class="title">Ready to publish</p>
+              <p class="subtitle">AI filled most details</p>
+            </div>
+          </div>
+          <div class="content">
+            <div class="card two-col">
+              <div class="score">82%</div>
+              <div>
+                <p class="name">Almost ready</p>
+                <div class="meta">3 small checks before the listing goes live.</div>
+              </div>
+            </div>
+            <div class="card hero">
+              <div class="photo"></div>
+              <div>
+                <p class="name">Wooden stacking toy</p>
+                <div class="price">₹450</div>
+                <div class="meta">Good • Cleaned • Koramangala</div>
+              </div>
+            </div>
+            <div class="card">
+              <p class="section-title">Improve readiness</p>
+              <div class="row">
+                <div class="dot warn">+8</div>
+                <div class="rowtext"><strong>Add age range</strong><span>Required for toys</span></div>
+                <div class="action">Add</div>
+              </div>
+              <div class="row">
+                <div class="dot warn">+6</div>
+                <div class="rowtext"><strong>Confirm parts</strong><span>No missing pieces?</span></div>
+                <div class="action">Confirm</div>
+              </div>
+              <div class="row">
+                <div class="dot">✓</div>
+                <div class="rowtext"><strong>Price and photos</strong><span>Looks ready</span></div>
+                <div class="action">View</div>
+              </div>
+            </div>
+          </div>
+          <div class="sticky">
+            <button class="primary">Finish 3 checks</button>
+            <button class="secondary">Preview as buyer</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="concept">
+      <h2>5. Guided Bottom Sheet</h2>
+      <p>Cleanest main page. Details are captured through short sheets with 3-5 options, one decision at a time.</p>
+      <div class="phone">
+        <div class="screen">
+          <div class="topbar">
+            <div class="back">‹</div>
+            <div class="topcopy">
+              <p class="title">Review listing</p>
+              <p class="subtitle">Main page stays simple</p>
+            </div>
+          </div>
+          <div class="content">
+            <div class="card hero">
+              <div class="photo"></div>
+              <div>
+                <p class="name">Wooden stacking toy</p>
+                <div class="price">₹450</div>
+                <div class="meta">Toys & Kids • Good • Koramangala</div>
+                <div class="pillrow">
+                  <span class="pill green">Name set</span>
+                  <span class="pill green">Price set</span>
+                  <span class="pill warn">Parts?</span>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <p class="section-title">Photos</p>
+              <div class="rail">
+                <div class="thumb"></div>
+                <div class="thumb"></div>
+                <div class="thumb"></div>
+                <div class="thumb"></div>
+              </div>
+            </div>
+            <div class="banner green">Only missing answers are asked. Filled details stay out of the way.</div>
+            <div class="bottomsheet">
+              <p class="section-title">Parts & safety</p>
+              <div class="option selected"><span class="radio"></span> Complete and safe</div>
+              <div class="option"><span class="radio"></span> Missing small part</div>
+              <div class="option"><span class="radio"></span> Safety issue to mention</div>
+              <button class="primary" style="margin-top:10px;">Save & next</button>
+            </div>
+          </div>
+          <div class="sticky">
+            <button class="primary">Continue</button>
+            <button class="secondary">Save draft</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

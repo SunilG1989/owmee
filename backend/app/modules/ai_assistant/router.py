@@ -55,10 +55,14 @@ from app.modules.ai_assistant.category_taxonomy import (
     category_family_for,
     category_token,
     clean_category_specifics,
+    has_educational_book_detail,
+    has_issue_disclosure_detail,
     is_meaningful_other_detail,
     required_category_specific_fields,
     requires_appliance_pickup_status,
     requires_book_set_status,
+    requires_educational_book_details,
+    requires_issue_disclosure_detail,
     requires_powered_toy_status,
 )
 from app.modules.ai_assistant.identifier_extraction import normalize_serial_number
@@ -123,7 +127,7 @@ _PUBLISH_BLOCK_FLAGS = _DRAFT_REJECT_FLAGS | {
 
 _VALID_SCREEN_CONDITIONS = {"flawless", "minor_scratches", "cracked"}
 _VALID_BODY_CONDITIONS = {"flawless", "minor_dents", "major_damage"}
-_PRICE_REFRESH_MRP_SOURCES = {"visible_mrp", "receipt_or_bill", "market_anchor", "seller_entered"}
+_PRICE_REFRESH_MRP_SOURCES = {"visible_mrp", "receipt_or_bill", "seller_entered"}
 
 
 def _min_photo_detail(photo_count: int) -> dict:
@@ -318,6 +322,7 @@ def _publish_category_specifics_rejection(
     category_family: str,
     category_specifics: dict,
     kids_safety_checklist: dict | None,
+    description: str | None,
     payload: CreateFromDraftRequest,
 ) -> dict | None:
     if category_family not in {"toy", "book", "appliance"}:
@@ -346,6 +351,9 @@ def _publish_category_specifics_rejection(
     if category_family == "book" and requires_book_set_status(payload.model, payload.title):
         if not _specific_present(category_specifics.get("set_status")):
             missing.append("set_status")
+    if category_family == "book" and requires_educational_book_details(payload.model, payload.title):
+        if not has_educational_book_detail(category_specifics):
+            missing.append("class_board_edition")
 
     if category_family == "appliance":
         if not _specific_present(category_specifics.get("appliance_type")):
@@ -353,6 +361,13 @@ def _publish_category_specifics_rejection(
         if requires_appliance_pickup_status(payload.model, payload.title):
             if not _specific_present(category_specifics.get("pickup_complexity")):
                 missing.append("pickup_complexity")
+            if not _specific_present(category_specifics.get("installation_status")):
+                missing.append("installation_status")
+    if (
+        requires_issue_disclosure_detail(category_family, category_specifics)
+        and not has_issue_disclosure_detail(description)
+    ):
+        missing.append("issue_disclosure")
 
     deduped = list(dict.fromkeys(missing))
     if not deduped:
@@ -808,6 +823,8 @@ def _fast_quality_reasons(detected: AIDetected) -> list[str]:
         reasons.append("missing_category")
     elif (detected.category_confidence or 0.0) < settings.ai_draft_fast_min_category_confidence:
         reasons.append("low_category_confidence")
+    if not is_meaningful_other_detail(detected.title_suggestion):
+        reasons.append("missing_title")
     if detected.manual_review_required and not _blocking_photo_flags(detected):
         reasons.append("manual_review_required")
     seen: set[str] = set()
@@ -845,7 +862,7 @@ def _mark_fast_quality_review_required(detected: AIDetected, reasons: list[str])
         if flag not in flags:
             flags.append(flag)
     edit_fields = list(detected.seller_edit_fields or [])
-    for field in ("category_slug", "brand", "model", "condition_guess"):
+    for field in ("category_slug", "title_suggestion", "brand", "model", "condition_guess"):
         if field not in edit_fields:
             edit_fields.append(field)
     return detected.model_copy(
@@ -1216,6 +1233,9 @@ def _mrp_anchor_price_result(detected: AIDetected, existing: dict | None = None)
     mrp = detected.mrp_inr
     if not mrp or mrp <= 0:
         return None
+    source = (detected.mrp_source or "").strip().lower()
+    if source not in {"visible_mrp", "receipt_or_bill", "seller_entered"}:
+        return None
     flags = set(detected.flags or [])
     if flags.intersection({"multiple_items", "no_product", "blurry", "screenshot_only", "stock_or_catalog_suspected"}):
         return None
@@ -1297,7 +1317,7 @@ def _safe_defects(values: list[str] | None) -> list[str]:
 
 
 def _merge_mrp_from_price_result(detected: AIDetected, price_result: dict) -> AIDetected:
-    """Carry text-price MRP back into the draft when vision had none."""
+    """Carry only directly evidenced MRP back into the draft when vision had none."""
     if detected.mrp_inr:
         return detected
     mrp = price_result.get("mrp_inr")
@@ -1312,9 +1332,9 @@ def _merge_mrp_from_price_result(detected: AIDetected, price_result: dict) -> AI
     result_price = price_result.get("price")
     if result_price is not None and mrp_value <= float(result_price):
         return detected
-    source = _safe_text(price_result.get("mrp_source"), max_len=40) or "market_anchor"
-    if source not in _PRICE_REFRESH_MRP_SOURCES:
-        source = "market_anchor"
+    source = _safe_text(price_result.get("mrp_source"), max_len=40)
+    if source not in {"visible_mrp", "receipt_or_bill", "seller_entered"}:
+        return detected
     confidence = price_result.get("mrp_confidence")
     try:
         mrp_confidence = max(0.0, min(1.0, float(confidence or 0.0)))
@@ -2362,6 +2382,7 @@ async def create_from_draft(
         category_family=category_family,
         category_specifics=category_specifics,
         kids_safety_checklist=kids_safety_checklist,
+        description=payload.description,
         payload=payload,
     )
     if category_specific_rejection:

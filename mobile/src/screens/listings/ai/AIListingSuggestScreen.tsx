@@ -31,36 +31,33 @@ import {
   Alert,
   TextInput,
   Linking,
-  ActivityIndicator,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { C, T, S, R, Shadow, formatPrice } from '../../../utils/tokens';
+import { C, T, S, R, Shadow, formatPrice, O } from '../../../utils/tokens';
 import { AIListing } from '../../../services/api';
 import { BackButton, Button } from '../../../components/ui';
 import type { AIDraftPriceRefreshRequest, AIDraftResponse } from '../../../services/api';
 import { parseApiError } from '../../../utils/errors';
 import type { RootScreen } from '../../../navigation/types';
-import EditDetailsSheet from './shared/EditDetailsSheet';
 import PriceSheet from './shared/PriceSheet';
 import ComparablesSheet from './shared/ComparablesSheet';
 import {
   APPLIANCE_ACCESSORY_OPTIONS,
-  APPLIANCE_DEFECT_OPTIONS,
+  APPLIANCE_INSTALLATION_OPTIONS,
   APPLIANCE_PICKUP_OPTIONS,
-  APPLIANCE_WORKING_OPTIONS,
-  BOOK_COMPLETENESS_OPTIONS,
   BOOK_LANGUAGE_OPTIONS,
-  BOOK_MARKING_OPTIONS,
-  BOOK_PAGE_CONDITION_OPTIONS,
   BOOK_SET_STATUS_OPTIONS,
-  BOOK_TYPE_OPTIONS,
   CATEGORY_PICKS,
+  COLOR_OPTIONS,
   HYGIENE_OPTIONS,
   KIDS_AGE_OPTIONS,
-  TOY_MISSING_PARTS_OPTIONS,
+  PROCESSOR_OPTIONS,
+  SCREEN_SIZE_OPTIONS,
   TOY_POWER_STATUS_OPTIONS,
-  TOY_SAFETY_STATUS_OPTIONS,
   canonicalCategorySlug,
   findCatalogOption,
   getBrandsForCategory,
@@ -72,14 +69,31 @@ import {
   getStorageOptionsForCategory,
   listingNeedsAppliancePickupStatus,
   listingNeedsBookSetStatus,
+  listingNeedsEducationalBookDetails,
   listingNeedsPoweredToyStatus,
 } from '../../../utils/listingCatalog';
 import type { ListingRequirementFamily } from '../../../utils/listingCatalog';
+import {
+  APPLIANCE_STATUS_OPTIONS,
+  BOOK_CONDITION_OPTIONS,
+  TOY_DISCLOSURE_OPTIONS,
+  appendDisclosureToDescription,
+  applianceStatusSpecifics,
+  applianceStatusValue,
+  bookConditionSpecifics,
+  bookConditionValue,
+  buildSmartReviewChecks,
+  disclosureDetailPrompt,
+  disclosureNeedsDetail,
+  toyDisclosureSpecifics,
+  toyDisclosureValue,
+} from '../../../utils/listingUx';
+import type { SmartReviewCheck } from '../../../utils/listingUx';
 
-const CONDITION_OPTIONS: { key: 'like_new' | 'good' | 'fair'; label: string; multiplier: number }[] = [
-  { key: 'like_new', label: 'Like new', multiplier: 1.0 },
-  { key: 'good', label: 'Good', multiplier: 0.85 },
-  { key: 'fair', label: 'Fair', multiplier: 0.70 },
+const CONDITION_OPTIONS: { key: 'like_new' | 'good' | 'fair'; label: string; desc: string; multiplier: number }[] = [
+  { key: 'like_new', label: 'Like new', desc: 'Barely used, no visible wear', multiplier: 1.0 },
+  { key: 'good', label: 'Good', desc: 'Used, works as expected', multiplier: 0.85 },
+  { key: 'fair', label: 'Fair', desc: 'Visible wear or needs attention', multiplier: 0.70 },
 ];
 
 const MIN_PUBLISH_PHOTOS = 3;
@@ -108,17 +122,6 @@ const BODY_CONDITION_OPTIONS = [
   { value: 'flawless', label: 'Flawless' },
   { value: 'minor_dents', label: 'Minor dents' },
   { value: 'major_damage', label: 'Major damage' },
-];
-
-const COMMON_DEFECTS = [
-  'Screen scratch',
-  'Body dent',
-  'Crack',
-  'Battery issue',
-  'Speaker issue',
-  'Camera issue',
-  'Missing part',
-  'Not fully working',
 ];
 
 const KIDS_SAFETY_ITEMS = [
@@ -163,8 +166,13 @@ type InlineField =
   | 'title'
   | 'brand'
   | 'model'
+  | 'color'
   | 'storage'
   | 'ram'
+  | 'processor'
+  | 'screen_size'
+  | 'condition'
+  | 'additional_details'
   | 'age_suitability'
   | 'hygiene_status'
   | 'has_box'
@@ -177,6 +185,8 @@ type InlineField =
   | 'screen_condition'
   | 'body_condition'
   | null;
+
+type ReviewRowStatus = 'Ready' | 'Review' | 'Add';
 
 type BooleanDetailField =
   | 'has_box'
@@ -274,6 +284,9 @@ const categorySpecificsForPayload = (
       'safety_status',
       'battery_status',
       'working_status',
+      'material',
+      'set_count',
+      'part_count',
       'box_or_manual',
       'recall_checked',
       'notes',
@@ -287,8 +300,12 @@ const categorySpecificsForPayload = (
       'set_status',
       'set_count',
       'author_or_publisher',
+      'class_board_edition',
       'edition',
       'class_or_grade',
+      'board',
+      'subject',
+      'isbn',
       'cover_condition',
       'notes',
     ],
@@ -299,9 +316,11 @@ const categorySpecificsForPayload = (
       'defects_disclosed',
       'pickup_complexity',
       'installation_status',
+      'power_requirement',
       'bill_or_warranty',
       'hygiene_status',
       'capacity_or_size',
+      'material',
       'notes',
     ],
   };
@@ -342,16 +361,20 @@ export default function AIListingSuggestScreen({
     normalizeConditionChoice(initialDraft.detected.body_condition, BODY_CONDITION_OPTIONS),
   );
   const [defects, setDefects] = useState<string[]>(normalizeDefects(initialDraft.detected.defects));
-  const [newDefect, setNewDefect] = useState('');
   const [kidsSafetyChecklist, setKidsSafetyChecklist] = useState<KidsSafetyState>(() => ({}));
-  const [categorySpecifics, setCategorySpecifics] = useState<Record<string, any>>({});
+  const [categorySpecifics, setCategorySpecifics] = useState<Record<string, any>>(
+    () => initialDraft.detected.category_specifics || {},
+  );
+  const [issueDisclosure, setIssueDisclosure] = useState('');
+  const [sellerAdditionalDetails, setSellerAdditionalDetails] = useState('');
+  const [touchedCategorySpecifics, setTouchedCategorySpecifics] = useState<Record<string, true>>({});
+  const [confirmedSmartChecks, setConfirmedSmartChecks] = useState<Record<string, string>>({});
   const [removedPhotoIndices, setRemovedPhotoIndices] = useState<number[]>([]);
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(
     typeof initialDraft.detected.hero_image_index === 'number' ? initialDraft.detected.hero_image_index : 0,
   );
   const [overrides, setOverrides] = useState<DetailOverrides>({});
   const [inlineField, setInlineField] = useState<InlineField>(null);
-  const [editSheet, setEditSheet] = useState(false);
   const [priceSheet, setPriceSheet] = useState(false);
   const [compsSheet, setCompsSheet] = useState(false);
   const [priceRefreshing, setPriceRefreshing] = useState(false);
@@ -376,9 +399,59 @@ export default function AIListingSuggestScreen({
     setOverrides((prev) => ({ ...prev, ...patch }));
   }, []);
 
+  const markCategorySpecificTouched = useCallback((keys: string[]) => {
+    setTouchedCategorySpecifics((prev) => {
+      const next = { ...prev };
+      keys.forEach((key) => {
+        next[key] = true;
+      });
+      return next;
+    });
+  }, []);
+
   const setCategorySpecific = useCallback((key: string, value: any) => {
     setCategorySpecifics((prev) => ({ ...prev, [key]: value }));
-  }, []);
+    markCategorySpecificTouched([key]);
+  }, [markCategorySpecificTouched]);
+
+  const setToyDisclosure = useCallback((value: string) => {
+    const nextSpecifics = toyDisclosureSpecifics(value);
+    setCategorySpecifics((prev) => ({
+      ...prev,
+      ...nextSpecifics,
+    }));
+    if (!disclosureNeedsDetail('toy', nextSpecifics)) setIssueDisclosure('');
+    markCategorySpecificTouched(['missing_parts_status', 'safety_status']);
+    const hasSafetyIssue = value === 'Safety issue disclosed';
+    setKidsSafetyChecklist({
+      cleaned: true,
+      no_small_parts: !hasSafetyIssue,
+      no_loose_batteries: !hasSafetyIssue,
+      no_sharp_edges: !hasSafetyIssue,
+      age_label_correct: true,
+      working_condition: true,
+    });
+  }, [markCategorySpecificTouched]);
+
+  const setBookCondition = useCallback((value: string) => {
+    const nextSpecifics = bookConditionSpecifics(value, categorySpecifics);
+    setCategorySpecifics((prev) => ({
+      ...prev,
+      ...bookConditionSpecifics(value, prev),
+    }));
+    if (!disclosureNeedsDetail('book', nextSpecifics)) setIssueDisclosure('');
+    markCategorySpecificTouched(['page_condition', 'markings_status', 'pages_complete']);
+  }, [categorySpecifics, markCategorySpecificTouched]);
+
+  const setApplianceStatus = useCallback((value: string) => {
+    const nextSpecifics = applianceStatusSpecifics(value, categorySpecifics);
+    setCategorySpecifics((prev) => ({
+      ...prev,
+      ...applianceStatusSpecifics(value, prev),
+    }));
+    if (!disclosureNeedsDetail('appliance', nextSpecifics)) setIssueDisclosure('');
+    markCategorySpecificTouched(['working_status', 'defects_disclosed']);
+  }, [categorySpecifics, markCategorySpecificTouched]);
 
   // Effective fields (overrides win over AI)
   const categorySlug = canonicalCategorySlug(overrides.category_slug ?? draft.detected.category_slug ?? '');
@@ -404,6 +477,10 @@ export default function AIListingSuggestScreen({
     if (previousCategoryFamily.current !== categoryFamily) {
       previousCategoryFamily.current = categoryFamily;
       setCategorySpecifics({});
+      setKidsSafetyChecklist({});
+      setIssueDisclosure('');
+      setTouchedCategorySpecifics({});
+      setConfirmedSmartChecks({});
     }
   }, [categoryFamily]);
   const categoryFamilyLabel = categoryFamily === 'toy'
@@ -419,6 +496,8 @@ export default function AIListingSuggestScreen({
     && listingNeedsPoweredToyStatus(model || draft.detected.detected_item_type, titleForFamily);
   const bookSetStatusRequired = categoryFamily === 'book'
     && listingNeedsBookSetStatus(model || draft.detected.detected_item_type, titleForFamily);
+  const educationalBookDetailsRequired = categoryFamily === 'book'
+    && listingNeedsEducationalBookDetails(model || draft.detected.detected_item_type, titleForFamily);
   const appliancePickupRequired = categoryFamily === 'appliance'
     && listingNeedsAppliancePickupStatus(model || draft.detected.detected_item_type, titleForFamily);
   const storageOptions = useMemo(() => getStorageOptionsForCategory(categorySlug), [categorySlug]);
@@ -444,8 +523,8 @@ export default function AIListingSuggestScreen({
   const purchaseYear = overrides.purchase_year ?? draft.detected.purchase_year ?? null;
   const accessories = overrides.accessories ?? draft.detected.accessories ?? '';
   const warrantyStatus = overrides.warranty_status ?? draft.detected.warranty_status ?? '';
-  const ageSuitability = overrides.age_suitability ?? '';
-  const hygieneStatus = overrides.hygiene_status ?? '';
+  const ageSuitability = overrides.age_suitability ?? String(specificValue(categorySpecifics, 'age_suitability') || '');
+  const hygieneStatus = overrides.hygiene_status ?? String(specificValue(categorySpecifics, 'hygiene_status') || '');
   const imageQuality = draft.detected.image_set_quality || {};
   const reviewPhotos = useMemo(() => {
     const source = draft.photo_urls && draft.photo_urls.length > 0 ? draft.photo_urls : [draft.photo_url];
@@ -509,8 +588,10 @@ export default function AIListingSuggestScreen({
     if (categoryFamily === 'toy') {
       if (!findCatalogOption(ageSuitability, KIDS_AGE_OPTIONS)) issues.push('age suitability');
       if (!findCatalogOption(hygieneStatus, HYGIENE_OPTIONS)) issues.push('cleanliness');
-      if (!hasSpecificValue(categorySpecifics, 'missing_parts_status')) issues.push('parts completeness');
-      if (!hasSpecificValue(categorySpecifics, 'safety_status')) issues.push('safety status');
+      if (!(
+        hasSpecificValue(categorySpecifics, 'missing_parts_status')
+        && hasSpecificValue(categorySpecifics, 'safety_status')
+      )) issues.push('parts & safety');
       if (poweredToyStatusRequired && !(
         hasSpecificValue(categorySpecifics, 'working_status')
         || hasSpecificValue(categorySpecifics, 'battery_status')
@@ -521,26 +602,41 @@ export default function AIListingSuggestScreen({
     if (categoryFamily === 'book') {
       if (!hasSpecificValue(categorySpecifics, 'book_type') && !model) issues.push('book type');
       if (!hasSpecificValue(categorySpecifics, 'language')) issues.push('language');
-      if (!hasSpecificValue(categorySpecifics, 'page_condition')) issues.push('page condition');
-      if (!hasSpecificValue(categorySpecifics, 'markings_status')) issues.push('markings');
-      if (!hasSpecificValue(categorySpecifics, 'pages_complete')) issues.push('page completeness');
+      if (!(
+        hasSpecificValue(categorySpecifics, 'page_condition')
+        && hasSpecificValue(categorySpecifics, 'markings_status')
+        && hasSpecificValue(categorySpecifics, 'pages_complete')
+      )) issues.push('page condition');
       if (bookSetStatusRequired && !hasSpecificValue(categorySpecifics, 'set_status')) issues.push('set completeness');
+      if (educationalBookDetailsRequired && !(
+        hasSpecificValue(categorySpecifics, 'class_board_edition')
+        || hasSpecificValue(categorySpecifics, 'class_or_grade')
+        || hasSpecificValue(categorySpecifics, 'edition')
+      )) issues.push('class / board / edition');
     }
     if (categoryFamily === 'appliance') {
       if (!hasSpecificValue(categorySpecifics, 'appliance_type') && !model) issues.push('appliance type');
-      if (!hasSpecificValue(categorySpecifics, 'working_status')) issues.push('working status');
+      if (!(
+        hasSpecificValue(categorySpecifics, 'working_status')
+        && hasSpecificValue(categorySpecifics, 'defects_disclosed')
+      )) issues.push('working condition');
       if (!hasSpecificValue(categorySpecifics, 'accessories_status')) issues.push('accessories');
-      if (!hasSpecificValue(categorySpecifics, 'defects_disclosed')) issues.push('defects');
       if (appliancePickupRequired && !hasSpecificValue(categorySpecifics, 'pickup_complexity')) issues.push('pickup effort');
+      if (appliancePickupRequired && !hasSpecificValue(categorySpecifics, 'installation_status')) issues.push('power / installation');
+    }
+    if (disclosureNeedsDetail(categoryFamily, categorySpecifics) && !issueDisclosure.trim()) {
+      issues.push('issue details');
     }
     return issues;
   }, [
     ageSuitability,
     appliancePickupRequired,
     bookSetStatusRequired,
+    educationalBookDetailsRequired,
     categoryFamily,
     categorySpecifics,
     hygieneStatus,
+    issueDisclosure,
     model,
     poweredToyStatusRequired,
   ]);
@@ -663,47 +759,86 @@ export default function AIListingSuggestScreen({
   ]);
 
   const openFirstRequiredField = useCallback(() => {
-    if (firstRequiredField === 'title') {
-      setInlineField(null);
-      setEditSheet(true);
-      return;
-    }
     if (firstRequiredField) {
       setInlineField(firstRequiredField);
       return;
     }
-    setEditSheet(true);
+    setInlineField('title');
   }, [firstRequiredField]);
 
   const selectCategoryInline = useCallback((nextSlug: string) => {
     const next = canonicalCategorySlug(nextSlug);
     if (!next) return;
-    const nextKind = getCategoryKind(next);
-    const nextBrandOptions = getBrandsForCategory(next);
-    const nextStorageOptions = getStorageOptionsForCategory(next);
-    const nextRamOptions = getRamOptionsForCategory(next);
-    setOverrides((prev) => {
-      const sourceBrand = prev.brand ?? draft.detected.brand ?? '';
-      const sourceStorage = prev.storage ?? draft.detected.storage ?? '';
-      const sourceRam = prev.ram ?? draft.detected.ram ?? '';
-      return {
-        ...prev,
-        category_slug: next,
-        brand: findCatalogOption(sourceBrand, nextBrandOptions) || '',
-        model: '',
-        storage: findCatalogOption(sourceStorage, nextStorageOptions) || '',
-        ram: findCatalogOption(sourceRam, nextRamOptions) || '',
-        has_earphones: nextKind === 'phone' ? prev.has_earphones ?? null : null,
-      };
-    });
-    setCategorySpecifics({});
-    setInlineField(null);
-  }, [draft.detected.brand, draft.detected.ram, draft.detected.storage]);
+    if (next === categorySlug) {
+      setInlineField(null);
+      return;
+    }
+    const applyCategorySelection = () => {
+      const nextKind = getCategoryKind(next);
+      const nextBrandOptions = getBrandsForCategory(next);
+      const nextStorageOptions = getStorageOptionsForCategory(next);
+      const nextRamOptions = getRamOptionsForCategory(next);
+      setOverrides((prev) => {
+        const sourceBrand = prev.brand ?? draft.detected.brand ?? '';
+        const sourceStorage = prev.storage ?? draft.detected.storage ?? '';
+        const sourceRam = prev.ram ?? draft.detected.ram ?? '';
+        return {
+          ...prev,
+          category_slug: next,
+          brand: findCatalogOption(sourceBrand, nextBrandOptions) || '',
+          model: '',
+          storage: findCatalogOption(sourceStorage, nextStorageOptions) || '',
+          ram: findCatalogOption(sourceRam, nextRamOptions) || '',
+          has_earphones: nextKind === 'phone' ? prev.has_earphones ?? null : null,
+        };
+      });
+      setCategorySpecifics({});
+      setKidsSafetyChecklist({});
+      setIssueDisclosure('');
+      setTouchedCategorySpecifics({});
+      setConfirmedSmartChecks({});
+      setInlineField(null);
+    };
+    if (Object.keys(categorySpecifics).length > 0 || issueDisclosure.trim()) {
+      Alert.alert(
+        'Change category?',
+        'Changing category will replace buyer-trust answers for the current item type.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Change', style: 'destructive', onPress: applyCategorySelection },
+        ],
+      );
+      return;
+    }
+    applyCategorySelection();
+  }, [
+    categorySlug,
+    categorySpecifics,
+    draft.detected.brand,
+    draft.detected.ram,
+    draft.detected.storage,
+    issueDisclosure,
+  ]);
 
   const selectBrandInline = useCallback((next: string) => {
     setOverrides((prev) => ({ ...prev, brand: next, model: '' }));
     setInlineField(getModelSuggestions(categorySlug, next).length > 0 ? 'model' : null);
   }, [categorySlug]);
+
+  const applyModelOverride = useCallback((next: string) => {
+    const cleaned = cleanText(next) || '';
+    applyOverrides({ model: cleaned });
+    if (categoryFamily === 'toy') {
+      setCategorySpecifics((prev) => ({ ...prev, toy_type: cleaned }));
+      markCategorySpecificTouched(['toy_type']);
+    } else if (categoryFamily === 'book') {
+      setCategorySpecifics((prev) => ({ ...prev, book_type: cleaned }));
+      markCategorySpecificTouched(['book_type']);
+    } else if (categoryFamily === 'appliance') {
+      setCategorySpecifics((prev) => ({ ...prev, appliance_type: cleaned }));
+      markCategorySpecificTouched(['appliance_type']);
+    }
+  }, [applyOverrides, categoryFamily, markCategorySpecificTouched]);
 
   const selectBooleanInline = useCallback((field: BooleanDetailField, next: boolean) => {
     applyOverrides({ [field]: next });
@@ -756,9 +891,6 @@ export default function AIListingSuggestScreen({
     return pct > 0 ? pct : null;
   }, [effectivePrice, originalPrice]);
 
-  const kidsSafetyIncomplete = categoryKind === 'kids' && categoryFamily === 'toy'
-    && KIDS_SAFETY_ITEMS.some((item) => kidsSafetyChecklist[item.key] === null || kidsSafetyChecklist[item.key] === undefined);
-
   const conditionReviewIssues = useMemo(() => {
     const issues: string[] = [];
     if (isElectronic) {
@@ -768,17 +900,11 @@ export default function AIListingSuggestScreen({
         issues.push('what is not working');
       }
     }
-    if (categoryKind === 'kids' && categoryFamily === 'toy' && kidsSafetyIncomplete) {
-      issues.push('kids safety checklist');
-    }
     return issues;
   }, [
     bodyCondition,
-    categoryFamily,
-    categoryKind,
     defects.length,
     isElectronic,
-    kidsSafetyIncomplete,
     screenCondition,
     sellerFunctionalAttestation,
   ]);
@@ -789,9 +915,19 @@ export default function AIListingSuggestScreen({
     const identityWasEdited = ['brand', 'model', 'storage', 'ram', 'color', 'category_slug']
       .some((key) => Object.prototype.hasOwnProperty.call(overrides, key));
     if (!identityWasEdited && draft.detected.title_suggestion) return draft.detected.title_suggestion;
-    const parts = [brand, model, storage, color].filter(Boolean);
-    return parts.join(' ').slice(0, 80) || 'Used item';
-  }, [draft, overrides, brand, model, storage, color]);
+    const itemType = cleanText(
+      model
+        || draft.detected.detected_item_type
+        || specificValue(categorySpecifics, 'appliance_type')
+        || specificValue(categorySpecifics, 'toy_type')
+        || specificValue(categorySpecifics, 'book_type')
+        || specificValue(categorySpecifics, 'subject')
+        || '',
+    );
+    const categoryFallback = categorySlug && categorySlug !== 'others' ? getCategoryLabel(categorySlug) : '';
+    const parts = [brand, itemType || categoryFallback, storage, color].filter(Boolean);
+    return (cleanText(parts.join(' ')) || '').slice(0, 80);
+  }, [draft, overrides, brand, model, storage, color, categorySpecifics, categorySlug]);
 
   const subtitleSpecifics = useMemo(() => {
     const parts = (() => {
@@ -870,6 +1006,15 @@ export default function AIListingSuggestScreen({
     kidsSafetyChecklist,
   ]);
 
+  const listingDescription = useMemo(
+    () => {
+      const base = appendDisclosureToDescription(draft.detected.description_suggestion ?? '', issueDisclosure);
+      const extra = sellerAdditionalDetails.replace(/\s+/g, ' ').trim();
+      return extra ? `${base}\n\nSeller note: ${extra}` : base;
+    },
+    [draft.detected.description_suggestion, issueDisclosure, sellerAdditionalDetails],
+  );
+
   const sellerAdjustedPriceInputs = useMemo(() => {
     if (Object.keys(overrides).length > 0) return true;
     if (condition !== ((initialDraft.detected.condition_guess as any) || 'good')) return true;
@@ -939,7 +1084,7 @@ export default function AIListingSuggestScreen({
   const priceRefreshKey = useMemo(() => JSON.stringify(priceRefreshPayload), [priceRefreshPayload]);
 
   useEffect(() => {
-    if (photosBlocked || heroCleanupNeedsRetake || needsDetailsReview) return;
+    if (photosBlocked || heroCleanupNeedsRetake || !categorySlug) return;
     if (customPrice != null && !sellerAdjustedPriceInputs) return;
     if (suggestedPrice && aiOriginalPrice && !sellerAdjustedPriceInputs) return;
     if (lastPriceRefreshKey.current === priceRefreshKey) return;
@@ -978,7 +1123,7 @@ export default function AIListingSuggestScreen({
     draft.draft_id,
     heroCleanupNeedsRetake,
     mrpReviewed,
-    needsDetailsReview,
+    categorySlug,
     photosBlocked,
     priceRefreshKey,
     priceRefreshPayload,
@@ -1062,7 +1207,7 @@ export default function AIListingSuggestScreen({
           seller_mrp_confirmed: mrpReviewed,
           hero_image_index: selectedPhotoIndex,
           removed_photo_indices: removedPhotoIndices,
-          description: draft.detected.description_suggestion ?? '',
+          description: listingDescription,
         },
       });
       return;
@@ -1083,7 +1228,7 @@ export default function AIListingSuggestScreen({
         seller_mrp_confirmed: mrpReviewed,
         hero_image_index: selectedPhotoIndex,
         removed_photo_indices: removedPhotoIndices,
-        description: draft.detected.description_suggestion ?? '',
+        description: listingDescription,
       });
       setSuccess({
         listingId: data.listing_id,
@@ -1112,6 +1257,7 @@ export default function AIListingSuggestScreen({
     submitting,
     hasEnoughPhotos,
     finalDetails,
+    listingDescription,
     mrpSource,
     mrpReviewed,
     selectedPhotoIndex,
@@ -1121,29 +1267,439 @@ export default function AIListingSuggestScreen({
     retakeHeroPhoto,
   ]);
 
-  const ctaLabel = !hasEnoughPhotos
-    ? 'Add photos'
-    : photosBlocked || heroCleanupNeedsRetake
-    ? 'Retake photos'
-    : needsDetailsReview
-      ? 'Complete item details'
-      : !effectivePrice
-        ? priceRefreshing ? 'Finding price' : 'Set asking price'
-        : needsMrpReview
-          ? 'Review MRP'
-          : needsConditionReview
-            ? 'Confirm condition'
-            : 'Publish listing';
-  const ctaOnPress = !hasEnoughPhotos || photosBlocked || heroCleanupNeedsRetake
-    ? retakeHeroPhoto
-    : needsDetailsReview
-      ? openFirstRequiredField
-      : !effectivePrice || needsMrpReview
-        ? () => setPriceSheet(true)
-        : submit;
+  const conditionText = CONDITION_OPTIONS.find((opt) => opt.key === condition)?.label || '';
+  const catalogItemTypeRequired = !isElectronic
+    && !isOther
+    && (categoryKind === 'appliance' || categoryKind === 'kids')
+    && modelOptions.length > 0;
+  const reviewItemTypeLabel = useMemo(() => {
+    if (catalogItemTypeRequired) return findCatalogOption(model, modelOptions) || '';
+    const familyType = categoryFamily === 'toy'
+      ? specificValue(categorySpecifics, 'toy_type')
+      : categoryFamily === 'book'
+        ? specificValue(categorySpecifics, 'book_type')
+        : categoryFamily === 'appliance'
+          ? specificValue(categorySpecifics, 'appliance_type')
+          : '';
+    return cleanText(model || familyType || draft.detected.detected_item_type || '');
+  }, [
+    catalogItemTypeRequired,
+    categoryFamily,
+    categorySpecifics,
+    draft.detected.detected_item_type,
+    model,
+    modelOptions,
+  ]);
+  const smartReviewChecks = useMemo(
+    () => buildSmartReviewChecks({
+      photoCount: activePhotoIndexes.length,
+      minPhotos: MIN_PUBLISH_PHOTOS,
+      photosBlocked: photosBlocked || heroCleanupNeedsRetake,
+      categoryLabel: categorySlug ? getCategoryLabel(categorySlug) : '',
+      categorySlug,
+      title: titleGuess,
+      priceLabel: effectivePrice ? formatPrice(effectivePrice) : '',
+      conditionLabel: conditionText,
+      localityLabel: 'Seller profile locality',
+      deliveryMethodLabel: 'Pickup + Owmee delivery',
+      categoryFamily,
+      categorySpecifics,
+      itemTypeLabel: reviewItemTypeLabel,
+      ageSuitability,
+      hygieneStatus,
+      poweredToyStatusRequired,
+      bookSetStatusRequired,
+      educationalBookDetailsRequired,
+      appliancePickupRequired,
+      issueDisclosureRequired: disclosureNeedsDetail(categoryFamily, categorySpecifics),
+      issueDisclosure,
+      confidenceByField: draft.detected.field_confidence || {},
+    }),
+    [
+      activePhotoIndexes.length,
+      ageSuitability,
+      appliancePickupRequired,
+      bookSetStatusRequired,
+      categoryFamily,
+      categorySlug,
+      categorySpecifics,
+      conditionText,
+      draft.detected.field_confidence,
+      effectivePrice,
+      educationalBookDetailsRequired,
+      heroCleanupNeedsRetake,
+      hygieneStatus,
+      issueDisclosure,
+      photosBlocked,
+      poweredToyStatusRequired,
+      reviewItemTypeLabel,
+      titleGuess,
+    ],
+  );
+  const smartCheckWasSellerTouched = useCallback((check: SmartReviewCheck) => {
+    const hasOverride = (key: keyof DetailOverrides) => Object.prototype.hasOwnProperty.call(overrides, key);
+    if (check.id === 'toy_item_type') return hasOverride('model') || touchedCategorySpecifics.toy_type;
+    if (check.id === 'age_suitability') return hasOverride('age_suitability') || touchedCategorySpecifics.age_suitability;
+    if (check.id === 'toy_cleanliness') return hasOverride('hygiene_status') || touchedCategorySpecifics.hygiene_status;
+    if (check.id === 'toy_parts_safety') {
+      return Boolean(touchedCategorySpecifics.missing_parts_status || touchedCategorySpecifics.safety_status || issueDisclosure.trim());
+    }
+    if (check.id === 'toy_power_status') return Boolean(touchedCategorySpecifics.working_status || touchedCategorySpecifics.battery_status);
+    if (check.id === 'book_identity') return hasOverride('model') || touchedCategorySpecifics.book_type;
+    if (check.id === 'book_language') return Boolean(touchedCategorySpecifics.language);
+    if (check.id === 'book_pages') {
+      return Boolean(
+        touchedCategorySpecifics.page_condition
+        || touchedCategorySpecifics.markings_status
+        || touchedCategorySpecifics.pages_complete
+        || issueDisclosure.trim(),
+      );
+    }
+    if (check.id === 'book_education_details') {
+      return Boolean(
+        touchedCategorySpecifics.class_board_edition
+        || touchedCategorySpecifics.class_or_grade
+        || touchedCategorySpecifics.edition,
+      );
+    }
+    if (check.id === 'book_set_status') return Boolean(touchedCategorySpecifics.set_status);
+    if (check.id === 'appliance_type') return hasOverride('model') || touchedCategorySpecifics.appliance_type;
+    if (check.id === 'appliance_working') {
+      return Boolean(touchedCategorySpecifics.working_status || touchedCategorySpecifics.defects_disclosed || issueDisclosure.trim());
+    }
+    if (check.id === 'appliance_accessories') return Boolean(touchedCategorySpecifics.accessories_status);
+    if (check.id === 'appliance_pickup') return Boolean(touchedCategorySpecifics.pickup_complexity);
+    if (check.id === 'appliance_installation') return Boolean(touchedCategorySpecifics.installation_status);
+    return false;
+  }, [issueDisclosure, overrides, touchedCategorySpecifics]);
+
+  const smartCheckNeedsVisibleConfirmation = useCallback((check: SmartReviewCheck) => {
+    if (check.status === 'missing') return false;
+    if (check.confirmationRequired) return true;
+    if (check.status === 'not_sure') return !smartCheckWasSellerTouched(check);
+    const sellerConfirmableIds = new Set([
+      'age_suitability',
+      'toy_cleanliness',
+      'toy_item_type',
+      'toy_parts_safety',
+      'toy_power_status',
+      'book_identity',
+      'book_language',
+      'book_pages',
+      'book_education_details',
+      'book_set_status',
+      'appliance_type',
+      'appliance_working',
+      'appliance_accessories',
+      'appliance_pickup',
+      'appliance_installation',
+    ]);
+    return sellerConfirmableIds.has(check.id) && !smartCheckWasSellerTouched(check);
+  }, [smartCheckWasSellerTouched]);
+
+  const remainingRequiredChecks = useMemo(
+    () => smartReviewChecks.filter((item) => {
+      if (item.requiredLevel !== 'P0' || item.status === 'not_applicable') return false;
+      if (item.status === 'missing') return true;
+      if (confirmedSmartChecks[item.id] === item.summary) return false;
+      return smartCheckNeedsVisibleConfirmation(item);
+    }),
+    [confirmedSmartChecks, smartCheckNeedsVisibleConfirmation, smartReviewChecks],
+  );
+
+  const mrpReviewCheck = useMemo<SmartReviewCheck | null>(() => {
+    if (!needsMrpReview) return null;
+    return {
+      id: 'mrp_review',
+      label: 'MRP source',
+      summary: aiOriginalPrice ? `${formatPrice(aiOriginalPrice)} found by AI` : 'Review before discount',
+      action: 'price',
+      requiredLevel: 'P0',
+      status: 'missing',
+      source: 'seller',
+      buyerVisible: false,
+    };
+  }, [aiOriginalPrice, needsMrpReview]);
+
+  const deviceConditionCheck = useMemo<SmartReviewCheck | null>(() => {
+    if (!needsConditionReview) return null;
+    const action = isElectronic && !screenCondition
+      ? 'screen_condition'
+      : isElectronic && !bodyCondition
+        ? 'body_condition'
+        : 'condition';
+    return {
+      id: 'device_condition_details',
+      label: 'Condition details',
+      summary: conditionReviewIssues.join(', '),
+      action,
+      requiredLevel: 'P0',
+      status: 'missing',
+      source: 'seller',
+      buyerVisible: true,
+    };
+  }, [bodyCondition, conditionReviewIssues, isElectronic, needsConditionReview, screenCondition]);
+
+  const pendingReviewChecks = useMemo(() => {
+    const checks = [...remainingRequiredChecks];
+    if (mrpReviewCheck && !checks.some((check) => check.id === mrpReviewCheck.id)) {
+      const priceIndex = checks.findIndex((check) => check.action === 'price');
+      checks.splice(priceIndex >= 0 ? priceIndex + 1 : 0, 0, mrpReviewCheck);
+    }
+    if (deviceConditionCheck && !checks.some((check) => check.id === deviceConditionCheck.id)) {
+      const photosIndex = checks.findIndex((check) => check.action === 'photos');
+      checks.splice(photosIndex >= 0 ? photosIndex + 1 : 0, 0, deviceConditionCheck);
+    }
+    return checks;
+  }, [deviceConditionCheck, mrpReviewCheck, remainingRequiredChecks]);
+
+  const allP0ReviewChecks = useMemo(() => {
+    const checks = smartReviewChecks.filter((check) => (
+      check.requiredLevel === 'P0' && check.status !== 'not_applicable'
+      && check.id !== 'photos'
+    ));
+    if (mrpReviewCheck && !checks.some((check) => check.id === mrpReviewCheck.id)) {
+      const priceIndex = checks.findIndex((check) => check.id === 'price');
+      checks.splice(priceIndex >= 0 ? priceIndex + 1 : 0, 0, mrpReviewCheck);
+    }
+    if (deviceConditionCheck && !checks.some((check) => check.id === deviceConditionCheck.id)) {
+      const conditionIndex = checks.findIndex((check) => check.id === 'condition');
+      checks.splice(conditionIndex >= 0 ? conditionIndex + 1 : 0, 0, deviceConditionCheck);
+    }
+    return checks;
+  }, [deviceConditionCheck, mrpReviewCheck, smartReviewChecks]);
+
+  const p1ReviewChecks = useMemo(
+    () => smartReviewChecks.filter((check) => (
+      check.requiredLevel === 'P1' && check.status !== 'not_applicable'
+    )),
+    [smartReviewChecks],
+  );
+
+  const readinessScore = useMemo(() => {
+    const totalRequired = smartReviewChecks.filter((check) => (
+      check.requiredLevel === 'P0' && check.status !== 'not_applicable'
+    )).length + (deviceConditionCheck ? 1 : 0) + (mrpReviewCheck ? 1 : 0);
+    if (totalRequired <= 0) return 100;
+    const blocked = Math.min(pendingReviewChecks.length, totalRequired);
+    return Math.max(0, Math.min(100, Math.round(((totalRequired - blocked) / totalRequired) * 100)));
+  }, [deviceConditionCheck, mrpReviewCheck, pendingReviewChecks.length, smartReviewChecks]);
+
+  const openSmartReviewCheck = useCallback((target?: SmartReviewCheck) => {
+    const next = target || pendingReviewChecks[0];
+    if (!next) {
+      submit();
+      return;
+    }
+    const openEditor = () => {
+      if (next.action === 'photos') {
+        retakeHeroPhoto();
+        return;
+      }
+      if (next.action === 'title') {
+        setInlineField('title');
+        return;
+      }
+      if (next.action === 'price') {
+        setPriceSheet(true);
+        return;
+      }
+      if (next.action === 'condition') {
+        if (isElectronic && !screenCondition) {
+          setInlineField('screen_condition');
+          return;
+        }
+        if (isElectronic && !bodyCondition) {
+          setInlineField('body_condition');
+          return;
+        }
+        setInlineField('condition');
+        return;
+      }
+      const inlineActions = new Set([
+        'category',
+        'title',
+        'model',
+        'brand',
+        'age_suitability',
+        'hygiene_status',
+        'category_specifics',
+        'screen_condition',
+        'body_condition',
+      ]);
+      if (inlineActions.has(next.action)) {
+        setInlineField(next.action as InlineField);
+        return;
+      }
+      setInlineField('title');
+    };
+    if (
+      next.status !== 'missing'
+      && confirmedSmartChecks[next.id] !== next.summary
+      && smartCheckNeedsVisibleConfirmation(next)
+    ) {
+      setConfirmedSmartChecks((prev) => ({ ...prev, [next.id]: next.summary }));
+    }
+    openEditor();
+  }, [
+    bodyCondition,
+    confirmedSmartChecks,
+    isElectronic,
+    pendingReviewChecks,
+    retakeHeroPhoto,
+    screenCondition,
+    smartCheckNeedsVisibleConfirmation,
+    submit,
+  ]);
+
+  const reviewStatusForCheck = useCallback((check: SmartReviewCheck): ReviewRowStatus => {
+    if (check.status === 'missing') return 'Add';
+    if (
+      confirmedSmartChecks[check.id] !== check.summary
+      && smartCheckNeedsVisibleConfirmation(check)
+    ) {
+      return 'Review';
+    }
+    return 'Ready';
+  }, [confirmedSmartChecks, smartCheckNeedsVisibleConfirmation]);
+
+  const reviewPressForCheck = useCallback((check: SmartReviewCheck) => {
+    if (check.action === 'location' || check.action === 'delivery') return undefined;
+    return () => openSmartReviewCheck(check);
+  }, [openSmartReviewCheck]);
+
+  const hasOpenRequiredChecks = pendingReviewChecks.length > 0 || needsDetailsReview || needsMrpReview || needsConditionReview;
+  const ctaLabel = hasOpenRequiredChecks
+    ? priceRefreshing && !effectivePrice
+      ? 'Finding price'
+      : photosBlocked || heroCleanupNeedsRetake
+        ? 'Retake photos'
+        : 'Finish required details'
+    : 'Publish listing';
+  const ctaOnPress = hasOpenRequiredChecks
+    ? () => {
+      if (photosBlocked || heroCleanupNeedsRetake || !hasEnoughPhotos) {
+        openSmartReviewCheck(pendingReviewChecks.find((item) => item.action === 'photos'));
+        return;
+      }
+      if (!effectivePrice || needsMrpReview) {
+        setPriceSheet(true);
+        return;
+      }
+      if (needsConditionReview) {
+        submit();
+        return;
+      }
+      if (pendingReviewChecks.length > 0) {
+        openSmartReviewCheck();
+        return;
+      }
+      openFirstRequiredField();
+    }
+    : submit;
+
+  const itemStatusLine = useMemo(() => {
+    const parts: string[] = [];
+    parts.push(
+      photosBlocked || heroCleanupNeedsRetake
+        ? 'Retake photos'
+        : activePhotoIndexes.length >= MIN_PUBLISH_PHOTOS
+          ? `${activePhotoIndexes.length} photos`
+          : `${Math.max(MIN_PUBLISH_PHOTOS - activePhotoIndexes.length, 0)} photos needed`,
+    );
+    const conditionOpen = needsConditionReview
+      || categorySpecificIssues.some((issue) => (
+        issue.includes('condition')
+        || issue.includes('safety')
+        || issue.includes('page')
+        || issue.includes('working')
+      ));
+    parts.push(conditionOpen ? 'Condition needed' : 'Condition ready');
+    parts.push(pendingReviewChecks.length > 0 ? `${pendingReviewChecks.length} pending` : 'Buyer preview ready');
+    return parts.join(' · ');
+  }, [
+    activePhotoIndexes.length,
+    categorySpecificIssues,
+    heroCleanupNeedsRetake,
+    needsConditionReview,
+    pendingReviewChecks.length,
+    photosBlocked,
+  ]);
+
+  const priceDisplayText = effectivePrice
+    ? formatPrice(effectivePrice)
+    : priceRefreshing
+      ? 'Finding price'
+      : 'Set price';
+
+  const priceHelperText = effectivePrice
+    ? customPrice != null
+      ? 'Seller price'
+      : 'Owmee guidance'
+    : priceRefreshing
+      ? 'Calculating guidance'
+      : 'Required';
+
+  const buyerPreviewFacts = useMemo(() => {
+    const facts: Array<{ label: string; value: string }> = [];
+    const add = (label: string, value?: string | number | boolean | null) => {
+      const cleaned = value == null ? '' : String(value).replace(/\s+/g, ' ').trim();
+      if (cleaned) facts.push({ label, value: cleaned });
+    };
+    add('Condition', conditionText);
+    add('Category', categorySlug ? getCategoryLabel(categorySlug) : '');
+    if (categoryFamily === 'toy') {
+      add('Age', ageSuitability);
+      add('Safety', toyDisclosureValue(categorySpecifics));
+      add('Cleanliness', hygieneStatus);
+    } else if (categoryFamily === 'book') {
+      add('Language', categorySpecifics.language);
+      add('Pages', bookConditionValue(categorySpecifics));
+      add('Class / board', categorySpecifics.class_board_edition || categorySpecifics.class_or_grade || categorySpecifics.edition);
+    } else if (categoryFamily === 'appliance') {
+      add('Working', applianceStatusValue(categorySpecifics));
+      add('Accessories', categorySpecifics.accessories_status);
+      add('Pickup', categorySpecifics.pickup_complexity);
+    } else {
+      add('Brand', brand);
+      add('Model', model);
+      add('Colour', color);
+    }
+    add('Fulfilment', 'Pickup + Owmee delivery');
+    return facts.slice(0, 6);
+  }, [
+    ageSuitability,
+    brand,
+    categoryFamily,
+    categorySlug,
+    categorySpecifics,
+    color,
+    conditionText,
+    hygieneStatus,
+    model,
+  ]);
 
   const renderInlinePicker = () => {
     if (!inlineField) return null;
+
+    if (inlineField === 'additional_details') {
+      return (
+        <InlineTextPanel
+          title="Additional details"
+          helper="Optional note shown in the buyer-facing description. Do not repeat price, title, or required condition answers."
+          value={sellerAdditionalDetails}
+          placeholder="Example: Gently used at home, includes extra blocks, original manual available."
+          allowEmpty
+          multiline
+          maxLength={500}
+          onSave={(next) => {
+            setSellerAdditionalDetails(next);
+            setInlineField(null);
+          }}
+          onClose={() => setInlineField(null)}
+        />
+      );
+    }
 
     if (inlineField === 'category') {
       return (
@@ -1158,7 +1714,38 @@ export default function AIListingSuggestScreen({
       );
     }
 
+    if (inlineField === 'title') {
+      return (
+        <InlineTextPanel
+          title="Listing title"
+          helper="Use a short buyer-facing title. Include product type, brand, or model only when you are sure."
+          value={titleGuess}
+          placeholder="e.g. Wooden stacking toy"
+          onSave={(next) => {
+            applyOverrides({ title: next });
+            setInlineField(null);
+          }}
+          onClose={() => setInlineField(null)}
+        />
+      );
+    }
+
     if (inlineField === 'brand') {
+      if (brandOptions.length === 0) {
+        return (
+          <InlineTextPanel
+            title="Brand / maker"
+            helper="Add the brand only if it is visible or you know it."
+            value={brand}
+            placeholder="Brand, or leave blank"
+            onSave={(next) => {
+              applyOverrides({ brand: next });
+              setInlineField(null);
+            }}
+            onClose={() => setInlineField(null)}
+          />
+        );
+      }
       return (
         <InlineChoicePanel
           title="Choose brand"
@@ -1173,6 +1760,21 @@ export default function AIListingSuggestScreen({
     }
 
     if (inlineField === 'model') {
+      if (modelOptions.length === 0) {
+        return (
+          <InlineTextPanel
+            title={isOther ? 'Product type' : 'Item type'}
+            helper="Be specific enough for buyers to understand the item at a glance."
+            value={model}
+            placeholder="e.g. mixer grinder, story book, office chair"
+            onSave={(next) => {
+              applyModelOverride(next);
+              setInlineField(null);
+            }}
+            onClose={() => setInlineField(null)}
+          />
+        );
+      }
       return (
         <InlineChoicePanel
           title="Choose model"
@@ -1180,11 +1782,30 @@ export default function AIListingSuggestScreen({
           options={modelOptions.map((option) => ({ label: option, value: option }))}
           selected={model}
           onSelect={(next) => {
-            applyOverrides({ model: next });
+            applyModelOverride(next);
             setInlineField(null);
           }}
           onClose={() => setInlineField(null)}
           emptyText={brand ? 'Model catalogue is not loaded for this brand yet.' : 'Choose brand first.'}
+        />
+      );
+    }
+
+    if (inlineField === 'color') {
+      const colorChoices = color && !findCatalogOption(color, COLOR_OPTIONS)
+        ? [color, ...COLOR_OPTIONS]
+        : COLOR_OPTIONS;
+      return (
+        <InlineChoicePanel
+          title="Choose colour"
+          helper="Pick the colour buyers will notice first. Use the closest match if exact shade is unclear."
+          options={colorChoices.map((option) => ({ label: option, value: option }))}
+          selected={color}
+          onSelect={(next) => {
+            applyOverrides({ color: next });
+            setInlineField(null);
+          }}
+          onClose={() => setInlineField(null)}
         />
       );
     }
@@ -1214,6 +1835,60 @@ export default function AIListingSuggestScreen({
           selected={ram}
           onSelect={(next) => {
             applyOverrides({ ram: next });
+            setInlineField(null);
+          }}
+          onClose={() => setInlineField(null)}
+        />
+      );
+    }
+
+    if (inlineField === 'processor') {
+      const processorChoices = processor && !findCatalogOption(processor, PROCESSOR_OPTIONS)
+        ? [processor, ...PROCESSOR_OPTIONS]
+        : PROCESSOR_OPTIONS;
+      return (
+        <InlineChoicePanel
+          title="Choose processor"
+          helper="Processor helps buyers compare laptops and tablets. Keep it blank if you are not sure."
+          options={processorChoices.map((option) => ({ label: option, value: option }))}
+          selected={processor}
+          onSelect={(next) => {
+            applyOverrides({ processor: next });
+            setInlineField(null);
+          }}
+          onClose={() => setInlineField(null)}
+        />
+      );
+    }
+
+    if (inlineField === 'screen_size') {
+      const screenSizeChoices = screenSize && !findCatalogOption(screenSize, SCREEN_SIZE_OPTIONS)
+        ? [screenSize, ...SCREEN_SIZE_OPTIONS]
+        : SCREEN_SIZE_OPTIONS;
+      return (
+        <InlineChoicePanel
+          title="Choose screen size"
+          helper="Use the closest display size if the exact value is not visible."
+          options={screenSizeChoices.map((option) => ({ label: option, value: option }))}
+          selected={screenSize}
+          onSelect={(next) => {
+            applyOverrides({ screen_size: next });
+            setInlineField(null);
+          }}
+          onClose={() => setInlineField(null)}
+        />
+      );
+    }
+
+    if (inlineField === 'condition') {
+      return (
+        <InlineChoicePanel
+          title="Overall condition"
+          helper="Choose the closest buyer-visible condition."
+          options={CONDITION_OPTIONS.map((option) => ({ label: option.label, value: option.key }))}
+          selected={condition}
+          onSelect={(next) => {
+            setCondition(next as 'like_new' | 'good' | 'fair');
             setInlineField(null);
           }}
           onClose={() => setInlineField(null)}
@@ -1286,7 +1961,38 @@ export default function AIListingSuggestScreen({
     }
 
     if (inlineField === 'category_specifics') {
-      return null;
+      return (
+        <CategorySpecificsEditSheet
+          family={categoryFamily}
+          model={model}
+          categorySpecifics={categorySpecifics}
+          categoryFamilyLabel={categoryFamilyLabel}
+          poweredToyStatusRequired={poweredToyStatusRequired}
+          bookSetStatusRequired={bookSetStatusRequired}
+          educationalBookDetailsRequired={educationalBookDetailsRequired}
+          appliancePickupRequired={appliancePickupRequired}
+          highlighted={categorySpecificIssues.length > 0}
+          issueDisclosure={issueDisclosure}
+          onClose={() => setInlineField(null)}
+          onSave={(nextSpecifics, nextIssueDisclosure) => {
+            setCategorySpecifics(nextSpecifics);
+            markCategorySpecificTouched(Object.keys(nextSpecifics));
+            setIssueDisclosure(nextIssueDisclosure);
+            if (categoryFamily === 'toy') {
+              const hasSafetyIssue = toyDisclosureValue(nextSpecifics) === 'Safety issue disclosed';
+              setKidsSafetyChecklist({
+                cleaned: true,
+                no_small_parts: !hasSafetyIssue,
+                no_loose_batteries: !hasSafetyIssue,
+                no_sharp_edges: !hasSafetyIssue,
+                age_label_correct: true,
+                working_condition: true,
+              });
+            }
+            setInlineField(null);
+          }}
+        />
+      );
     }
 
     const booleanConfig: Partial<Record<Exclude<InlineField, null>, { title: string; helper: string; value: boolean | null }>> = {
@@ -1390,13 +2096,16 @@ export default function AIListingSuggestScreen({
     <SafeAreaView style={st.root}>
       {/* Header */}
       <View style={st.header}>
-        <BackButton onPress={() => navigation.goBack()} />
-        <Text style={st.headerTitle}>Review listing</Text>
+        <BackButton onPress={() => navigation.goBack()} style={st.headerBackButton} />
+        <View style={st.headerTextWrap}>
+          <Text style={st.headerTitle}>Review listing</Text>
+          <Text style={st.headerHelper}>Complete pending details, then preview as buyer</Text>
+        </View>
         <View style={st.headerSpacer} />
       </View>
 
       <ScrollView style={st.flex} contentContainerStyle={st.scrollPad}>
-        {/* Compact item card — image left, title + price + edit affordance */}
+        {/* Compact listing snapshot — the four facts sellers check first */}
         <View style={st.itemCard}>
           <Image source={{ uri: selectedPhotoUrl }} style={st.itemImage} resizeMode="cover" />
           <View style={st.itemMeta}>
@@ -1404,11 +2113,17 @@ export default function AIListingSuggestScreen({
             {subtitleSpecifics ? (
               <Text style={st.itemSubtitle} numberOfLines={1}>{subtitleSpecifics}</Text>
             ) : null}
-            <Text style={st.itemPrice}>{effectivePrice ? formatPrice(effectivePrice) : 'Set price'}</Text>
+            <Text style={st.itemStatusLine} numberOfLines={1}>{itemStatusLine}</Text>
+            {priceRefreshError && !effectivePrice ? (
+              <Text style={st.itemPriceError}>Price guidance unavailable. Set your asking price.</Text>
+            ) : null}
           </View>
-          <TouchableOpacity onPress={() => setEditSheet(true)} style={st.itemEditBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Text style={st.itemEditGlyph}>✎</Text>
-          </TouchableOpacity>
+          <View style={st.itemActionRail}>
+            <Text style={st.itemPrice}>{priceDisplayText}</Text>
+            <Text style={st.itemPriceHelper}>{priceHelperText}</Text>
+            <ReadinessBadge score={readinessScore} />
+            <ActionPill label="Edit" onPress={() => setInlineField('title')} />
+          </View>
         </View>
         <View style={st.photoReviewCard}>
           <View style={st.photoReviewHeader}>
@@ -1416,9 +2131,7 @@ export default function AIListingSuggestScreen({
               <Text style={st.photoReviewTitle}>Photos</Text>
               <Text style={st.photoReviewSub}>Choose hero and remove accidental photos.</Text>
             </View>
-            <TouchableOpacity onPress={retakeHeroPhoto} activeOpacity={0.82} style={st.photoRetakeBtn}>
-              <Text style={st.photoRetakeText}>Retake</Text>
-            </TouchableOpacity>
+            <ActionPill label="Retake" onPress={retakeHeroPhoto} />
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.photoRail}>
             {reviewPhotos.map((url, index) => {
@@ -1486,390 +2199,140 @@ export default function AIListingSuggestScreen({
           </View>
         ) : null}
 
-        <View style={st.checklistCard}>
-          <Text style={st.checklistTitle}>Publish checklist</Text>
-          <ChecklistRow
-            label="Photos"
-            ready={!photosBlocked && !heroCleanupNeedsRetake && hasEnoughPhotos}
-            hint={
-              photosBlocked || heroCleanupNeedsRetake
-                ? 'Retake required'
-                : hasEnoughPhotos
-                  ? `${activePhotoIndexes.length} ready`
-                  : `${MIN_PUBLISH_PHOTOS - activePhotoIndexes.length} more needed`
-            }
-          />
-          <ChecklistRow
-            label="Item identity"
-            ready={!needsDetailsReview}
-            hint={needsDetailsReview ? detailReviewIssues.join(', ') : 'Confirmed'}
-          />
-          <ChecklistRow
-            label="Price and MRP"
-            ready={Boolean(effectivePrice) && !needsMrpReview}
-            hint={!effectivePrice ? 'Set price' : needsMrpReview ? 'Review MRP source' : 'Ready'}
-          />
-          <ChecklistRow
-            label="Condition"
-            ready={!needsConditionReview}
-            hint={needsConditionReview ? conditionReviewIssues.join(', ') : 'Confirmed'}
-          />
+        <View style={st.detailCard}>
+          <View style={st.detailHeader}>
+            <View>
+              <Text style={st.detailTitle}>Required details</Text>
+              <Text style={st.detailSub}>
+                {pendingReviewChecks.length > 0
+                  ? `${pendingReviewChecks.length} required detail${pendingReviewChecks.length === 1 ? '' : 's'} need review.`
+                  : 'Required details are ready.'}
+              </Text>
+            </View>
+            {pendingReviewChecks.length > 0 ? (
+              <TouchableOpacity onPress={() => openSmartReviewCheck()} activeOpacity={0.82} style={st.queueNextBtn}>
+                <Text style={st.queueNextText}>{pendingReviewChecks.length} left</Text>
+              </TouchableOpacity>
+            ) : (
+              <Text style={st.queueDoneText}>Ready</Text>
+            )}
+          </View>
+
+          <View style={st.summaryRows}>
+            {allP0ReviewChecks.map((check) => (
+              <ReviewSummaryRow
+                key={check.id}
+                label={check.label}
+                summary={check.summary}
+                status={reviewStatusForCheck(check)}
+                onPress={reviewPressForCheck(check)}
+              />
+            ))}
+          </View>
+
+          {detailReviewIssues.length > 0 && pendingReviewChecks.length === 0 ? (
+            <Text style={st.detailIssue}>
+              Required before listing: {detailReviewIssues.join(', ')}.
+            </Text>
+          ) : null}
         </View>
 
         <View style={st.detailCard}>
-            <View style={st.detailHeader}>
-              <View>
-                <Text style={st.detailTitle}>Product details</Text>
-                <Text style={st.detailSub}>
-                  {needsDetailsReview
-                    ? 'Tap highlighted fields to complete them.'
-                    : 'Exact specs confirmed.'}
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={needsDetailsReview ? openFirstRequiredField : () => setEditSheet(true)}
-                activeOpacity={0.82}
-                style={[st.detailBadge, needsDetailsReview ? st.detailBadgeWarn : st.detailBadgeOk]}
-              >
-                <Text style={[st.detailBadgeText, needsDetailsReview ? st.detailBadgeWarnText : st.detailBadgeOkText]}>
-                  {needsDetailsReview ? 'Review' : 'Ready'}
-                </Text>
-              </TouchableOpacity>
+          <View style={st.detailHeader}>
+            <View style={st.detailTitleWrap}>
+              <Text style={st.detailTitle}>Additional details</Text>
+              <Text style={st.detailSub}>Optional note buyers see in the listing description.</Text>
             </View>
-            <View style={st.specRow}>
-              <SpecPill
-                label="Category"
-                value={categorySlug ? getCategoryLabel(categorySlug) : ''}
-                missing={!categorySlug}
-                onPress={() => setInlineField('category')}
-              />
-              {isOther ? (
-                <SpecPill
-                  label="Item"
-                  value={titleGuess}
-                  missing={titleGuess.trim().length < 4}
-                  onPress={() => setEditSheet(true)}
-                />
-              ) : null}
-              <SpecPill
-                label="Brand"
-                value={brand}
-                missing={isElectronic && !findCatalogOption(brand, brandOptions)}
-                onPress={() => setInlineField('brand')}
-              />
-              <SpecPill
-                label={isElectronic ? 'Model' : 'Item type'}
-                value={model}
-                missing={
-                  modelOptions.length > 0
-                  && (isElectronic || categoryKind === 'appliance' || categoryKind === 'kids')
-                  && !findCatalogOption(model, modelOptions)
-                }
-                onPress={() => setInlineField('model')}
-              />
-              {categoryKind === 'kids' ? (
-                <>
-                  <SpecPill
-                    label="Age"
-                    value={ageSuitability}
-                    missing={!findCatalogOption(ageSuitability, KIDS_AGE_OPTIONS)}
-                    onPress={() => setInlineField('age_suitability')}
-                  />
-                  <SpecPill
-                    label="Cleanliness"
-                    value={hygieneStatus}
-                    missing={!findCatalogOption(hygieneStatus, HYGIENE_OPTIONS)}
-                    onPress={() => setInlineField('hygiene_status')}
-                  />
-                </>
-              ) : null}
-              {isElectronic ? (
-                <SpecPill
-                  label="Storage"
-                  value={storage}
-                  missing={!findCatalogOption(storage, storageOptions)}
-                  onPress={() => setInlineField('storage')}
-                />
-              ) : null}
-              {categoryKind === 'laptop' ? (
-                <SpecPill
-                  label="RAM"
-                  value={ram}
-                  missing={!findCatalogOption(ram, ramOptions)}
-                  onPress={() => setInlineField('ram')}
-                />
-              ) : null}
-              {!isElectronic && categoryKind !== 'kids' ? (
-                <SpecPill
-                  label="Colour"
-                  value={color}
-                  onPress={() => setEditSheet(true)}
-                />
-              ) : null}
-              {isElectronic ? (
-                <>
-                  <SpecPill label="Box" value={boolLabel(hasBox)} missing={hasBox === null} onPress={() => setInlineField('has_box')} />
-                  <SpecPill label="Bill" value={boolLabel(hasBill)} missing={hasBill === null} onPress={() => setInlineField('has_bill')} />
-                  <SpecPill label="Charger" value={boolLabel(hasCharger)} missing={hasCharger === null} onPress={() => setInlineField('has_charger')} />
-                  {categoryKind === 'phone' ? (
-                    <SpecPill label="Earphones" value={boolLabel(hasEarphones)} missing={hasEarphones === null} onPress={() => setInlineField('has_earphones')} />
-                  ) : null}
-                  <SpecPill
-                    label="Water damage"
-                    value={boolLabel(waterDamageHistory)}
-                    missing={waterDamageHistory === null}
-                    onPress={() => setInlineField('water_damage_history')}
-                  />
-                  <SpecPill
-                    label="Works"
-                    value={boolLabel(sellerFunctionalAttestation)}
-                    missing={sellerFunctionalAttestation === null}
-                    onPress={() => setInlineField('seller_functional_attestation')}
-                  />
-                </>
-              ) : null}
-            </View>
-            {categoryFamily === 'toy' || categoryFamily === 'book' || categoryFamily === 'appliance' ? (
-              <CategorySpecificsPanel
-                family={categoryFamily}
-                model={model}
-                categorySpecifics={categorySpecifics}
-                categoryFamilyLabel={categoryFamilyLabel}
-                poweredToyStatusRequired={poweredToyStatusRequired}
-                bookSetStatusRequired={bookSetStatusRequired}
-                appliancePickupRequired={appliancePickupRequired}
-                highlighted={inlineField === 'category_specifics' || categorySpecificIssues.length > 0}
-                onSelect={setCategorySpecific}
-              />
-            ) : null}
-            {detailReviewIssues.length > 0 ? (
-              <Text style={st.detailIssue}>
-                Required before listing: {detailReviewIssues.join(', ')}.
-              </Text>
-            ) : null}
-            {inlineField === 'screen_condition' || inlineField === 'body_condition' ? null : renderInlinePicker()}
+            <ActionPill
+              label={sellerAdditionalDetails.trim() ? 'Edit' : 'Add'}
+              onPress={() => setInlineField('additional_details')}
+            />
+          </View>
+          {sellerAdditionalDetails.trim() ? (
+            <Text style={st.additionalNoteText} numberOfLines={4}>{sellerAdditionalDetails.trim()}</Text>
+          ) : (
             <TouchableOpacity
-              style={st.detailAction}
-              onPress={needsDetailsReview ? openFirstRequiredField : () => setEditSheet(true)}
+              onPress={() => setInlineField('additional_details')}
               activeOpacity={0.82}
-            >
-              <Text style={st.detailActionText}>{needsDetailsReview ? 'Complete highlighted fields' : 'More details'}</Text>
-            </TouchableOpacity>
-        </View>
-
-        {/* Set your price */}
-        <View style={st.section}>
-          <Text style={st.sectionH1}>Set your price</Text>
-          <Text style={st.sectionSub}>
-            {draft.price_source === 'comparables' && draft.comparables.length > 0
-              ? `Owmee guidance is based on ${draft.comparables.length} similar items sold recently.`
-              : draft.price_source === 'vision'
-                ? 'Owmee guidance uses your photos and item condition.'
-                : draft.price_source === 'category_anchor'
-                  ? 'Owmee guidance uses the item type and condition.'
-                  : draft.price_source === 'mrp_anchor'
-                    ? 'Owmee guidance uses MRP and visible condition.'
-                    : draft.price_source === 'ai'
-                      ? 'Owmee guidance uses Indian market estimates.'
-                      : 'Choose the asking price buyers will see.'}
-          </Text>
-
-          <TouchableOpacity style={st.priceBtn} onPress={() => setPriceSheet(true)}>
-            <View style={st.priceTitleRow}>
-              <Text style={st.priceBtnTitle}>{originalPrice ? 'Discounted price' : 'Asking price and MRP'}</Text>
-              {priceRefreshing ? <ActivityIndicator size="small" color={C.ctaPrimary} /> : null}
-            </View>
-            <Text style={st.priceBtnHint}>
-              {customPrice != null
-                ? `${formatPrice(customPrice)} · you set this price.`
-                : effectivePrice
-                  ? `${formatPrice(effectivePrice)} · starts from Owmee guidance.`
-                  : priceRefreshing
-                    ? 'Getting Owmee guidance from confirmed details.'
-                    : 'No reliable guidance yet. Enter the amount you want.'}
-            </Text>
-            <Text style={st.priceBtnArrow}>›</Text>
-          </TouchableOpacity>
-          {priceRefreshError && !effectivePrice ? (
-            <Text style={st.priceRefreshError}>{priceRefreshError}</Text>
-          ) : null}
-          {originalPrice && discountPct ? (
-            <View style={st.mrpDealRow}>
-              <Text style={st.mrpText}>MRP {formatPrice(originalPrice)}</Text>
-              <Text style={st.discountBadge}>{discountPct}% off</Text>
-            </View>
-          ) : needsMrpReview && aiOriginalPrice ? (
-            <View style={st.mrpReviewRow}>
-              <Text style={st.mrpReviewText}>
-                AI found MRP {formatPrice(aiOriginalPrice)}. Review source before any discount is shown.
+              style={st.additionalNoteEmpty}>
+              <Text style={st.additionalNoteEmptyText}>
+                Add anything useful that is not already covered, such as usage context, included extras, or care notes.
               </Text>
-            </View>
-          ) : mrpReviewed && confirmedOriginalPrice && !buyerFacingMrpSource(mrpSource) ? (
-            <View style={st.mrpReviewRow}>
-              <Text style={st.mrpReviewText}>
-                MRP saved for context. No buyer discount shown from market estimate.
-              </Text>
-            </View>
-          ) : null}
-          <Text style={st.priceNote}>
-            Owmee suggests a range; you choose the final asking price.
-          </Text>
-
-          {draft.comparables.length > 0 && (
-            <TouchableOpacity style={st.priceBtn} onPress={() => setCompsSheet(true)}>
-              <Text style={st.priceBtnTitle}>See Owmee price guidance</Text>
-              <Text style={st.priceBtnHint}>
-                {suggestedPrice ? `${formatPrice(suggestedPrice)} · based on similar sales` : 'Recent sales available for context'}
-              </Text>
-              <Text style={st.priceBtnArrow}>›</Text>
             </TouchableOpacity>
           )}
         </View>
 
-        {/* Condition pills */}
-        <View style={st.section}>
-          <Text style={st.sectionH1}>Condition</Text>
-          <Text style={st.sectionSub}>How is the item right now?</Text>
-          <View style={st.condRow}>
-            {CONDITION_OPTIONS.map((opt) => {
-              const active = condition === opt.key;
-              return (
-                <TouchableOpacity
-                  key={opt.key}
-                  onPress={() => setCondition(opt.key)}
-                  style={[st.condPill, active && st.condPillActive]}>
-                  {active && <Text style={st.condPillTick}>✓</Text>}
-                  <Text style={[st.condPillLabel, active && st.condPillLabelActive]}>
-                    {opt.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
+        {draft.comparables.length > 0 ? (
+          <View style={st.priceGuidanceCard}>
+            <View style={st.detailTitleWrap}>
+              <Text style={st.priceBtnTitle}>Price guidance</Text>
+              <Text style={st.priceBtnHint}>
+                {suggestedPrice ? `${formatPrice(suggestedPrice)} from similar sales` : 'Recent sales available'}
+              </Text>
+            </View>
+            <ActionPill label="View" onPress={() => setCompsSheet(true)} />
           </View>
-          {isElectronic ? (
-            <>
-              <View style={st.conditionGrid}>
-                <SpecPill
-                  label="Screen"
-                  value={conditionLabel(screenCondition)}
-                  missing={!screenCondition}
-                  onPress={() => setInlineField('screen_condition')}
-                />
-                <SpecPill
-                  label="Body"
-                  value={conditionLabel(bodyCondition)}
-                  missing={!bodyCondition}
-                  onPress={() => setInlineField('body_condition')}
-                />
-                {draft.detected.battery_health != null ? (
-                  <SpecPill label="Battery" value={`${draft.detected.battery_health}%`} />
-                ) : null}
-              </View>
-              <Text style={st.issueLabel}>Known issues</Text>
-              <View style={st.issueChipRow}>
-                {COMMON_DEFECTS.map((issue) => {
-                  const active = defects.some((item) => item.toLowerCase() === issue.toLowerCase());
-                  return (
-                    <TouchableOpacity
-                      key={issue}
-                      onPress={() => {
-                        setDefects((prev) => (
-                          active
-                            ? prev.filter((item) => item.toLowerCase() !== issue.toLowerCase())
-                            : [...prev, issue]
-                        ));
-                      }}
-                      activeOpacity={0.82}
-                      style={[st.issueChip, active && st.issueChipActive]}>
-                      <Text style={[st.issueChipText, active && st.issueChipTextActive]}>{issue}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-              <View style={st.customIssueRow}>
-                <TextInput
-                  value={newDefect}
-                  onChangeText={setNewDefect}
-                  placeholder="Add another issue"
-                  placeholderTextColor={C.text4}
-                  style={st.customIssueInput}
-                />
-                <TouchableOpacity
-                  onPress={() => {
-                    const cleaned = cleanText(newDefect);
-                    if (!cleaned) return;
-                    setDefects((prev) => normalizeDefects([...prev, cleaned]));
-                    setNewDefect('');
-                  }}
-                  activeOpacity={0.82}
-                  style={st.addIssueBtn}>
-                  <Text style={st.addIssueText}>Add</Text>
-                </TouchableOpacity>
-              </View>
-            </>
-          ) : null}
-          {categoryKind === 'kids' && categoryFamily === 'toy' ? (
-            <View style={st.kidsSafetyBox}>
-              <Text style={st.issueLabel}>Kids safety declarations</Text>
-              {KIDS_SAFETY_ITEMS.map((item) => {
-                const value = kidsSafetyChecklist[item.key];
-                return (
-                  <View key={item.key} style={st.safetyRow}>
-                    <Text style={st.safetyLabel}>{item.label}</Text>
-                    <View style={st.safetyChoices}>
-                      {[true, false].map((choice) => (
-                        <TouchableOpacity
-                          key={`${item.key}-${choice ? 'yes' : 'no'}`}
-                          onPress={() => setKidsSafetyChecklist((prev) => ({ ...prev, [item.key]: choice }))}
-                          activeOpacity={0.82}
-                          style={[st.safetyChoice, value === choice && st.safetyChoiceActive]}>
-                          <Text style={[st.safetyChoiceText, value === choice && st.safetyChoiceTextActive]}>
-                            {choice ? 'Yes' : 'No'}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-                );
-              })}
+        ) : null}
+
+        <View style={st.buyerPreviewCard}>
+          <View style={st.detailHeader}>
+            <View>
+              <Text style={st.detailTitle}>Buyer preview</Text>
+              <Text style={st.detailSub}>This is the core listing buyers will see before they pay.</Text>
+            </View>
+            {pendingReviewChecks.length > 0 ? (
+              <Text style={st.previewWarnBadge}>Pending</Text>
+            ) : (
+              <Text style={st.previewReadyBadge}>Ready</Text>
+            )}
+          </View>
+          <View style={st.previewBody}>
+            <Image source={{ uri: selectedPhotoUrl }} style={st.previewImage} resizeMode="cover" />
+            <View style={st.previewCopy}>
+              <Text style={st.previewTitle} numberOfLines={2}>{titleGuess || 'Listing title'}</Text>
+              <Text style={st.previewPrice}>{effectivePrice ? formatPrice(effectivePrice) : 'Price not set'}</Text>
+              {discountPct ? <Text style={st.previewDiscount}>{discountPct}% off MRP after review</Text> : null}
+              {sellerAdditionalDetails.trim() ? (
+                <Text style={st.previewNote} numberOfLines={2}>{sellerAdditionalDetails.trim()}</Text>
+              ) : null}
+            </View>
+          </View>
+          {buyerPreviewFacts.length > 0 ? (
+            <View style={st.previewFacts}>
+              {buyerPreviewFacts.map((fact) => (
+                <View key={`${fact.label}-${fact.value}`} style={st.previewFactRow}>
+                  <Text style={st.previewFactLabel}>{fact.label}</Text>
+                  <Text style={st.previewFactValue} numberOfLines={2}>{fact.value}</Text>
+                </View>
+              ))}
             </View>
           ) : null}
-          {needsConditionReview ? (
-            <Text style={st.detailIssue}>
-              Required before listing: {conditionReviewIssues.join(', ')}.
-            </Text>
-          ) : null}
-          {inlineField === 'screen_condition' || inlineField === 'body_condition' ? renderInlinePicker() : null}
         </View>
 
-        {/* How Owmee protects your trust */}
+        {/* Seller-facing sale basics. Keep concise; the checkout flow carries detailed policy copy. */}
         <View style={st.trustBlock}>
-          <Text style={st.trustHeading}>How Owmee protects your sale</Text>
-          <TrustRow text="Seller KYC badge appears only after verification is complete" />
-          <TrustRow text="Owmee manages protected payment and delivery support" />
-          <TrustRow text="Buyer payment stays inside Owmee checkout" />
-          <TrustRow text="You can edit details until a buyer commits" />
-          <TrustRow text="Clear photos and honest condition help prevent returns" />
+          <Text style={st.trustHeading}>Listing checklist</Text>
+          <TrustRow text="KYC badge shows after verification" />
+          <TrustRow text="Payment and delivery stay on Owmee" />
+          <TrustRow text="Edit anytime before a buyer commits" />
+          <TrustRow text="Clear photos reduce returns" />
         </View>
 
-        {/* TDS pre-disclosure (P0 launch fix) — surfacing IT Section 194-O
-           early avoids the surprise at first ₹5L payout. Single info card,
-           non-blocking. */}
+        {/* TDS pre-disclosure. Single info card, non-blocking. */}
         <View style={st.tdsCard}>
-          <Text style={st.tdsHeading}>Heads-up about taxes</Text>
+          <Text style={st.tdsHeading}>Tax note</Text>
           <Text style={st.tdsBody}>
-            Once your sales on Owmee cross{' '}
-            <Text style={st.tdsBold}>₹5,00,000 in a financial year</Text>,
-            1% TDS is deducted from each payout (Section 194-O). Add your PAN
-            in profile to keep the rate at 1% — without it, deductions jump to 5%.
+            After <Text style={st.tdsBold}>₹5,00,000</Text> sales in a financial year,
+            1% TDS applies under Section 194-O. Add PAN to keep it at 1%;
+            without PAN it can be 5%.
           </Text>
         </View>
 
         {/* Tiny legal */}
         <Text style={st.legal}>
-          By listing, you agree to{' '}
+          By publishing, you accept{' '}
           <Text style={st.legalLink} onPress={() => Linking.openURL(TERMS_URL)}>
-            Owmee Terms
+            Owmee seller terms
           </Text>
           .
         </Text>
@@ -1890,42 +2353,6 @@ export default function AIListingSuggestScreen({
       </View>
 
       {/* Bottom sheets */}
-      {editSheet && (
-        <EditDetailsSheet
-          initial={{
-            title: titleGuess,
-            brand,
-            model,
-            storage,
-            ram,
-            processor,
-            screen_size: screenSize,
-            color,
-            purchase_year: purchaseYear,
-            accessories,
-            warranty_status: warrantyStatus,
-            age_suitability: ageSuitability,
-            hygiene_status: hygieneStatus,
-            has_box: hasBox,
-            has_bill: hasBill,
-            has_charger: hasCharger,
-            has_earphones: categoryKind === 'phone' ? hasEarphones : null,
-            water_damage_history: waterDamageHistory,
-            seller_functional_attestation: sellerFunctionalAttestation,
-            category_slug: categorySlug,
-          }}
-          onSave={(next) => {
-            const nextCategorySlug = canonicalCategorySlug(next.category_slug);
-            setOverrides({
-              ...next,
-              category_slug: nextCategorySlug,
-            });
-            if (nextCategorySlug !== categorySlug) setCategorySpecifics({});
-            setEditSheet(false);
-          }}
-          onClose={() => setEditSheet(false)}
-        />
-      )}
       {priceSheet && (
         <PriceSheet
           suggested={suggestedPrice}
@@ -1959,6 +2386,7 @@ export default function AIListingSuggestScreen({
           onClose={() => setCompsSheet(false)}
         />
       )}
+      {renderInlinePicker()}
     </SafeAreaView>
   );
 }
@@ -1974,69 +2402,141 @@ function TrustRow({ text }: { text: string }) {
   );
 }
 
-function ChecklistRow({ label, ready, hint }: { label: string; ready: boolean; hint: string }) {
+function RequiredCheckRow({
+  check,
+  needsConfirmation,
+  onPress,
+}: {
+  check: SmartReviewCheck;
+  needsConfirmation?: boolean;
+  onPress: () => void;
+}) {
+  const warning = check.status === 'missing' || check.status === 'not_sure' || needsConfirmation;
   return (
-    <View style={st.checklistRow}>
-      <View style={[st.checklistDot, ready ? st.checklistDotReady : st.checklistDotTodo]}>
-        <Text style={[st.checklistDotText, ready ? st.checklistDotTextReady : st.checklistDotTextTodo]}>
-          {ready ? '✓' : '!'}
+    <TouchableOpacity style={st.requiredRow} onPress={onPress} activeOpacity={0.82}>
+      <View style={[st.requiredDot, warning && st.requiredDotWarn]}>
+        <Text style={[st.requiredDotText, warning && st.requiredDotWarnText]}>
+          {check.status === 'not_sure' ? '?' : '!'}
         </Text>
       </View>
-      <View style={st.checklistCopy}>
-        <Text style={st.checklistLabel}>{label}</Text>
-        <Text style={st.checklistHint} numberOfLines={1}>{hint}</Text>
+      <View style={st.requiredCopy}>
+        <Text style={st.requiredLabel}>{check.label}</Text>
+        <Text style={st.requiredSummary} numberOfLines={1}>{check.summary}</Text>
       </View>
+      <Text style={st.requiredAction}>{needsConfirmation ? 'Review' : 'Fix'}</Text>
+    </TouchableOpacity>
+  );
+}
+
+function ReadinessBadge({ score }: { score: number }) {
+  return (
+    <View style={st.readinessMini}>
+      <Text style={st.readinessMiniText}>{score}% ready</Text>
     </View>
   );
 }
 
-function boolLabel(value: boolean | null | undefined) {
-  if (value === true) return 'Yes';
-  if (value === false) return 'No';
-  return '';
+function ActionPill({
+  label,
+  onPress,
+  tone = 'default',
+}: {
+  label: string;
+  onPress: () => void;
+  tone?: 'default' | 'danger';
+}) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.82}
+      style={[st.actionPill, tone === 'danger' && st.actionPillDanger]}
+      accessibilityRole="button">
+      <Text style={[st.actionPillText, tone === 'danger' && st.actionPillTextDanger]} numberOfLines={1}>
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
 }
 
-function SpecPill({
+function ReviewSummaryRow({
   label,
-  value,
-  missing,
+  summary,
+  status,
   onPress,
 }: {
   label: string;
-  value: string;
-  missing?: boolean;
+  summary: string;
+  status: ReviewRowStatus;
   onPress?: () => void;
 }) {
+  const actionLabel = status === 'Ready' ? 'Edit' : status;
   const content = (
     <>
-      <Text style={[st.specPillLabel, missing && st.specPillMissingText]}>{label}</Text>
-      <Text style={[st.specPillValue, missing && st.specPillMissingText]} numberOfLines={1}>
-        {value || 'Select'}
-      </Text>
+      <View style={st.reviewSummaryCopy}>
+        <Text style={st.reviewSummaryLabel}>{label}</Text>
+        <Text style={st.reviewSummaryText} numberOfLines={1}>{summary || 'Needs answer'}</Text>
+      </View>
+      {onPress ? (
+        <ActionPill label={actionLabel} onPress={onPress} tone={status === 'Add' ? 'danger' : 'default'} />
+      ) : (
+        <View style={st.reviewSummaryStatus}>
+          <Text style={st.reviewSummaryStatusText}>{status}</Text>
+        </View>
+      )}
     </>
   );
-  if (!onPress) {
-    return (
-      <View style={[st.specPill, missing && st.specPillMissing]}>
-        {content}
-      </View>
-    );
-  }
-  return (
-    <TouchableOpacity
-      style={[st.specPill, st.specPillTap, missing && st.specPillMissing]}
-      onPress={onPress}
-      activeOpacity={0.82}
-      accessibilityRole="button">
-      {content}
-    </TouchableOpacity>
-  );
+  if (!onPress) return <View style={[st.reviewSummaryRow, st.reviewSummaryRowStatic]}>{content}</View>;
+  return <View style={st.reviewSummaryRow}>{content}</View>;
 }
 
 type InlineChoice = {
   label: string;
   value: string;
 };
+
+function FieldEditSheet({
+  title,
+  helper,
+  children,
+  footer,
+  onClose,
+}: {
+  title: string;
+  helper: string;
+  children: React.ReactNode;
+  footer?: React.ReactNode;
+  onClose: () => void;
+}) {
+  return (
+    <Modal transparent visible animationType="slide" onRequestClose={onClose}>
+      <View style={st.fieldBackdrop}>
+        <TouchableOpacity style={st.fieldBackdropTouch} activeOpacity={1} onPress={onClose} />
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={st.fieldSheet}>
+          <View style={st.fieldHandle} />
+          <View style={st.fieldHeader}>
+            <View style={st.fieldTitleWrap}>
+              <Text style={st.fieldTitle}>{title}</Text>
+              <Text style={st.fieldHelper}>{helper}</Text>
+            </View>
+            <TouchableOpacity onPress={onClose} style={st.fieldClose} activeOpacity={0.82}>
+              <Text style={st.fieldCloseText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView
+            style={st.fieldScroll}
+            contentContainerStyle={st.fieldContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}>
+            {children}
+          </ScrollView>
+          {footer ? <View style={st.fieldFooter}>{footer}</View> : null}
+        </KeyboardAvoidingView>
+      </View>
+    </Modal>
+  );
+}
 
 function InlineChoicePanel({
   title,
@@ -2055,25 +2555,33 @@ function InlineChoicePanel({
   onClose: () => void;
   emptyText?: string;
 }) {
+  const [draftValue, setDraftValue] = useState(selected || '');
+  const canSave = draftValue.length > 0;
   return (
-    <View style={st.inlinePanel}>
-      <View style={st.inlineHeader}>
-        <View style={st.inlineTitleWrap}>
-          <Text style={st.inlineTitle}>{title}</Text>
-          <Text style={st.inlineHelper}>{helper}</Text>
+    <FieldEditSheet
+      title={title}
+      helper={helper}
+      onClose={onClose}
+      footer={(
+        <View style={st.fieldCtaRow}>
+          <Button label="Cancel" variant="secondary" onPress={onClose} style={st.fieldCtaBtn} />
+          <Button
+            label="Save"
+            variant="primary"
+            disabled={!canSave}
+            onPress={() => onSelect(draftValue)}
+            style={st.fieldCtaBtn}
+          />
         </View>
-        <TouchableOpacity onPress={onClose} style={st.inlineClose} activeOpacity={0.82}>
-          <Text style={st.inlineCloseText}>Close</Text>
-        </TouchableOpacity>
-      </View>
+      )}>
       {options.length > 0 ? (
         <View style={st.inlineChoiceRow}>
           {options.map((option) => {
-            const active = selected === option.value;
+            const active = draftValue === option.value;
             return (
               <TouchableOpacity
                 key={option.value}
-                onPress={() => onSelect(option.value)}
+                onPress={() => setDraftValue(option.value)}
                 activeOpacity={0.82}
                 style={[st.inlineChoice, active && st.inlineChoiceActive]}>
                 <Text style={[st.inlineChoiceText, active && st.inlineChoiceTextActive]}>
@@ -2086,7 +2594,63 @@ function InlineChoicePanel({
       ) : (
         <Text style={st.inlineEmpty}>{emptyText || 'No options available yet.'}</Text>
       )}
-    </View>
+    </FieldEditSheet>
+  );
+}
+
+function InlineTextPanel({
+  title,
+  helper,
+  value,
+  placeholder,
+  allowEmpty,
+  multiline,
+  maxLength = 80,
+  onSave,
+  onClose,
+}: {
+  title: string;
+  helper: string;
+  value?: string;
+  placeholder: string;
+  allowEmpty?: boolean;
+  multiline?: boolean;
+  maxLength?: number;
+  onSave: (value: string) => void;
+  onClose: () => void;
+}) {
+  const [text, setText] = useState(value || '');
+  const cleaned = text.replace(/\s+/g, ' ').trim();
+  const canSave = allowEmpty || cleaned.length > 0;
+  return (
+    <FieldEditSheet
+      title={title}
+      helper={helper}
+      onClose={onClose}
+      footer={(
+        <View style={st.fieldCtaRow}>
+          <Button label="Cancel" variant="secondary" onPress={onClose} style={st.fieldCtaBtn} />
+          <Button
+            label="Save"
+            variant="primary"
+            disabled={!canSave}
+            onPress={() => onSave(cleaned)}
+            style={st.fieldCtaBtn}
+          />
+        </View>
+      )}>
+      <TextInput
+        value={text}
+        onChangeText={setText}
+        placeholder={placeholder}
+        placeholderTextColor={C.text4}
+        style={[st.inlineTextInput, multiline && st.inlineTextArea]}
+        autoCapitalize="words"
+        maxLength={maxLength}
+        multiline={multiline}
+        textAlignVertical={multiline ? 'top' : 'center'}
+      />
+    </FieldEditSheet>
   );
 }
 
@@ -2130,16 +2694,50 @@ function RequirementChoiceGroup({
   );
 }
 
-function CategorySpecificsPanel({
+function RequirementTextField({
+  label,
+  value,
+  placeholder,
+  required,
+  onChangeText,
+}: {
+  label: string;
+  value?: any;
+  placeholder: string;
+  required?: boolean;
+  onChangeText: (value: string) => void;
+}) {
+  const selected = value == null ? '' : String(value);
+  const missing = required && !selected.trim();
+  return (
+    <View style={st.requirementGroup}>
+      <Text style={[st.requirementLabel, missing && st.requirementMissingText]}>
+        {label}{required ? ' *' : ''}
+      </Text>
+      <TextInput
+        value={selected}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor={C.text4}
+        style={[st.requirementTextInput, missing && st.requirementTextInputMissing]}
+      />
+    </View>
+  );
+}
+
+function CategorySpecificsEditSheet({
   family,
   model,
   categorySpecifics,
   categoryFamilyLabel,
   poweredToyStatusRequired,
   bookSetStatusRequired,
+  educationalBookDetailsRequired,
   appliancePickupRequired,
   highlighted,
-  onSelect,
+  issueDisclosure,
+  onSave,
+  onClose,
 }: {
   family: ListingRequirementFamily;
   model: string;
@@ -2147,17 +2745,131 @@ function CategorySpecificsPanel({
   categoryFamilyLabel: string;
   poweredToyStatusRequired: boolean;
   bookSetStatusRequired: boolean;
+  educationalBookDetailsRequired: boolean;
   appliancePickupRequired: boolean;
   highlighted?: boolean;
+  issueDisclosure: string;
+  onSave: (nextSpecifics: Record<string, any>, nextIssueDisclosure: string) => void;
+  onClose: () => void;
+}) {
+  const [draftSpecifics, setDraftSpecifics] = useState<Record<string, any>>(() => ({ ...categorySpecifics }));
+  const [draftIssueDisclosure, setDraftIssueDisclosure] = useState(issueDisclosure);
+  const setDraftSpecific = useCallback((key: string, value: any) => {
+    setDraftSpecifics((prev) => ({ ...prev, [key]: value }));
+  }, []);
+  const setDraftToyDisclosure = useCallback((value: string) => {
+    const nextSpecifics = toyDisclosureSpecifics(value);
+    setDraftSpecifics((prev) => ({
+      ...prev,
+      ...nextSpecifics,
+    }));
+    if (!disclosureNeedsDetail('toy', nextSpecifics)) setDraftIssueDisclosure('');
+  }, []);
+  const setDraftBookCondition = useCallback((value: string) => {
+    const nextSpecifics = bookConditionSpecifics(value, draftSpecifics);
+    setDraftSpecifics((prev) => ({
+      ...prev,
+      ...bookConditionSpecifics(value, prev),
+    }));
+    if (!disclosureNeedsDetail('book', nextSpecifics)) setDraftIssueDisclosure('');
+  }, [draftSpecifics]);
+  const setDraftApplianceStatus = useCallback((value: string) => {
+    const nextSpecifics = applianceStatusSpecifics(value, draftSpecifics);
+    setDraftSpecifics((prev) => ({
+      ...prev,
+      ...applianceStatusSpecifics(value, prev),
+    }));
+    if (!disclosureNeedsDetail('appliance', nextSpecifics)) setDraftIssueDisclosure('');
+  }, [draftSpecifics]);
+
+  return (
+    <FieldEditSheet
+      title={`${categoryFamilyLabel} details`}
+      helper="Answer the item-specific details buyers check before paying."
+      onClose={onClose}
+      footer={(
+        <View style={st.fieldCtaRow}>
+          <Button label="Cancel" variant="secondary" onPress={onClose} style={st.fieldCtaBtn} />
+          <Button
+            label="Save"
+            variant="primary"
+            onPress={() => {
+              const nextIssueDisclosure = disclosureNeedsDetail(family, draftSpecifics)
+                ? draftIssueDisclosure.replace(/\s+/g, ' ').trim()
+                : '';
+              onSave(draftSpecifics, nextIssueDisclosure);
+            }}
+            style={st.fieldCtaBtn}
+          />
+        </View>
+      )}>
+      <CategorySpecificsPanel
+        family={family}
+        model={model}
+        categorySpecifics={draftSpecifics}
+        categoryFamilyLabel={categoryFamilyLabel}
+        poweredToyStatusRequired={poweredToyStatusRequired}
+        bookSetStatusRequired={bookSetStatusRequired}
+        educationalBookDetailsRequired={educationalBookDetailsRequired}
+        appliancePickupRequired={appliancePickupRequired}
+        highlighted={highlighted}
+        sheetMode
+        issueDisclosureRequired={disclosureNeedsDetail(family, draftSpecifics)}
+        issueDisclosure={draftIssueDisclosure}
+        onIssueDisclosureChange={setDraftIssueDisclosure}
+        onSelect={setDraftSpecific}
+        onToyDisclosure={setDraftToyDisclosure}
+        onBookCondition={setDraftBookCondition}
+        onApplianceStatus={setDraftApplianceStatus}
+      />
+    </FieldEditSheet>
+  );
+}
+
+function CategorySpecificsPanel({
+  family,
+  model,
+  categorySpecifics,
+  categoryFamilyLabel,
+  poweredToyStatusRequired,
+  bookSetStatusRequired,
+  educationalBookDetailsRequired,
+  appliancePickupRequired,
+  highlighted,
+  sheetMode,
+  issueDisclosureRequired,
+  issueDisclosure,
+  onIssueDisclosureChange,
+  onSelect,
+  onToyDisclosure,
+  onBookCondition,
+  onApplianceStatus,
+}: {
+  family: ListingRequirementFamily;
+  model: string;
+  categorySpecifics: Record<string, any>;
+  categoryFamilyLabel: string;
+  poweredToyStatusRequired: boolean;
+  bookSetStatusRequired: boolean;
+  educationalBookDetailsRequired: boolean;
+  appliancePickupRequired: boolean;
+  highlighted?: boolean;
+  sheetMode?: boolean;
+  issueDisclosureRequired?: boolean;
+  issueDisclosure?: string;
+  onIssueDisclosureChange?: (value: string) => void;
   onSelect: (key: string, value: any) => void;
+  onToyDisclosure: (value: string) => void;
+  onBookCondition: (value: string) => void;
+  onApplianceStatus: (value: string) => void;
 }) {
   if (family !== 'toy' && family !== 'book' && family !== 'appliance') return null;
   return (
-    <View style={[st.requirementPanel, highlighted && st.requirementPanelWarn]}>
+    <View style={[sheetMode ? st.requirementPanelSheet : st.requirementPanel, highlighted && st.requirementPanelWarn]}>
       <View style={st.requirementPanelHeader}>
         <View>
           <Text style={st.requirementTitle}>{categoryFamilyLabel}</Text>
-          <Text style={st.requirementHelper}>Buyer-critical details for this item type.</Text>
+          <Text style={st.requirementHelper}>Quick answers buyers need before paying.</Text>
         </View>
         {model ? <Text style={st.requirementModel} numberOfLines={1}>{model}</Text> : null}
       </View>
@@ -2165,21 +2877,14 @@ function CategorySpecificsPanel({
       {family === 'toy' ? (
         <>
           <RequirementChoiceGroup
-            label="Parts"
+            label="Condition & safety"
             required
-            value={categorySpecifics.missing_parts_status}
-            options={TOY_MISSING_PARTS_OPTIONS}
-            onSelect={(value) => onSelect('missing_parts_status', value)}
+            value={toyDisclosureValue(categorySpecifics)}
+            options={TOY_DISCLOSURE_OPTIONS}
+            onSelect={onToyDisclosure}
           />
           <RequirementChoiceGroup
-            label="Safety"
-            required
-            value={categorySpecifics.safety_status}
-            options={TOY_SAFETY_STATUS_OPTIONS}
-            onSelect={(value) => onSelect('safety_status', value)}
-          />
-          <RequirementChoiceGroup
-            label="Power / working"
+            label="Battery / working"
             required={poweredToyStatusRequired}
             value={categorySpecifics.working_status || categorySpecifics.battery_status}
             options={TOY_POWER_STATUS_OPTIONS}
@@ -2194,13 +2899,6 @@ function CategorySpecificsPanel({
       {family === 'book' ? (
         <>
           <RequirementChoiceGroup
-            label="Type"
-            required
-            value={categorySpecifics.book_type || model}
-            options={BOOK_TYPE_OPTIONS}
-            onSelect={(value) => onSelect('book_type', value)}
-          />
-          <RequirementChoiceGroup
             label="Language"
             required
             value={categorySpecifics.language}
@@ -2210,23 +2908,9 @@ function CategorySpecificsPanel({
           <RequirementChoiceGroup
             label="Pages"
             required
-            value={categorySpecifics.page_condition}
-            options={BOOK_PAGE_CONDITION_OPTIONS}
-            onSelect={(value) => onSelect('page_condition', value)}
-          />
-          <RequirementChoiceGroup
-            label="Markings"
-            required
-            value={categorySpecifics.markings_status}
-            options={BOOK_MARKING_OPTIONS}
-            onSelect={(value) => onSelect('markings_status', value)}
-          />
-          <RequirementChoiceGroup
-            label="Completeness"
-            required
-            value={categorySpecifics.pages_complete}
-            options={BOOK_COMPLETENESS_OPTIONS}
-            onSelect={(value) => onSelect('pages_complete', value)}
+            value={bookConditionValue(categorySpecifics)}
+            options={BOOK_CONDITION_OPTIONS}
+            onSelect={onBookCondition}
           />
           {bookSetStatusRequired ? (
             <RequirementChoiceGroup
@@ -2237,17 +2921,26 @@ function CategorySpecificsPanel({
               onSelect={(value) => onSelect('set_status', value)}
             />
           ) : null}
+          {educationalBookDetailsRequired ? (
+            <RequirementTextField
+              label="Class / board"
+              required
+              value={categorySpecifics.class_board_edition || categorySpecifics.class_or_grade || categorySpecifics.edition}
+              placeholder="e.g. Class 4 CBSE, 2025 edition"
+              onChangeText={(value) => onSelect('class_board_edition', value)}
+            />
+          ) : null}
         </>
       ) : null}
 
       {family === 'appliance' ? (
         <>
           <RequirementChoiceGroup
-            label="Working"
+            label="Condition"
             required
-            value={categorySpecifics.working_status}
-            options={APPLIANCE_WORKING_OPTIONS}
-            onSelect={(value) => onSelect('working_status', value)}
+            value={applianceStatusValue(categorySpecifics)}
+            options={APPLIANCE_STATUS_OPTIONS}
+            onSelect={onApplianceStatus}
           />
           <RequirementChoiceGroup
             label="Accessories"
@@ -2255,13 +2948,6 @@ function CategorySpecificsPanel({
             value={categorySpecifics.accessories_status}
             options={APPLIANCE_ACCESSORY_OPTIONS}
             onSelect={(value) => onSelect('accessories_status', value)}
-          />
-          <RequirementChoiceGroup
-            label="Defects"
-            required
-            value={categorySpecifics.defects_disclosed}
-            options={APPLIANCE_DEFECT_OPTIONS}
-            onSelect={(value) => onSelect('defects_disclosed', value)}
           />
           {appliancePickupRequired ? (
             <RequirementChoiceGroup
@@ -2272,7 +2958,35 @@ function CategorySpecificsPanel({
               onSelect={(value) => onSelect('pickup_complexity', value)}
             />
           ) : null}
+          {appliancePickupRequired ? (
+            <RequirementChoiceGroup
+              label="Install"
+              required
+              value={categorySpecifics.installation_status}
+              options={APPLIANCE_INSTALLATION_OPTIONS}
+              onSelect={(value) => onSelect('installation_status', value)}
+            />
+          ) : null}
         </>
+      ) : null}
+
+      {issueDisclosureRequired && onIssueDisclosureChange ? (
+        <View style={st.disclosureBox}>
+          <Text style={st.disclosureLabel}>{disclosureDetailPrompt(family, categorySpecifics)}</Text>
+          <TextInput
+            value={issueDisclosure || ''}
+            onChangeText={onIssueDisclosureChange}
+            placeholder="Short and specific, so buyers see it before paying"
+            placeholderTextColor={C.text4}
+            style={st.disclosureInput}
+            multiline
+            textAlignVertical="top"
+            maxLength={300}
+          />
+          {!(issueDisclosure || '').trim() ? (
+            <Text style={st.detailIssue}>Required before listing: issue details.</Text>
+          ) : null}
+        </View>
       ) : null}
     </View>
   );
@@ -2301,52 +3015,119 @@ const st = StyleSheet.create({
     borderBottomColor: C.border,
     backgroundColor: C.surface,
   },
-  headerSpacer: { width: 36 },
+  headerSpacer: { width: 44 },
+  headerBackButton: {
+    width: 44,
+    height: 44,
+  },
+  headerTextWrap: { flex: 1, alignItems: 'center' },
   headerTitle: { fontSize: T.size.lg, fontWeight: T.weight.semi, color: C.text },
+  headerHelper: { marginTop: 1, fontSize: T.size.xs, color: C.text4, fontWeight: T.weight.medium },
   flex: { flex: 1 },
-  scrollPad: { paddingBottom: 96 },
+  scrollPad: { paddingBottom: 168 },
 
   // Compact item card — image + meta + edit pencil
   itemCard: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     backgroundColor: C.surface,
     marginHorizontal: S.lg,
-    marginTop: S.lg,
+    marginTop: S.md,
     padding: S.md,
     borderRadius: R.lg,
     borderWidth: 1,
     borderColor: C.border,
   },
   itemImage: {
-    width: 64,
-    height: 64,
+    width: 72,
+    height: 72,
     borderRadius: R.md,
     backgroundColor: C.bone2,
   },
-  itemMeta: { flex: 1, marginLeft: S.md },
-  itemTitle: { fontSize: T.size.md, fontWeight: T.weight.semi, color: C.text },
+  itemMeta: { flex: 1, minWidth: 0, marginLeft: S.md },
+  itemTitle: {
+    fontSize: T.size.md,
+    fontWeight: T.weight.bold,
+    color: C.text,
+    lineHeight: T.size.md + 5,
+  },
   itemSubtitle: { marginTop: 2, fontSize: T.size.sm, color: C.text3 },
+  itemStatusLine: {
+    marginTop: S.sm,
+    color: C.text3,
+    fontSize: T.size.xs,
+    fontWeight: T.weight.semi,
+  },
+  itemActionRail: {
+    width: 88,
+    alignItems: 'flex-end',
+    gap: 5,
+    flexShrink: 0,
+  },
   itemPrice: {
-    marginTop: 4,
-    fontSize: T.size.lg,
+    flexShrink: 0,
+    fontSize: T.size.md,
     fontWeight: T.weight.bold,
     color: C.petrol,
   },
-  itemEditBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: C.bone2,
+  itemPriceHelper: {
+    marginTop: -2,
+    color: C.text4,
+    fontSize: T.size.xs,
+    fontWeight: T.weight.semi,
+  },
+  readinessMini: {
+    minHeight: 24,
+    paddingHorizontal: S.sm,
+    paddingVertical: 4,
+    borderRadius: R.pill,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: C.greenLight,
+    borderWidth: 1,
+    borderColor: '#BFE8CF',
   },
-  itemEditGlyph: { fontSize: T.size.md, color: C.ctaPrimary, fontWeight: T.weight.semi },
+  readinessMiniText: {
+    color: C.green,
+    fontSize: T.size.xs,
+    fontWeight: T.weight.bold,
+  },
+  itemPriceError: {
+    marginTop: S.xs,
+    color: C.amberDeep,
+    fontSize: T.size.xs,
+    fontWeight: T.weight.semi,
+  },
+  actionPill: {
+    width: 72,
+    minHeight: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: S.sm,
+    paddingVertical: 6,
+    borderRadius: R.pill,
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.blueBorder,
+  },
+  actionPillDanger: {
+    backgroundColor: C.redLight,
+    borderColor: '#F1C7C1',
+  },
+  actionPillText: {
+    color: C.ctaPrimary,
+    fontSize: T.size.sm,
+    fontWeight: T.weight.bold,
+  },
+  actionPillTextDanger: {
+    color: C.red,
+  },
   photoReviewCard: {
     backgroundColor: C.surface,
     marginHorizontal: S.lg,
     marginTop: S.sm,
-    padding: S.md,
+    paddingHorizontal: S.md,
+    paddingVertical: S.sm,
     borderRadius: R.lg,
     borderWidth: 1,
     borderColor: C.border,
@@ -2358,13 +3139,13 @@ const st = StyleSheet.create({
     gap: S.md,
   },
   photoReviewTitle: {
-    fontSize: T.size.md,
+    fontSize: T.size.sm,
     fontWeight: T.weight.bold,
     color: C.text,
   },
   photoReviewSub: {
     marginTop: 2,
-    fontSize: T.size.sm,
+    fontSize: T.size.xs,
     color: C.text3,
   },
   photoRetakeBtn: {
@@ -2381,12 +3162,12 @@ const st = StyleSheet.create({
     fontWeight: T.weight.bold,
   },
   photoRail: {
-    gap: S.sm,
-    paddingTop: S.md,
+    gap: S.xs,
+    paddingTop: S.sm,
     paddingBottom: 2,
   },
   photoThumbWrap: {
-    width: 88,
+    width: 68,
     borderRadius: R.md,
     borderWidth: 1,
     borderColor: C.border,
@@ -2402,7 +3183,7 @@ const st = StyleSheet.create({
   },
   photoThumb: {
     width: '100%',
-    height: 72,
+    height: 58,
     backgroundColor: C.bone2,
   },
   photoHeroLabel: {
@@ -2422,7 +3203,7 @@ const st = StyleSheet.create({
     position: 'absolute',
     left: 4,
     right: 4,
-    top: 26,
+    top: 20,
     textAlign: 'center',
     color: C.red,
     fontSize: T.size.xs,
@@ -2431,13 +3212,17 @@ const st = StyleSheet.create({
   },
   photoRemoveBtn: {
     alignItems: 'center',
-    paddingVertical: 5,
-    backgroundColor: C.surface,
+    justifyContent: 'center',
+    minHeight: 26,
+    paddingVertical: 3,
+    backgroundColor: C.bone,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: C.border,
   },
   photoRemoveText: {
     color: C.text3,
-    fontSize: T.size.xs,
-    fontWeight: T.weight.bold,
+    fontSize: T.size.xs - 1,
+    fontWeight: T.weight.semi,
   },
   photoNotice: {
     marginHorizontal: S.lg,
@@ -2513,6 +3298,275 @@ const st = StyleSheet.create({
     color: C.text3,
     fontSize: T.size.xs,
   },
+  readinessCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: S.md,
+    backgroundColor: C.surface,
+    marginHorizontal: S.lg,
+    marginTop: S.md,
+    padding: S.lg,
+    borderRadius: R.lg,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  readinessIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: C.ctaPrimarySoft,
+    borderWidth: 1,
+    borderColor: C.ctaPrimaryBorder,
+  },
+  readinessIconText: {
+    color: C.ctaPrimary,
+    fontSize: T.size.md,
+    fontWeight: T.weight.bold,
+  },
+  readinessCopy: { flex: 1, minWidth: 0 },
+  readinessTitle: {
+    color: C.text,
+    fontSize: T.size.md,
+    fontWeight: T.weight.bold,
+  },
+  readinessSub: {
+    marginTop: 2,
+    color: C.text3,
+    fontSize: T.size.sm,
+    lineHeight: T.size.sm + 5,
+  },
+  requiredQueueCard: {
+    backgroundColor: C.surface,
+    marginHorizontal: S.lg,
+    marginTop: S.md,
+    padding: S.lg,
+    borderRadius: R.lg,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  requiredQueueCardPending: {
+    backgroundColor: C.amberSoft,
+    borderColor: C.amberBorder,
+  },
+  requiredQueueHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: S.md,
+    marginBottom: S.sm,
+  },
+  requiredQueueTitle: {
+    color: C.text,
+    fontSize: T.size.md,
+    fontWeight: T.weight.bold,
+  },
+  requiredQueueSub: {
+    marginTop: 2,
+    color: C.text3,
+    fontSize: T.size.xs,
+  },
+  queueNextBtn: {
+    paddingHorizontal: S.md,
+    paddingVertical: S.xs,
+    borderRadius: R.pill,
+    backgroundColor: C.ctaPrimary,
+  },
+  queueNextText: {
+    color: C.surface,
+    fontSize: T.size.sm,
+    fontWeight: T.weight.bold,
+  },
+  queueDoneText: {
+    paddingHorizontal: S.md,
+    paddingVertical: S.xs,
+    borderRadius: R.pill,
+    overflow: 'hidden',
+    backgroundColor: C.greenLight,
+    color: C.green,
+    fontSize: T.size.sm,
+    fontWeight: T.weight.bold,
+  },
+  requiredRow: {
+    minHeight: 54,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: S.md,
+    paddingVertical: S.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: C.border,
+  },
+  requiredDot: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: C.ctaPrimarySoft,
+  },
+  requiredDotWarn: {
+    backgroundColor: C.amberSoft,
+    borderWidth: 1,
+    borderColor: C.amberBorder,
+  },
+  requiredDotText: {
+    color: C.ctaPrimary,
+    fontSize: T.size.xs,
+    fontWeight: T.weight.bold,
+  },
+  requiredDotWarnText: { color: C.amberDeep },
+  requiredCopy: { flex: 1, minWidth: 0 },
+  requiredLabel: {
+    color: C.text,
+    fontSize: T.size.sm,
+    fontWeight: T.weight.bold,
+  },
+  requiredSummary: {
+    marginTop: 1,
+    color: C.text3,
+    fontSize: T.size.xs,
+  },
+  requiredAction: {
+    color: C.ctaPrimary,
+    fontSize: T.size.sm,
+    fontWeight: T.weight.bold,
+  },
+  queueEmpty: {
+    marginTop: S.sm,
+    padding: S.md,
+    borderRadius: R.md,
+    backgroundColor: C.greenLight,
+  },
+  queueEmptyText: {
+    color: C.green,
+    fontSize: T.size.sm,
+    fontWeight: T.weight.semi,
+    lineHeight: T.size.sm + 5,
+  },
+  summaryRows: {
+    marginTop: S.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: C.border,
+  },
+  reviewSummaryRow: {
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: S.md,
+    paddingVertical: S.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: C.border,
+  },
+  reviewSummaryRowStatic: {
+    opacity: 0.86,
+  },
+  reviewSummaryCopy: { flex: 1, minWidth: 0 },
+  reviewSummaryLabel: {
+    color: C.text,
+    fontSize: T.size.sm,
+    fontWeight: T.weight.bold,
+  },
+  reviewSummaryText: {
+    marginTop: 2,
+    color: C.text3,
+    fontSize: T.size.xs,
+  },
+  reviewSummaryStatus: {
+    minWidth: 58,
+    alignItems: 'center',
+    paddingHorizontal: S.sm,
+    paddingVertical: 4,
+    borderRadius: R.pill,
+    backgroundColor: C.greenLight,
+  },
+  reviewSummaryStatusWarn: { backgroundColor: C.amberSoft },
+  reviewSummaryStatusDanger: { backgroundColor: C.redLight },
+  reviewSummaryStatusText: {
+    color: C.green,
+    fontSize: T.size.xs,
+    fontWeight: T.weight.bold,
+  },
+  reviewSummaryStatusTextWarn: { color: C.amberDeep },
+  reviewSummaryStatusTextDanger: { color: C.red },
+  reviewSummaryArrow: {
+    color: C.text4,
+    fontSize: T.size.lg,
+    fontWeight: T.weight.bold,
+    marginLeft: -S.xs,
+  },
+  additionalNoteText: {
+    marginTop: S.md,
+    padding: S.md,
+    borderRadius: R.md,
+    backgroundColor: C.bone,
+    color: C.text,
+    fontSize: T.size.sm,
+    lineHeight: T.size.sm + 6,
+  },
+  additionalNoteEmpty: {
+    marginTop: S.md,
+    minHeight: 72,
+    justifyContent: 'center',
+    padding: S.md,
+    borderRadius: R.md,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: C.border2,
+    backgroundColor: C.bone,
+  },
+  additionalNoteEmptyText: {
+    color: C.text3,
+    fontSize: T.size.sm,
+    lineHeight: T.size.sm + 6,
+  },
+  conditionBreakdownCard: {
+    marginTop: S.md,
+    padding: S.md,
+    borderRadius: R.md,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.bone,
+  },
+  conditionBreakdownHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: S.md,
+    marginBottom: S.sm,
+  },
+  conditionBreakdownTitle: {
+    color: C.text,
+    fontSize: T.size.sm,
+    fontWeight: T.weight.bold,
+  },
+  conditionBreakdownSub: {
+    marginTop: 1,
+    color: C.text3,
+    fontSize: T.size.xs,
+  },
+  conditionEditBtn: {
+    paddingHorizontal: S.md,
+    paddingVertical: S.xs,
+    borderRadius: R.pill,
+    borderWidth: 1,
+    borderColor: C.blueBorder,
+    backgroundColor: C.surface,
+  },
+  conditionEditText: {
+    color: C.ctaPrimary,
+    fontSize: T.size.sm,
+    fontWeight: T.weight.bold,
+  },
+  detailSectionLabel: {
+    marginTop: S.md,
+    marginBottom: S.xs,
+    color: C.text3,
+    fontSize: T.size.xs,
+    fontWeight: T.weight.bold,
+    textTransform: 'uppercase',
+  },
 
   detailCard: {
     backgroundColor: C.surface,
@@ -2523,11 +3577,46 @@ const st = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.border,
   },
+  finalReviewCard: {
+    backgroundColor: C.surface,
+    marginHorizontal: S.lg,
+    marginTop: S.md,
+    padding: S.lg,
+    borderRadius: R.lg,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  finalReviewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: S.md,
+    marginBottom: S.xs,
+  },
+  finalReviewTitle: {
+    color: C.text,
+    fontSize: T.size.md,
+    fontWeight: T.weight.bold,
+  },
+  finalReviewBadge: {
+    overflow: 'hidden',
+    borderRadius: R.pill,
+    paddingHorizontal: S.sm,
+    paddingVertical: 4,
+    backgroundColor: C.ctaPrimarySoft,
+    color: C.ctaPrimary,
+    fontSize: T.size.xs,
+    fontWeight: T.weight.bold,
+  },
   detailHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: S.md,
+  },
+  detailTitleWrap: {
+    flex: 1,
+    minWidth: 0,
   },
   detailTitle: {
     fontSize: T.size.md,
@@ -2559,84 +3648,179 @@ const st = StyleSheet.create({
   },
   detailBadgeWarnText: { color: C.amberDeep },
   detailBadgeOkText: { color: C.ctaPrimary },
-  specRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: S.sm,
+  buyerPreviewCard: {
+    backgroundColor: C.surface,
+    marginHorizontal: S.lg,
     marginTop: S.md,
-  },
-  specPill: {
-    minWidth: 92,
-    maxWidth: '48%',
-    paddingHorizontal: S.md,
-    paddingVertical: S.sm,
-    borderRadius: R.md,
+    padding: S.lg,
+    borderRadius: R.lg,
     borderWidth: 1,
-    borderColor: C.border2,
-    backgroundColor: C.bone,
+    borderColor: C.border,
   },
-  specPillTap: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  specPillMissing: {
-    borderColor: C.amberBorder,
-    backgroundColor: C.amberSoft,
-  },
-  specPillLabel: {
+  previewReadyBadge: {
+    overflow: 'hidden',
+    borderRadius: R.pill,
+    paddingHorizontal: S.sm,
+    paddingVertical: 4,
+    backgroundColor: C.greenLight,
+    color: C.green,
     fontSize: T.size.xs,
-    color: C.text4,
-    fontWeight: T.weight.semi,
-    textTransform: 'uppercase',
-  },
-  specPillValue: {
-    marginTop: 2,
-    color: C.text,
-    fontSize: T.size.base,
     fontWeight: T.weight.bold,
   },
-  specPillMissingText: { color: C.amberDeep },
-  inlinePanel: {
+  previewWarnBadge: {
+    overflow: 'hidden',
+    borderRadius: R.pill,
+    paddingHorizontal: S.sm,
+    paddingVertical: 4,
+    backgroundColor: C.amberSoft,
+    color: C.amberDeep,
+    fontSize: T.size.xs,
+    fontWeight: T.weight.bold,
+  },
+  previewBody: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: S.md,
     marginTop: S.md,
     padding: S.md,
     borderRadius: R.md,
-    borderWidth: 1,
-    borderColor: C.ctaPrimary,
-    backgroundColor: C.ctaPrimarySoft,
+    backgroundColor: C.bone,
   },
-  inlineHeader: {
+  previewImage: {
+    width: 72,
+    height: 72,
+    borderRadius: R.md,
+    backgroundColor: C.bone2,
+  },
+  previewCopy: { flex: 1, minWidth: 0 },
+  previewTitle: {
+    color: C.text,
+    fontSize: T.size.base,
+    fontWeight: T.weight.bold,
+    lineHeight: T.size.base + 5,
+  },
+  previewPrice: {
+    marginTop: 4,
+    color: C.petrol,
+    fontSize: T.size.lg,
+    fontWeight: T.weight.bold,
+  },
+  previewDiscount: {
+    marginTop: 2,
+    color: C.green,
+    fontSize: T.size.xs,
+    fontWeight: T.weight.bold,
+  },
+  previewNote: {
+    marginTop: S.xs,
+    color: C.text3,
+    fontSize: T.size.xs,
+    lineHeight: T.size.xs + 5,
+  },
+  previewFacts: {
+    marginTop: S.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: C.border,
+  },
+  previewFactRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: S.md,
+    paddingVertical: S.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: C.border,
+  },
+  previewFactLabel: {
+    width: 104,
+    color: C.text4,
+    fontSize: T.size.xs,
+    fontWeight: T.weight.bold,
+    textTransform: 'uppercase',
+  },
+  previewFactValue: {
+    flex: 1,
+    color: C.text,
+    fontSize: T.size.sm,
+    fontWeight: T.weight.semi,
+    textAlign: 'right',
+    lineHeight: T.size.sm + 5,
+  },
+  fieldBackdrop: {
+    flex: 1,
+    backgroundColor: O.dark50,
+    justifyContent: 'flex-end',
+  },
+  fieldBackdropTouch: { ...StyleSheet.absoluteFillObject },
+  fieldSheet: {
+    maxHeight: '82%',
+    backgroundColor: C.surface,
+    borderTopLeftRadius: R.xl,
+    borderTopRightRadius: R.xl,
+    paddingHorizontal: S.lg,
+    paddingTop: S.sm,
+    paddingBottom: S.xl,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.14,
+    shadowRadius: 12,
+    elevation: 16,
+  },
+  fieldHandle: {
+    alignSelf: 'center',
+    width: 44,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: C.border2,
+    marginBottom: S.md,
+  },
+  fieldHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: S.md,
   },
-  inlineTitleWrap: { flex: 1 },
-  inlineTitle: {
-    fontSize: T.size.base,
+  fieldTitleWrap: { flex: 1 },
+  fieldTitle: {
+    fontSize: T.size.lg,
     fontWeight: T.weight.bold,
-    color: C.ctaPrimary,
+    color: C.text,
   },
-  inlineHelper: {
-    marginTop: 2,
+  fieldHelper: {
+    marginTop: 3,
     fontSize: T.size.sm,
-    color: C.text2,
+    color: C.text3,
     lineHeight: T.size.sm + 5,
   },
-  inlineClose: {
+  fieldClose: {
     paddingHorizontal: S.sm,
-    paddingVertical: 4,
+    paddingVertical: 6,
     borderRadius: R.pill,
-    backgroundColor: C.surface,
+    backgroundColor: C.bone,
     borderWidth: 1,
-    borderColor: C.blueBorder,
+    borderColor: C.border,
   },
-  inlineCloseText: {
+  fieldCloseText: {
     fontSize: T.size.xs,
     fontWeight: T.weight.bold,
     color: C.ctaPrimary,
+  },
+  fieldScroll: {
+    marginTop: S.md,
+  },
+  fieldContent: {
+    paddingBottom: S.md,
+  },
+  fieldFooter: {
+    paddingTop: S.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: C.border,
+  },
+  fieldCtaRow: {
+    flexDirection: 'row',
+    gap: S.sm,
+  },
+  fieldCtaBtn: {
+    flex: 1,
   },
   inlineChoiceRow: {
     flexDirection: 'row',
@@ -2670,6 +3854,35 @@ const st = StyleSheet.create({
     color: C.text3,
     fontWeight: T.weight.medium,
   },
+  inlineTextInput: {
+    minHeight: 46,
+    marginTop: S.md,
+    borderWidth: 1,
+    borderColor: C.blueBorder,
+    borderRadius: R.md,
+    paddingHorizontal: S.md,
+    paddingVertical: S.sm,
+    backgroundColor: C.surface,
+    color: C.text,
+    fontSize: T.size.base,
+  },
+  inlineTextArea: {
+    minHeight: 128,
+    lineHeight: T.size.base + 6,
+  },
+  inlineSaveBtn: {
+    marginTop: S.sm,
+    alignSelf: 'flex-end',
+    paddingHorizontal: S.lg,
+    paddingVertical: S.sm,
+    borderRadius: R.pill,
+    backgroundColor: C.ctaPrimary,
+  },
+  inlineSaveText: {
+    color: C.surface,
+    fontSize: T.size.sm,
+    fontWeight: T.weight.bold,
+  },
   requirementPanel: {
     marginTop: S.md,
     padding: S.md,
@@ -2677,6 +3890,10 @@ const st = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.border,
     backgroundColor: C.bone,
+  },
+  requirementPanelSheet: {
+    paddingTop: S.xs,
+    paddingBottom: S.sm,
   },
   requirementPanelWarn: {
     borderColor: C.amberBorder,
@@ -2754,11 +3971,52 @@ const st = StyleSheet.create({
   requirementChipTextActive: {
     color: C.surface,
   },
+  requirementTextInput: {
+    minHeight: 44,
+    marginTop: S.xs,
+    borderWidth: 1,
+    borderColor: C.border2,
+    borderRadius: R.md,
+    paddingHorizontal: S.md,
+    paddingVertical: S.sm,
+    backgroundColor: C.surface,
+    color: C.text,
+    fontSize: T.size.base,
+  },
+  requirementTextInputMissing: {
+    borderColor: C.amberBorder,
+    backgroundColor: C.surface,
+  },
   detailIssue: {
     marginTop: S.md,
     fontSize: T.size.sm,
     color: C.amberDeep,
     fontWeight: T.weight.semi,
+  },
+  disclosureBox: {
+    marginTop: S.md,
+    padding: S.md,
+    borderRadius: R.md,
+    borderWidth: 1,
+    borderColor: C.amberBorder,
+    backgroundColor: C.amberSoft,
+  },
+  disclosureLabel: {
+    color: C.amberDeep,
+    fontSize: T.size.sm,
+    fontWeight: T.weight.bold,
+    marginBottom: S.sm,
+  },
+  disclosureInput: {
+    minHeight: 76,
+    borderWidth: 1,
+    borderColor: C.amberBorder,
+    borderRadius: R.md,
+    paddingHorizontal: S.md,
+    paddingVertical: S.sm,
+    backgroundColor: C.surface,
+    color: C.text,
+    fontSize: T.size.base,
   },
   detailAction: {
     marginTop: S.md,
@@ -2776,7 +4034,7 @@ const st = StyleSheet.create({
     fontWeight: T.weight.bold,
   },
 
-  // Section (Set your price / Condition)
+  // Shared cards and edit controls
   section: {
     backgroundColor: C.surface,
     marginHorizontal: S.lg,
@@ -2799,6 +4057,19 @@ const st = StyleSheet.create({
   },
 
   // Price option button (outlined)
+  priceGuidanceCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: S.md,
+    backgroundColor: C.surface,
+    marginHorizontal: S.lg,
+    marginTop: S.md,
+    padding: S.lg,
+    borderRadius: R.lg,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
   priceBtn: {
     position: 'relative',
     paddingHorizontal: S.md,
@@ -2920,6 +4191,12 @@ const st = StyleSheet.create({
     color: C.text2,
   },
   condPillLabelActive: { color: C.ctaPrimary },
+  conditionHelp: {
+    marginTop: S.sm,
+    fontSize: T.size.sm,
+    color: C.text3,
+    fontWeight: T.weight.medium,
+  },
   conditionGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',

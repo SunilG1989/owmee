@@ -151,8 +151,13 @@ category_specifics should contain only observed or seller-needed facts. Use
 null when unknown; do not claim working, complete, clean, safe, original,
 sanitized, or defect-free unless directly supported.
 
+Use compact P0 buyer-trust fields. Do not invent a field just to fill the
+schema; null/omission is safer than false certainty.
+
 For toy:
 - toy_type
+- age_suitability
+- hygiene_status
 - missing_parts_status
 - safety_status
 - battery_status / working_status when batteries/electronics are involved
@@ -164,6 +169,9 @@ For book:
 - markings_status
 - pages_complete
 - set_status when it is a set/series/box
+- class_board_edition for textbooks/workbooks/school study material
+  only when exact printed class/board/edition text is legible; do not use
+  placeholder text such as "shown" or "not sure"
 
 For appliance:
 - appliance_type
@@ -171,6 +179,7 @@ For appliance:
 - accessories_status
 - defects_disclosed
 - pickup_complexity for bulky appliances
+- installation_status / power_requirement for installation-heavy appliances
 """
 
 
@@ -302,6 +311,120 @@ POWERED_TOY_KEYWORDS = {
 }
 
 SET_BOOK_KEYWORDS = {"set", "series", "box", "boxed", "bundle", "combo"}
+EDUCATIONAL_BOOK_KEYWORDS = {
+    "textbook",
+    "workbook",
+    "class",
+    "grade",
+    "standard",
+    "std",
+    "ncert",
+    "cbse",
+    "icse",
+    "stateboard",
+    "school",
+    "science",
+    "math",
+    "mathematics",
+    "evs",
+    "socialscience",
+    "exam",
+    "guide",
+}
+EDUCATIONAL_BOOK_PLACEHOLDER_VALUES = {
+    "classboardeditionshown",
+    "shown",
+    "visible",
+    "notsure",
+    "notchecked",
+    "unknown",
+    "na",
+    "notapplicable",
+    "detailsnotavailable",
+}
+SAFE_DISCLOSURE_TOKENS = {
+    "allpagespresent",
+    "complete",
+    "completeallpartsincluded",
+    "completeallpagespresent",
+    "completegoodworking",
+    "completeworking",
+    "fullyworking",
+    "noknowndefect",
+    "noknowndefects",
+    "noknownissue",
+    "noknownissues",
+    "nomarkings",
+    "nomissingpages",
+    "nopagemissing",
+    "nopartsmissing",
+    "notapplicable",
+    "novisibledefect",
+    "novisibledefects",
+    "novisibleissue",
+    "novisiblesafetyissue",
+    "nowritingorhighlights",
+    "working",
+    "workingproperly",
+}
+GENERIC_NEGATIVE_DISCLOSURE_TOKENS = {
+    "defectdisclosed",
+    "defectsdisclosed",
+    "damaged",
+    "issuedisclosed",
+    "lightdamage",
+    "minordefectdisclosed",
+    "minormissingpartsdisclosed",
+    "missingpagedisclosed",
+    "missingpages",
+    "missingpagesdisclosed",
+    "missingparts",
+    "missingpartsdisclosed",
+    "needsrepair",
+    "notesdisclosed",
+    "notchecked",
+    "nottested",
+    "notworking",
+    "pagesmissing",
+    "partialsetdisclosed",
+    "repairneeded",
+    "somepartsmissing",
+    "visibledefectdisclosed",
+}
+GENERIC_NEGATIVE_DISCLOSURE_FRAGMENTS = (
+    "defectdisclosed",
+    "defectsdisclosed",
+    "highlightdisclosed",
+    "highlightsdisclosed",
+    "issuedisclosed",
+    "markingsdisclosed",
+    "missingpartsdisclosed",
+    "notesdisclosed",
+    "notesandhighlightsdisclosed",
+    "notchecked",
+    "nottested",
+    "notworking",
+    "partialsetdisclosed",
+)
+DESCRIPTION_NEGATIVE_DISCLOSURE_TERMS = (
+    "broken",
+    "crack",
+    "damage",
+    "defect",
+    "highlight",
+    "issue",
+    "mark",
+    "missing",
+    "notes",
+    "notchecked",
+    "nottested",
+    "notworking",
+    "partial",
+    "repair",
+    "scratch",
+    "tear",
+    "torn",
+)
 
 TOY_REQUIRED_SPECIFICS = ("missing_parts_status", "safety_status")
 BOOK_REQUIRED_SPECIFICS = (
@@ -320,10 +443,15 @@ APPLIANCE_REQUIRED_SPECIFICS = (
 _ALLOWED_SPECIFIC_KEYS = {
     "toy": {
         "toy_type",
+        "age_suitability",
+        "hygiene_status",
         "missing_parts_status",
         "safety_status",
         "battery_status",
         "working_status",
+        "material",
+        "set_count",
+        "part_count",
         "box_or_manual",
         "recall_checked",
         "notes",
@@ -337,8 +465,12 @@ _ALLOWED_SPECIFIC_KEYS = {
         "set_status",
         "set_count",
         "author_or_publisher",
+        "class_board_edition",
         "edition",
         "class_or_grade",
+        "board",
+        "subject",
+        "isbn",
         "cover_condition",
         "notes",
     },
@@ -349,9 +481,11 @@ _ALLOWED_SPECIFIC_KEYS = {
         "defects_disclosed",
         "pickup_complexity",
         "installation_status",
+        "power_requirement",
         "bill_or_warranty",
         "hygiene_status",
         "capacity_or_size",
+        "material",
         "notes",
     },
     "device": set(),
@@ -408,6 +542,74 @@ def requires_powered_toy_status(*values: str | None) -> bool:
 
 def requires_book_set_status(*values: str | None) -> bool:
     return _has_keyword(_compact_text(*values), SET_BOOK_KEYWORDS)
+
+
+def requires_educational_book_details(*values: str | None) -> bool:
+    return _has_keyword(_compact_text(*values), EDUCATIONAL_BOOK_KEYWORDS)
+
+
+def has_educational_book_detail(specifics: dict[str, Any] | None) -> bool:
+    if not isinstance(specifics, dict):
+        return False
+    for field in ("class_board_edition", "class_or_grade", "edition"):
+        raw_value = specifics.get(field)
+        if raw_value in (None, "", [], {}):
+            continue
+        token = _keyword_token(str(raw_value))
+        if token and token not in EDUCATIONAL_BOOK_PLACEHOLDER_VALUES:
+            return True
+    return False
+
+
+def _specific_values(specifics: dict[str, Any] | None, *fields: str) -> list[Any]:
+    if not isinstance(specifics, dict):
+        return []
+    return [specifics.get(field) for field in fields]
+
+
+def _value_needs_issue_detail(value: Any) -> bool:
+    token = _keyword_token(str(value or ""))
+    if not token:
+        return False
+    if token in SAFE_DISCLOSURE_TOKENS:
+        return False
+    if any(safe in token for safe in SAFE_DISCLOSURE_TOKENS if len(safe) > 8):
+        return False
+    if token in GENERIC_NEGATIVE_DISCLOSURE_TOKENS:
+        return True
+    if any(fragment in token for fragment in GENERIC_NEGATIVE_DISCLOSURE_FRAGMENTS):
+        return True
+    return False
+
+
+def requires_issue_disclosure_detail(family: str, specifics: dict[str, Any] | None) -> bool:
+    """Return true when category-specific values need plain buyer-facing detail.
+
+    Negative disclosures are allowed, but a generic value like "defects
+    disclosed" or "missing pages disclosed" is not enough unless the listing
+    description explains what the buyer should expect.
+    """
+    fields: tuple[str, ...]
+    if family == "toy":
+        fields = ("missing_parts_status", "safety_status")
+    elif family == "book":
+        fields = ("page_condition", "markings_status", "pages_complete")
+    elif family == "appliance":
+        fields = ("working_status", "defects_disclosed")
+    else:
+        return False
+    return any(_value_needs_issue_detail(value) for value in _specific_values(specifics, *fields))
+
+
+def has_issue_disclosure_detail(description: str | None) -> bool:
+    text = " ".join(str(description or "").split())
+    if not text:
+        return False
+    lower = text.lower()
+    if "disclosure:" in lower:
+        return len(lower.split("disclosure:", 1)[1].strip()) >= 6
+    compact = _keyword_token(text)
+    return len(text) >= 20 and any(term in compact for term in DESCRIPTION_NEGATIVE_DISCLOSURE_TERMS)
 
 
 def requires_appliance_pickup_status(*values: str | None) -> bool:

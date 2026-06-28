@@ -246,7 +246,7 @@ export interface Listing {
   imei_verified?: boolean;
   // Sprint 4 / Pass 3 — set on listings published through the kids
   // category. Renders the safety checklist on detail.
-  kids_safety_checklist?: { age_range?: string; cleaned?: boolean; sanitized?: boolean; defects?: string[] } | null;
+  kids_safety_checklist?: Record<string, boolean> | null;
   seller?: { kyc_verified?: boolean; avg_rating?: number; deal_count?: number; name?: string };
 }
 
@@ -1220,6 +1220,7 @@ export interface AIDetectedFields {
   hero_image_rationale?: string | null;
   field_confidence?: Record<string, number>;
   field_evidence?: Record<string, string>;
+  photo_analysis?: Record<string, any>;
 }
 
 export interface AIComparable {

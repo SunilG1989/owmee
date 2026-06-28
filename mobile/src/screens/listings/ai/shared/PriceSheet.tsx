@@ -35,7 +35,7 @@ const MRP_SOURCE_OPTIONS = [
   { key: 'visible_mrp', label: 'Seen on box' },
   { key: 'receipt_or_bill', label: 'From bill' },
   { key: 'seller_entered', label: 'Seller entered' },
-  { key: 'market_anchor', label: 'Market estimate' },
+  { key: 'market_anchor', label: 'Owmee estimate' },
 ];
 
 const buyerFacingMrpSource = (source?: string | null) =>
@@ -141,7 +141,7 @@ export default function PriceSheet({
             <Text style={st.mrpError}>Choose where the MRP came from.</Text>
           ) : null}
           {hasValidMrp && mrpSource === 'market_anchor' ? (
-            <Text style={st.mrpMuted}>Market estimates are saved for support context, but not shown as a buyer discount.</Text>
+            <Text style={st.mrpMuted}>Saved for reference. Not shown as discount.</Text>
           ) : null}
           {discountPct && discountPct > 0 ? (
             <View style={st.discountPreview}>

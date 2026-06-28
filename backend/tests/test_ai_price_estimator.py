@@ -119,7 +119,7 @@ async def test_estimate_price_keeps_comparables_priority_when_ai_disabled(monkey
 
 
 @pytest.mark.asyncio
-async def test_estimate_price_carries_text_ai_mrp_anchor(monkeypatch):
+async def test_estimate_price_drops_text_ai_mrp_anchor(monkeypatch):
     async def fake_comparables_query(*args, **kwargs):
         return []
 
@@ -150,5 +150,5 @@ async def test_estimate_price_carries_text_ai_mrp_anchor(monkeypatch):
 
     assert result["source"] == "ai"
     assert result["price"] == 28000
-    assert result["mrp_inr"] == 69900
-    assert result["mrp_source"] == "market_anchor"
+    assert "mrp_inr" not in result
+    assert "mrp_source" not in result

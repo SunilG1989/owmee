@@ -362,6 +362,13 @@ export const APPLIANCE_PICKUP_OPTIONS = [
   'Not sure',
 ];
 
+export const APPLIANCE_INSTALLATION_OPTIONS = [
+  'Plug-in only',
+  'Needs disconnection/install help',
+  'Requires technician',
+  'Not sure',
+];
+
 export function getCategoryKind(slug?: string | null): ListingCategoryKind {
   const canonical = canonicalCategorySlug(slug);
   if (canonical === 'smartphones') return 'phone';
@@ -398,6 +405,11 @@ const APPLIANCE_TOKENS = [
 
 const POWERED_TOY_TOKENS = ['battery', 'electronic', 'remote', 'learningtablet', 'rideon', 'musical', 'monitor'];
 const BOOK_SET_TOKENS = ['set', 'series', 'box', 'boxed', 'bundle', 'combo'];
+const EDUCATIONAL_BOOK_TOKENS = [
+  'textbook', 'workbook', 'class', 'grade', 'standard', 'std', 'ncert',
+  'cbse', 'icse', 'stateboard', 'school', 'science', 'math', 'mathematics',
+  'evs', 'socialscience', 'exam', 'guide',
+];
 const LARGE_APPLIANCE_TOKENS = ['airconditioner', 'washingmachine', 'refrigerator', 'fridge', 'dishwasher', 'chimney', 'geyser'];
 
 const hasAnyToken = (source: string, tokens: string[]) => tokens.some((token) => source.includes(token));
@@ -424,6 +436,10 @@ export function listingNeedsPoweredToyStatus(itemType?: string | null, title?: s
 
 export function listingNeedsBookSetStatus(itemType?: string | null, title?: string | null): boolean {
   return hasAnyToken(textToken(itemType, title), BOOK_SET_TOKENS);
+}
+
+export function listingNeedsEducationalBookDetails(itemType?: string | null, title?: string | null): boolean {
+  return hasAnyToken(textToken(itemType, title), EDUCATIONAL_BOOK_TOKENS);
 }
 
 export function listingNeedsAppliancePickupStatus(itemType?: string | null, title?: string | null): boolean {

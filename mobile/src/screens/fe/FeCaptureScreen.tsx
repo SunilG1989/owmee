@@ -620,7 +620,7 @@ export default function FeCaptureScreen({ route, navigation }: RootScreen<'FeCap
           {categoryFamily !== 'device' && categoryFamily !== 'other' && (
             <View style={st.section}>
               <Text style={st.sectionTitle}>Item-specific checks</Text>
-              <Text style={st.sectionHint}>Capture the buyer-critical facts before seller approval.</Text>
+              <Text style={st.sectionHint}>Capture key facts before seller approval.</Text>
 
               {categoryFamily === 'toy' && (
                 <>

@@ -25,7 +25,11 @@ async def test_fast_low_confidence_runs_full_fallback(monkeypatch):
     async def fake_fast(images):
         calls.append("fast")
         metrics.append({"operation": "vision_fast", "status": "success", "latency_ms": 100})
-        return AIDetected(category_slug="smartphones", category_confidence=0.2)
+        return AIDetected(
+            category_slug="smartphones",
+            category_confidence=0.2,
+            title_suggestion="Apple iPhone",
+        )
 
     async def fake_full(images):
         calls.append("full")
@@ -49,6 +53,41 @@ async def test_fast_low_confidence_runs_full_fallback(monkeypatch):
     assert metric["fallback_reasons"] == ["low_category_confidence"]
     assert metric["fallback_from_operation"] == "vision_fast"
     assert metric["fast_provider_metrics"]["operation"] == "vision_fast"
+
+
+@pytest.mark.asyncio
+async def test_fast_missing_title_runs_full_fallback(monkeypatch):
+    metrics: list[dict] = []
+    calls: list[str] = []
+
+    async def fake_fast(images):
+        calls.append("fast")
+        metrics.append({"operation": "vision_fast", "status": "success", "latency_ms": 90})
+        return AIDetected(category_slug="kids-utility", category_confidence=0.86, title_suggestion=None)
+
+    async def fake_full(images):
+        calls.append("full")
+        metrics.append({"operation": "vision_full", "status": "success", "latency_ms": 520})
+        return AIDetected(
+            category_slug="kids-utility",
+            category_confidence=0.91,
+            title_suggestion="Wooden stacking toy",
+        )
+
+    monkeypatch.setattr(router.settings, "ai_draft_fast_path_enabled", True)
+    monkeypatch.setattr(router.settings, "ai_draft_full_fallback_enabled", True)
+    monkeypatch.setattr(router.settings, "ai_draft_shadow_full_analysis_enabled", False)
+    monkeypatch.setattr(router.settings, "ai_draft_fast_min_category_confidence", 0.55)
+    monkeypatch.setattr(router.ai_provider, "detect_fast_from_images", fake_fast)
+    monkeypatch.setattr(router.ai_provider, "detect_from_images", fake_full)
+    _patch_metric_provider(monkeypatch, metrics)
+
+    detected, metric = await router._detect_from_images_bounded_with_metrics([(b"toy", "image/jpeg")])
+
+    assert calls == ["fast", "full"]
+    assert detected.title_suggestion == "Wooden stacking toy"
+    assert metric["analysis_mode"] == "full_fallback_from_fast"
+    assert metric["fallback_reasons"] == ["missing_title"]
 
 
 @pytest.mark.asyncio
@@ -160,7 +199,11 @@ async def test_full_fallback_failure_marks_fast_result_for_seller_review(monkeyp
     async def fake_fast(images):
         calls.append("fast")
         metrics.append({"operation": "vision_fast", "status": "success"})
-        return AIDetected(category_slug="smartphones", category_confidence=0.22)
+        return AIDetected(
+            category_slug="smartphones",
+            category_confidence=0.22,
+            title_suggestion="Apple iPhone",
+        )
 
     async def fake_full(images):
         calls.append("full")
@@ -196,7 +239,11 @@ async def test_fast_quality_result_requires_review_when_full_fallback_disabled(m
     async def fake_fast(images):
         calls.append("fast")
         metrics.append({"operation": "vision_fast", "status": "success"})
-        return AIDetected(category_slug="smartphones", category_confidence=0.24)
+        return AIDetected(
+            category_slug="smartphones",
+            category_confidence=0.24,
+            title_suggestion="Apple iPhone",
+        )
 
     async def fake_full(images):
         calls.append("full")
@@ -259,7 +306,12 @@ async def test_shadow_full_analysis_keeps_fast_result_and_records_comparison(mon
     async def fake_fast(images):
         calls.append("fast")
         metrics.append({"operation": "vision_fast", "status": "success", "latency_ms": 100})
-        return AIDetected(category_slug="kids-utility", category_confidence=0.8, brand="ToyCo")
+        return AIDetected(
+            category_slug="kids-utility",
+            category_confidence=0.8,
+            brand="ToyCo",
+            title_suggestion="ToyCo stacking toy",
+        )
 
     async def fake_full(images):
         calls.append("full")

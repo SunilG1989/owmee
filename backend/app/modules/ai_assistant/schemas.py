@@ -72,7 +72,7 @@ class AIDetected(BaseModel):
     price_reasoning: str | None = None
     mrp_inr: int | None = None              # original MRP / new-price anchor for discount display
     mrp_confidence: float = 0.0
-    mrp_source: str | None = None           # visible_mrp | receipt_or_bill | market_anchor | none
+    mrp_source: str | None = None           # visible_mrp | receipt_or_bill | seller_entered | none
     mrp_reasoning: str | None = None
 
     # Authoring
@@ -124,6 +124,12 @@ class AIDetected(BaseModel):
     # | "not_evidenced". The post-processor enforces direct_visible for
     # spec fields (storage, ram, processor, battery_health, purchase_year).
     field_evidence: dict = Field(default_factory=dict)
+
+    # Raw nested photo-intelligence contract returned by the current vision
+    # prompt. The mobile/API surface still consumes the flattened fields above,
+    # but keeping this payload lets us audit P0/P1 decisions and evolve review
+    # UX without losing model evidence.
+    photo_analysis: dict[str, Any] = Field(default_factory=dict)
 
 
 class DraftFromImageResponse(BaseModel):

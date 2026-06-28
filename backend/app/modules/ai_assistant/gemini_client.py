@@ -62,6 +62,10 @@ from app.modules.ai_assistant.prompts import (
     PROMPT_DESCRIPTION_REGEN,
     PROMPT_PRICE_ESTIMATE,
 )
+from app.modules.ai_assistant.category_taxonomy import (
+    canonical_category_slug,
+    category_family_for,
+)
 from app.modules.ai_assistant.identifier_extraction import (
     extract_imei_candidate,
     extract_serial_candidate,
@@ -260,6 +264,259 @@ class _GeminiVisionFastOut(BaseModel):
     seller_edit_fields: list[str] = []
     field_confidence: _FieldConfidence = _FieldConfidence()
     field_evidence: _FieldEvidence = _FieldEvidence()
+
+
+class _V2BlockingFlags(BaseModel):
+    product_not_visible: bool = False
+    too_blurry: bool = False
+    multiple_unrelated_products: bool = False
+    unsafe_or_prohibited: bool = False
+    stock_image_or_screenshot_only: bool = False
+    packaging_only_product_not_visible: bool = False
+
+
+class _V2EvidenceValue(BaseModel):
+    value: str | None = None
+    confidence: float = 0.0
+    evidence: str | None = None
+
+
+class _V2PrimaryItem(BaseModel):
+    detected_item_type: str | None = None
+    category: str | None = None
+    subcategory: str | None = None
+    category_confidence: float = 0.0
+    brand: _V2EvidenceValue = _V2EvidenceValue()
+    model: _V2EvidenceValue = _V2EvidenceValue()
+    variant_or_capacity: _V2EvidenceValue = _V2EvidenceValue()
+
+
+class _V2Title(BaseModel):
+    title_suggestion: str | None = None
+    confidence: float = 0.0
+    basis: str | None = None
+    seller_edit_required: bool = False
+
+
+class _V2VisibleTextSnippet(BaseModel):
+    text: str = ""
+    confidence: float = 0.0
+    source_area: str | None = None
+
+
+class _V2VisibleFacts(BaseModel):
+    colors: list[str] = []
+    materials: list[str] = []
+    accessories_visible: list[str] = []
+    packaging_visible: bool = False
+    labels_visible: bool = False
+    visible_text_snippets: list[_V2VisibleTextSnippet] = []
+
+
+class _V2PricingKeys(BaseModel):
+    brand: str | None = None
+    model: str | None = None
+    isbn: str | None = None
+    ean_or_barcode: str | None = None
+    product_name: str | None = None
+
+
+class _V2Pricing(BaseModel):
+    seller_entered_price_inr: int | None = None
+    printed_mrp_visible: bool = False
+    printed_mrp_inr: int | None = None
+    printed_mrp_confidence: float = 0.0
+    mrp_evidence: str | None = None
+    current_mrp_from_photo: str | None = None
+    current_mrp_requires_backend_enrichment: bool = False
+    pricing_enrichment_keys: _V2PricingKeys = _V2PricingKeys()
+
+
+class _V2VisibleWear(BaseModel):
+    issue_type: str | None = None
+    severity: str | None = None
+    evidence: str | None = None
+    confidence: float = 0.0
+
+
+class _V2ConditionAssessment(BaseModel):
+    visual_condition: str | None = None
+    confidence: float = 0.0
+    condition_summary: str | None = None
+    visible_wear: list[_V2VisibleWear] = []
+    no_visible_damage: bool = False
+    working_status_from_photos: str | None = None
+    working_status_confidence: float = 0.0
+    seller_condition_confirmation_required: bool = True
+
+
+class _V2StatusValue(BaseModel):
+    value: str | None = None
+    confidence: float = 0.0
+    status: str | None = None
+
+
+class _V2ToysKidsSpecific(BaseModel):
+    age_suitability: _V2StatusValue = _V2StatusValue()
+    battery_or_electric: _V2EvidenceValue = _V2EvidenceValue()
+    parts_complete_from_photos: _V2EvidenceValue = _V2EvidenceValue()
+    safety_issue_visible: _V2EvidenceValue = _V2EvidenceValue()
+
+
+class _V2BooksSpecific(BaseModel):
+    book_title: str | None = None
+    subject: str | None = None
+    language: str | None = None
+    class_or_grade: str | None = None
+    board: str | None = None
+    edition: str | None = None
+    isbn: str | None = None
+    pages_missing_or_torn_visible: str | None = None
+    writing_or_highlighting_visible: str | None = None
+    cover_condition: str | None = None
+
+
+class _V2HomeAppliancesSpecific(BaseModel):
+    appliance_type: str | None = None
+    brand: str | None = None
+    model: str | None = None
+    capacity_or_size: str | None = None
+    power_source: str | None = None
+    accessories_required_for_use_visible: list[str] = []
+    accessories_missing_visible: list[str] = []
+    visible_damage: list[str] = []
+    installation_or_pickup_complexity: str | None = None
+    working_status: str | None = None
+
+
+class _V2ElectronicsSpecific(BaseModel):
+    brand: str | None = None
+    model: str | None = None
+    working_status: str | None = None
+    screen_body_condition: str | None = None
+    battery_or_power_status: str | None = None
+    accessories_visible: list[str] = []
+    lock_or_reset_status: str | None = None
+    repair_history_confirmation_required: bool = False
+
+
+class _V2FurnitureSpecific(BaseModel):
+    furniture_type: str | None = None
+    material: str | None = None
+    size_or_dimensions: str | None = None
+    visible_damage: list[str] = []
+    upholstery_or_surface_condition: str | None = None
+    pickup_complexity: str | None = None
+    floor_lift_need: str | None = None
+
+
+class _V2ClothingShoesSpecific(BaseModel):
+    item_type: str | None = None
+    size: str | None = None
+    brand: str | None = None
+    visible_defects: list[str] = []
+    authenticity_confirmation_required: bool = False
+    hygiene_state: str | None = None
+
+
+class _V2HouseholdSpecific(BaseModel):
+    item_type: str | None = None
+    material: str | None = None
+    size_or_capacity: str | None = None
+    set_count: str | None = None
+    accessories_visible: list[str] = []
+    visible_damage: list[str] = []
+
+
+class _V2SportsFitnessSpecific(BaseModel):
+    item_type: str | None = None
+    brand: str | None = None
+    size: str | None = None
+    accessories_visible: list[str] = []
+    visible_damage: list[str] = []
+    working_status: str | None = None
+    safety_gear_condition: str | None = None
+
+
+class _V2OtherSpecific(BaseModel):
+    item_type: str | None = None
+    buyer_critical_details: list[str] = []
+    visible_damage: list[str] = []
+    seller_confirmation_needed: list[str] = []
+
+
+class _V2CategorySpecific(BaseModel):
+    toys_kids: _V2ToysKidsSpecific = _V2ToysKidsSpecific()
+    books: _V2BooksSpecific = _V2BooksSpecific()
+    home_appliances: _V2HomeAppliancesSpecific = _V2HomeAppliancesSpecific()
+    electronics: _V2ElectronicsSpecific = _V2ElectronicsSpecific()
+    furniture: _V2FurnitureSpecific = _V2FurnitureSpecific()
+    clothing_shoes: _V2ClothingShoesSpecific = _V2ClothingShoesSpecific()
+    household: _V2HouseholdSpecific = _V2HouseholdSpecific()
+    sports_fitness: _V2SportsFitnessSpecific = _V2SportsFitnessSpecific()
+    other: _V2OtherSpecific = _V2OtherSpecific()
+
+
+class _V2FieldStatus(BaseModel):
+    key: str = ""
+    label: str = ""
+    value: str | None = None
+    source: str | None = None
+    confidence: float = 0.0
+    status: str | None = None
+    seller_question: str | None = None
+    reason: str | None = None
+
+
+class _V2P1Field(BaseModel):
+    key: str = ""
+    label: str = ""
+    value: str | None = None
+    source: str | None = None
+    confidence: float = 0.0
+    show_in_optional_details: bool = False
+
+
+class _V2SellerRequiredCheck(BaseModel):
+    field_key: str = ""
+    priority: int = 0
+    bottom_sheet_type: str | None = None
+    question: str = ""
+    prefilled_value: str | None = None
+    options: list[str] = []
+    requires_text_if: list[str] = []
+    buyer_visible: bool = True
+    why_required: str | None = None
+
+
+class _V2QualityRecommendation(BaseModel):
+    type: str | None = None
+    message: str = ""
+    blocking: bool = False
+
+
+class _V2Overall(BaseModel):
+    draft_quality_score: float = 0.0
+    estimated_required_checks_count: int = 0
+    estimated_seller_time_seconds: int = 0
+    publish_blocked_until_required_checks_done: bool = True
+
+
+class _OwmeePhotoAnalysisV2(BaseModel):
+    version: str = "owmee_photo_analysis_v2"
+    blocking_flags: _V2BlockingFlags = _V2BlockingFlags()
+    primary_item: _V2PrimaryItem = _V2PrimaryItem()
+    title: _V2Title = _V2Title()
+    visible_facts: _V2VisibleFacts = _V2VisibleFacts()
+    pricing: _V2Pricing = _V2Pricing()
+    condition_assessment: _V2ConditionAssessment = _V2ConditionAssessment()
+    category_specific: _V2CategorySpecific = _V2CategorySpecific()
+    p0_fields: list[_V2FieldStatus] = []
+    p1_fields: list[_V2P1Field] = []
+    seller_required_checks: list[_V2SellerRequiredCheck] = []
+    safe_description_draft: str | None = None
+    quality_recommendations: list[_V2QualityRecommendation] = []
+    overall: _V2Overall = _V2Overall()
 
 
 class _GeminiIMEIOut(BaseModel):
@@ -561,7 +818,17 @@ def _vision_parts(
     parts: list[Any] = []
     parts.append(
         "These photos show ONE proposed resale product from multiple angles. "
-        "Photo indexes are zero-based; use those indexes when setting hero_image_index."
+        "Photo indexes are zero-based; mention indexes in evidence text when useful."
+    )
+    parts.append(
+        "INPUT CONTEXT:\n"
+        "country: India\n"
+        "currency: INR\n"
+        "seller_selected_category: null\n"
+        "seller_entered_price: null\n"
+        "seller_locality: null\n"
+        "delivery_options_available: Owmee pickup and delivery eligibility are checked by backend\n"
+        f"photo_count: {len(images)}"
     )
     for idx, (image_bytes, content_type) in enumerate(images):
         part_kwargs = {
@@ -695,8 +962,8 @@ async def detect_from_images(
     config = types.GenerateContentConfig(
         system_instruction=PROMPT_VISION_DETECT,
         response_mime_type="application/json",
-        response_schema=_GeminiVisionOut,
-        temperature=0.2,
+        response_schema=_OwmeePhotoAnalysisV2,
+        temperature=0.0,
         max_output_tokens=VISION_DETECT_MAX_OUTPUT_TOKENS,
         thinking_config=_thinking_config(types, model, "vision"),
     )
@@ -738,7 +1005,7 @@ async def detect_from_images(
         import json
         try:
             data = json.loads(raw)
-            parsed = _GeminiVisionOut(**data)
+            parsed = _OwmeePhotoAnalysisV2(**data)
         except Exception as e:
             log.warning(
                 "ai_assistant.vision_parse_failed",
@@ -751,8 +1018,378 @@ async def detect_from_images(
     # prompt itself instructs Gemini to follow these rules — but Gemini
     # doesn't always comply (especially on price + spec fields), so
     # we enforce them server-side as a hard belt-and-braces.
-    detected = _translate_vision_response(parsed)
+    detected = _translate_photo_analysis_v2(parsed)
     return _apply_post_processing_guardrails(detected)
+
+
+def _model_to_dict(v: Any) -> dict:
+    if v is None:
+        return {}
+    if isinstance(v, dict):
+        return v
+    if hasattr(v, "model_dump"):
+        return v.model_dump(exclude_none=False)
+    return {}
+
+
+def _clean_str(value: Any, *, max_len: int = 160) -> str | None:
+    if value is None:
+        return None
+    cleaned = " ".join(str(value).strip().split())
+    return cleaned[:max_len] if cleaned else None
+
+
+def _confidence(value: Any) -> float:
+    try:
+        parsed = float(value or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+    return max(0.0, min(1.0, parsed))
+
+
+def _first_clean(values: list[Any], *, max_len: int = 160) -> str | None:
+    for value in values:
+        cleaned = _clean_str(value, max_len=max_len)
+        if cleaned:
+            return cleaned
+    return None
+
+
+def _v2_blocking_flags(blocking: _V2BlockingFlags) -> list[str]:
+    flags: list[str] = []
+    if blocking.product_not_visible:
+        flags.append("no_product")
+    if blocking.too_blurry:
+        flags.append("blurry")
+    if blocking.multiple_unrelated_products:
+        flags.append("multiple_items")
+    if blocking.unsafe_or_prohibited:
+        flags.append("nsfw")
+    if blocking.stock_image_or_screenshot_only:
+        flags.extend(["screenshot_only", "stock_or_catalog_suspected"])
+    if blocking.packaging_only_product_not_visible:
+        flags.append("packaging_only")
+    seen: set[str] = set()
+    return [flag for flag in flags if not (flag in seen or seen.add(flag))]
+
+
+def _internal_category_from_v2(analysis: _OwmeePhotoAnalysisV2) -> tuple[str | None, str | None]:
+    primary = analysis.primary_item
+    raw_category = _clean_str(primary.category, max_len=80)
+    subcategory = _clean_str(primary.subcategory, max_len=80)
+    item_text = " ".join(
+        part for part in [
+            primary.detected_item_type,
+            subcategory,
+            analysis.title.title_suggestion,
+            primary.model.value,
+        ]
+        if part
+    ).lower()
+
+    category_key = (raw_category or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if category_key in {"toys_kids", "toys", "kids", "baby"}:
+        return "kids-utility", "toy"
+    if category_key in {"books", "book"}:
+        return "kids-utility", "book"
+    if category_key in {"home_appliances", "appliances", "small_appliances"}:
+        return "small-appliances", "appliance"
+    if category_key == "electronics":
+        if any(token in item_text for token in ("iphone", "phone", "mobile", "smartphone")):
+            return "smartphones", "device"
+        if any(token in item_text for token in ("laptop", "macbook", "notebook")):
+            return "laptops", "device"
+        if any(token in item_text for token in ("tablet", "ipad", "tab")):
+            return "tablets", "device"
+        return "others", "other"
+    if category_key in {"furniture", "clothing_shoes", "household", "sports_fitness", "other"}:
+        return "others", "other"
+
+    canonical = canonical_category_slug(raw_category, fallback_empty_to_others=False)
+    family = category_family_for(
+        canonical,
+        detected_item_type=primary.detected_item_type,
+        title=analysis.title.title_suggestion,
+        model=primary.model.value,
+    ) if canonical else None
+    return canonical, family
+
+
+def _condition_guess_from_v2(condition: str | None) -> str | None:
+    normalized = (condition or "").strip().lower()
+    if normalized in {"like_new", "good", "fair"}:
+        return normalized
+    if normalized == "poor":
+        return "fair"
+    return None
+
+
+def _condition_issue_text(issue: _V2VisibleWear) -> str | None:
+    issue_type = _clean_str(issue.issue_type, max_len=40)
+    evidence = _clean_str(issue.evidence, max_len=90)
+    severity = _clean_str(issue.severity, max_len=20)
+    if not issue_type and not evidence:
+        return None
+    prefix = f"{severity} " if severity else ""
+    if issue_type and evidence:
+        return f"{prefix}{issue_type}: {evidence}"[:120]
+    return f"{prefix}{issue_type or evidence}"[:120]
+
+
+def _parts_status(value: str | None) -> str | None:
+    normalized = (value or "").lower()
+    if "complete" in normalized:
+        return "Complete / no parts missing"
+    if "missing" in normalized:
+        return "Minor missing parts disclosed"
+    return None
+
+
+def _safety_status(value: str | None) -> str | None:
+    normalized = (value or "").lower()
+    if normalized == "yes" or "issue" in normalized:
+        return "Issue disclosed"
+    if "no_visible" in normalized or "no visible" in normalized:
+        return "No visible safety issue"
+    return None
+
+
+def _book_page_condition(value: str | None, cover_condition: str | None) -> str | None:
+    normalized = (value or "").lower()
+    if "yes" in normalized or "missing" in normalized or "torn" in normalized:
+        return "Missing or damaged pages disclosed"
+    if cover_condition in {"fair", "poor"}:
+        return "Minor wear"
+    if "no_visible" in normalized or "no visible" in normalized:
+        return "Pages clean"
+    return None
+
+
+def _book_markings(value: str | None) -> str | None:
+    normalized = (value or "").lower()
+    if "yes" in normalized or "writing" in normalized or "highlight" in normalized:
+        return "Notes/highlights disclosed"
+    if "no_visible" in normalized or "no visible" in normalized:
+        return "No markings"
+    return None
+
+
+def _book_pages_complete(value: str | None) -> str | None:
+    normalized = (value or "").lower()
+    if "yes" in normalized or "missing" in normalized or "torn" in normalized:
+        return "Missing pages disclosed"
+    if "no_visible" in normalized or "no visible" in normalized:
+        return "All pages present"
+    return None
+
+
+def _appliance_working_status(value: str | None) -> str | None:
+    normalized = (value or "").lower()
+    if "not_working" in normalized:
+        return "Not working"
+    if "working_visible" in normalized:
+        return "Fully working"
+    return None
+
+
+def _status_is_required(value: str | None) -> bool:
+    return (value or "").strip().lower() in {
+        "missing_answer_required",
+        "prefill_confirm",
+        "blocked",
+        "missing",
+        "not_sure",
+    }
+
+
+def _translate_photo_analysis_v2(parsed: _OwmeePhotoAnalysisV2) -> AIDetected:
+    primary = parsed.primary_item
+    title = parsed.title
+    visible = parsed.visible_facts
+    pricing = parsed.pricing
+    condition = parsed.condition_assessment
+    category_slug, category_family = _internal_category_from_v2(parsed)
+    flags = _v2_blocking_flags(parsed.blocking_flags)
+    appliance = parsed.category_specific.home_appliances
+    electronics = parsed.category_specific.electronics
+    clothing = parsed.category_specific.clothing_shoes
+    sports = parsed.category_specific.sports_fitness
+    brand = _first_clean([
+        primary.brand.value,
+        appliance.brand,
+        electronics.brand,
+        clothing.brand,
+        sports.brand,
+    ])
+    model = _first_clean([primary.model.value, appliance.model, electronics.model])
+    detected_item_type = _clean_str(primary.detected_item_type or primary.subcategory)
+    title_suggestion = _clean_str(title.title_suggestion, max_len=80)
+    defects = [
+        text for text in (_condition_issue_text(issue) for issue in (condition.visible_wear or []))
+        if text
+    ][:8]
+
+    category_specifics: dict[str, Any] = {}
+    if category_family == "toy":
+        toy = parsed.category_specific.toys_kids
+        category_specifics = {
+            "toy_type": detected_item_type,
+            "age_suitability": _clean_str(toy.age_suitability.value),
+            "missing_parts_status": _parts_status(toy.parts_complete_from_photos.value),
+            "safety_status": _safety_status(toy.safety_issue_visible.value),
+            "battery_status": _clean_str(toy.battery_or_electric.value),
+            "material": ", ".join(visible.materials[:2]) if visible.materials else None,
+        }
+    elif category_family == "book":
+        book = parsed.category_specific.books
+        class_board = " ".join(
+            part for part in [book.class_or_grade, book.board, book.edition]
+            if _clean_str(part)
+        ) or None
+        category_specifics = {
+            "book_type": detected_item_type or "Book",
+            "language": _clean_str(book.language),
+            "page_condition": _book_page_condition(book.pages_missing_or_torn_visible, book.cover_condition),
+            "markings_status": _book_markings(book.writing_or_highlighting_visible),
+            "pages_complete": _book_pages_complete(book.pages_missing_or_torn_visible),
+            "class_board_edition": _clean_str(class_board),
+            "subject": _clean_str(book.subject or book.book_title),
+            "isbn": _clean_str(book.isbn),
+            "cover_condition": _clean_str(book.cover_condition),
+        }
+    elif category_family == "appliance":
+        missing = [item for item in appliance.accessories_missing_visible if _clean_str(item)]
+        included = [item for item in appliance.accessories_required_for_use_visible if _clean_str(item)]
+        if missing:
+            accessories_status = f"Missing: {', '.join(missing[:3])}"
+        elif included:
+            accessories_status = f"Visible: {', '.join(included[:3])}"
+        else:
+            accessories_status = None
+        category_specifics = {
+            "appliance_type": _clean_str(appliance.appliance_type or detected_item_type),
+            "working_status": _appliance_working_status(appliance.working_status),
+            "accessories_status": accessories_status,
+            "defects_disclosed": ", ".join(appliance.visible_damage[:3]) if appliance.visible_damage else None,
+            "pickup_complexity": _clean_str(appliance.installation_or_pickup_complexity),
+            "installation_status": _clean_str(appliance.power_source),
+            "power_requirement": _clean_str(appliance.power_source),
+            "capacity_or_size": _clean_str(appliance.capacity_or_size),
+            "material": ", ".join(visible.materials[:2]) if visible.materials else None,
+        }
+
+    category_specifics = {
+        key: value for key, value in category_specifics.items()
+        if value not in (None, "", [])
+    }
+
+    seller_edit_fields = []
+    for field in parsed.p0_fields or []:
+        if _status_is_required(field.status) and field.key:
+            seller_edit_fields.append(str(field.key)[:60])
+    for check in parsed.seller_required_checks or []:
+        if check.field_key:
+            seller_edit_fields.append(str(check.field_key)[:60])
+    if title.seller_edit_required and "title" not in seller_edit_fields:
+        seller_edit_fields.append("title")
+
+    field_confidence: dict[str, float] = {
+        "category_slug": _confidence(primary.category_confidence),
+        "brand": _confidence(primary.brand.confidence),
+        "model": _confidence(primary.model.confidence),
+        "title_suggestion": _confidence(title.confidence),
+        "condition_guess": _confidence(condition.confidence),
+        "mrp_inr": _confidence(pricing.printed_mrp_confidence),
+    }
+    for field in parsed.p0_fields or []:
+        if field.key:
+            field_confidence.setdefault(str(field.key), _confidence(field.confidence))
+
+    field_evidence = {
+        "category_slug": "strong_visual_inference" if category_slug else "not_evidenced",
+        "brand": "direct_visible" if brand and primary.brand.evidence else ("strong_visual_inference" if brand else "not_evidenced"),
+        "model": "direct_visible" if model and primary.model.evidence else ("strong_visual_inference" if model else "not_evidenced"),
+        "storage": "direct_visible" if category_family == "device" and primary.variant_or_capacity.value and primary.variant_or_capacity.evidence else "not_evidenced",
+        "accessories": "direct_visible" if visible.accessories_visible else "not_evidenced",
+        "title_suggestion": "strong_visual_inference" if title_suggestion else "not_evidenced",
+        "condition_guess": "strong_visual_inference" if condition.visual_condition else "not_evidenced",
+        "mrp_inr": "direct_visible" if pricing.printed_mrp_visible and pricing.printed_mrp_inr else "not_evidenced",
+    }
+
+    feedback = [
+        _clean_str(item.message, max_len=200)
+        for item in (parsed.quality_recommendations or [])
+        if _clean_str(item.message)
+    ][:5]
+
+    blocking_reasons = list(flags)
+    for item in parsed.quality_recommendations or []:
+        if item.blocking and item.type:
+            blocking_reasons.append(str(item.type)[:80])
+
+    condition_guess = _condition_guess_from_v2(condition.visual_condition)
+    if condition.visual_condition == "poor" and "condition_guess" not in seller_edit_fields:
+        seller_edit_fields.append("condition_guess")
+
+    raw = parsed.model_dump(exclude_none=False) if hasattr(parsed, "model_dump") else {}
+    visible_text = [
+        snippet.text for snippet in visible.visible_text_snippets
+        if _clean_str(snippet.text)
+    ][:4]
+    extraction_notes = _first_clean([
+        condition.condition_summary,
+        "; ".join(visible_text) if visible_text else None,
+    ], max_len=240)
+
+    return AIDetected(
+        category_slug=category_slug,
+        category_confidence=_confidence(primary.category_confidence),
+        category_rationale=f"Photo analysis category={primary.category or 'unknown'}",
+        category_family=category_family,
+        category_specifics=category_specifics,
+        detected_item_type=detected_item_type,
+        brand=brand,
+        model=model,
+        storage=_clean_str(primary.variant_or_capacity.value) if category_family == "device" else None,
+        color=", ".join(visible.colors[:2]) if visible.colors else None,
+        condition_guess=condition_guess,
+        defects=defects,
+        accessories=", ".join(visible.accessories_visible[:5]) if visible.accessories_visible else None,
+        suggested_price_inr=pricing.seller_entered_price_inr,
+        price_confidence=1.0 if pricing.seller_entered_price_inr else 0.0,
+        price_reasoning="Seller-entered price from input context." if pricing.seller_entered_price_inr else "Price requires seller answer or backend enrichment.",
+        mrp_inr=int(pricing.printed_mrp_inr) if pricing.printed_mrp_inr else None,
+        mrp_confidence=_confidence(pricing.printed_mrp_confidence),
+        mrp_source="visible_mrp" if pricing.printed_mrp_visible and pricing.printed_mrp_inr else None,
+        mrp_reasoning=pricing.mrp_evidence,
+        title_suggestion=title_suggestion,
+        description_suggestion=_clean_str(parsed.safe_description_draft, max_len=600),
+        flags=flags,
+        image_set_quality={
+            "is_single_sellable_item": not flags,
+            "has_actual_item_photo": not any(flag in flags for flag in {"no_product", "screenshot_only", "stock_or_catalog_suspected", "packaging_only"}),
+            "has_box_or_packaging": bool(visible.packaging_visible or parsed.blocking_flags.packaging_only_product_not_visible),
+            "has_settings_or_spec_screen": False,
+            "has_receipt_or_warranty": False,
+            "has_private_info": False,
+            "is_stock_or_catalog_image_suspected": parsed.blocking_flags.stock_image_or_screenshot_only,
+            "overall_photo_quality": "unusable" if {"no_product", "blurry"}.intersection(flags) else "usable",
+        },
+        manual_review_required=bool(
+            flags
+            or parsed.seller_required_checks
+            or condition.seller_condition_confirmation_required
+            or title.seller_edit_required
+        ),
+        auto_publish_candidate=not bool(flags or parsed.seller_required_checks),
+        blocking_reasons=[str(reason)[:200] for reason in blocking_reasons][:8],
+        extraction_notes=extraction_notes,
+        seller_photo_feedback=[item for item in feedback if item],
+        seller_edit_fields=list(dict.fromkeys(seller_edit_fields))[:12],
+        field_confidence=field_confidence,
+        field_evidence=field_evidence,
+        photo_analysis=raw,
+    )
 
 
 def _translate_vision_response(parsed: "_GeminiVisionOut") -> AIDetected:
@@ -861,7 +1498,6 @@ _MRP_BLOCKING_FLAGS = (
 _VALID_MRP_SOURCES = {
     "visible_mrp",
     "receipt_or_bill",
-    "market_anchor",
 }
 
 # Substrings in seller_photo_feedback that signal kids-set completeness
@@ -940,6 +1576,7 @@ def _apply_post_processing_guardrails(detected: AIDetected) -> AIDetected:
             seller_edit_fields=[],
             field_confidence={},
             field_evidence={},
+            photo_analysis=detected.photo_analysis,
         )
 
     # Rule 2: flags that block pricing.
@@ -974,11 +1611,6 @@ def _apply_post_processing_guardrails(detected: AIDetected) -> AIDetected:
             mrp_source = None
         elif (mrp_confidence or 0.0) < 0.55:
             mrp_reasoning = "MRP suppressed by post-processor: confidence below floor."
-            mrp_inr = None
-            mrp_confidence = 0.0
-            mrp_source = None
-        elif mrp_source == "market_anchor" and (mrp_confidence or 0.0) < 0.60:
-            mrp_reasoning = "MRP suppressed by post-processor: market anchor confidence below floor."
             mrp_inr = None
             mrp_confidence = 0.0
             mrp_source = None
@@ -1330,7 +1962,7 @@ async def estimate_price(
         system_instruction=PROMPT_PRICE_ESTIMATE,
         response_mime_type="application/json",
         response_schema=_GeminiPriceOut,
-        temperature=0.3,
+        temperature=0.0,
         max_output_tokens=PRICE_ESTIMATE_MAX_OUTPUT_TOKENS,
         thinking_config=_thinking_config(types, model, "text"),
     )
@@ -1362,15 +1994,15 @@ async def estimate_price(
         except Exception:
             return None
 
-    if parsed.price_inr <= 0 and not parsed.mrp_inr:
+    if parsed.price_inr <= 0:
         return None
 
     return {
         "price_inr": int(parsed.price_inr or 0),
         "confidence": float(parsed.confidence or 0.0),
         "reasoning": str(parsed.reasoning or "")[:200],
-        "mrp_inr": int(parsed.mrp_inr) if parsed.mrp_inr else None,
-        "mrp_confidence": float(parsed.mrp_confidence or 0.0),
-        "mrp_source": parsed.mrp_source,
-        "mrp_reasoning": str(parsed.mrp_reasoning or "")[:200] if parsed.mrp_reasoning else None,
+        "mrp_inr": None,
+        "mrp_confidence": 0.0,
+        "mrp_source": None,
+        "mrp_reasoning": None,
     }

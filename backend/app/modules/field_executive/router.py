@@ -48,9 +48,13 @@ from app.modules.identity_auth.models import User
 from app.modules.ai_assistant.category_taxonomy import (
     category_family_for,
     clean_category_specifics,
+    has_educational_book_detail,
+    has_issue_disclosure_detail,
     required_category_specific_fields,
     requires_appliance_pickup_status,
     requires_book_set_status,
+    requires_educational_book_details,
+    requires_issue_disclosure_detail,
     requires_powered_toy_status,
 )
 from app.modules.listings.models import Category, Listing
@@ -279,6 +283,9 @@ def _fe_category_specifics_rejection(
     if family == "book" and requires_book_set_status(body.model, body.title):
         if not _specific_present(specifics.get("set_status")):
             missing.append("set_status")
+    if family == "book" and requires_educational_book_details(body.model, body.title):
+        if not has_educational_book_detail(specifics):
+            missing.append("class_board_edition")
 
     if family == "appliance":
         if not _specific_present(specifics.get("appliance_type")):
@@ -286,6 +293,13 @@ def _fe_category_specifics_rejection(
         if requires_appliance_pickup_status(body.model, body.title):
             if not _specific_present(specifics.get("pickup_complexity")):
                 missing.append("pickup_complexity")
+            if not _specific_present(specifics.get("installation_status")):
+                missing.append("installation_status")
+    if (
+        requires_issue_disclosure_detail(family, specifics)
+        and not has_issue_disclosure_detail(body.description)
+    ):
+        missing.append("issue_disclosure")
 
     deduped = list(dict.fromkeys(missing))
     if not deduped:

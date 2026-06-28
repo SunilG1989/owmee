@@ -26,8 +26,16 @@ from sqlalchemy.types import String as SAString
 from app.modules.ai_assistant.category_taxonomy import (
     CATEGORY_SLUGS,
     IDENTIFIER_CATEGORIES,
+    category_family_for,
     canonical_category_slug,
+    clean_category_specifics,
+    has_educational_book_detail,
     is_meaningful_other_detail,
+    requires_appliance_pickup_status,
+    requires_book_set_status,
+    requires_educational_book_details,
+    requires_issue_disclosure_detail,
+    requires_powered_toy_status,
 )
 from app.modules.ai_assistant.schemas import AIDetected
 
@@ -182,6 +190,16 @@ _AI_FIELD_KEYS = (
     "description_suggestion",
 )
 
+_P1_FIELD_LABELS = {
+    "brand": "Brand",
+    "color": "Colour",
+    "accessories": "Extra included items",
+    "warranty_status": "Warranty",
+    "purchase_year": "Purchase year",
+    "mrp_inr": "Original price / MRP",
+    "description_suggestion": "AI description",
+}
+
 
 def _json(value: Any) -> str:
     return json.dumps(value, default=str, separators=(",", ":"))
@@ -301,6 +319,210 @@ def required_actions_for_detected(detected: AIDetected, price_result: dict | Non
     return deduped
 
 
+def _field_confidence(detected: AIDetected, field_key: str) -> float | None:
+    raw = (detected.field_confidence or {}).get(field_key)
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return None
+    if math.isnan(value):
+        return None
+    return max(0.0, min(1.0, value))
+
+
+def _status_for_value(value: Any, *, required: bool = True) -> str:
+    if not required and value in (None, "", [], {}):
+        return "not_applicable"
+    if value in (None, "", [], {}):
+        return "missing"
+    text_value = " ".join(str(value).split()).lower()
+    if text_value in {"not sure", "not checked"} or "not sure" in text_value or "not checked" in text_value:
+        return "not_sure"
+    return "confirmed"
+
+
+def _metadata(
+    *,
+    field_key: str,
+    label: str,
+    value: Any,
+    required_level: str = "P0",
+    source: str = "ai",
+    confidence: float | None = None,
+    required: bool = True,
+    buyer_visible: bool = True,
+) -> dict[str, Any]:
+    status = _status_for_value(value, required=required)
+    return {
+        "field_key": field_key,
+        "label": label,
+        "value": value,
+        "source": source,
+        "confidence": confidence,
+        "required_level": required_level,
+        "status": status,
+        "buyer_visible": buyer_visible,
+        "confirmation_required": bool(confidence is not None and confidence < 0.65 and status == "confirmed"),
+    }
+
+
+def _append_check(target: list[dict[str, Any]], metadata: dict[str, Any], *, action: str) -> None:
+    if metadata["required_level"] != "P0":
+        return
+    target.append({
+        "id": metadata["field_key"],
+        "field_key": metadata["field_key"],
+        "label": metadata["label"],
+        "summary": metadata["value"] or "Needs answer",
+        "status": metadata["status"],
+        "source": metadata["source"],
+        "confidence": metadata["confidence"],
+        "action": action,
+        "buyer_visible": metadata["buyer_visible"],
+        "confirmation_required": metadata["confirmation_required"],
+    })
+
+
+def smart_review_contract_for_detected(
+    detected: AIDetected,
+    price_result: dict | None = None,
+) -> dict[str, Any]:
+    category = canonical_category_slug(detected.category_slug)
+    family = category_family_for(
+        category,
+        detected_item_type=detected.detected_item_type,
+        title=detected.title_suggestion,
+        model=detected.model,
+    )
+    specifics = clean_category_specifics(family, detected.category_specifics)
+    blockers = publish_blockers_for_detected(detected)
+    price = (price_result or {}).get("price") or detected.suggested_price_inr
+    title = detected.title_suggestion
+    item_type = detected.model or detected.detected_item_type
+    metadata: dict[str, dict[str, Any]] = {}
+    checks: list[dict[str, Any]] = []
+
+    def add(
+        field_key: str,
+        label: str,
+        value: Any,
+        *,
+        action: str,
+        source: str = "ai",
+        confidence_key: str | None = None,
+        required_level: str = "P0",
+        required: bool = True,
+        buyer_visible: bool = True,
+    ) -> None:
+        meta = _metadata(
+            field_key=field_key,
+            label=label,
+            value=value,
+            required_level=required_level,
+            source=source,
+            confidence=_field_confidence(detected, confidence_key or field_key),
+            required=required,
+            buyer_visible=buyer_visible,
+        )
+        metadata[field_key] = meta
+        _append_check(checks, meta, action=action)
+
+    photo_status = "missing" if blockers else "confirmed"
+    photo_meta = {
+        "field_key": "photos",
+        "label": "Photos",
+        "value": "Retake required" if blockers else "Product photos ready",
+        "source": "seller",
+        "confidence": None,
+        "required_level": "P0",
+        "status": photo_status,
+        "buyer_visible": True,
+        "confirmation_required": False,
+    }
+    metadata["photos"] = photo_meta
+    _append_check(checks, photo_meta, action="photos")
+
+    add("category_slug", "Category", category, action="category", confidence_key="category_slug")
+    add("title_suggestion", "Title", title, action="title")
+    add("suggested_price_inr", "Price", price, action="price", source="seller", confidence_key="suggested_price_inr")
+    add("condition_guess", "Condition", detected.condition_guess, action="condition")
+    add("locality", "Pickup locality", "Seller profile locality", action="location", source="system")
+    add("delivery_method", "Fulfilment", "Pickup + Owmee delivery", action="delivery", source="system")
+
+    if family == "toy":
+        add("age_suitability", "Age suitability", specifics.get("age_suitability"), action="age_suitability", source="seller")
+        add("hygiene_status", "Cleanliness", specifics.get("hygiene_status"), action="hygiene_status", source="seller")
+        add("missing_parts_status", "Parts completeness", specifics.get("missing_parts_status"), action="category_specifics", source="seller")
+        add("safety_status", "Safety disclosure", specifics.get("safety_status"), action="category_specifics", source="seller")
+        if requires_powered_toy_status(item_type, title):
+            add(
+                "battery_or_working_status",
+                "Battery / working",
+                specifics.get("working_status") or specifics.get("battery_status"),
+                action="category_specifics",
+                source="seller",
+            )
+    elif family == "book":
+        add("book_type", "Book type", specifics.get("book_type") or item_type, action="model", source="seller")
+        add("language", "Language", specifics.get("language"), action="category_specifics", source="seller")
+        add("page_condition", "Page condition", specifics.get("page_condition"), action="category_specifics", source="seller")
+        add("markings_status", "Writing / highlighting", specifics.get("markings_status"), action="category_specifics", source="seller")
+        add("pages_complete", "Page completeness", specifics.get("pages_complete"), action="category_specifics", source="seller")
+        if requires_educational_book_details(item_type, title):
+            education_detail = (
+                specifics.get("class_board_edition")
+                or specifics.get("class_or_grade")
+                or specifics.get("edition")
+            )
+            add(
+                "class_board_edition",
+                "Class / board / edition",
+                education_detail if has_educational_book_detail(specifics) else None,
+                action="category_specifics",
+                source="seller",
+            )
+        if requires_book_set_status(item_type, title):
+            add("set_status", "Set completeness", specifics.get("set_status"), action="category_specifics", source="seller")
+    elif family == "appliance":
+        add("appliance_type", "Product type", specifics.get("appliance_type") or item_type, action="model", source="seller")
+        add("working_status", "Working status", specifics.get("working_status"), action="category_specifics", source="seller")
+        add("accessories_status", "Accessories", specifics.get("accessories_status"), action="category_specifics", source="seller")
+        add("defects_disclosed", "Defect disclosure", specifics.get("defects_disclosed"), action="category_specifics", source="seller")
+        if requires_appliance_pickup_status(item_type, title):
+            add("pickup_complexity", "Pickup effort", specifics.get("pickup_complexity"), action="category_specifics", source="seller")
+            add("installation_status", "Power / installation", specifics.get("installation_status"), action="category_specifics", source="seller")
+
+    if requires_issue_disclosure_detail(family, specifics):
+        add("issue_disclosure", "Issue detail", None, action="issue_disclosure", source="seller")
+
+    for field_key, label in _P1_FIELD_LABELS.items():
+        value = detected.mrp_inr if field_key == "mrp_inr" else getattr(detected, field_key, None)
+        metadata.setdefault(
+            field_key,
+            _metadata(
+                field_key=field_key,
+                label=label,
+                value=value,
+                required_level="P1",
+                source="ai",
+                confidence=_field_confidence(detected, field_key),
+                required=False,
+                buyer_visible=field_key not in {"mrp_inr"} or bool(value),
+            ),
+        )
+
+    return {
+        "schema_version": 1,
+        "category_family": family,
+        "required_checks": checks,
+        "remaining_required_checks": [
+            item for item in checks
+            if item["status"] in {"missing", "not_sure"} or item["confirmation_required"]
+        ],
+        "field_metadata": metadata,
+    }
+
+
 def build_draft_contract(
     detected: AIDetected,
     price_result: dict | None = None,
@@ -324,6 +546,7 @@ def build_draft_contract(
         "publish_blockers": blockers,
         "stale_fields": sorted(stale_fields or []),
         "field_contract": field_contract_payload(category),
+        "smart_review": smart_review_contract_for_detected(detected, price_result),
         "statuses": {
             "safety_status": "blocked" if blockers else ("unknown" if ai_failed else "passed"),
             "core_analysis_status": "failed" if ai_failed else "success",

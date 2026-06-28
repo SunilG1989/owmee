@@ -27,12 +27,47 @@ database category, cache, or migration.
    `category_specifics` when visible from photos.
 2. Backend canonicalizes `category_slug` and re-derives `category_family` using
    `backend/app/modules/ai_assistant/category_taxonomy.py`.
-3. Mobile AI review renders the family-specific requirement panel from
-   `mobile/src/utils/listingCatalog.ts`.
-4. Seller confirms required facts before publishing.
-5. Backend validates the same contract in `POST /v1/listings/from-draft`.
-6. Confirmed fields are stored in `listings.seller_review_snapshot`, under
+3. Backend returns `analysis_contract.smart_review` with P0/P1 metadata:
+   `value`, `source`, `confidence`, `required_level`, `status`, and
+   `confirmation_required`.
+4. Mobile AI review renders a one-page smart review: buyer preview, readiness
+   card, and a required-check queue containing only missing or risky P0 fields.
+5. Seller confirms required facts before publishing.
+6. Backend validates the same contract in `POST /v1/listings/from-draft`.
+7. Confirmed fields are stored in `listings.seller_review_snapshot`, under
    `seller_confirmed.category_family` and `seller_confirmed.category_specifics`.
+
+## P0 / P1 Contract
+
+P0 blocks publish when missing:
+
+- Photos.
+- Category.
+- Title.
+- Asking price.
+- Condition.
+- Major defect / missing-parts / safety disclosure.
+- Pickup locality and fulfilment method.
+- Category-specific required attributes.
+- Working status when relevant.
+
+P1 never blocks publish:
+
+- AI description.
+- Brand unless the category truly needs it.
+- Material.
+- Box included.
+- Invoice upload.
+- Purchase year.
+- Extra notes or extra photos.
+- Original price / MRP.
+
+P0 values can be AI-filled or system-filled, but the review page must keep them
+visible. Low-confidence or high-risk P0 values require seller confirmation.
+Vague negative disclosures such as “defects disclosed”, “notes/highlights
+disclosed”, or “missing parts disclosed” also require a buyer-facing detail.
+Clear safe values such as “no known defects” or “no parts missing” should not
+create extra work for the seller.
 
 ## Universal Requirements
 
@@ -118,6 +153,9 @@ Required before publish:
 - Markings/highlights status.
 - Page completeness.
 - Set completeness when it is a set, series, box, bundle, or combo.
+- Exact class, board, or edition detail when the item is a textbook, workbook,
+  school guide, or class/board study material. Placeholder values such as
+  “shown”, “visible”, or “not sure” do not satisfy this gate.
 
 Allowed negative examples:
 
@@ -131,6 +169,7 @@ Blocked cases:
 - No language.
 - No page/marking disclosure.
 - Set or series without set completeness.
+- Educational book without class/board/edition detail.
 
 ## Home Appliances
 
@@ -146,6 +185,7 @@ Required before publish:
 - Defect disclosure.
 - Pickup complexity for bulky or installation-heavy appliances such as washing
   machines, refrigerators, ACs, geysers, chimneys, and dishwashers.
+- Power or installation status for the same bulky/install-heavy appliances.
 
 Allowed negative examples:
 
@@ -161,6 +201,24 @@ Blocked cases:
 - No accessory status.
 - No defect disclosure.
 - Bulky appliance without pickup complexity.
+- Bulky appliance without power/installation expectation.
+
+## Smart Review UX
+
+The AI review page remains one page. It is not a long form.
+
+- Header: `Review listing` with helper copy saying Owmee filled the draft from
+  photos.
+- Buyer preview: main photo, title, price, category, condition, locality, and
+  fulfilment signals are always visible.
+- Readiness card: shows remaining P0 count and expected completion time.
+- Required checks: shows only missing or confirmation-needed P0 fields.
+- Optional details: stay secondary and never block publish.
+- Sticky CTA: `Complete required checks` until P0 is done, then `Publish`.
+
+Quick checks use small option sets, usually 3 to 5 choices. Free text appears
+only when a negative disclosure needs explanation or when the buyer-critical
+value must be exact, such as class/board/edition for educational books.
 
 ## Performance Rules
 
@@ -170,9 +228,17 @@ Blocked cases:
 - Keep requirement options as small arrays and memoized derived values.
 - Persist the seller-confirmed snapshot once, during publish.
 
+## Success Metrics
+
+- Median review-to-publish time below 60 seconds.
+- P80 review-to-publish time below 120 seconds.
+- Required-check completion rate above 90%.
+- Manual text entry near zero for standard toys, books, and appliances.
+- Lower dispute/mismatch rate for condition, missing parts, and working status.
+
 ## Future Backlog
 
-- Show category-specific facts on listing detail and seller inventory pages.
+- Show category-specific facts more prominently on seller inventory pages.
 - Use category-specific facts as price-adjustment signals.
 - Add FE-assisted parity for book/appliance-specific requirements.
 - Expand category family detection only when new launch categories are approved.

@@ -97,6 +97,66 @@ def test_fast_quality_flag_requires_seller_review_action():
     assert contract["statuses"]["seller_review_status"] == "pending"
 
 
+def test_smart_review_contract_exposes_p0_queue_and_field_metadata():
+    detected = AIDetected(
+        category_slug="kids-utility",
+        category_family="book",
+        detected_item_type="Class 4 science book set",
+        model="Book set",
+        title_suggestion="Class 4 science book set",
+        condition_guess="good",
+        category_specifics={
+            "book_type": "Book set",
+            "language": "English",
+            "page_condition": "Minor wear",
+            "markings_status": "Notes/highlights disclosed",
+            "pages_complete": "All pages present",
+        },
+        field_confidence={"title_suggestion": 0.92},
+        flags=[],
+    )
+
+    contract = draft_contracts.build_draft_contract(
+        detected,
+        {"price": 700, "source": "category_anchor"},
+    )
+
+    smart_review = contract["smart_review"]
+    remaining = {item["field_key"] for item in smart_review["remaining_required_checks"]}
+    assert smart_review["category_family"] == "book"
+    assert "set_status" in remaining
+    assert "class_board_edition" in remaining
+    assert smart_review["field_metadata"]["title_suggestion"]["required_level"] == "P0"
+    assert smart_review["field_metadata"]["brand"]["required_level"] == "P1"
+
+
+def test_smart_review_contract_treats_placeholder_education_detail_as_missing():
+    detected = AIDetected(
+        category_slug="kids-utility",
+        category_family="book",
+        detected_item_type="Class 4 science workbook",
+        model="Workbook",
+        title_suggestion="Class 4 science workbook",
+        condition_guess="good",
+        category_specifics={
+            "book_type": "Workbook",
+            "language": "English",
+            "page_condition": "Pages clean",
+            "markings_status": "No markings",
+            "pages_complete": "All pages present",
+            "class_board_edition": "Class/board/edition shown",
+        },
+        flags=[],
+    )
+
+    contract = draft_contracts.build_draft_contract(detected, {"price": 300})
+    smart_review = contract["smart_review"]
+
+    assert smart_review["field_metadata"]["class_board_edition"]["status"] == "missing"
+    remaining = {item["field_key"] for item in smart_review["remaining_required_checks"]}
+    assert "class_board_edition" in remaining
+
+
 def test_category_change_reconciliation_invalidates_category_price_and_copy_fields():
     reconciliation = draft_contracts.category_change_reconciliation(
         "smartphones",
