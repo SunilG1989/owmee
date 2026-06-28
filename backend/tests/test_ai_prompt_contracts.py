@@ -204,6 +204,12 @@ def test_vision_prompt_is_background_invariant_for_product_facts():
     assert "your answer is overfitting to noise" in PROMPT_VISION_DETECT
 
 
+def test_vision_prompt_bans_other_colour_listing_titles():
+    assert "Never build title.title_suggestion from a placeholder plus colour" in PROMPT_VISION_DETECT
+    assert "Other Pink" in PROMPT_VISION_DETECT
+    assert "detected_item_type must be a concrete visible product noun" in PROMPT_VISION_DETECT
+
+
 def test_mrp_guardrails_suppress_bad_discount_inputs():
     detected = AIDetected(
         category_slug="smartphones",

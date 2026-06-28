@@ -131,6 +131,60 @@ def test_photo_analysis_v2_appliance_does_not_misread_not_working_as_working():
     assert detected.field_evidence["accessories"] == "direct_visible"
 
 
+def test_photo_analysis_v2_repairs_other_colour_title_from_description():
+    analysis = _OwmeePhotoAnalysisV2(
+        primary_item={
+            "detected_item_type": "Other",
+            "category": "toys_kids",
+            "subcategory": "Other",
+            "category_confidence": 0.86,
+        },
+        title={
+            "title_suggestion": "Other Pink",
+            "confidence": 0.78,
+            "basis": "fallback_catalog_type_and_colour",
+        },
+        visible_facts={"colors": ["Pink"]},
+        condition_assessment={
+            "visual_condition": "good",
+            "confidence": 0.7,
+            "seller_condition_confirmation_required": True,
+        },
+        safe_description_draft="Cute pink magnetic pencil box featuring a unicorn design.",
+    )
+
+    detected = gemini_client._translate_photo_analysis_v2(analysis)
+    cleaned = gemini_client._apply_post_processing_guardrails(detected)
+
+    assert cleaned.title_suggestion == "pink magnetic pencil box"
+    assert cleaned.detected_item_type == "pink magnetic pencil box"
+    assert cleaned.category_specifics["toy_type"] == "pink magnetic pencil box"
+    assert "title" in cleaned.seller_edit_fields
+    assert cleaned.field_confidence["title_suggestion"] <= 0.72
+
+
+def test_photo_analysis_v2_never_keeps_other_camouflage_title():
+    analysis = _OwmeePhotoAnalysisV2(
+        primary_item={
+            "detected_item_type": "Other",
+            "category": "toys_kids",
+            "subcategory": "Other",
+            "category_confidence": 0.84,
+        },
+        title={"title_suggestion": "Other camouflage", "confidence": 0.8},
+        visible_facts={"colors": ["camouflage"]},
+        condition_assessment={"visual_condition": "good", "confidence": 0.7},
+        safe_description_draft="Toy binoculars with a camouflage pattern are visible.",
+    )
+
+    detected = gemini_client._translate_photo_analysis_v2(analysis)
+    cleaned = gemini_client._apply_post_processing_guardrails(detected)
+
+    assert cleaned.title_suggestion == "Toy binoculars"
+    assert cleaned.detected_item_type == "Toy binoculars"
+    assert cleaned.category_specifics["toy_type"] == "Toy binoculars"
+
+
 def test_photo_analysis_v2_blocking_flags_and_guardrails_preserve_audit_payload():
     detected = AIDetected(
         title_suggestion="Visible product",

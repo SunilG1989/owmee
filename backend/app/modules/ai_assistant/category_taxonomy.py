@@ -109,6 +109,38 @@ OTHER_PLACEHOLDER_VALUES = {
     "other / not sure",
 }
 
+TITLE_COLOR_WORDS = {
+    "black",
+    "blue",
+    "brown",
+    "camouflage",
+    "cream",
+    "gold",
+    "green",
+    "grey",
+    "gray",
+    "orange",
+    "pink",
+    "purple",
+    "red",
+    "silver",
+    "white",
+    "yellow",
+}
+
+TITLE_FILLER_WORDS = {
+    "used",
+    "preowned",
+    "pre",
+    "owned",
+    "second",
+    "hand",
+    "good",
+    "condition",
+    "like",
+    "new",
+}
+
 CATEGORY_TAXONOMY_PROMPT = """
 CATEGORY TAXONOMY
 ==================================================
@@ -203,6 +235,36 @@ def is_meaningful_other_detail(value: str | None) -> bool:
     if cleaned in OTHER_PLACEHOLDER_VALUES:
         return False
     return len(cleaned) >= 3
+
+
+def is_generic_listing_title(value: str | None) -> bool:
+    """Reject buyer-facing titles made from placeholders instead of product nouns.
+
+    A category-specific type may legitimately be "Other" in a dropdown, but a
+    published listing title like "Other Pink" or "Other camouflage" is never
+    useful to a buyer. Keep this check category-agnostic so toy/book/appliance
+    drafts get the same protection as the catch-all "others" category.
+    """
+    cleaned = " ".join(str(value or "").strip().lower().replace("-", " ").split())
+    if len(cleaned) < 3:
+        return True
+    if cleaned in OTHER_PLACEHOLDER_VALUES:
+        return True
+    if cleaned.startswith(("other ", "others ", "unknown ", "not sure ")):
+        return True
+
+    tokens = [token.strip(".,:/()[]{}") for token in cleaned.split()]
+    tokens = [token for token in tokens if token]
+    if not tokens:
+        return True
+    if all(
+        token in OTHER_PLACEHOLDER_VALUES
+        or token in TITLE_COLOR_WORDS
+        or token in TITLE_FILLER_WORDS
+        for token in tokens
+    ):
+        return True
+    return False
 
 
 DEVICE_CATEGORY_SLUGS = {"smartphones", "laptops", "tablets"}

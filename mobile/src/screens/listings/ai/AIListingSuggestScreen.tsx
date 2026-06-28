@@ -219,9 +219,63 @@ const OTHER_PLACEHOLDERS = new Set([
   'other / not sure',
 ]);
 
+const TITLE_COLOR_WORDS = new Set([
+  'black',
+  'blue',
+  'brown',
+  'camouflage',
+  'cream',
+  'gold',
+  'green',
+  'grey',
+  'gray',
+  'orange',
+  'pink',
+  'purple',
+  'red',
+  'silver',
+  'white',
+  'yellow',
+]);
+
+const TITLE_FILLER_WORDS = new Set([
+  'used',
+  'preowned',
+  'pre',
+  'owned',
+  'second',
+  'hand',
+  'good',
+  'condition',
+  'like',
+  'new',
+]);
+
+const isGenericListingTitle = (value?: string | null) => {
+  const cleaned = (value || '').replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+  if (cleaned.length < 3) return true;
+  if (OTHER_PLACEHOLDERS.has(cleaned)) return true;
+  if (/^(other|others|unknown|not sure)\b/.test(cleaned)) return true;
+  const tokens = cleaned.split(' ').map((token) => token.replace(/[.,:/()[\]{}]/g, '')).filter(Boolean);
+  if (!tokens.length) return true;
+  return tokens.every((token) => (
+    OTHER_PLACEHOLDERS.has(token)
+    || TITLE_COLOR_WORDS.has(token)
+    || TITLE_FILLER_WORDS.has(token)
+  ));
+};
+
 const isMeaningfulOtherDetail = (value?: string | null) => {
   const cleaned = (value || '').replace(/\s+/g, ' ').trim().toLowerCase();
-  return cleaned.length >= 3 && !OTHER_PLACEHOLDERS.has(cleaned);
+  return cleaned.length >= 3 && !OTHER_PLACEHOLDERS.has(cleaned) && !isGenericListingTitle(cleaned);
+};
+
+const meaningfulProductPhrase = (...values: Array<string | null | undefined>) => {
+  for (const value of values) {
+    const cleaned = cleanText(value);
+    if (cleaned && !isGenericListingTitle(cleaned)) return cleaned;
+  }
+  return null;
 };
 
 const normalizeConditionChoice = (value?: string | null, options: { value: string }[] = []) => {
@@ -911,29 +965,37 @@ export default function AIListingSuggestScreen({
   const needsConditionReview = conditionReviewIssues.length > 0;
 
   const titleGuess = useMemo(() => {
-    if (overrides.title?.trim()) return overrides.title.trim();
+    const sellerTitle = cleanText(overrides.title);
+    if (sellerTitle && !isGenericListingTitle(sellerTitle)) return sellerTitle;
     const identityWasEdited = ['brand', 'model', 'storage', 'ram', 'color', 'category_slug']
       .some((key) => Object.prototype.hasOwnProperty.call(overrides, key));
-    if (!identityWasEdited && draft.detected.title_suggestion) return draft.detected.title_suggestion;
-    const itemType = cleanText(
+    const aiTitle = cleanText(draft.detected.title_suggestion);
+    if (!identityWasEdited && aiTitle && !isGenericListingTitle(aiTitle)) return aiTitle;
+    const categoryFallback = categorySlug && categorySlug !== 'others' && categoryKind !== 'kids'
+      ? getCategoryLabel(categorySlug)
+      : '';
+    const itemType = meaningfulProductPhrase(
       model
-        || draft.detected.detected_item_type
-        || specificValue(categorySpecifics, 'appliance_type')
-        || specificValue(categorySpecifics, 'toy_type')
-        || specificValue(categorySpecifics, 'book_type')
-        || specificValue(categorySpecifics, 'subject')
-        || '',
+        || undefined,
+      draft.detected.detected_item_type,
+      specificValue(categorySpecifics, 'appliance_type'),
+      specificValue(categorySpecifics, 'toy_type'),
+      specificValue(categorySpecifics, 'book_type'),
+      specificValue(categorySpecifics, 'subject'),
+      categoryFallback,
     );
-    const categoryFallback = categorySlug && categorySlug !== 'others' ? getCategoryLabel(categorySlug) : '';
-    const parts = [brand, itemType || categoryFallback, storage, color].filter(Boolean);
+    const base = [brand, itemType, storage].filter(Boolean).join(' ');
+    const includeColor = color && base && !base.toLowerCase().includes(color.toLowerCase());
+    const parts = [brand, itemType, storage, includeColor ? color : null].filter(Boolean);
     return (cleanText(parts.join(' ')) || '').slice(0, 80);
-  }, [draft, overrides, brand, model, storage, color, categorySpecifics, categorySlug]);
+  }, [draft, overrides, brand, model, storage, color, categorySpecifics, categorySlug, categoryKind]);
 
   const subtitleSpecifics = useMemo(() => {
+    const safeModel = meaningfulProductPhrase(model);
     const parts = (() => {
       if (categoryKind === 'kids') return [ageSuitability, hygieneStatus, color].filter(Boolean);
-      if (categoryKind === 'appliance') return [model, brand, color].filter(Boolean);
-      if (categoryKind === 'other') return [model, brand, color].filter(Boolean);
+      if (categoryKind === 'appliance') return [safeModel, brand, color].filter(Boolean);
+      if (categoryKind === 'other') return [safeModel, brand, color].filter(Boolean);
       return [storage, ram, color].filter(Boolean);
     })();
     return parts.length ? parts.join(' · ') : '';
@@ -1273,7 +1335,10 @@ export default function AIListingSuggestScreen({
     && (categoryKind === 'appliance' || categoryKind === 'kids')
     && modelOptions.length > 0;
   const reviewItemTypeLabel = useMemo(() => {
-    if (catalogItemTypeRequired) return findCatalogOption(model, modelOptions) || '';
+    if (catalogItemTypeRequired) {
+      const catalogLabel = findCatalogOption(model, modelOptions) || '';
+      return meaningfulProductPhrase(catalogLabel);
+    }
     const familyType = categoryFamily === 'toy'
       ? specificValue(categorySpecifics, 'toy_type')
       : categoryFamily === 'book'
@@ -1281,7 +1346,7 @@ export default function AIListingSuggestScreen({
         : categoryFamily === 'appliance'
           ? specificValue(categorySpecifics, 'appliance_type')
           : '';
-    return cleanText(model || familyType || draft.detected.detected_item_type || '');
+    return meaningfulProductPhrase(model, familyType, draft.detected.detected_item_type);
   }, [
     catalogItemTypeRequired,
     categoryFamily,

@@ -84,9 +84,16 @@ FAST EXTRACTION RULES
   2. visible product type + important visible attribute
   3. conservative category-specific title from the image
 - detected_item_type must be filled when brand/model is missing.
+- detected_item_type must be a concrete visible product noun. Never use catalog
+  placeholders such as "Other", "Others", "Item", "Product", "Unknown", or
+  colour-only values. If the dropdown/category would be "Other", still name the
+  actual visible object, e.g. "toy binoculars", "magnetic pencil box", or
+  "kids water bottle".
 - Never output vague titles like "Used item", "Product", "Item", "Thing",
   "Second hand product", or one-word generic titles unless the product itself
   is naturally one word like "Chair".
+- Never build title_suggestion from a placeholder plus colour, such as
+  "Other Pink", "Other camouflage", "Item blue", or "Product black".
 - Do not invent brand, model, storage, capacity, edition, age, working status,
   warranty, or authenticity in the title.
 - Examples: "Wooden stacking toy", "Kids puzzle board", "Children story book",
@@ -929,6 +936,13 @@ Hard title rules:
   or Owmee process claims in the title.
 - Keep title_suggestion under 80 characters.
 - detected_item_type must be filled whenever brand/model is missing.
+- detected_item_type must be a concrete visible product noun, not a catalog
+  fallback. Never return "Other", "Others", "Item", "Product", "Unknown", or a
+  colour-only value. If the category/dropdown fallback is "Other", still name
+  the actual product type, e.g. "toy binoculars", "magnetic pencil box",
+  "kids water bottle", or "storage box".
+- Never build title.title_suggestion from a placeholder plus colour, such as
+  "Other Pink", "Other camouflage", "Item blue", or "Product black".
 - If the title is generic but useful, set confidence between 0.55 and 0.75 and
   mark title as seller_edit_required.
 - Return null title only when product is not visible, too blurry, unsafe,

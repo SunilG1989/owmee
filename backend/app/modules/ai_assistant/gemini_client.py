@@ -49,6 +49,7 @@ from contextvars import ContextVar
 from io import BytesIO
 import logging
 import os
+import re
 from time import perf_counter
 from typing import Any
 
@@ -65,6 +66,7 @@ from app.modules.ai_assistant.prompts import (
 from app.modules.ai_assistant.category_taxonomy import (
     canonical_category_slug,
     category_family_for,
+    is_generic_listing_title,
 )
 from app.modules.ai_assistant.identifier_extraction import (
     extract_imei_candidate,
@@ -1055,6 +1057,92 @@ def _first_clean(values: list[Any], *, max_len: int = 160) -> str | None:
     return None
 
 
+_TITLE_LEADING_NOISE_RE = re.compile(
+    r"^(?:this\s+is|it\s+is|the\s+item\s+is|item\s+is|"
+    r"photo\s+shows|image\s+shows|a\s+photo\s+of|an\s+image\s+of|"
+    r"a|an|the)\s+",
+    re.IGNORECASE,
+)
+_TITLE_CLAUSE_CUT_RE = re.compile(
+    r"\b(?:with|featuring|that|which|showing|comes\s+with|has|is\s+visible|appears)\b",
+    re.IGNORECASE,
+)
+_TITLE_SUBJECTIVE_WORD_RE = re.compile(
+    r"\b(?:cute|nice|beautiful|lovely|amazing|good\s+condition|like\s+new|used|pre[-\s]?owned)\b",
+    re.IGNORECASE,
+)
+
+
+def _description_title_candidate(description: str | None) -> str | None:
+    """Extract a short product noun phrase from the generated description.
+
+    This is a guardrail, not a second model. It is intentionally conservative:
+    use only the opening product phrase and reject it if it still looks generic.
+    """
+    cleaned = _clean_str(description, max_len=180)
+    if not cleaned:
+        return None
+    first_sentence = re.split(r"[.!?\n]", cleaned, maxsplit=1)[0]
+    phrase = _TITLE_LEADING_NOISE_RE.sub("", first_sentence).strip(" ,:-")
+    phrase = _TITLE_SUBJECTIVE_WORD_RE.sub("", phrase)
+    phrase = _TITLE_CLAUSE_CUT_RE.split(phrase, maxsplit=1)[0]
+    phrase = re.sub(r"\s+", " ", phrase).strip(" ,:-")
+    words = phrase.split()
+    if len(words) > 8:
+        phrase = " ".join(words[:8])
+    phrase = _clean_str(phrase, max_len=80)
+    if not phrase or is_generic_listing_title(phrase):
+        return None
+    return phrase
+
+
+def _specific_product_phrase(
+    *,
+    detected_item_type: str | None,
+    title_suggestion: str | None,
+    description_suggestion: str | None,
+) -> str | None:
+    for candidate in (
+        detected_item_type,
+        title_suggestion,
+        _description_title_candidate(description_suggestion),
+    ):
+        cleaned = _clean_str(candidate, max_len=80)
+        if cleaned and not is_generic_listing_title(cleaned):
+            return cleaned
+    return None
+
+
+def _repair_title_and_item_type(
+    *,
+    title_suggestion: str | None,
+    detected_item_type: str | None,
+    description_suggestion: str | None,
+) -> tuple[str | None, str | None, bool]:
+    """Return safe title, safe item type, and whether seller should review title."""
+    specific_phrase = _specific_product_phrase(
+        detected_item_type=detected_item_type,
+        title_suggestion=title_suggestion,
+        description_suggestion=description_suggestion,
+    )
+    safe_item_type = (
+        _clean_str(detected_item_type, max_len=80)
+        if detected_item_type and not is_generic_listing_title(detected_item_type)
+        else specific_phrase
+    )
+    safe_title = (
+        _clean_str(title_suggestion, max_len=80)
+        if title_suggestion and not is_generic_listing_title(title_suggestion)
+        else specific_phrase
+    )
+    title_repaired = bool(
+        title_suggestion
+        and is_generic_listing_title(title_suggestion)
+        and safe_title
+    )
+    return safe_title, safe_item_type, title_repaired
+
+
 def _v2_blocking_flags(blocking: _V2BlockingFlags) -> list[str]:
     flags: list[str] = []
     if blocking.product_not_visible:
@@ -1581,6 +1669,33 @@ def _apply_post_processing_guardrails(detected: AIDetected) -> AIDetected:
 
     # Rule 2: flags that block pricing.
     fe = detected.field_evidence or {}
+    field_confidence = dict(detected.field_confidence or {})
+    seller_edit_fields = list(detected.seller_edit_fields or [])
+    category_specifics = dict(detected.category_specifics or {})
+    title_suggestion, detected_item_type, title_repaired = _repair_title_and_item_type(
+        title_suggestion=detected.title_suggestion,
+        detected_item_type=detected.detected_item_type,
+        description_suggestion=detected.description_suggestion,
+    )
+    if title_repaired or not title_suggestion:
+        if "title" not in seller_edit_fields:
+            seller_edit_fields.append("title")
+    if title_repaired:
+        field_confidence["title_suggestion"] = min(
+            _confidence(field_confidence.get("title_suggestion") or 0.72),
+            0.72,
+        )
+    elif not title_suggestion:
+        field_confidence["title_suggestion"] = 0.0
+
+    if detected_item_type:
+        if detected.category_family == "toy" and is_generic_listing_title(category_specifics.get("toy_type")):
+            category_specifics["toy_type"] = detected_item_type
+        elif detected.category_family == "book" and is_generic_listing_title(category_specifics.get("book_type")):
+            category_specifics["book_type"] = detected_item_type
+        elif detected.category_family == "appliance" and is_generic_listing_title(category_specifics.get("appliance_type")):
+            category_specifics["appliance_type"] = detected_item_type
+
     suggested_price_inr = detected.suggested_price_inr
     price_confidence = detected.price_confidence
     price_reasoning = detected.price_reasoning
@@ -1669,9 +1784,14 @@ def _apply_post_processing_guardrails(detected: AIDetected) -> AIDetected:
         "mrp_confidence": mrp_confidence,
         "mrp_source": mrp_source,
         "mrp_reasoning": mrp_reasoning,
+        "title_suggestion": title_suggestion,
+        "detected_item_type": detected_item_type,
+        "category_specifics": category_specifics,
         "manual_review_required": manual_review_required,
         "auto_publish_candidate": auto_publish_candidate,
         "blocking_reasons": blocking_reasons,
+        "seller_edit_fields": list(dict.fromkeys(seller_edit_fields))[:12],
+        "field_confidence": field_confidence,
     }
     update_kwargs.update(forced_specs)
     return detected.model_copy(update=update_kwargs)

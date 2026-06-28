@@ -57,6 +57,7 @@ from app.modules.ai_assistant.category_taxonomy import (
     clean_category_specifics,
     has_educational_book_detail,
     has_issue_disclosure_detail,
+    is_generic_listing_title,
     is_meaningful_other_detail,
     required_category_specific_fields,
     requires_appliance_pickup_status,
@@ -261,6 +262,13 @@ def _publish_rejection_detail(draft_ai_response: dict) -> dict | None:
 
 def _publish_detail_rejection(category_slug: str, payload: CreateFromDraftRequest) -> dict | None:
     """Require enough seller-confirmed structure for launch-risk categories."""
+    if is_generic_listing_title(payload.title):
+        return {
+            "error": "TITLE_DETAILS_REQUIRED",
+            "fields": ["title"],
+            "message": "Add a specific product title before publishing.",
+        }
+
     if category_slug != "others":
         return None
 
@@ -306,11 +314,26 @@ def _with_seeded_category_specifics(
     raw_specifics = payload.category_specifics if isinstance(payload.category_specifics, dict) else {}
     specifics = clean_category_specifics(category_family, raw_specifics)
 
-    if category_family == "toy" and not _specific_present(specifics.get("toy_type")) and payload.model:
+    if (
+        category_family == "toy"
+        and not _specific_present(specifics.get("toy_type"))
+        and payload.model
+        and not is_generic_listing_title(payload.model)
+    ):
         specifics["toy_type"] = payload.model
-    if category_family == "book" and not _specific_present(specifics.get("book_type")) and payload.model:
+    if (
+        category_family == "book"
+        and not _specific_present(specifics.get("book_type"))
+        and payload.model
+        and not is_generic_listing_title(payload.model)
+    ):
         specifics["book_type"] = payload.model
-    if category_family == "appliance" and not _specific_present(specifics.get("appliance_type")) and payload.model:
+    if (
+        category_family == "appliance"
+        and not _specific_present(specifics.get("appliance_type"))
+        and payload.model
+        and not is_generic_listing_title(payload.model)
+    ):
         specifics["appliance_type"] = payload.model
 
     return specifics
@@ -328,12 +351,37 @@ def _publish_category_specifics_rejection(
     if category_family not in {"toy", "book", "appliance"}:
         return None
 
+    effective_specifics = dict(category_specifics or {})
+    if (
+        category_family == "toy"
+        and not _specific_present(effective_specifics.get("toy_type"))
+        and payload.model
+        and not is_generic_listing_title(payload.model)
+    ):
+        effective_specifics["toy_type"] = payload.model
+    if (
+        category_family == "book"
+        and not _specific_present(effective_specifics.get("book_type"))
+        and payload.model
+        and not is_generic_listing_title(payload.model)
+    ):
+        effective_specifics["book_type"] = payload.model
+    if (
+        category_family == "appliance"
+        and not _specific_present(effective_specifics.get("appliance_type"))
+        and payload.model
+        and not is_generic_listing_title(payload.model)
+    ):
+        effective_specifics["appliance_type"] = payload.model
+
     missing: list[str] = []
     for field in required_category_specific_fields(category_family):
-        if not _specific_present(category_specifics.get(field)):
+        if not _specific_present(effective_specifics.get(field)):
             missing.append(field)
 
     if category_family == "toy":
+        if is_generic_listing_title(effective_specifics.get("toy_type")):
+            missing.append("toy_type")
         if not _specific_present(payload.age_suitability):
             missing.append("age_suitability")
         if not _specific_present(payload.hygiene_status):
@@ -348,23 +396,29 @@ def _publish_category_specifics_rejection(
             if not all(key in (kids_safety_checklist or {}) for key in required_checklist):
                 missing.append("kids_safety_checklist")
 
+    if category_family == "book" and is_generic_listing_title(effective_specifics.get("book_type")):
+        missing.append("book_type")
+
     if category_family == "book" and requires_book_set_status(payload.model, payload.title):
-        if not _specific_present(category_specifics.get("set_status")):
+        if not _specific_present(effective_specifics.get("set_status")):
             missing.append("set_status")
     if category_family == "book" and requires_educational_book_details(payload.model, payload.title):
-        if not has_educational_book_detail(category_specifics):
+        if not has_educational_book_detail(effective_specifics):
             missing.append("class_board_edition")
 
     if category_family == "appliance":
-        if not _specific_present(category_specifics.get("appliance_type")):
+        if (
+            not _specific_present(effective_specifics.get("appliance_type"))
+            or is_generic_listing_title(effective_specifics.get("appliance_type"))
+        ):
             missing.append("appliance_type")
         if requires_appliance_pickup_status(payload.model, payload.title):
-            if not _specific_present(category_specifics.get("pickup_complexity")):
+            if not _specific_present(effective_specifics.get("pickup_complexity")):
                 missing.append("pickup_complexity")
-            if not _specific_present(category_specifics.get("installation_status")):
+            if not _specific_present(effective_specifics.get("installation_status")):
                 missing.append("installation_status")
     if (
-        requires_issue_disclosure_detail(category_family, category_specifics)
+        requires_issue_disclosure_detail(category_family, effective_specifics)
         and not has_issue_disclosure_detail(description)
     ):
         missing.append("issue_disclosure")

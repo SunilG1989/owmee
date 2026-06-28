@@ -96,9 +96,9 @@ def test_other_publish_requires_specific_product_type():
         model="item",
     )
     assert _publish_detail_rejection("others", generic_payload) == {
-        "error": "OTHER_DETAILS_REQUIRED",
+        "error": "TITLE_DETAILS_REQUIRED",
         "fields": ["title"],
-        "message": "Add a specific title for this Other category listing.",
+        "message": "Add a specific product title before publishing.",
     }
 
     missing_type_payload = generic_payload.model_copy(update={
@@ -113,6 +113,23 @@ def test_other_publish_requires_specific_product_type():
 
     valid_payload = missing_type_payload.model_copy(update={"model": "wireless headphones"})
     assert _publish_detail_rejection("others", valid_payload) is None
+
+
+def test_publish_rejects_placeholder_colour_titles_for_any_category():
+    payload = CreateFromDraftRequest(
+        draft_id=uuid4(),
+        title="Other Pink",
+        price=500,
+        condition="good",
+        category_slug="kids-utility",
+        model="Other",
+    )
+
+    assert _publish_detail_rejection("kids-utility", payload) == {
+        "error": "TITLE_DETAILS_REQUIRED",
+        "fields": ["title"],
+        "message": "Add a specific product title before publishing.",
+    }
 
 
 def test_identifier_requirement_tracks_canonical_category():
