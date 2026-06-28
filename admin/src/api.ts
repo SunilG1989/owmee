@@ -166,8 +166,35 @@ export const AdminFE = {
     req('GET', `/v1/admin/fe-visits/${visitId}`),
   listFEs: (activeOnly = true) =>
     req('GET', `/v1/admin/fe-visits/fes?active_only=${activeOnly}`),
-  createFE: (userId: string, city: string) =>
-    req('POST', '/v1/admin/fe-visits/fes', { user_id: userId, city }),
+  getFE: (feId: string) =>
+    req('GET', `/v1/admin/fe-visits/fes/${feId}`),
+  createFE: (body: {
+    user_id?: string;
+    phone_number?: string;
+    city: string;
+    employment_type?: 'internal' | 'contractor' | 'vendor_staff';
+    vendor_name?: string;
+    service_zones?: string[];
+    category_certifications?: string[];
+    languages?: string[];
+    daily_capacity?: number;
+    admin_notes?: string;
+  }) =>
+    req('POST', '/v1/admin/fe-visits/fes', body),
+  updateFE: (feId: string, body: Record<string, unknown>) =>
+    req('PATCH', `/v1/admin/fe-visits/fes/${feId}`, body),
+  updateFEVerification: (feId: string, status: string, note?: string) =>
+    req('POST', `/v1/admin/fe-visits/fes/${feId}/verification`, { status, note }),
+  updateFETraining: (feId: string, status: string, note?: string) =>
+    req('POST', `/v1/admin/fe-visits/fes/${feId}/training`, { status, note }),
+  decideFEDevice: (feId: string, approved: boolean, note?: string) =>
+    req('POST', `/v1/admin/fe-visits/fes/${feId}/device`, { approved, note }),
+  activateFE: (feId: string) =>
+    req('POST', `/v1/admin/fe-visits/fes/${feId}/activate`),
+  suspendFE: (feId: string, reason: string) =>
+    req('POST', `/v1/admin/fe-visits/fes/${feId}/suspend`, { reason }),
+  deactivateFE: (feId: string, reason?: string) =>
+    req('POST', `/v1/admin/fe-visits/fes/${feId}/deactivate`, { reason }),
   assign: (
     visitId: string,
     feId: string,
@@ -210,6 +237,8 @@ export const AdminListings = {
 export const DirectOps = {
   listBookings: (statusFilter?: string) =>
     req('GET', `/v1/ops/bookings${statusFilter ? `?status=${statusFilter}` : ''}`),
+  riskBookings: () =>
+    req('GET', '/v1/ops/risk-bookings'),
   assignFe: (bookingId: string, feId: string) =>
     req('POST', `/v1/ops/bookings/${bookingId}/assign-fe`, {
       fe_id: feId,
@@ -225,10 +254,19 @@ export const DirectOps = {
       success: false,
       failure_reason: failureReason,
     }),
+  retryPayout: (bookingId: string) =>
+    req('POST', `/v1/ops/bookings/${bookingId}/retry-payout`),
   warehouseReceive: (bookingId: string, receiptCode?: string, notes?: string) =>
     req('POST', `/v1/ops/bookings/${bookingId}/warehouse-receive`, {
+      outcome: 'received',
       receipt_code: receiptCode,
       notes,
+    }),
+  warehouseMismatch: (bookingId: string, mismatchReason: string, receiptCode?: string) =>
+    req('POST', `/v1/ops/bookings/${bookingId}/warehouse-receive`, {
+      outcome: 'mismatch',
+      receipt_code: receiptCode,
+      mismatch_reason: mismatchReason,
     }),
   priceApprovals: (status = 'pending') =>
     req('GET', `/v1/ops/price-approvals?status=${status}`),

@@ -48,7 +48,7 @@ async def make_fe(phone: str, db: DBSession, city: str = "Bengaluru"):
             },
         )
 
-    fe = await fe_service.create_fe_for_user(db, user=user, city=city)
+    fe = await fe_service.create_fe_for_user(db, user=user, city=city, active=True)
     await db.commit()
     logger.info("dev.make_fe", user_id=str(user.id), fe_code=fe.fe_code)
     return {

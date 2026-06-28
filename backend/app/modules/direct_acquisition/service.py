@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import secrets
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
@@ -9,6 +10,23 @@ from typing import Iterable
 
 SUPPORTED_DIRECT_CATEGORIES = {"toys", "books"}
 OTP_MAX_ATTEMPTS = 5
+FE_GEOFENCE_RADIUS_M = 500
+FE_MAX_LOCATION_ACCURACY_M = 1_500
+
+BASE_QC_REQUIRED_KEYS = {
+    "matched_seller_photos",
+    "condition_confirmed",
+    "price_confirmed",
+    "custody_photo_captured",
+}
+TOYS_QC_REQUIRED_KEYS = BASE_QC_REQUIRED_KEYS | {
+    "parts_complete_or_disclosed",
+    "safety_issue_absent",
+}
+BOOKS_QC_REQUIRED_KEYS = BASE_QC_REQUIRED_KEYS | {
+    "language_confirmed",
+    "pages_complete_or_disclosed",
+}
 
 BOOKING_TERMINAL_STATUSES = {
     "seller_cancelled_before_visit",
@@ -132,6 +150,116 @@ def assert_otp_attempt_allowed(*, attempts: int, expires_at: datetime | None, pu
             raise DirectAcquisitionError("OTP_EXPIRED", f"{purpose} OTP has expired.")
 
 
+def append_risk_flag(booking, code: str, message: str, **details) -> None:
+    flags = list(getattr(booking, "risk_flags", None) or [])
+    flags.append({
+        "code": code,
+        "message": message,
+        "details": {k: v for k, v in details.items() if v is not None},
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    booking.risk_flags = flags
+
+
+def pickup_coordinates(booking) -> tuple[float, float] | None:
+    snapshot = getattr(booking, "pickup_address_snapshot", None) or {}
+    try:
+        lat = snapshot.get("lat")
+        lng = snapshot.get("lng")
+        if lat is None or lng is None:
+            return None
+        return float(lat), float(lng)
+    except (TypeError, ValueError):
+        return None
+
+
+def location_coordinates(location: dict | None) -> tuple[float, float] | None:
+    if not location:
+        return None
+    try:
+        lat = location.get("lat")
+        lng = location.get("lng")
+        if lat is None or lng is None:
+            return None
+        return float(lat), float(lng)
+    except (TypeError, ValueError):
+        return None
+
+
+def distance_meters(a: tuple[float, float], b: tuple[float, float]) -> int:
+    lat1, lng1 = a
+    lat2, lng2 = b
+    radius_m = 6_371_000
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lam = math.radians(lng2 - lng1)
+    hav = (
+        math.sin(delta_phi / 2) ** 2
+        + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lam / 2) ** 2
+    )
+    return round(radius_m * 2 * math.atan2(math.sqrt(hav), math.sqrt(1 - hav)))
+
+
+def assert_location_payload_present(location: dict | None, *, purpose: str) -> None:
+    if not location_coordinates(location):
+        raise DirectAcquisitionError("FE_LOCATION_REQUIRED", f"{purpose} requires FE GPS location.")
+    accuracy = (location or {}).get("accuracy_meters")
+    try:
+        accuracy_value = float(accuracy) if accuracy is not None else None
+    except (TypeError, ValueError):
+        accuracy_value = None
+    if accuracy_value is not None and accuracy_value > FE_MAX_LOCATION_ACCURACY_M:
+        raise DirectAcquisitionError(
+            "FE_LOCATION_TOO_BROAD",
+            f"{purpose} GPS accuracy is too broad. Please retry closer to the pickup address.",
+        )
+
+
+def assert_fe_location_near_pickup(
+    booking,
+    location: dict | None,
+    *,
+    purpose: str,
+    radius_m: int = FE_GEOFENCE_RADIUS_M,
+) -> int:
+    assert_location_payload_present(location, purpose=purpose)
+    pickup = pickup_coordinates(booking)
+    if pickup is None:
+        raise DirectAcquisitionError(
+            "PICKUP_LOCATION_MISSING",
+            "Pickup address coordinates are missing. Ask Ops to fix the seller address before proceeding.",
+        )
+    current = location_coordinates(location)
+    assert current is not None
+    distance = distance_meters(pickup, current)
+    if distance > radius_m:
+        raise DirectAcquisitionError(
+            "FE_GEOFENCE_MISMATCH",
+            f"{purpose} is {distance}m from pickup address; limit is {radius_m}m.",
+        )
+    return distance
+
+
+def required_qc_answer_keys(item) -> set[str]:
+    category = (getattr(item, "category", "") or "").lower()
+    if category == "toys":
+        return set(TOYS_QC_REQUIRED_KEYS)
+    if category == "books":
+        return set(BOOKS_QC_REQUIRED_KEYS)
+    return set(BASE_QC_REQUIRED_KEYS)
+
+
+def assert_qc_answers_complete(item) -> None:
+    answers = getattr(item, "qc_answers", None) or {}
+    missing = [key for key in sorted(required_qc_answer_keys(item)) if answers.get(key) is not True]
+    if missing:
+        raise DirectAcquisitionError(
+            "QC_CHECKLIST_INCOMPLETE",
+            f"Complete FE QC before accepting item. Missing: {', '.join(missing)}",
+        )
+
+
 def assert_item_can_be_qced(booking, item) -> None:
     assert_seller_verified(booking)
     if getattr(item, "item_status", None) in {"rejected", "acquired", "warehouse_inbound"}:
@@ -223,6 +351,12 @@ def assert_payout_process_allowed(booking) -> None:
         raise DirectAcquisitionError("PAYOUT_NOT_READY", "FE must submit payout-ready before Finance can process payout.")
     if not getattr(booking, "payout_ready_at", None):
         raise DirectAcquisitionError("PAYOUT_NOT_READY", "Payout-ready timestamp is missing.")
+    _assert_positive_final_payout(booking)
+
+
+def assert_payout_retry_allowed(booking) -> None:
+    if getattr(booking, "status", None) != "payout_failed":
+        raise DirectAcquisitionError("PAYOUT_NOT_FAILED", "Only failed Direct payouts can be retried.")
     _assert_positive_final_payout(booking)
 
 

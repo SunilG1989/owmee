@@ -22,11 +22,20 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { launchCamera } from 'react-native-image-picker';
 
-import { FE, type DirectAcquisitionBooking, type DirectAcquisitionItem } from '../../services/api';
+import {
+  FE,
+  type DirectAcquisitionBooking,
+  type DirectAcquisitionItem,
+  type DirectLocationPayload,
+} from '../../services/api';
 import { Button, IconButton } from '../../components/ui';
 import type { RootScreen } from '../../navigation/types';
 import { C, R, S, Shadow, T, formatPrice } from '../../utils/tokens';
 import { parseApiError } from '../../utils/errors';
+import {
+  getBestCurrentLocationFix,
+  requestFineLocationPermission,
+} from '../../utils/locationGps';
 
 function formatSlot(startIso: string, endIso: string): string {
   try {
@@ -46,6 +55,44 @@ function statusLabel(status: string): string {
 
 function isPayable(item: DirectAcquisitionItem): boolean {
   return item.item_status === 'qc_passed' || item.item_status === 'qc_revised';
+}
+
+function qcAnswersFor(item: DirectAcquisitionItem): Record<string, boolean> {
+  const base = {
+    matched_seller_photos: true,
+    condition_confirmed: true,
+    price_confirmed: true,
+    custody_photo_captured: true,
+  };
+  if (item.category === 'toys') {
+    return {
+      ...base,
+      parts_complete_or_disclosed: true,
+      safety_issue_absent: true,
+    };
+  }
+  if (item.category === 'books') {
+    return {
+      ...base,
+      language_confirmed: true,
+      pages_complete_or_disclosed: true,
+    };
+  }
+  return base;
+}
+
+async function getDirectLocationPayload(): Promise<DirectLocationPayload> {
+  const granted = await requestFineLocationPermission();
+  if (!granted) {
+    throw new Error('Location permission is required for Direct pickup custody steps.');
+  }
+  const fix = await getBestCurrentLocationFix();
+  return {
+    lat: fix.lat,
+    lng: fix.lng,
+    accuracy_meters: fix.accuracy,
+    source: fix.source,
+  };
 }
 
 async function requestCameraPermission(): Promise<boolean> {
@@ -203,7 +250,7 @@ export default function FeDirectBookingDetailScreen({
           {booking.status === 'assigned_to_fe' ? (
             <Button
               label="Start route"
-              onPress={() => run('start', () => FE.startDirectBooking(booking.id))}
+              onPress={() => run('start', async () => FE.startDirectBooking(booking.id, await getDirectLocationPayload()))}
               loading={busy === 'start'}
               disabled={!!busy}
               fullWidth
@@ -214,7 +261,7 @@ export default function FeDirectBookingDetailScreen({
           {booking.status === 'fe_en_route' ? (
             <Button
               label="Mark arrived"
-              onPress={() => run('arrive', () => FE.arriveDirectBooking(booking.id))}
+              onPress={() => run('arrive', async () => FE.arriveDirectBooking(booking.id, await getDirectLocationPayload()))}
               loading={busy === 'arrive'}
               disabled={!!busy}
               fullWidth
@@ -273,7 +320,15 @@ export default function FeDirectBookingDetailScreen({
                 />
                 <Button
                   label="Seller accepts final payout"
-                  onPress={() => run('final', () => FE.directSellerFinalAcceptance(booking.id, true, finalOtp))}
+                  onPress={() => run(
+                    'final',
+                    async () => FE.directSellerFinalAcceptance(
+                      booking.id,
+                      true,
+                      finalOtp,
+                      await getDirectLocationPayload(),
+                    ),
+                  )}
                   disabled={!!busy || !canRequestFinalAcceptance}
                   loading={busy === 'final'}
                   fullWidth
@@ -416,7 +471,7 @@ function DirectItemCard({
           onPress={() => run(
             `qc-${item.id}`,
             () => FE.directItemQc(booking.id, item.id, {
-              qc_answers: { matched_seller_photos: true, no_blocked_issue: true },
+              qc_answers: qcAnswersFor(item),
               qc_notes: 'FE accepted item after physical QC.',
               pickup_photos: item.pickup_photos,
             }),

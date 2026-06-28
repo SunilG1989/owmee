@@ -54,12 +54,14 @@ const getKycFlowScreen = screen(() => require('../screens/auth/KycFlowScreen'));
 const getKycRequiredForActionScreen = screen(() => require('../screens/KycRequiredForActionScreen'));
 const getMyListingsScreen = screen(() => require('../screens/listings/MyListingsScreen'));
 const getMyFeVisitsScreen = screen(() => require('../screens/profile/MyFeVisitsScreen'));
+const getMyDirectPickupsScreen = screen(() => require('../screens/profile/MyDirectPickupsScreen'));
 const getWishlistScreen = screen(() => require('../screens/profile/WishlistScreen'));
 const getTransactionListScreen = screen(() => require('../screens/profile/TransactionListScreen'));
 const getEditProfileScreen = screen(() => require('../screens/profile/EditProfileScreen'));
 const getSellerProfileScreen = screen(() => require('../screens/profile/SellerProfileScreen'));
 const getCheckoutScreen = screen(() => require('../screens/purchase/CheckoutScreen'));
 const getOrderConfirmationScreen = screen(() => require('../screens/purchase/OrderConfirmationScreen'));
+const getFeOnboardingScreen = screen(() => require('../screens/fe/FeOnboardingScreen'));
 const getFeHomeScreen = screen(() => require('../screens/fe/FeHomeScreen'));
 const getFeOpsScreen = screen(() => require('../screens/fe/FeOpsScreen'));
 const getFeVisitDetailScreen = screen(() => require('../screens/fe/FeVisitDetailScreen'));
@@ -435,7 +437,8 @@ function MainTabs() {
 function FeRootStack() {
   return (
     <NavigationContainer>
-      <FeStack.Navigator screenOptions={{ headerShown: false, freezeOnBlur: true }} initialRouteName="FeHome">
+      <FeStack.Navigator screenOptions={{ headerShown: false, freezeOnBlur: true }} initialRouteName="FeOnboarding">
+        <FeStack.Screen name="FeOnboarding" getComponent={getFeOnboardingScreen} />
         <FeStack.Screen name="FeHome" getComponent={getFeHomeScreen} />
         <FeStack.Screen name="FeOps" getComponent={getFeOpsScreen} options={{ animation: 'slide_from_right' }} />
         <FeStack.Screen name="FeVisitDetail" getComponent={getFeVisitDetailScreen} options={{ animation: 'slide_from_right' }} />
@@ -566,6 +569,7 @@ export default function RootNavigator() {
           {/* Profile sub-screens */}
           <RootStack.Screen name="MyListings" getComponent={getMyListingsScreen} options={{ animation: 'slide_from_right' }} />
           <RootStack.Screen name="MyFeVisits" getComponent={getMyFeVisitsScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="MyDirectPickups" getComponent={getMyDirectPickupsScreen} options={{ animation: 'slide_from_right' }} />
           <RootStack.Screen name="SavedItems" getComponent={getWishlistScreen} options={{ animation: 'slide_from_right' }} />
           <RootStack.Screen name="TransactionList" getComponent={getTransactionListScreen} options={{ animation: 'slide_from_right' }} />
           <RootStack.Screen name="EditProfile" getComponent={getEditProfileScreen} options={{ animation: 'slide_from_right' }} />

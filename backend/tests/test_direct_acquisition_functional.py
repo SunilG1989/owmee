@@ -65,6 +65,7 @@ class _DB:
 def _item(**overrides):
     base = dict(
         id=uuid4(),
+        draft_listing_id=None,
         category="toys",
         item_type="wooden puzzle",
         item_title="Wooden puzzle board",
@@ -117,6 +118,8 @@ def _booking(**overrides):
             "locality": "HSR Layout",
             "city": "Bengaluru",
             "pincode": "560102",
+            "lat": 12.911,
+            "lng": 77.641,
         },
         pickup_locality="HSR Layout",
         pickup_pincode="560102",
@@ -140,8 +143,8 @@ def _booking(**overrides):
         fe_started_at=None,
         fe_arrived_at=None,
         fe_start_location={},
-        fe_arrival_location={},
-        seller_verified_location={},
+        fe_arrival_location={"lat": 12.911, "lng": 77.641, "accuracy_meters": 40},
+        seller_verified_location={"lat": 12.911, "lng": 77.641, "accuracy_meters": 40},
         seller_final_acceptance_location={},
         verified_at=now,
         seller_final_accepted_at=None,
@@ -197,6 +200,7 @@ def test_direct_acquisition_routes_are_registered_and_no_off_platform_routes():
         "/v1/direct-sell/bookings/{booking_id}",
         "/v1/direct-sell/bookings/{booking_id}/verification-codes",
         "/v1/direct-sell/bookings/{booking_id}/cancel",
+        "/v1/ops/risk-bookings",
         "/v1/fe/bookings",
         "/v1/fe/bookings/{booking_id}",
         "/v1/fe/bookings/{booking_id}/start",
@@ -214,6 +218,7 @@ def test_direct_acquisition_routes_are_registered_and_no_off_platform_routes():
         "/v1/ops/bookings",
         "/v1/ops/bookings/{booking_id}/assign-fe",
         "/v1/ops/bookings/{booking_id}/process-payout",
+        "/v1/ops/bookings/{booking_id}/retry-payout",
         "/v1/ops/bookings/{booking_id}/warehouse-receive",
         "/v1/ops/price-approvals",
         "/v1/ops/price-approvals/{approval_id}/approve",
@@ -303,6 +308,55 @@ async def test_fe_reject_all_items_closes_booking_without_payout(monkeypatch):
     assert booking.status == "item_rejected_by_fe"
     assert item.item_status == "rejected"
     assert out["status"] == "item_rejected_by_fe"
+
+
+@pytest.mark.asyncio
+async def test_fe_arrival_outside_geofence_moves_booking_to_fraud_review(monkeypatch):
+    fe_id = uuid4()
+    booking = _booking(status="fe_en_route", assigned_fe_id=fe_id)
+    await _patch_current_fe(monkeypatch, fe_id)
+    _patch_booking_loader(monkeypatch, booking)
+    db = _DB()
+
+    with pytest.raises(HTTPException) as exc:
+        await router.fe_arrive_booking(
+            booking.id,
+            SimpleNamespace(user_id=uuid4()),
+            db,
+            router.FeVisitCheckpointRequest(
+                location=router.LocationPayload(lat=28.6139, lng=77.2090, accuracy_meters=30, source="fresh"),
+            ),
+        )
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["error"] == "FE_GEOFENCE_MISMATCH"
+    assert booking.status == "fraud_review"
+    assert db.committed is True
+    assert booking.risk_flags[-1]["code"] == "FE_GEOFENCE_MISMATCH"
+
+
+@pytest.mark.asyncio
+async def test_fe_item_qc_requires_category_checklist(monkeypatch):
+    fe_id = uuid4()
+    item = _item(item_status="pending_qc")
+    booking = _booking(status="seller_verified", assigned_fe_id=fe_id, items=[item])
+    await _patch_current_fe(monkeypatch, fe_id)
+    _patch_booking_loader(monkeypatch, booking, item)
+
+    with pytest.raises(HTTPException) as exc:
+        await router.fe_item_qc(
+            booking.id,
+            item.id,
+            router.ItemQcRequest(
+                qc_answers={"matched_seller_photos": True},
+                pickup_photos=["pickup/front.jpg"],
+            ),
+            SimpleNamespace(user_id=uuid4()),
+            _DB(),
+        )
+
+    assert exc.value.status_code == 400
+    assert exc.value.detail["error"] == "QC_CHECKLIST_INCOMPLETE"
 
 
 @pytest.mark.asyncio
@@ -402,6 +456,32 @@ async def test_finance_process_payout_posts_single_seller_ledger_entry(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_finance_can_retry_failed_direct_payout(monkeypatch):
+    item = _item(item_status="qc_passed", fe_final_offer_inr=100)
+    booking = _booking(
+        status="payout_failed",
+        items=[item],
+        final_total_payout_inr=100,
+        seller_final_accepted_at=datetime.now(timezone.utc),
+        payout_failure_reason="Bank rejected credit.",
+    )
+    _patch_booking_loader(monkeypatch, booking)
+    db = _DB()
+
+    out = await router.retry_payout(
+        booking.id,
+        SimpleNamespace(admin_id=uuid4()),
+        db,
+    )
+
+    assert db.committed is True
+    assert booking.status == "payout_ready"
+    assert booking.payout_status == "ready_for_finance"
+    assert booking.risk_flags[-1]["code"] == "PAYOUT_RETRY_REQUESTED"
+    assert out["status"] == "payout_ready"
+
+
+@pytest.mark.asyncio
 async def test_fe_cannot_complete_handover(monkeypatch):
     fe_id = uuid4()
     payable = _item(item_status="qc_passed", fe_final_offer_inr=100)
@@ -444,6 +524,30 @@ async def test_warehouse_receive_moves_only_payable_items_to_warehouse(monkeypat
     assert payable.item_status == "warehouse_inbound"
     assert rejected.item_status == "rejected"
     assert out["status"] == "booking_completed"
+
+
+@pytest.mark.asyncio
+async def test_warehouse_mismatch_quarantines_payable_items(monkeypatch):
+    payable = _item(item_status="qc_passed", fe_final_offer_inr=100)
+    booking = _booking(
+        status="payout_completed",
+        items=[payable],
+        payout_completed_at=datetime.now(timezone.utc),
+    )
+    _patch_booking_loader(monkeypatch, booking)
+
+    out = await router.warehouse_receive(
+        booking.id,
+        router.WarehouseReceiveRequest(outcome="mismatch", mismatch_reason="Seal code does not match."),
+        SimpleNamespace(admin_id=uuid4()),
+        _DB(),
+    )
+
+    assert booking.status == "fraud_review"
+    assert payable.item_status == "quarantined"
+    assert payable.warehouse_status == "mismatch"
+    assert booking.risk_flags[-1]["code"] == "WAREHOUSE_MISMATCH"
+    assert out["status"] == "fraud_review"
 
 
 @pytest.mark.asyncio
@@ -497,3 +601,22 @@ async def test_admin_listing_approval_requires_warehouse_inbound_item():
 
     assert exc.value.status_code == 409
     assert exc.value.detail["error"] == "ITEM_NOT_READY_FOR_ADMIN_APPROVAL"
+
+
+@pytest.mark.asyncio
+async def test_admin_listing_approval_requires_linked_draft_listing():
+    item = _item(item_status="warehouse_inbound", draft_listing_id=None)
+    db = _DB(get_value=item)
+
+    with pytest.raises(HTTPException) as exc:
+        await router.approve_direct_listing(
+            item.id,
+            ListingApprovalDecisionRequest(note="Ready"),
+            SimpleNamespace(admin_id=uuid4()),
+            db,
+        )
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["error"] == "DRAFT_LISTING_REQUIRED"
+    assert item.item_status == "listing_draft_required"
+    assert db.committed is True

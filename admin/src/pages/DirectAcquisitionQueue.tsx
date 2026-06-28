@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AdminFE, DirectOps } from '../api';
 
-type ViewMode = 'dispatch' | 'price' | 'finance' | 'warehouse' | 'listing';
+type ViewMode = 'dispatch' | 'price' | 'finance' | 'warehouse' | 'listing' | 'exceptions';
 
 interface DirectItem {
   id: string;
@@ -41,7 +41,7 @@ interface DirectBooking {
   payout_failure_reason?: string | null;
   warehouse_received_at?: string | null;
   warehouse_receipt_code?: string | null;
-  risk_flags?: string[];
+  risk_flags?: Array<string | Record<string, any>>;
   items: DirectItem[];
 }
 
@@ -77,6 +77,7 @@ const VIEWS: Array<{ key: ViewMode; label: string }> = [
   { key: 'price', label: 'Price approvals' },
   { key: 'finance', label: 'Finance payout' },
   { key: 'warehouse', label: 'Warehouse intake' },
+  { key: 'exceptions', label: 'Exceptions' },
   { key: 'listing', label: 'Listing approvals' },
 ];
 
@@ -109,6 +110,9 @@ export default function DirectAcquisitionQueue() {
         setBookings(res?.bookings || []);
       } else if (view === 'warehouse') {
         const res: any = await DirectOps.listBookings('payout_completed');
+        setBookings(res?.bookings || []);
+      } else if (view === 'exceptions') {
+        const res: any = await DirectOps.riskBookings();
         setBookings(res?.bookings || []);
       } else {
         const res: any = await DirectOps.listingApprovals('pending');
@@ -178,6 +182,16 @@ export default function DirectAcquisitionQueue() {
     }
   };
 
+  const retryPayout = async (bookingId: string) => {
+    try {
+      await DirectOps.retryPayout(bookingId);
+      setMessage('Failed payout moved back to Finance queue.');
+      await load();
+    } catch (e: any) {
+      setMessage(e.message || 'Payout retry failed');
+    }
+  };
+
   const receiveWarehouse = async (bookingId: string) => {
     try {
       await DirectOps.warehouseReceive(bookingId);
@@ -185,6 +199,18 @@ export default function DirectAcquisitionQueue() {
       await load();
     } catch (e: any) {
       setMessage(e.message || 'Warehouse receive failed');
+    }
+  };
+
+  const markWarehouseMismatch = async (bookingId: string) => {
+    const reason = window.prompt('Warehouse mismatch reason');
+    if (!reason?.trim()) return;
+    try {
+      await DirectOps.warehouseMismatch(bookingId, reason.trim());
+      setMessage('Warehouse mismatch moved to Exceptions.');
+      await load();
+    } catch (e: any) {
+      setMessage(e.message || 'Warehouse mismatch action failed');
     }
   };
 
@@ -241,7 +267,9 @@ export default function DirectAcquisitionQueue() {
       ) : view === 'finance' ? (
         <FinancePayoutList bookings={bookings} onPost={processPayout} onFail={failPayout} />
       ) : view === 'warehouse' ? (
-        <WarehouseReceiveList bookings={bookings} onReceive={receiveWarehouse} />
+        <WarehouseReceiveList bookings={bookings} onReceive={receiveWarehouse} onMismatch={markWarehouseMismatch} />
+      ) : view === 'exceptions' ? (
+        <ExceptionList bookings={bookings} onRetryPayout={retryPayout} />
       ) : (
         <ListingApprovalList items={listingItems} onDecision={decideListing} />
       )}
@@ -371,9 +399,11 @@ function FinancePayoutList({
 function WarehouseReceiveList({
   bookings,
   onReceive,
+  onMismatch,
 }: {
   bookings: DirectBooking[];
   onReceive: (bookingId: string) => void;
+  onMismatch: (bookingId: string) => void;
 }) {
   if (bookings.length === 0) {
     return <div className="card text-center py-12 text-ink3">No paid pickups waiting for warehouse receipt.</div>;
@@ -411,10 +441,75 @@ function WarehouseReceiveList({
             </div>
           </div>
           <div className="mt-4 flex justify-end gap-2">
+            <button className="btn-secondary" onClick={() => onMismatch(booking.id)}>Report mismatch</button>
             <button className="btn-primary" onClick={() => onReceive(booking.id)}>Receive inventory</button>
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+function ExceptionList({
+  bookings,
+  onRetryPayout,
+}: {
+  bookings: DirectBooking[];
+  onRetryPayout: (bookingId: string) => void;
+}) {
+  if (bookings.length === 0) {
+    return <div className="card text-center py-12 text-ink3">No Direct exceptions right now.</div>;
+  }
+  return (
+    <div className="grid gap-4">
+      {bookings.map((booking) => {
+        const flags = (booking.risk_flags || []).map((flag) => {
+          if (typeof flag === 'string') return { code: flag, message: flag };
+          return {
+            code: String((flag as any).code || 'risk'),
+            message: String((flag as any).message || (flag as any).code || 'Needs review'),
+          };
+        });
+        return (
+          <div key={booking.id} className="card border border-red-100">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="pill bg-red-50 text-red-700">{booking.status.replace(/_/g, ' ')}</span>
+                  <span className="font-mono text-xs text-ink3">{booking.booking_code}</span>
+                </div>
+                <div className="mt-2 font-semibold text-ink">
+                  {booking.pickup_locality} · {booking.pickup_pincode}
+                </div>
+                {booking.payout_failure_reason && (
+                  <div className="text-sm text-red-700 mt-1">
+                    Payout: {booking.payout_failure_reason}
+                  </div>
+                )}
+                <div className="mt-3 grid gap-2">
+                  {(flags.length ? flags : [{ code: 'status', message: 'Status requires Ops review.' }]).map((flag, index) => (
+                    <div key={`${flag.code}-${index}`} className="rounded-md border border-ink4 bg-white p-2 text-sm">
+                      <span className="font-medium text-ink">{flag.code}</span>
+                      <span className="text-ink3"> · {flag.message}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-xs text-ink3">Final payout</div>
+                <div className="text-2xl font-bold text-petrol-700">
+                  ₹{booking.final_total_payout_inr || booking.estimated_total_offer_inr || 0}
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              {booking.status === 'payout_failed' && (
+                <button className="btn-primary" onClick={() => onRetryPayout(booking.id)}>Retry payout</button>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

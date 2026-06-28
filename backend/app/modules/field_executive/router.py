@@ -358,8 +358,16 @@ def _validate_listing_package(category: Category, body: SubmitListingRequest) ->
 
 
 class CreateFERequest(BaseModel):
-    user_id: str
+    user_id: Optional[str] = None
+    phone_number: Optional[str] = Field(None, min_length=10, max_length=20)
     city: str = Field(..., min_length=2, max_length=100)
+    employment_type: str = Field("contractor", pattern="^(internal|contractor|vendor_staff)$")
+    vendor_name: Optional[str] = Field(None, max_length=120)
+    service_zones: list[str] = Field(default_factory=list, max_length=50)
+    category_certifications: list[str] = Field(default_factory=list, max_length=30)
+    languages: list[str] = Field(default_factory=list, max_length=12)
+    daily_capacity: int = Field(4, ge=1, le=12)
+    admin_notes: Optional[str] = Field(None, max_length=2000)
 
 
 class FEResponse(BaseModel):
@@ -369,7 +377,69 @@ class FEResponse(BaseModel):
     city: str
     active: bool
     current_shift: str
+    onboarding_status: str
+    verification_status: str
+    training_status: str
+    device_status: str
+    employment_type: str
+    vendor_name: Optional[str] = None
+    service_zones: list[str] = Field(default_factory=list)
+    category_certifications: list[str] = Field(default_factory=list)
+    languages: list[str] = Field(default_factory=list)
+    daily_capacity: int
+    readiness_gaps: list[str] = Field(default_factory=list)
+    profile_snapshot: dict = Field(default_factory=dict)
+    device_binding: dict = Field(default_factory=dict)
+    risk_metrics: dict = Field(default_factory=dict)
+    suspended_reason: Optional[str] = None
+    admin_notes: Optional[str] = None
+    verified_at: Optional[str] = None
+    certified_at: Optional[str] = None
+    device_approved_at: Optional[str] = None
+    activated_at: Optional[str] = None
+    suspended_at: Optional[str] = None
+    last_seen_at: Optional[str] = None
+    shift_started_at: Optional[str] = None
     created_at: str
+
+
+class UpdateFEProfileRequest(BaseModel):
+    city: Optional[str] = Field(None, min_length=2, max_length=100)
+    employment_type: Optional[str] = Field(None, pattern="^(internal|contractor|vendor_staff)$")
+    vendor_name: Optional[str] = Field(None, max_length=120)
+    service_zones: Optional[list[str]] = Field(None, max_length=50)
+    category_certifications: Optional[list[str]] = Field(None, max_length=30)
+    languages: Optional[list[str]] = Field(None, max_length=12)
+    daily_capacity: Optional[int] = Field(None, ge=1, le=12)
+    profile_snapshot: Optional[dict] = None
+    admin_notes: Optional[str] = Field(None, max_length=2000)
+
+
+class FEStatusDecisionRequest(BaseModel):
+    status: str
+    note: Optional[str] = Field(None, max_length=2000)
+
+
+class FEDeviceDecisionRequest(BaseModel):
+    approved: bool = True
+    note: Optional[str] = Field(None, max_length=2000)
+
+
+class FEActionRequest(BaseModel):
+    reason: Optional[str] = Field(None, max_length=2000)
+
+
+class FEDeviceBindRequest(BaseModel):
+    device_id: str = Field(..., min_length=6, max_length=160)
+    platform: str = Field(..., max_length=32)
+    app_version: Optional[str] = Field(None, max_length=40)
+    os_version: Optional[str] = Field(None, max_length=80)
+    device_model: Optional[str] = Field(None, max_length=120)
+    push_token: Optional[str] = Field(None, max_length=500)
+
+
+class FEShiftCheckInRequest(BaseModel):
+    location: Optional[dict] = None
 
 
 class ImageUploadRequest(BaseModel):
@@ -451,6 +521,74 @@ async def _load_fe_by_id(db, fe_id: UUID) -> FieldExecutive:
     if fe is None:
         raise HTTPException(status_code=404, detail={"error": "FE_NOT_FOUND"})
     return fe
+
+
+async def _operational_fe_for_user(db, user_id: UUID) -> FieldExecutive:
+    fe = await fe_service.get_fe_by_user_id(db, user_id)
+    if fe is None:
+        raise HTTPException(status_code=403, detail={"error": "FE_PROFILE_MISSING"})
+    try:
+        fe_service.assert_fe_ready_for_assignment(fe)
+    except fe_service.FEOnboardingError as e:
+        raise HTTPException(status_code=403, detail={"error": e.code, "message": e.message})
+    return fe
+
+
+def _dt(value) -> str | None:
+    return value.isoformat() if value else None
+
+
+def _normalize_india_phone(raw: str) -> str:
+    value = "".join(ch for ch in raw.strip() if ch.isdigit() or ch == "+")
+    if value.startswith("+"):
+        digits = "".join(ch for ch in value[1:] if ch.isdigit())
+        if len(digits) == 12 and digits.startswith("91"):
+            return f"+{digits}"
+        raise HTTPException(status_code=400, detail={"error": "INVALID_PHONE_NUMBER"})
+    digits = "".join(ch for ch in value if ch.isdigit())
+    if len(digits) == 10:
+        return f"+91{digits}"
+    if len(digits) == 12 and digits.startswith("91"):
+        return f"+{digits}"
+    raise HTTPException(status_code=400, detail={"error": "INVALID_PHONE_NUMBER"})
+
+
+def _fe_to_response(fe: FieldExecutive) -> FEResponse:
+    legacy_active = bool(fe.active)
+    service_zones = list(getattr(fe, "service_zones", None) or (["legacy"] if legacy_active else []))
+    category_certifications = list(getattr(fe, "category_certifications", None) or (["*"] if legacy_active else []))
+    return FEResponse(
+        id=str(fe.id),
+        user_id=str(fe.user_id),
+        fe_code=fe.fe_code,
+        city=fe.city,
+        active=bool(fe.active),
+        current_shift=fe.current_shift,
+        onboarding_status=getattr(fe, "onboarding_status", None) or ("active" if fe.active else "candidate"),
+        verification_status=getattr(fe, "verification_status", None) or "pending",
+        training_status=getattr(fe, "training_status", None) or "not_started",
+        device_status=getattr(fe, "device_status", None) or "not_bound",
+        employment_type=getattr(fe, "employment_type", None) or "contractor",
+        vendor_name=getattr(fe, "vendor_name", None),
+        service_zones=service_zones,
+        category_certifications=category_certifications,
+        languages=list(getattr(fe, "languages", None) or []),
+        daily_capacity=int(getattr(fe, "daily_capacity", 0) or (4 if legacy_active else 0)),
+        readiness_gaps=fe_service.readiness_gaps(fe),
+        profile_snapshot=getattr(fe, "profile_snapshot", None) or {},
+        device_binding=getattr(fe, "device_binding", None) or {},
+        risk_metrics=getattr(fe, "risk_metrics", None) or {},
+        suspended_reason=getattr(fe, "suspended_reason", None),
+        admin_notes=getattr(fe, "admin_notes", None),
+        verified_at=_dt(getattr(fe, "verified_at", None)),
+        certified_at=_dt(getattr(fe, "certified_at", None)),
+        device_approved_at=_dt(getattr(fe, "device_approved_at", None)),
+        activated_at=_dt(getattr(fe, "activated_at", None)),
+        suspended_at=_dt(getattr(fe, "suspended_at", None)),
+        last_seen_at=_dt(getattr(fe, "last_seen_at", None)),
+        shift_started_at=_dt(getattr(fe, "shift_started_at", None)),
+        created_at=fe.created_at.isoformat(),
+    )
 
 
 async def _load_visit_by_id(db, visit_id: UUID) -> FEVisit:
@@ -960,14 +1098,73 @@ async def seller_confirm_arrival(
 # ── FE-facing router: /v1/fe/visits ───────────────────────────────────────────
 
 fe_router = APIRouter()
+onboarding_router = APIRouter()
+
+
+@onboarding_router.get("/me", response_model=FEResponse)
+async def my_fe_onboarding(current_user: BasicUser, db: DBSession):
+    fe = await fe_service.get_fe_by_user_id(db, current_user.user_id)
+    if fe is None:
+        raise HTTPException(status_code=404, detail={"error": "FE_INVITE_NOT_FOUND"})
+    return _fe_to_response(fe)
+
+
+@onboarding_router.post("/device", response_model=FEResponse)
+async def bind_fe_device(body: FEDeviceBindRequest, current_user: BasicUser, db: DBSession):
+    fe = await fe_service.get_fe_by_user_id(db, current_user.user_id)
+    if fe is None:
+        raise HTTPException(status_code=404, detail={"error": "FE_INVITE_NOT_FOUND"})
+    try:
+        fe_service.request_device_binding(
+            fe,
+            {
+                "device_id": body.device_id,
+                "platform": body.platform,
+                "app_version": body.app_version,
+                "os_version": body.os_version,
+                "device_model": body.device_model,
+                "push_token": body.push_token,
+            },
+        )
+    except fe_service.FEOnboardingError as e:
+        raise HTTPException(status_code=400, detail={"error": e.code, "message": e.message})
+    await db.commit()
+    await db.refresh(fe)
+    return _fe_to_response(fe)
+
+
+@onboarding_router.post("/shift/check-in", response_model=FEResponse)
+async def fe_shift_check_in(body: FEShiftCheckInRequest, current_fe: FEUser, db: DBSession):
+    fe = await fe_service.get_fe_by_user_id(db, current_fe.user_id)
+    if fe is None:
+        raise HTTPException(status_code=403, detail={"error": "FE_PROFILE_MISSING"})
+    try:
+        fe_service.check_in_shift(fe, location=body.location)
+    except fe_service.FEOnboardingError as e:
+        raise HTTPException(status_code=403, detail={"error": e.code, "message": e.message})
+    await db.commit()
+    await db.refresh(fe)
+    return _fe_to_response(fe)
+
+
+@onboarding_router.post("/shift/check-out", response_model=FEResponse)
+async def fe_shift_check_out(current_fe: FEUser, db: DBSession):
+    fe = await fe_service.get_fe_by_user_id(db, current_fe.user_id)
+    if fe is None:
+        raise HTTPException(status_code=403, detail={"error": "FE_PROFILE_MISSING"})
+    try:
+        fe_service.check_out_shift(fe)
+    except fe_service.FEOnboardingError as e:
+        raise HTTPException(status_code=403, detail={"error": e.code, "message": e.message})
+    await db.commit()
+    await db.refresh(fe)
+    return _fe_to_response(fe)
 
 
 @fe_router.get("/assigned", response_model=list[VisitResponse])
 async def assigned_visits(current_fe: FEUser, db: DBSession):
     """List visits assigned to the current FE, newest first."""
-    fe = await fe_service.get_fe_by_user_id(db, current_fe.user_id)
-    if fe is None:
-        raise HTTPException(status_code=403, detail={"error": "FE_PROFILE_MISSING"})
+    fe = await _operational_fe_for_user(db, current_fe.user_id)
     res = await db.execute(
         select(FEVisit)
         .where(FEVisit.fe_id == fe.id)
@@ -985,8 +1182,8 @@ async def get_visit(
     db: DBSession,
 ):
     visit = await _load_visit_by_id(db, visit_id)
-    fe = await fe_service.get_fe_by_user_id(db, current_fe.user_id)
-    if fe is None or visit.fe_id != fe.id:
+    fe = await _operational_fe_for_user(db, current_fe.user_id)
+    if visit.fe_id != fe.id:
         raise HTTPException(status_code=403, detail={"error": "NOT_YOUR_VISIT"})
     return await _visit_to_response(db, visit)
 
@@ -1004,8 +1201,8 @@ async def start_visit(
     shows the same arrival_verification_code generated at booking time.
     """
     visit = await _load_visit_by_id(db, visit_id)
-    fe = await fe_service.get_fe_by_user_id(db, current_fe.user_id)
-    if fe is None or visit.fe_id != fe.id:
+    fe = await _operational_fe_for_user(db, current_fe.user_id)
+    if visit.fe_id != fe.id:
         raise HTTPException(status_code=403, detail={"error": "NOT_YOUR_VISIT"})
     try:
         await fe_service.start_visit(db, visit=visit)
@@ -1050,8 +1247,8 @@ async def start_route(
     so the seller's app shows progress before the door knock.
     """
     visit = await _load_visit_by_id(db, visit_id)
-    fe = await fe_service.get_fe_by_user_id(db, current_fe.user_id)
-    if fe is None or visit.fe_id != fe.id:
+    fe = await _operational_fe_for_user(db, current_fe.user_id)
+    if visit.fe_id != fe.id:
         raise HTTPException(status_code=403, detail={"error": "NOT_YOUR_VISIT"})
 
     try:
@@ -1083,8 +1280,8 @@ async def arriving_soon(
     Same pattern as start-route — no status change, pure notification.
     """
     visit = await _load_visit_by_id(db, visit_id)
-    fe = await fe_service.get_fe_by_user_id(db, current_fe.user_id)
-    if fe is None or visit.fe_id != fe.id:
+    fe = await _operational_fe_for_user(db, current_fe.user_id)
+    if visit.fe_id != fe.id:
         raise HTTPException(status_code=403, detail={"error": "NOT_YOUR_VISIT"})
 
     try:
@@ -1124,8 +1321,8 @@ async def enforce_aadhaar(
     integrates with partner short-link + push to seller device.
     """
     visit = await _load_visit_by_id(db, visit_id)
-    fe = await fe_service.get_fe_by_user_id(db, current_fe.user_id)
-    if fe is None or visit.fe_id != fe.id:
+    fe = await _operational_fe_for_user(db, current_fe.user_id)
+    if visit.fe_id != fe.id:
         raise HTTPException(status_code=403, detail={"error": "NOT_YOUR_VISIT"})
     if visit.status != "in_progress":
         raise HTTPException(
@@ -1162,8 +1359,8 @@ async def fe_request_image_upload(
     if no listing is created (e.g. outcome=rejected_item).
     """
     visit = await _load_visit_by_id(db, visit_id)
-    fe = await fe_service.get_fe_by_user_id(db, current_fe.user_id)
-    if fe is None or visit.fe_id != fe.id:
+    fe = await _operational_fe_for_user(db, current_fe.user_id)
+    if visit.fe_id != fe.id:
         raise HTTPException(status_code=403, detail={"error": "NOT_YOUR_VISIT"})
     if visit.status != "in_progress":
         raise HTTPException(
@@ -1203,8 +1400,8 @@ async def fe_confirm_image_upload(
     can preview them immediately.
     """
     visit = await _load_visit_by_id(db, visit_id)
-    fe = await fe_service.get_fe_by_user_id(db, current_fe.user_id)
-    if fe is None or visit.fe_id != fe.id:
+    fe = await _operational_fe_for_user(db, current_fe.user_id)
+    if visit.fe_id != fe.id:
         raise HTTPException(status_code=403, detail={"error": "NOT_YOUR_VISIT"})
     # Require the r2_key to be in this visit's prefix — prevents injecting
     # random keys from other visits/listings.
@@ -1247,8 +1444,8 @@ async def submit_listing(
       - Signals fe_submitted_outcome on the workflow after commit.
     """
     visit = await _load_visit_by_id(db, visit_id)
-    fe = await fe_service.get_fe_by_user_id(db, current_fe.user_id)
-    if fe is None or visit.fe_id != fe.id:
+    fe = await _operational_fe_for_user(db, current_fe.user_id)
+    if visit.fe_id != fe.id:
         raise HTTPException(status_code=403, detail={"error": "NOT_YOUR_VISIT"})
     if visit.status != "in_progress":
         raise HTTPException(
@@ -1412,8 +1609,8 @@ async def close_visit(
     Phase 3 it's a clean status transition only.
     """
     visit = await _load_visit_by_id(db, visit_id)
-    fe = await fe_service.get_fe_by_user_id(db, current_fe.user_id)
-    if fe is None or visit.fe_id != fe.id:
+    fe = await _operational_fe_for_user(db, current_fe.user_id)
+    if visit.fe_id != fe.id:
         raise HTTPException(status_code=403, detail={"error": "NOT_YOUR_VISIT"})
     if visit.status != "in_progress":
         raise HTTPException(
@@ -1481,8 +1678,8 @@ async def submit_outcome(
     db: DBSession,
 ):
     visit = await _load_visit_by_id(db, visit_id)
-    fe = await fe_service.get_fe_by_user_id(db, current_fe.user_id)
-    if fe is None or visit.fe_id != fe.id:
+    fe = await _operational_fe_for_user(db, current_fe.user_id)
+    if visit.fe_id != fe.id:
         raise HTTPException(status_code=403, detail={"error": "NOT_YOUR_VISIT"})
 
     listing_uuid = UUID(body.listing_id) if body.listing_id else None
@@ -1582,8 +1779,8 @@ async def fe_report_issue(
     in pilot; admin web /admin/fe-issues page surfaces the alert).
     """
     visit = await _load_visit_by_id(db, visit_id)
-    fe = await fe_service.get_fe_by_user_id(db, current_fe.user_id)
-    if fe is None or visit.fe_id != fe.id:
+    fe = await _operational_fe_for_user(db, current_fe.user_id)
+    if visit.fe_id != fe.id:
         raise HTTPException(status_code=403, detail={"error": "NOT_YOUR_VISIT"})
     if body.category not in _ISSUE_CATEGORIES:
         raise HTTPException(
@@ -1744,18 +1941,7 @@ async def admin_list_fes(
     q = q.order_by(FieldExecutive.fe_code)
     res = await db.execute(q)
     fes = list(res.scalars().all())
-    return [
-        FEResponse(
-            id=str(fe.id),
-            user_id=str(fe.user_id),
-            fe_code=fe.fe_code,
-            city=fe.city,
-            active=bool(fe.active),
-            current_shift=fe.current_shift,
-            created_at=fe.created_at.isoformat(),
-        )
-        for fe in fes
-    ]
+    return [_fe_to_response(fe) for fe in fes]
 
 
 @admin_router.post("/fes", response_model=FEResponse, status_code=201)
@@ -1764,29 +1950,174 @@ async def admin_create_fe(
     current_admin: AdminL2,
     db: DBSession,
 ):
-    res = await db.execute(select(User).where(User.id == UUID(body.user_id)))
-    user = res.scalar_one_or_none()
-    if user is None:
-        raise HTTPException(status_code=404, detail={"error": "USER_NOT_FOUND"})
+    if not body.user_id and not body.phone_number:
+        raise HTTPException(status_code=400, detail={"error": "USER_OR_PHONE_REQUIRED"})
+    user = None
+    if body.user_id:
+        try:
+            user_uuid = UUID(body.user_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail={"error": "INVALID_USER_ID"})
+        res = await db.execute(select(User).where(User.id == user_uuid))
+        user = res.scalar_one_or_none()
+        if user is None:
+            raise HTTPException(status_code=404, detail={"error": "USER_NOT_FOUND"})
+    else:
+        normalized = _normalize_india_phone(body.phone_number or "")
+        res = await db.execute(select(User).where(User.phone_number == normalized))
+        user = res.scalar_one_or_none()
+        if user is None:
+            user = User(
+                phone_number=normalized,
+                phone_verified=False,
+                tier="basic",
+                kyc_status="not_started",
+                auth_state="guest",
+                buyer_eligible=False,
+                seller_tier="not_eligible",
+            )
+            db.add(user)
+            await db.flush()
 
-    fe = await fe_service.create_fe_for_user(
-        db,
-        user=user,
-        city=body.city,
-        created_by_admin_id=current_admin.admin_id,
-    )
+    try:
+        fe = await fe_service.create_fe_for_user(
+            db,
+            user=user,
+            city=body.city,
+            created_by_admin_id=current_admin.admin_id,
+            employment_type=body.employment_type,
+            vendor_name=body.vendor_name,
+            service_zones=body.service_zones,
+            category_certifications=body.category_certifications,
+            languages=body.languages,
+            daily_capacity=body.daily_capacity,
+            active=False,
+        )
+        if body.admin_notes:
+            fe.admin_notes = body.admin_notes
+    except fe_service.FEOnboardingError as e:
+        raise HTTPException(status_code=400, detail={"error": e.code, "message": e.message})
     await db.commit()
     await db.refresh(fe)
 
-    return FEResponse(
-        id=str(fe.id),
-        user_id=str(fe.user_id),
-        fe_code=fe.fe_code,
-        city=fe.city,
-        active=bool(fe.active),
-        current_shift=fe.current_shift,
-        created_at=fe.created_at.isoformat(),
-    )
+    return _fe_to_response(fe)
+
+
+@admin_router.get("/fes/{fe_id}", response_model=FEResponse)
+async def admin_get_fe(fe_id: UUID, current_admin: AdminAny, db: DBSession):
+    return _fe_to_response(await _load_fe_by_id(db, fe_id))
+
+
+@admin_router.patch("/fes/{fe_id}", response_model=FEResponse)
+async def admin_update_fe_profile(
+    fe_id: UUID,
+    body: UpdateFEProfileRequest,
+    current_admin: AdminL2,
+    db: DBSession,
+):
+    fe = await _load_fe_by_id(db, fe_id)
+    try:
+        fe_service.update_fe_profile(
+            fe,
+            city=body.city,
+            employment_type=body.employment_type,
+            vendor_name=body.vendor_name,
+            service_zones=body.service_zones,
+            category_certifications=body.category_certifications,
+            languages=body.languages,
+            daily_capacity=body.daily_capacity,
+            profile_snapshot=body.profile_snapshot,
+            admin_notes=body.admin_notes,
+        )
+    except fe_service.FEOnboardingError as e:
+        raise HTTPException(status_code=400, detail={"error": e.code, "message": e.message})
+    await db.commit()
+    await db.refresh(fe)
+    return _fe_to_response(fe)
+
+
+@admin_router.post("/fes/{fe_id}/verification", response_model=FEResponse)
+async def admin_update_fe_verification(
+    fe_id: UUID,
+    body: FEStatusDecisionRequest,
+    current_admin: AdminL2,
+    db: DBSession,
+):
+    fe = await _load_fe_by_id(db, fe_id)
+    try:
+        fe_service.set_verification_status(fe, body.status, note=body.note)
+    except fe_service.FEOnboardingError as e:
+        raise HTTPException(status_code=400, detail={"error": e.code, "message": e.message})
+    await db.commit()
+    await db.refresh(fe)
+    return _fe_to_response(fe)
+
+
+@admin_router.post("/fes/{fe_id}/training", response_model=FEResponse)
+async def admin_update_fe_training(
+    fe_id: UUID,
+    body: FEStatusDecisionRequest,
+    current_admin: AdminL2,
+    db: DBSession,
+):
+    fe = await _load_fe_by_id(db, fe_id)
+    try:
+        fe_service.set_training_status(fe, body.status, note=body.note)
+    except fe_service.FEOnboardingError as e:
+        raise HTTPException(status_code=400, detail={"error": e.code, "message": e.message})
+    await db.commit()
+    await db.refresh(fe)
+    return _fe_to_response(fe)
+
+
+@admin_router.post("/fes/{fe_id}/device", response_model=FEResponse)
+async def admin_decide_fe_device(
+    fe_id: UUID,
+    body: FEDeviceDecisionRequest,
+    current_admin: AdminL2,
+    db: DBSession,
+):
+    fe = await _load_fe_by_id(db, fe_id)
+    try:
+        fe_service.approve_device(fe, approved=body.approved, note=body.note)
+    except fe_service.FEOnboardingError as e:
+        raise HTTPException(status_code=400, detail={"error": e.code, "message": e.message})
+    await db.commit()
+    await db.refresh(fe)
+    return _fe_to_response(fe)
+
+
+@admin_router.post("/fes/{fe_id}/activate", response_model=FEResponse)
+async def admin_activate_fe(fe_id: UUID, current_admin: AdminL2, db: DBSession):
+    fe = await _load_fe_by_id(db, fe_id)
+    try:
+        fe_service.activate_fe(fe)
+    except fe_service.FEOnboardingError as e:
+        raise HTTPException(status_code=409, detail={"error": e.code, "message": e.message})
+    await db.commit()
+    await db.refresh(fe)
+    return _fe_to_response(fe)
+
+
+@admin_router.post("/fes/{fe_id}/suspend", response_model=FEResponse)
+async def admin_suspend_fe(fe_id: UUID, body: FEActionRequest, current_admin: AdminL2, db: DBSession):
+    fe = await _load_fe_by_id(db, fe_id)
+    try:
+        fe_service.suspend_fe(fe, body.reason or "")
+    except fe_service.FEOnboardingError as e:
+        raise HTTPException(status_code=400, detail={"error": e.code, "message": e.message})
+    await db.commit()
+    await db.refresh(fe)
+    return _fe_to_response(fe)
+
+
+@admin_router.post("/fes/{fe_id}/deactivate", response_model=FEResponse)
+async def admin_deactivate_fe(fe_id: UUID, body: FEActionRequest, current_admin: AdminL2, db: DBSession):
+    fe = await _load_fe_by_id(db, fe_id)
+    fe_service.deactivate_fe(fe, reason=body.reason)
+    await db.commit()
+    await db.refresh(fe)
+    return _fe_to_response(fe)
 
 
 @admin_router.get("/", response_model=list[VisitResponse])
@@ -1830,7 +2161,11 @@ async def admin_assign(
             status_code=400, detail={"error": "INVALID_CATEGORY_ID"}
         )
     # Verify category exists before we persist
-    await _load_category(db, category_uuid)
+    category = await _load_category(db, category_uuid)
+    try:
+        fe_service.assert_fe_ready_for_assignment(fe, required_categories={category.slug})
+    except fe_service.FEOnboardingError as e:
+        raise HTTPException(status_code=409, detail={"error": e.code, "message": e.message})
 
     try:
         await fe_service.assign_fe(
@@ -1924,7 +2259,17 @@ async def admin_reassign(
             raise HTTPException(
                 status_code=400, detail={"error": "INVALID_CATEGORY_ID"}
             )
-        await _load_category(db, category_uuid)
+        category = await _load_category(db, category_uuid)
+        try:
+            fe_service.assert_fe_ready_for_assignment(fe, required_categories={category.slug})
+        except fe_service.FEOnboardingError as e:
+            raise HTTPException(status_code=409, detail={"error": e.code, "message": e.message})
+    elif visit.category_id:
+        category = await _load_category(db, visit.category_id)
+        try:
+            fe_service.assert_fe_ready_for_assignment(fe, required_categories={category.slug})
+        except fe_service.FEOnboardingError as e:
+            raise HTTPException(status_code=409, detail={"error": e.code, "message": e.message})
 
     try:
         await fe_service.reassign_fe(

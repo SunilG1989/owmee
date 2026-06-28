@@ -479,7 +479,15 @@ export type DirectBookingStatus =
   | 'payout_failed'
   | 'admin_cancelled'
   | 'fraud_review'
+  | 'listing_draft_required'
   | string;
+
+export interface DirectLocationPayload {
+  lat: number;
+  lng: number;
+  accuracy_meters?: number;
+  source?: string;
+}
 
 export interface DirectAcquisitionItem {
   id: string;
@@ -548,7 +556,7 @@ export interface DirectAcquisitionBooking {
   warehouse_received_at?: string | null;
   warehouse_receipt_code?: string | null;
   warehouse_receipt_notes?: string | null;
-  risk_flags?: string[];
+  risk_flags?: Array<string | Record<string, any>>;
   seller_otp?: string | null;
   final_acceptance_otp?: string | null;
   items: DirectAcquisitionItem[];
@@ -1132,12 +1140,62 @@ export const DirectSell = {
     ),
   createBooking: (body: DirectAcquisitionBookingRequest) =>
     api.post<DirectAcquisitionBooking>('/v1/direct-sell/bookings', body),
+  myBookings: () =>
+    api.get<{ bookings: DirectAcquisitionBooking[] }>('/v1/direct-sell/bookings'),
   getBooking: (id: string) =>
     api.get<DirectAcquisitionBooking>(`/v1/direct-sell/bookings/${id}`),
   refreshVerificationCodes: (id: string) =>
     api.post<DirectAcquisitionBooking>(`/v1/direct-sell/bookings/${id}/verification-codes`),
   cancelBooking: (id: string, reason: string) =>
     api.post<DirectAcquisitionBooking>(`/v1/direct-sell/bookings/${id}/cancel`, { reason }),
+};
+
+export interface FEProfile {
+  id: string;
+  user_id: string;
+  fe_code: string;
+  city: string;
+  active: boolean;
+  current_shift: string;
+  onboarding_status: string;
+  verification_status: string;
+  training_status: string;
+  device_status: string;
+  employment_type: 'internal' | 'contractor' | 'vendor_staff';
+  vendor_name?: string | null;
+  service_zones: string[];
+  category_certifications: string[];
+  languages: string[];
+  daily_capacity: number;
+  readiness_gaps: string[];
+  profile_snapshot: Record<string, any>;
+  device_binding: Record<string, any>;
+  risk_metrics: Record<string, any>;
+  suspended_reason?: string | null;
+  admin_notes?: string | null;
+  verified_at?: string | null;
+  certified_at?: string | null;
+  device_approved_at?: string | null;
+  activated_at?: string | null;
+  suspended_at?: string | null;
+  last_seen_at?: string | null;
+  shift_started_at?: string | null;
+  created_at: string;
+}
+
+export const FEOnboarding = {
+  me: () => api.get<FEProfile>('/v1/fe/onboarding/me'),
+  bindDevice: (payload: {
+    device_id: string;
+    platform: string;
+    app_version?: string;
+    os_version?: string;
+    device_model?: string;
+    push_token?: string;
+  }) => api.post<FEProfile>('/v1/fe/onboarding/device', payload),
+  checkIn: (location?: Record<string, any>) =>
+    api.post<FEProfile>('/v1/fe/onboarding/shift/check-in', { location: location || {} }),
+  checkOut: () => api.post<FEProfile>('/v1/fe/onboarding/shift/check-out'),
 };
 
 // ── Sprint 4 / Pass 2: FE-role endpoints ─────────────────────────────
@@ -1151,10 +1209,10 @@ export const FE = {
     ),
   directBooking: (id: string) =>
     api.get<DirectAcquisitionBooking>(`/v1/fe/bookings/${id}`),
-  startDirectBooking: (id: string) =>
-    api.post<DirectAcquisitionBooking>(`/v1/fe/bookings/${id}/start`),
-  arriveDirectBooking: (id: string) =>
-    api.post<DirectAcquisitionBooking>(`/v1/fe/bookings/${id}/arrive`),
+  startDirectBooking: (id: string, location?: DirectLocationPayload) =>
+    api.post<DirectAcquisitionBooking>(`/v1/fe/bookings/${id}/start`, { location }),
+  arriveDirectBooking: (id: string, location?: DirectLocationPayload) =>
+    api.post<DirectAcquisitionBooking>(`/v1/fe/bookings/${id}/arrive`, { location }),
   verifyDirectSellerOtp: (id: string, otp: string) =>
     api.post<DirectAcquisitionBooking>(`/v1/fe/bookings/${id}/verify-seller-otp`, { otp }),
   addDirectItemPhotos: (bookingId: string, itemId: string, photoKeys: string[]) =>
@@ -1179,11 +1237,17 @@ export const FE = {
     notes?: string;
     evidence_photos?: string[];
   }) => api.post(`/v1/fe/bookings/${bookingId}/items/${itemId}/reject`, payload),
-  directSellerFinalAcceptance: (bookingId: string, accepted = true, otp?: string) =>
+  directSellerFinalAcceptance: (
+    bookingId: string,
+    accepted = true,
+    otp?: string,
+    location?: DirectLocationPayload,
+  ) =>
     api.post<DirectAcquisitionBooking>(`/v1/fe/bookings/${bookingId}/seller-final-acceptance`, {
       accepted,
       method: 'otp',
       otp,
+      location,
     }),
   requestDirectPayout: (bookingId: string) =>
     api.post<DirectAcquisitionBooking>(`/v1/fe/bookings/${bookingId}/request-payout`),

@@ -53,9 +53,115 @@ _VALID_OUTCOMES = {
     "postponed",
 }
 
+ONBOARDING_TERMINAL_STATUSES = {"rejected", "deactivated"}
+ONBOARDING_BLOCKED_STATUSES = ONBOARDING_TERMINAL_STATUSES | {"suspended"}
+VALID_EMPLOYMENT_TYPES = {"internal", "contractor", "vendor_staff"}
+VALID_VERIFICATION_STATUSES = {"pending", "approved", "rejected", "resubmission_required"}
+VALID_TRAINING_STATUSES = {"not_started", "in_progress", "certified", "failed", "expired"}
+VALID_DEVICE_STATUSES = {"not_bound", "pending_admin_approval", "approved", "blocked"}
+VALID_SHIFT_STATUSES = {"off", "available", "assigned", "on_route", "busy", "blocked"}
+
 
 class IllegalVisitTransition(ValueError):
     pass
+
+
+class FEOnboardingError(ValueError):
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _clean_list(values: list[str] | None) -> list[str]:
+    return list(dict.fromkeys(str(v).strip() for v in (values or []) if str(v).strip()))
+
+
+def _status(fe: FieldExecutive, field: str, fallback: str) -> str:
+    value = getattr(fe, field, None)
+    if value:
+        return str(value)
+    active = bool(getattr(fe, "active", False))
+    if field == "onboarding_status":
+        return "active" if active else fallback
+    if active and field == "verification_status":
+        return "approved"
+    if active and field == "training_status":
+        return "certified"
+    if active and field == "device_status":
+        return "approved"
+    return fallback
+
+
+def readiness_gaps(fe: FieldExecutive) -> list[str]:
+    gaps: list[str] = []
+    onboarding_status = _status(fe, "onboarding_status", "candidate")
+    if onboarding_status in ONBOARDING_TERMINAL_STATUSES:
+        gaps.append(onboarding_status)
+    if onboarding_status == "suspended":
+        gaps.append("suspended")
+    if _status(fe, "verification_status", "pending") != "approved":
+        gaps.append("verification_not_approved")
+    if _status(fe, "training_status", "not_started") != "certified":
+        gaps.append("training_not_certified")
+    if _status(fe, "device_status", "not_bound") != "approved":
+        gaps.append("device_not_approved")
+    capacity = getattr(fe, "daily_capacity", 4 if getattr(fe, "active", False) else 0)
+    if int(capacity or 0) <= 0:
+        gaps.append("capacity_missing")
+    zones = list(getattr(fe, "service_zones", None) or (["legacy"] if getattr(fe, "active", False) else []))
+    if not zones:
+        gaps.append("service_zones_missing")
+    categories = list(getattr(fe, "category_certifications", None) or (["*"] if getattr(fe, "active", False) else []))
+    if not categories:
+        gaps.append("category_certification_missing")
+    return list(dict.fromkeys(gaps))
+
+
+def is_fe_ready(fe: FieldExecutive) -> bool:
+    return bool(getattr(fe, "active", False)) and not readiness_gaps(fe)
+
+
+def assert_fe_ready_for_assignment(
+    fe: FieldExecutive,
+    *,
+    required_categories: set[str] | None = None,
+) -> None:
+    if not getattr(fe, "active", False):
+        raise FEOnboardingError("FE_INACTIVE", "FE is not active.")
+    gaps = readiness_gaps(fe)
+    if gaps:
+        raise FEOnboardingError("FE_NOT_READY", f"FE onboarding is incomplete: {', '.join(gaps)}")
+    if getattr(fe, "current_shift", None) == "blocked":
+        raise FEOnboardingError("FE_SHIFT_BLOCKED", "FE shift is blocked.")
+    categories = set(getattr(fe, "category_certifications", None) or (["*"] if getattr(fe, "active", False) else []))
+    if "*" not in categories and required_categories:
+        missing = sorted(required_categories - categories)
+        if missing:
+            raise FEOnboardingError("FE_CATEGORY_NOT_CERTIFIED", f"FE is not certified for: {', '.join(missing)}")
+
+
+def _next_status_from_checks(fe: FieldExecutive) -> str:
+    if _status(fe, "onboarding_status", "candidate") in ONBOARDING_BLOCKED_STATUSES:
+        return fe.onboarding_status
+    if _status(fe, "verification_status", "pending") != "approved":
+        return "verification_pending"
+    if _status(fe, "training_status", "not_started") != "certified":
+        return "training_pending"
+    if _status(fe, "device_status", "not_bound") != "approved":
+        return "certified"
+    return "device_ready"
+
+
+def refresh_onboarding_status(fe: FieldExecutive) -> None:
+    if getattr(fe, "active", False):
+        fe.onboarding_status = "active"
+        return
+    fe.onboarding_status = _next_status_from_checks(fe)
 
 
 # ── FE CRUD ───────────────────────────────────────────────────────────────────
@@ -89,24 +195,218 @@ async def create_fe_for_user(
     user: User,
     city: str,
     created_by_admin_id: Optional[UUID] = None,
+    *,
+    employment_type: str = "contractor",
+    vendor_name: str | None = None,
+    service_zones: list[str] | None = None,
+    category_certifications: list[str] | None = None,
+    languages: list[str] | None = None,
+    daily_capacity: int = 4,
+    active: bool = False,
 ) -> FieldExecutive:
     existing = await get_fe_by_user_id(db, user.id)
     if existing:
         return existing
+    if employment_type not in VALID_EMPLOYMENT_TYPES:
+        raise FEOnboardingError("INVALID_EMPLOYMENT_TYPE", "Unsupported FE employment type.")
+    if daily_capacity < 1 or daily_capacity > 12:
+        raise FEOnboardingError("INVALID_DAILY_CAPACITY", "Daily capacity must be between 1 and 12.")
 
     code = await _next_fe_code(db, city)
     fe = FieldExecutive(
         user_id=user.id,
         fe_code=code,
         city=city,
-        active=True,
+        active=active,
         current_shift="off",
         created_by_admin_id=created_by_admin_id,
+        onboarding_status="active" if active else "candidate",
+        verification_status="approved" if active else "pending",
+        training_status="certified" if active else "not_started",
+        device_status="approved" if active else "not_bound",
+        employment_type=employment_type,
+        vendor_name=vendor_name,
+        manager_admin_id=created_by_admin_id,
+        service_zones=_clean_list(service_zones) or ([city] if active else []),
+        category_certifications=_clean_list(category_certifications) or (["*"] if active else []),
+        languages=_clean_list(languages),
+        daily_capacity=daily_capacity,
+        profile_snapshot={},
+        onboarding_checklist={},
+        device_binding={},
+        risk_metrics={},
+        verified_at=_now() if active else None,
+        certified_at=_now() if active else None,
+        device_approved_at=_now() if active else None,
+        activated_at=_now() if active else None,
     )
     db.add(fe)
     await db.flush()
     logger.info("fe.created", user_id=str(user.id), fe_code=code, city=city)
     return fe
+
+
+def update_fe_profile(
+    fe: FieldExecutive,
+    *,
+    city: str | None = None,
+    employment_type: str | None = None,
+    vendor_name: str | None = None,
+    service_zones: list[str] | None = None,
+    category_certifications: list[str] | None = None,
+    languages: list[str] | None = None,
+    daily_capacity: int | None = None,
+    profile_snapshot: dict | None = None,
+    admin_notes: str | None = None,
+) -> None:
+    if city is not None:
+        if len(city.strip()) < 2:
+            raise FEOnboardingError("INVALID_CITY", "City is required.")
+        fe.city = city.strip()
+    if employment_type is not None:
+        if employment_type not in VALID_EMPLOYMENT_TYPES:
+            raise FEOnboardingError("INVALID_EMPLOYMENT_TYPE", "Unsupported FE employment type.")
+        fe.employment_type = employment_type
+    if vendor_name is not None:
+        fe.vendor_name = vendor_name.strip() or None
+    if service_zones is not None:
+        fe.service_zones = _clean_list(service_zones)
+    if category_certifications is not None:
+        fe.category_certifications = _clean_list(category_certifications)
+    if languages is not None:
+        fe.languages = _clean_list(languages)
+    if daily_capacity is not None:
+        if daily_capacity < 1 or daily_capacity > 12:
+            raise FEOnboardingError("INVALID_DAILY_CAPACITY", "Daily capacity must be between 1 and 12.")
+        fe.daily_capacity = daily_capacity
+    if profile_snapshot is not None:
+        fe.profile_snapshot = profile_snapshot
+    if admin_notes is not None:
+        fe.admin_notes = admin_notes
+    refresh_onboarding_status(fe)
+
+
+def set_verification_status(fe: FieldExecutive, status: str, *, note: str | None = None) -> None:
+    if status not in VALID_VERIFICATION_STATUSES:
+        raise FEOnboardingError("INVALID_VERIFICATION_STATUS", "Unsupported verification status.")
+    fe.verification_status = status
+    checklist = dict(getattr(fe, "onboarding_checklist", None) or {})
+    checklist["verification_note"] = note
+    checklist["verification_updated_at"] = _now().isoformat()
+    fe.onboarding_checklist = checklist
+    if status == "approved":
+        fe.verified_at = fe.verified_at or _now()
+    elif status in {"rejected", "resubmission_required"}:
+        fe.active = False
+        if status == "rejected":
+            fe.onboarding_status = "rejected"
+            fe.rejected_at = _now()
+            fe.admin_notes = note or fe.admin_notes
+            return
+    refresh_onboarding_status(fe)
+
+
+def set_training_status(fe: FieldExecutive, status: str, *, note: str | None = None) -> None:
+    if status not in VALID_TRAINING_STATUSES:
+        raise FEOnboardingError("INVALID_TRAINING_STATUS", "Unsupported training status.")
+    fe.training_status = status
+    checklist = dict(getattr(fe, "onboarding_checklist", None) or {})
+    checklist["training_note"] = note
+    checklist["training_updated_at"] = _now().isoformat()
+    fe.onboarding_checklist = checklist
+    if status == "certified":
+        fe.certified_at = fe.certified_at or _now()
+    else:
+        fe.active = False
+    refresh_onboarding_status(fe)
+
+
+def request_device_binding(fe: FieldExecutive, payload: dict) -> None:
+    if _status(fe, "onboarding_status", "candidate") in ONBOARDING_TERMINAL_STATUSES:
+        raise FEOnboardingError("FE_NOT_OPERATIONAL", "This FE profile is no longer operational.")
+    device_id = str(payload.get("device_id") or "").strip()
+    if not device_id:
+        raise FEOnboardingError("DEVICE_ID_REQUIRED", "Device id is required.")
+    existing = getattr(fe, "device_binding", None) or {}
+    if existing.get("device_id") and existing.get("device_id") != device_id and fe.device_status == "approved":
+        fe.device_status = "pending_admin_approval"
+        payload["previous_device_id"] = existing.get("device_id")
+    else:
+        fe.device_status = "pending_admin_approval"
+    fe.device_binding = {
+        **existing,
+        **payload,
+        "device_id": device_id,
+        "requested_at": _now().isoformat(),
+    }
+    fe.last_seen_at = _now()
+    if fe.active:
+        fe.active = False
+        fe.onboarding_status = "certified"
+    refresh_onboarding_status(fe)
+
+
+def approve_device(fe: FieldExecutive, *, approved: bool, note: str | None = None) -> None:
+    if approved:
+        if not (getattr(fe, "device_binding", None) or {}).get("device_id"):
+            raise FEOnboardingError("DEVICE_NOT_BOUND", "FE must bind a device before approval.")
+        fe.device_status = "approved"
+        fe.device_approved_at = _now()
+    else:
+        fe.device_status = "blocked"
+        fe.active = False
+    checklist = dict(getattr(fe, "onboarding_checklist", None) or {})
+    checklist["device_note"] = note
+    checklist["device_updated_at"] = _now().isoformat()
+    fe.onboarding_checklist = checklist
+    refresh_onboarding_status(fe)
+
+
+def activate_fe(fe: FieldExecutive) -> None:
+    gaps = readiness_gaps(fe)
+    if gaps:
+        raise FEOnboardingError("FE_NOT_READY", f"Cannot activate FE. Missing: {', '.join(gaps)}")
+    fe.active = True
+    fe.onboarding_status = "active"
+    fe.suspended_at = None
+    fe.suspended_reason = None
+    fe.activated_at = fe.activated_at or _now()
+
+
+def suspend_fe(fe: FieldExecutive, reason: str) -> None:
+    if not reason.strip():
+        raise FEOnboardingError("SUSPENSION_REASON_REQUIRED", "Suspension reason is required.")
+    fe.active = False
+    fe.onboarding_status = "suspended"
+    fe.suspended_at = _now()
+    fe.suspended_reason = reason.strip()
+    fe.current_shift = "blocked"
+
+
+def deactivate_fe(fe: FieldExecutive, reason: str | None = None) -> None:
+    fe.active = False
+    fe.onboarding_status = "deactivated"
+    fe.deactivated_at = _now()
+    fe.current_shift = "off"
+    if reason:
+        fe.admin_notes = reason
+
+
+def check_in_shift(fe: FieldExecutive, *, location: dict | None = None) -> None:
+    assert_fe_ready_for_assignment(fe)
+    fe.current_shift = "available"
+    fe.shift_started_at = _now()
+    fe.shift_location = location or {}
+    fe.last_seen_at = _now()
+
+
+def check_out_shift(fe: FieldExecutive) -> None:
+    if _status(fe, "onboarding_status", "candidate") in ONBOARDING_BLOCKED_STATUSES:
+        raise FEOnboardingError("FE_NOT_OPERATIONAL", "FE is not operational.")
+    fe.current_shift = "off"
+    fe.shift_started_at = None
+    fe.shift_location = {}
+    fe.last_seen_at = _now()
 
 
 # ── Visit CRUD ────────────────────────────────────────────────────────────────
@@ -189,8 +489,7 @@ async def assign_fe(
         )
     if scheduled_end <= scheduled_start:
         raise ValueError("scheduled_slot_end must be after scheduled_slot_start")
-    if not fe.active:
-        raise ValueError("Cannot assign to inactive FE")
+    assert_fe_ready_for_assignment(fe)
 
     visit.fe_id = fe.id
     visit.scheduled_slot_start = scheduled_start
@@ -221,8 +520,7 @@ async def reassign_fe(
         raise IllegalVisitTransition(
             f"Can only reassign a scheduled visit, not {visit.status}"
         )
-    if not new_fe.active:
-        raise ValueError("Cannot reassign to inactive FE")
+    assert_fe_ready_for_assignment(new_fe)
 
     visit.fe_id = new_fe.id
     if scheduled_start and scheduled_end:

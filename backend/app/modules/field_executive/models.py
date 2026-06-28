@@ -47,6 +47,38 @@ class FieldExecutive(Base, TimestampMixin):
     current_shift = Column(String(20), nullable=False, default="off")
     # morning | afternoon | evening | off
     created_by_admin_id = Column(UUID(as_uuid=True), nullable=True)
+    onboarding_status = Column(String(32), nullable=False, default="candidate", index=True)
+    # candidate | verification_pending | verified | training_pending |
+    # certified | device_ready | active | suspended | deactivated | rejected
+    verification_status = Column(String(32), nullable=False, default="pending")
+    # pending | approved | rejected | resubmission_required
+    training_status = Column(String(32), nullable=False, default="not_started")
+    # not_started | in_progress | certified | failed | expired
+    device_status = Column(String(32), nullable=False, default="not_bound")
+    # not_bound | pending_admin_approval | approved | blocked
+    employment_type = Column(String(32), nullable=False, default="contractor")
+    vendor_name = Column(String(120), nullable=True)
+    manager_admin_id = Column(UUID(as_uuid=True), nullable=True)
+    service_zones = Column(JSONB, nullable=False, default=list)
+    category_certifications = Column(JSONB, nullable=False, default=list)
+    languages = Column(JSONB, nullable=False, default=list)
+    daily_capacity = Column(Integer, nullable=False, default=4)
+    profile_snapshot = Column(JSONB, nullable=False, default=dict)
+    onboarding_checklist = Column(JSONB, nullable=False, default=dict)
+    device_binding = Column(JSONB, nullable=False, default=dict)
+    risk_metrics = Column(JSONB, nullable=False, default=dict)
+    verified_at = Column(DateTime(timezone=True), nullable=True)
+    certified_at = Column(DateTime(timezone=True), nullable=True)
+    device_approved_at = Column(DateTime(timezone=True), nullable=True)
+    activated_at = Column(DateTime(timezone=True), nullable=True)
+    suspended_at = Column(DateTime(timezone=True), nullable=True)
+    deactivated_at = Column(DateTime(timezone=True), nullable=True)
+    rejected_at = Column(DateTime(timezone=True), nullable=True)
+    last_seen_at = Column(DateTime(timezone=True), nullable=True)
+    shift_started_at = Column(DateTime(timezone=True), nullable=True)
+    shift_location = Column(JSONB, nullable=False, default=dict)
+    suspended_reason = Column(Text, nullable=True)
+    admin_notes = Column(Text, nullable=True)
 
     visits = relationship(
         "FEVisit",

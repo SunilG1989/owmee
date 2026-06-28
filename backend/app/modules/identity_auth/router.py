@@ -268,17 +268,21 @@ async def _get_or_create_user(db, phone: str):
 
 async def _resolve_role(db, user_id) -> str:
     """
-    Pass 2: role is derived from active field_executives row. Kept cheap —
-    one indexed lookup per token issue. 'admin' is handled separately by the
-    admin module; for end-user tokens we return 'user' | 'fe'.
+    Role is derived from any non-terminal field_executives row.
+
+    Candidate / pending FEs must be able to enter the FE app to bind their
+    device and see onboarding status. Real work endpoints still do a live DB
+    readiness check before returning assignments or allowing field actions.
+    'admin' is handled separately by the admin module; for end-user tokens we
+    return 'user' | 'fe'.
     """
     from sqlalchemy import select
     from app.modules.field_executive.models import FieldExecutive
     res = await db.execute(
-        select(FieldExecutive.active).where(FieldExecutive.user_id == user_id)
+        select(FieldExecutive.onboarding_status).where(FieldExecutive.user_id == user_id)
     )
-    row = res.scalar_one_or_none()
-    if row is True:
+    status = res.scalar_one_or_none()
+    if status is not None and status not in {"deactivated", "rejected"}:
         return "fe"
     return "user"
 

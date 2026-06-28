@@ -74,6 +74,7 @@ export default function ProfileScreen({ navigation }: any) {
 
   const menuItems: MenuItem[] = [
     { emoji: '🚚', label: 'My Concierge', route: 'MyConcierge' },
+    { emoji: '✓', label: 'Direct pickups', route: 'MyDirectPickups' },
     { emoji: '📦', label: 'My listings', route: 'MyListings' },
     { emoji: '✉️', label: 'My offers', route: 'MyOffers' },
     { emoji: '📦', label: 'Your FE visits', route: 'MyFeVisits' },

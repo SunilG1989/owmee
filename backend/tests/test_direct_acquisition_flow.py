@@ -14,6 +14,7 @@ def _item(**overrides):
     base = dict(
         id=uuid4(),
         category="toys",
+        qc_answers={},
         seller_photos=["seller/front.jpg"],
         policy_status="allowed",
         direct_eligibility_status="eligible",
@@ -36,6 +37,7 @@ def _booking(**overrides):
         seller_user_id=uuid4(),
         seller_account_id=uuid4(),
         pickup_address_id=uuid4(),
+        pickup_address_snapshot={"lat": 12.911, "lng": 77.641},
         pickup_locality="HSR Layout",
         pickup_pincode="560102",
         slot_start=datetime.now(timezone.utc),
@@ -158,3 +160,48 @@ def test_handover_requires_completed_payout():
         service.assert_handover_allowed(booking)
 
     assert exc.value.code == "PAYOUT_NOT_COMPLETED"
+
+
+def test_geofence_accepts_near_pickup_and_blocks_far_location():
+    booking = _booking()
+    near = {"lat": 12.9112, "lng": 77.6411, "accuracy_meters": 40}
+    far = {"lat": 28.6139, "lng": 77.2090, "accuracy_meters": 30}
+
+    assert service.assert_fe_location_near_pickup(booking, near, purpose="Arrival") < 50
+
+    with pytest.raises(service.DirectAcquisitionError) as exc:
+        service.assert_fe_location_near_pickup(booking, far, purpose="Arrival")
+
+    assert exc.value.code == "FE_GEOFENCE_MISMATCH"
+
+
+def test_toy_qc_requires_safety_and_parts_confirmation():
+    item = _item(qc_answers={"matched_seller_photos": True})
+
+    with pytest.raises(service.DirectAcquisitionError) as exc:
+        service.assert_qc_answers_complete(item)
+
+    assert exc.value.code == "QC_CHECKLIST_INCOMPLETE"
+    assert "parts_complete_or_disclosed" in exc.value.message
+
+    item.qc_answers = {
+        "matched_seller_photos": True,
+        "condition_confirmed": True,
+        "price_confirmed": True,
+        "custody_photo_captured": True,
+        "parts_complete_or_disclosed": True,
+        "safety_issue_absent": True,
+    }
+    service.assert_qc_answers_complete(item)
+
+
+def test_failed_payout_can_be_retried_only_after_final_acceptance():
+    booking = _booking(status="payout_failed", final_total_payout_inr=100)
+
+    with pytest.raises(service.DirectAcquisitionError) as exc:
+        service.assert_payout_retry_allowed(booking)
+
+    assert exc.value.code == "SELLER_FINAL_ACCEPTANCE_REQUIRED"
+
+    booking.seller_final_accepted_at = datetime.now(timezone.utc)
+    service.assert_payout_retry_allowed(booking)

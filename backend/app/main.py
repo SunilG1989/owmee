@@ -90,6 +90,7 @@ def create_app() -> FastAPI:
     from app.modules.field_executive.router import (
         seller_router as fe_seller_router,
         fe_router as fe_fe_router,
+        onboarding_router as fe_onboarding_router,
         admin_router as fe_admin_router,
     )
     from app.modules.field_executive.dev_router import router as fe_dev_router
@@ -141,6 +142,7 @@ def create_app() -> FastAPI:
     # ── Sprint 4 / Pass 2 ─────────────────────────────────────────────────
     app.include_router(fe_seller_router, prefix="/v1/fe-visits", tags=["fe-visits-seller"])
     app.include_router(fe_fe_router, prefix="/v1/fe/visits", tags=["fe-visits-fe"])
+    app.include_router(fe_onboarding_router, prefix="/v1/fe/onboarding", tags=["fe-onboarding"])
     app.include_router(fe_admin_router, prefix="/v1/admin/fe-visits", tags=["fe-visits-admin"])
     app.include_router(fe_dev_router, prefix="/v1", tags=["fe-dev"])
     # Owmee Direct acquisition: seller books, FE QCs, Ops/Admin approve before buyer-live inventory.

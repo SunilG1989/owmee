@@ -13,6 +13,7 @@ export type RootStackParams = {
   // Profile sub-screens
   MyListings: undefined;
   MyFeVisits: undefined;
+  MyDirectPickups: undefined;
   SavedItems: undefined;
   TransactionList: undefined;
   EditProfile: undefined;
@@ -26,6 +27,7 @@ export type RootStackParams = {
   FeVisitConfirmation: { visitId: string };
   VerificationWall: { intent?: 'buy' | 'sell' | 'publish' } | undefined;
   // FE-role screens
+  FeOnboarding: undefined;
   FeHome: undefined;
   FeOps: undefined;  // Sprint 6c: post-purchase pickups + deliveries
   FeVisitDetail: { visitId: string };

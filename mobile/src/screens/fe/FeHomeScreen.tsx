@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { FE, type DirectAcquisitionBooking, type FEVisit } from '../../services/api';
+import { FE, FEOnboarding, type DirectAcquisitionBooking, type FEProfile, type FEVisit } from '../../services/api';
 import { Button, Chip, IconButton } from '../../components/ui';
 import { C, S, R, T, Shadow } from '../../utils/tokens';
 import type { RootScreen } from '../../navigation/types';
@@ -79,7 +79,9 @@ function StatusPill({ status }: { status: FEVisit['status'] }) {
 export default function FeHomeScreen({ navigation }: RootScreen<'FeHome'>) {
   const [visits, setVisits] = useState<FEVisit[]>([]);
   const [directBookings, setDirectBookings] = useState<DirectAcquisitionBooking[]>([]);
+  const [profile, setProfile] = useState<FEProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [shiftBusy, setShiftBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [tab, setTab] = useState<Tab>('active');
   const [error, setError] = useState<string | null>(null);
@@ -89,6 +91,13 @@ export default function FeHomeScreen({ navigation }: RootScreen<'FeHome'>) {
   const load = useCallback(async () => {
     try {
       setError(null);
+      const profileRes = await FEOnboarding.me();
+      const nextProfile = profileRes.data;
+      setProfile(nextProfile);
+      if (!nextProfile.active || (nextProfile.readiness_gaps || []).length > 0) {
+        navigation.reset({ index: 0, routes: [{ name: 'FeOnboarding' }] });
+        return;
+      }
       const [visitRes, directRes] = await Promise.all([
         FE.assignedVisits(),
         FE.directBookings(),
@@ -101,13 +110,25 @@ export default function FeHomeScreen({ navigation }: RootScreen<'FeHome'>) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [navigation]);
 
   useEffect(() => { load(); }, [load]);
 
   const onRefresh = () => {
     setRefreshing(true);
     load();
+  };
+
+  const runShift = async (mode: 'in' | 'out') => {
+    setShiftBusy(true);
+    try {
+      const res = mode === 'in' ? await FEOnboarding.checkIn() : await FEOnboarding.checkOut();
+      setProfile(res.data);
+    } catch (e: any) {
+      setError(e?.response?.data?.detail?.message || 'Could not update shift.');
+    } finally {
+      setShiftBusy(false);
+    }
   };
 
   const filteredVisits = visits.filter((v) => visitBucket(v) === tab);
@@ -134,9 +155,18 @@ export default function FeHomeScreen({ navigation }: RootScreen<'FeHome'>) {
       <View style={st.header}>
         <View>
           <Text style={st.h1}>Field visits</Text>
-          <Text style={st.subtitle}>{counts.active} active · {counts.scheduled} upcoming</Text>
+          <Text style={st.subtitle}>
+            {counts.active} active · {counts.scheduled} upcoming · Shift {String(profile?.current_shift || 'off').replace(/_/g, ' ')}
+          </Text>
         </View>
         <View style={st.headerActions}>
+          <Button
+            label={profile?.current_shift === 'available' ? 'End shift' : 'Start shift'}
+            size="sm"
+            variant={profile?.current_shift === 'available' ? 'secondary' : 'primary'}
+            loading={shiftBusy}
+            onPress={() => runShift(profile?.current_shift === 'available' ? 'out' : 'in')}
+          />
           <IconButton
             icon="📦"
             onPress={() => navigation.navigate('FeOps')}
