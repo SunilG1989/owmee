@@ -5,7 +5,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -190,26 +189,24 @@ export default function MyDirectPickupsScreen({
 
               <View style={s.actions}>
                 {canRefreshCodes(booking.status) ? (
-                  <TouchableOpacity
-                    style={s.secondaryBtn}
+                  <Button
+                    label="Refresh codes"
+                    variant="secondary"
+                    size="sm"
+                    loading={busy === `codes-${booking.id}`}
                     disabled={!!busy}
                     onPress={() => refreshCodes(booking)}
-                  >
-                    <Text style={s.secondaryText}>
-                      {busy === `codes-${booking.id}` ? 'Refreshing...' : 'Refresh codes'}
-                    </Text>
-                  </TouchableOpacity>
+                  />
                 ) : null}
                 {canCancel(booking.status) ? (
-                  <TouchableOpacity
-                    style={s.cancelBtn}
+                  <Button
+                    label="Cancel"
+                    variant="destructive"
+                    size="sm"
+                    loading={busy === `cancel-${booking.id}`}
                     disabled={!!busy}
                     onPress={() => cancelBooking(booking)}
-                  >
-                    <Text style={s.cancelText}>
-                      {busy === `cancel-${booking.id}` ? 'Cancelling...' : 'Cancel'}
-                    </Text>
-                  </TouchableOpacity>
+                  />
                 ) : null}
               </View>
             </View>
@@ -280,20 +277,4 @@ const s = StyleSheet.create({
   itemMeta: { color: C.text3, fontSize: T.small, marginTop: 2, textTransform: 'capitalize' },
   itemAmount: { color: C.text, fontSize: T.body, fontWeight: T.weight.bold },
   actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: S.sm, marginTop: S.md },
-  secondaryBtn: {
-    borderWidth: 1,
-    borderColor: C.border,
-    borderRadius: R.pill,
-    paddingHorizontal: S.md,
-    paddingVertical: S.sm,
-  },
-  secondaryText: { color: C.petrolDeep, fontSize: T.small, fontWeight: T.weight.bold },
-  cancelBtn: {
-    borderWidth: 1,
-    borderColor: C.red,
-    borderRadius: R.pill,
-    paddingHorizontal: S.md,
-    paddingVertical: S.sm,
-  },
-  cancelText: { color: C.red, fontSize: T.small, fontWeight: T.weight.bold },
 });

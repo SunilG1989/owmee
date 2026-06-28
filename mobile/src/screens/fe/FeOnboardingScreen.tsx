@@ -52,7 +52,7 @@ function statusTone(value?: string | null): 'good' | 'warn' | 'bad' | 'neutral' 
 
 function toneStyle(tone: 'good' | 'warn' | 'bad' | 'neutral') {
   if (tone === 'good') return { bg: C.petrolLight, fg: C.petrolText };
-  if (tone === 'warn') return { bg: '#FFF4D8', fg: '#7A4C00' };
+  if (tone === 'warn') return { bg: C.yellowLight, fg: C.yellow };
   if (tone === 'bad') return { bg: C.redLight, fg: C.red };
   return { bg: C.bone2, fg: C.text2 };
 }
