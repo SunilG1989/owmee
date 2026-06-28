@@ -24,6 +24,7 @@ def _item(**overrides):
         approval_required=False,
         approval_status="not_required",
         pickup_photos=["pickup/front.jpg"],
+        required_pickup_photos=["front"],
         item_status="pending_qc",
     )
     base.update(overrides)
@@ -46,6 +47,7 @@ def _booking(**overrides):
         assigned_fe_id=None,
         seller_final_accepted_at=None,
         final_total_payout_inr=None,
+        payout_ready_at=None,
         payout_completed_at=None,
         items=[_item()],
     )
@@ -132,16 +134,17 @@ def test_price_revision_requires_pickup_evidence_photos():
     assert exc.value.code == "EVIDENCE_PHOTO_REQUIRED"
 
 
-def test_payout_requires_seller_final_acceptance_and_positive_amount():
+def test_payout_processing_requires_finance_ready_and_positive_amount():
     booking = _booking(status="pickup_qc_in_progress", final_total_payout_inr=100)
 
     with pytest.raises(service.DirectAcquisitionError) as exc:
         service.assert_payout_allowed(booking)
 
-    assert exc.value.code == "SELLER_FINAL_ACCEPTANCE_REQUIRED"
+    assert exc.value.code == "PAYOUT_NOT_READY"
 
-    booking.status = "seller_final_acceptance"
+    booking.status = "payout_ready"
     booking.seller_final_accepted_at = datetime.now(timezone.utc)
+    booking.payout_ready_at = datetime.now(timezone.utc)
     booking.final_total_payout_inr = 0
     with pytest.raises(service.DirectAcquisitionError) as exc2:
         service.assert_payout_allowed(booking)

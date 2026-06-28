@@ -18,15 +18,16 @@ seller accepts Owmee offer
 → direct_acquisition_booking is created with item manifest
 → Ops or auto-assignment assigns FE
 → FE opens assigned booking in FE app
-→ FE starts visit
-→ seller OTP/QR verification
+→ FE starts route
+→ FE marks arrival
+→ seller arrival OTP/QR verification
 → per-item pickup photos and QC
 → item accept/revise/reject
 → >10% price increase requires admin approval
-→ seller final payout acceptance
-→ seller account ledger credit
-→ handover completed
-→ warehouse inbound
+→ seller final payout acceptance with a separate final OTP
+→ FE requests payout-ready
+→ Finance posts seller account ledger credit
+→ Warehouse/Admin receives custody package
 → admin listing approval
 → buyer-facing listing can go live
 ```
@@ -34,13 +35,17 @@ seller accepts Owmee offer
 ## Hard Blocks
 
 - No FE assignment without seller, address, slot, manifest, ownership declaration, and serviceability.
-- No FE QC before seller OTP/QR verification.
+- No FE QC before FE arrival and seller arrival OTP/QR verification.
 - No payout for rejected items.
 - No payout without QC, pickup photos, seller final acceptance, and positive final payout.
 - No seller final acceptance while any manifest item is still pending QC or approval.
 - No FE price increase above the configured threshold without admin approval.
 - No FE price revision without pickup evidence photos.
-- No handover before seller-account ledger payout is posted.
+- No rejected item without pickup evidence photos.
+- FE cannot post seller payout; FE can only request payout-ready.
+- Finance cannot post payout until seller final acceptance and payout-ready are present.
+- FE cannot mark warehouse inbound; Warehouse/Admin must receive the custody package.
+- No warehouse receipt before seller-account ledger payout is posted.
 - No buyer-facing live listing before warehouse inbound and Admin approval.
 - No offline booking, cash, manual UPI, or unsupported extra-item acquisition.
 
@@ -62,13 +67,16 @@ The FE app must make the workflow obvious:
 2. Booking detail shows seller address, slot, manifest, suggested payout, warnings, and progress.
 3. FE cannot proceed with QC until seller verification succeeds.
 4. Each item shows clear Accept, Revise, Reject states.
-5. The final payout summary requires seller OTP confirmation before triggering ledger payout.
-6. Handover is only enabled after payout is posted.
+5. The final payout summary requires the separate seller final OTP.
+6. After seller acceptance, the FE can only send the booking to Finance for payout.
+7. Handover/inbound is completed from the admin Warehouse queue, not the FE app.
 
 ## Follow-Up Scope
 
-The current implementation adds the controlled booking/FE/Ops/Admin spine. It does
-not yet add seller-side Direct offer creation UI, masked seller calling, map launch,
-extra-item add during visit, real seller-account payout rails, or warehouse SKU
-generation UI. Those remain launch-critical follow-ups before Owmee Direct can run
-outside internal pilots.
+The current implementation adds the controlled booking/FE/Ops/Admin spine with
+separate arrival/final OTPs, FE payout-ready, Finance payout, Warehouse receipt,
+and Admin listing approval gates. It does not yet add seller-side Direct offer
+creation UI, masked seller calling, map launch, automatic geofence enforcement,
+extra-item add during visit, real external payout rails, or warehouse SKU
+generation UI. Those remain launch-critical follow-ups before Owmee Direct can
+run outside internal pilots.

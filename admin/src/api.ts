@@ -215,6 +215,21 @@ export const DirectOps = {
       fe_id: feId,
       assignment_method: 'ops_manual',
     }),
+  processPayout: (bookingId: string, referenceId?: string) =>
+    req('POST', `/v1/ops/bookings/${bookingId}/process-payout`, {
+      success: true,
+      reference_id: referenceId,
+    }),
+  failPayout: (bookingId: string, failureReason: string) =>
+    req('POST', `/v1/ops/bookings/${bookingId}/process-payout`, {
+      success: false,
+      failure_reason: failureReason,
+    }),
+  warehouseReceive: (bookingId: string, receiptCode?: string, notes?: string) =>
+    req('POST', `/v1/ops/bookings/${bookingId}/warehouse-receive`, {
+      receipt_code: receiptCode,
+      notes,
+    }),
   priceApprovals: (status = 'pending') =>
     req('GET', `/v1/ops/price-approvals?status=${status}`),
   approvePrice: (approvalId: string, note?: string) =>

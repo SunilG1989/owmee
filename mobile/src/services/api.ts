@@ -468,6 +468,7 @@ export type DirectBookingStatus =
   | 'seller_verified'
   | 'pickup_qc_in_progress'
   | 'seller_final_acceptance'
+  | 'payout_ready'
   | 'payout_completed'
   | 'booking_completed'
   | 'seller_cancelled_before_visit'
@@ -502,7 +503,12 @@ export interface DirectAcquisitionItem {
   approval_status: string;
   qc_status: string;
   qc_answers: Record<string, any>;
+  qc_evidence_manifest?: Record<string, any>;
   qc_notes: string | null;
+  reject_evidence_photos?: string[];
+  custody_seal_code?: string | null;
+  warehouse_status?: string;
+  warehouse_notes?: string | null;
   item_status: string;
 }
 
@@ -524,12 +530,27 @@ export interface DirectAcquisitionBooking {
   item_count: number;
   estimated_total_offer_inr: number;
   final_total_payout_inr: number | null;
+  fe_started_at?: string | null;
+  fe_arrived_at?: string | null;
+  fe_start_location?: Record<string, any>;
+  fe_arrival_location?: Record<string, any>;
+  seller_verified_location?: Record<string, any>;
+  seller_final_acceptance_location?: Record<string, any>;
   verified_at?: string | null;
   seller_final_accepted_at?: string | null;
+  payout_ready_at?: string | null;
+  payout_status?: string | null;
+  payout_reference_id?: string | null;
+  payout_failure_reason?: string | null;
   payout_completed_at?: string | null;
   handover_completed_at?: string | null;
   warehouse_inbound_id: string | null;
+  warehouse_received_at?: string | null;
+  warehouse_receipt_code?: string | null;
+  warehouse_receipt_notes?: string | null;
+  risk_flags?: string[];
   seller_otp?: string | null;
+  final_acceptance_otp?: string | null;
   items: DirectAcquisitionItem[];
   created_at: string | null;
   updated_at: string | null;
@@ -1113,6 +1134,8 @@ export const DirectSell = {
     api.post<DirectAcquisitionBooking>('/v1/direct-sell/bookings', body),
   getBooking: (id: string) =>
     api.get<DirectAcquisitionBooking>(`/v1/direct-sell/bookings/${id}`),
+  refreshVerificationCodes: (id: string) =>
+    api.post<DirectAcquisitionBooking>(`/v1/direct-sell/bookings/${id}/verification-codes`),
   cancelBooking: (id: string, reason: string) =>
     api.post<DirectAcquisitionBooking>(`/v1/direct-sell/bookings/${id}/cancel`, { reason }),
 };
@@ -1130,6 +1153,8 @@ export const FE = {
     api.get<DirectAcquisitionBooking>(`/v1/fe/bookings/${id}`),
   startDirectBooking: (id: string) =>
     api.post<DirectAcquisitionBooking>(`/v1/fe/bookings/${id}/start`),
+  arriveDirectBooking: (id: string) =>
+    api.post<DirectAcquisitionBooking>(`/v1/fe/bookings/${id}/arrive`),
   verifyDirectSellerOtp: (id: string, otp: string) =>
     api.post<DirectAcquisitionBooking>(`/v1/fe/bookings/${id}/verify-seller-otp`, { otp }),
   addDirectItemPhotos: (bookingId: string, itemId: string, photoKeys: string[]) =>
@@ -1160,10 +1185,8 @@ export const FE = {
       method: 'otp',
       otp,
     }),
-  triggerDirectPayout: (bookingId: string) =>
-    api.post<DirectAcquisitionBooking>(`/v1/fe/bookings/${bookingId}/trigger-payout`),
-  completeDirectHandover: (bookingId: string) =>
-    api.post<DirectAcquisitionBooking>(`/v1/fe/bookings/${bookingId}/complete-handover`),
+  requestDirectPayout: (bookingId: string) =>
+    api.post<DirectAcquisitionBooking>(`/v1/fe/bookings/${bookingId}/request-payout`),
   // Concierge Phase 2 trust theater — N4 + N5 trigger endpoints.
   startRoute: (id: string) => api.post(`/v1/fe/visits/${id}/start-route`),
   arrivingSoon: (id: string) => api.post(`/v1/fe/visits/${id}/arriving-soon`),

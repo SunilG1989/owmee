@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.core.admin_dependencies import AdminAny, AdminL2
+from app.core.admin_dependencies import AdminAny, AdminFinance, AdminL2
 from app.core.dependencies import BasicUser, DBSession
 from app.core.fe_dependencies import FEUser
 from app.core.storage import generate_presigned_upload_url
@@ -83,6 +83,17 @@ class VerifySellerOtpRequest(BaseModel):
     otp: str = Field(..., min_length=4, max_length=8)
 
 
+class LocationPayload(BaseModel):
+    lat: Optional[float] = Field(None, ge=-90, le=90)
+    lng: Optional[float] = Field(None, ge=-180, le=180)
+    accuracy_meters: Optional[float] = Field(None, ge=0, le=10000)
+    source: Optional[str] = Field(None, max_length=40)
+
+
+class FeVisitCheckpointRequest(BaseModel):
+    location: Optional[LocationPayload] = None
+
+
 class ItemPhotosRequest(BaseModel):
     photo_keys: list[str] = Field(..., min_length=1, max_length=10)
 
@@ -113,10 +124,22 @@ class SellerFinalAcceptanceRequest(BaseModel):
     accepted: bool = True
     method: str = Field("otp", pattern="^(seller_app|otp)$")
     otp: Optional[str] = Field(None, min_length=4, max_length=8)
+    location: Optional[LocationPayload] = None
 
 
 class ApprovalDecisionRequest(BaseModel):
     note: Optional[str] = Field(None, max_length=1000)
+
+
+class PayoutDecisionRequest(BaseModel):
+    success: bool = True
+    reference_id: Optional[str] = Field(None, max_length=100)
+    failure_reason: Optional[str] = Field(None, max_length=1000)
+
+
+class WarehouseReceiveRequest(BaseModel):
+    receipt_code: Optional[str] = Field(None, max_length=80)
+    notes: Optional[str] = Field(None, max_length=1000)
 
 
 class ListingApprovalDecisionRequest(BaseModel):
@@ -133,9 +156,17 @@ def _raise(err: direct_service.DirectAcquisitionError) -> None:
         "INVALID_PAYOUT_AMOUNT",
         "BOOKING_NOT_ASSIGNABLE",
         "EVIDENCE_PHOTO_REQUIRED",
+        "PICKUP_PHOTOS_REQUIRED",
+        "FINAL_ACCEPTANCE_NOT_READY",
     }:
         status_code = status.HTTP_400_BAD_REQUEST
     raise HTTPException(status_code, {"error": err.code, "message": err.message})
+
+
+def _location_dict(location: LocationPayload | None) -> dict:
+    if location is None:
+        return {}
+    return location.model_dump(exclude_none=True)
 
 
 async def _address_snapshot(db, address_id: UUID, owner_user_id: UUID) -> dict:
@@ -226,7 +257,12 @@ def _item_dict(item: AcquisitionItem) -> dict:
         "approval_status": item.approval_status,
         "qc_status": item.qc_status,
         "qc_answers": item.qc_answers or {},
+        "qc_evidence_manifest": getattr(item, "qc_evidence_manifest", None) or {},
         "qc_notes": item.qc_notes,
+        "reject_evidence_photos": getattr(item, "reject_evidence_photos", None) or [],
+        "custody_seal_code": getattr(item, "custody_seal_code", None),
+        "warehouse_status": getattr(item, "warehouse_status", None) or "pending",
+        "warehouse_notes": getattr(item, "warehouse_notes", None),
         "item_status": item.item_status,
     }
 
@@ -259,7 +295,13 @@ async def _fe_code(db, fe_id: UUID | None) -> str | None:
     return res.scalar_one_or_none()
 
 
-async def _booking_dict(db, booking: DirectAcquisitionBooking, *, seller_otp: str | None = None) -> dict:
+async def _booking_dict(
+    db,
+    booking: DirectAcquisitionBooking,
+    *,
+    seller_otp: str | None = None,
+    final_acceptance_otp: str | None = None,
+) -> dict:
     return {
         "id": str(booking.id),
         "booking_code": booking.booking_code,
@@ -278,12 +320,27 @@ async def _booking_dict(db, booking: DirectAcquisitionBooking, *, seller_otp: st
         "item_count": booking.item_count,
         "estimated_total_offer_inr": booking.estimated_total_offer_inr,
         "final_total_payout_inr": booking.final_total_payout_inr,
+        "fe_started_at": booking.fe_started_at.isoformat() if getattr(booking, "fe_started_at", None) else None,
+        "fe_arrived_at": booking.fe_arrived_at.isoformat() if getattr(booking, "fe_arrived_at", None) else None,
+        "fe_start_location": getattr(booking, "fe_start_location", None) or {},
+        "fe_arrival_location": getattr(booking, "fe_arrival_location", None) or {},
+        "seller_verified_location": getattr(booking, "seller_verified_location", None) or {},
+        "seller_final_acceptance_location": getattr(booking, "seller_final_acceptance_location", None) or {},
         "verified_at": booking.verified_at.isoformat() if booking.verified_at else None,
         "seller_final_accepted_at": booking.seller_final_accepted_at.isoformat() if booking.seller_final_accepted_at else None,
+        "payout_ready_at": booking.payout_ready_at.isoformat() if getattr(booking, "payout_ready_at", None) else None,
+        "payout_status": getattr(booking, "payout_status", None) or "not_started",
+        "payout_reference_id": getattr(booking, "payout_reference_id", None),
+        "payout_failure_reason": getattr(booking, "payout_failure_reason", None),
         "payout_completed_at": booking.payout_completed_at.isoformat() if booking.payout_completed_at else None,
         "handover_completed_at": booking.handover_completed_at.isoformat() if booking.handover_completed_at else None,
         "warehouse_inbound_id": booking.warehouse_inbound_id,
+        "warehouse_received_at": booking.warehouse_received_at.isoformat() if getattr(booking, "warehouse_received_at", None) else None,
+        "warehouse_receipt_code": getattr(booking, "warehouse_receipt_code", None),
+        "warehouse_receipt_notes": getattr(booking, "warehouse_receipt_notes", None),
+        "risk_flags": getattr(booking, "risk_flags", None) or [],
         "seller_otp": seller_otp,
+        "final_acceptance_otp": final_acceptance_otp,
         "items": [_item_dict(item) for item in booking.items],
         "created_at": booking.created_at.isoformat() if booking.created_at else None,
         "updated_at": booking.updated_at.isoformat() if booking.updated_at else None,
@@ -320,6 +377,8 @@ async def create_booking(body: CreateBookingRequest, current_user: BasicUser, db
 
     snapshot = await _address_snapshot(db, body.pickup_address_id, current_user.user_id)
     seller_otp = direct_service.new_seller_otp()
+    final_acceptance_otp = direct_service.new_seller_otp()
+    otp_expiry = direct_service.otp_expires_at(body.slot_end)
     booking = DirectAcquisitionBooking(
         booking_code=direct_service.new_booking_code(),
         seller_user_id=current_user.user_id,
@@ -332,6 +391,11 @@ async def create_booking(body: CreateBookingRequest, current_user: BasicUser, db
         slot_end=body.slot_end,
         status="pending_fe_assignment",
         seller_otp_hash=direct_service.hash_otp(seller_otp),
+        arrival_otp_expires_at=otp_expiry,
+        arrival_otp_attempts=0,
+        final_acceptance_otp_hash=direct_service.hash_otp(final_acceptance_otp),
+        final_acceptance_otp_expires_at=otp_expiry,
+        final_acceptance_otp_attempts=0,
         seller_phone_verified=bool(current_user.phone_verified),
         seller_ownership_declaration=True,
         serviceable_area=True,
@@ -339,6 +403,8 @@ async def create_booking(body: CreateBookingRequest, current_user: BasicUser, db
         assignment_priority=body.assignment_priority,
         item_count=len(body.items),
         estimated_total_offer_inr=sum(i.owmee_suggested_offer_inr for i in body.items),
+        payout_status="not_started",
+        risk_flags=[],
     )
     for item_in in body.items:
         booking.items.append(AcquisitionItem(
@@ -367,7 +433,7 @@ async def create_booking(body: CreateBookingRequest, current_user: BasicUser, db
     await db.refresh(booking)
     booking = await _load_booking(db, booking.id)
     logger.info("direct.booking.created", booking_id=str(booking.id), seller_id=str(current_user.user_id))
-    return await _booking_dict(db, booking, seller_otp=seller_otp)
+    return await _booking_dict(db, booking, seller_otp=seller_otp, final_acceptance_otp=final_acceptance_otp)
 
 
 @seller_router.get("/bookings/{booking_id}")
@@ -376,6 +442,26 @@ async def get_my_booking(booking_id: UUID, current_user: BasicUser, db: DBSessio
     if booking.seller_user_id != current_user.user_id:
         raise HTTPException(403, {"error": "NOT_YOUR_BOOKING"})
     return await _booking_dict(db, booking)
+
+
+@seller_router.post("/bookings/{booking_id}/verification-codes")
+async def refresh_my_booking_codes(booking_id: UUID, current_user: BasicUser, db: DBSession):
+    booking = await _load_booking(db, booking_id)
+    if booking.seller_user_id != current_user.user_id:
+        raise HTTPException(403, {"error": "NOT_YOUR_BOOKING"})
+    if booking.status in direct_service.BOOKING_TERMINAL_STATUSES or booking.status in {"seller_final_acceptance", "payout_ready", "payout_completed"}:
+        raise HTTPException(409, {"error": "CANNOT_REFRESH_CODES"})
+    seller_otp = direct_service.new_seller_otp()
+    final_acceptance_otp = direct_service.new_seller_otp()
+    expiry = direct_service.otp_expires_at(booking.slot_end)
+    booking.seller_otp_hash = direct_service.hash_otp(seller_otp)
+    booking.arrival_otp_expires_at = expiry
+    booking.arrival_otp_attempts = 0
+    booking.final_acceptance_otp_hash = direct_service.hash_otp(final_acceptance_otp)
+    booking.final_acceptance_otp_expires_at = expiry
+    booking.final_acceptance_otp_attempts = 0
+    await db.commit()
+    return await _booking_dict(db, booking, seller_otp=seller_otp, final_acceptance_otp=final_acceptance_otp)
 
 
 @seller_router.post("/bookings/{booking_id}/cancel")
@@ -424,7 +510,16 @@ async def assign_fe(booking_id: UUID, body: AssignBookingRequest, current_admin:
 @fe_router.get("/bookings")
 async def fe_bookings(current_user: FEUser, db: DBSession, date: str | None = None, status_filter: str | None = Query(None, alias="status")):
     fe = await _current_fe(db, current_user)
-    statuses = {status_filter} if status_filter else {"assigned_to_fe", "fe_en_route", "fe_arrived", "seller_verified", "pickup_qc_in_progress", "seller_final_acceptance", "payout_completed"}
+    statuses = {status_filter} if status_filter else {
+        "assigned_to_fe",
+        "fe_en_route",
+        "fe_arrived",
+        "seller_verified",
+        "pickup_qc_in_progress",
+        "seller_final_acceptance",
+        "payout_ready",
+        "payout_completed",
+    }
     rows = (await db.execute(
         select(DirectAcquisitionBooking)
         .options(selectinload(DirectAcquisitionBooking.items))
@@ -444,14 +539,43 @@ async def fe_booking_detail(booking_id: UUID, current_user: FEUser, db: DBSessio
 
 
 @fe_router.post("/bookings/{booking_id}/start")
-async def fe_start_booking(booking_id: UUID, current_user: FEUser, db: DBSession):
+async def fe_start_booking(
+    booking_id: UUID,
+    current_user: FEUser,
+    db: DBSession,
+    body: FeVisitCheckpointRequest | None = None,
+):
     fe = await _current_fe(db, current_user)
     booking = await _load_booking(db, booking_id)
     try:
         direct_service.assert_can_start_booking(booking, fe.id)
     except direct_service.DirectAcquisitionError as err:
         _raise(err)
+    booking.status = "fe_en_route"
+    booking.fe_started_at = datetime.now(timezone.utc)
+    booking.fe_start_location = _location_dict(body.location if body else None)
+    await db.commit()
+    return await _booking_dict(db, booking)
+
+
+@fe_router.post("/bookings/{booking_id}/arrive")
+async def fe_arrive_booking(
+    booking_id: UUID,
+    current_user: FEUser,
+    db: DBSession,
+    body: FeVisitCheckpointRequest | None = None,
+):
+    fe = await _current_fe(db, current_user)
+    booking = await _load_booking(db, booking_id)
+    if booking.assigned_fe_id != fe.id:
+        raise HTTPException(403, {"error": "NOT_YOUR_BOOKING"})
+    if booking.status not in {"fe_en_route", "assigned_to_fe"}:
+        raise HTTPException(409, {"error": "BOOKING_NOT_EN_ROUTE"})
+    if booking.status == "assigned_to_fe":
+        booking.fe_started_at = booking.fe_started_at or datetime.now(timezone.utc)
     booking.status = "fe_arrived"
+    booking.fe_arrived_at = datetime.now(timezone.utc)
+    booking.fe_arrival_location = _location_dict(body.location if body else None)
     await db.commit()
     return await _booking_dict(db, booking)
 
@@ -462,12 +586,23 @@ async def fe_verify_seller_otp(booking_id: UUID, body: VerifySellerOtpRequest, c
     booking = await _load_booking(db, booking_id)
     if booking.assigned_fe_id != fe.id:
         raise HTTPException(403, {"error": "NOT_YOUR_BOOKING"})
-    if booking.status not in {"fe_arrived", "fe_en_route"}:
+    if booking.status != "fe_arrived":
         raise HTTPException(409, {"error": "BOOKING_NOT_AT_DOOR"})
+    try:
+        direct_service.assert_otp_attempt_allowed(
+            attempts=getattr(booking, "arrival_otp_attempts", 0) or 0,
+            expires_at=getattr(booking, "arrival_otp_expires_at", None),
+            purpose="Arrival",
+        )
+    except direct_service.DirectAcquisitionError as err:
+        _raise(err)
     if not direct_service.verify_otp(body.otp, booking.seller_otp_hash):
+        booking.arrival_otp_attempts = (getattr(booking, "arrival_otp_attempts", 0) or 0) + 1
+        await db.commit()
         raise HTTPException(400, {"error": "INVALID_SELLER_OTP"})
     booking.status = "seller_verified"
     booking.verified_at = datetime.now(timezone.utc)
+    booking.seller_verified_location = getattr(booking, "fe_arrival_location", None) or {}
     await db.commit()
     return await _booking_dict(db, booking)
 
@@ -484,6 +619,12 @@ async def fe_item_photos(booking_id: UUID, item_id: UUID, body: ItemPhotosReques
         _raise(err)
     item = await _load_item(db, booking_id, item_id)
     item.pickup_photos = list(dict.fromkeys([*(item.pickup_photos or []), *body.photo_keys]))
+    item.qc_evidence_manifest = {
+        **(getattr(item, "qc_evidence_manifest", None) or {}),
+        "pickup_photo_count": len(item.pickup_photos or []),
+        "required_photo_count": len(item.required_pickup_photos or []),
+        "last_added_count": len(body.photo_keys),
+    }
     booking.status = "pickup_qc_in_progress"
     await db.commit()
     return {"item": _item_dict(item)}
@@ -533,6 +674,17 @@ async def fe_item_qc(booking_id: UUID, item_id: UUID, body: ItemQcRequest, curre
     item.qc_answers = body.qc_answers
     item.qc_notes = body.qc_notes
     item.pickup_photos = list(dict.fromkeys([*(item.pickup_photos or []), *body.pickup_photos]))
+    try:
+        direct_service.assert_required_pickup_evidence(item)
+    except direct_service.DirectAcquisitionError as err:
+        _raise(err)
+    item.qc_evidence_manifest = {
+        **(getattr(item, "qc_evidence_manifest", None) or {}),
+        "accepted_by_fe": True,
+        "pickup_photo_count": len(item.pickup_photos or []),
+        "required_photo_count": len(item.required_pickup_photos or []),
+        "qc_answer_keys": sorted((item.qc_answers or {}).keys()),
+    }
     booking.status = "pickup_qc_in_progress"
     await db.commit()
     return {"item": _item_dict(item)}
@@ -594,13 +746,21 @@ async def fe_reject_item(booking_id: UUID, item_id: UUID, body: RejectItemReques
     item = await _load_item(db, booking_id, item_id)
     try:
         direct_service.assert_item_can_be_qced(booking, item)
+        direct_service.assert_reject_evidence(body.evidence_photos, item)
     except direct_service.DirectAcquisitionError as err:
         _raise(err)
     item.qc_status = "rejected"
     item.item_status = "rejected"
     item.price_change_reason_code = body.reason_code
     item.qc_notes = body.notes
+    item.reject_evidence_photos = list(dict.fromkeys([*(getattr(item, "reject_evidence_photos", None) or []), *body.evidence_photos]))
     item.pickup_photos = list(dict.fromkeys([*(item.pickup_photos or []), *body.evidence_photos]))
+    item.qc_evidence_manifest = {
+        **(getattr(item, "qc_evidence_manifest", None) or {}),
+        "rejected_by_fe": True,
+        "reject_reason_code": body.reason_code,
+        "pickup_photo_count": len(item.pickup_photos or []),
+    }
     if all(i.item_status == "rejected" for i in booking.items):
         booking.status = "item_rejected_by_fe"
     else:
@@ -621,7 +781,18 @@ async def seller_final_acceptance(booking_id: UUID, body: SellerFinalAcceptanceR
         return await _booking_dict(db, booking)
     if body.method == "seller_app":
         raise HTTPException(400, {"error": "SELLER_APP_CONFIRMATION_REQUIRES_SELLER_SESSION"})
-    if not body.otp or not direct_service.verify_otp(body.otp, booking.seller_otp_hash):
+    final_hash = getattr(booking, "final_acceptance_otp_hash", None) or booking.seller_otp_hash
+    try:
+        direct_service.assert_otp_attempt_allowed(
+            attempts=getattr(booking, "final_acceptance_otp_attempts", 0) or 0,
+            expires_at=getattr(booking, "final_acceptance_otp_expires_at", None),
+            purpose="Final acceptance",
+        )
+    except direct_service.DirectAcquisitionError as err:
+        _raise(err)
+    if not body.otp or not direct_service.verify_otp(body.otp, final_hash):
+        booking.final_acceptance_otp_attempts = (getattr(booking, "final_acceptance_otp_attempts", 0) or 0) + 1
+        await db.commit()
         raise HTTPException(400, {"error": "INVALID_SELLER_FINAL_OTP"})
     try:
         direct_service.assert_final_acceptance_allowed(booking)
@@ -629,62 +800,111 @@ async def seller_final_acceptance(booking_id: UUID, body: SellerFinalAcceptanceR
         _raise(err)
     booking.final_total_payout_inr = direct_service.final_payout_total(booking.items)
     booking.seller_final_accepted_at = datetime.now(timezone.utc)
+    booking.seller_final_acceptance_location = _location_dict(body.location) or getattr(booking, "seller_verified_location", None) or {}
+    booking.payout_status = "not_started"
     booking.status = "seller_final_acceptance"
+    await db.commit()
+    return await _booking_dict(db, booking)
+
+
+@fe_router.post("/bookings/{booking_id}/request-payout")
+async def request_payout(booking_id: UUID, current_user: FEUser, db: DBSession):
+    fe = await _current_fe(db, current_user)
+    booking = await _load_booking(db, booking_id)
+    if booking.assigned_fe_id != fe.id:
+        raise HTTPException(403, {"error": "NOT_YOUR_BOOKING"})
+    try:
+        direct_service.assert_payout_request_allowed(booking)
+    except direct_service.DirectAcquisitionError as err:
+        _raise(err)
+    now = datetime.now(timezone.utc)
+    booking.status = "payout_ready"
+    booking.payout_status = "ready_for_finance"
+    booking.payout_ready_at = booking.payout_ready_at or now
+    booking.payout_ready_by_fe_id = fe.id
     await db.commit()
     return await _booking_dict(db, booking)
 
 
 @fe_router.post("/bookings/{booking_id}/trigger-payout")
 async def trigger_payout(booking_id: UUID, current_user: FEUser, db: DBSession):
-    fe = await _current_fe(db, current_user)
+    # Backward-compatible route name for older FE builds. It no longer posts money.
+    return await request_payout(booking_id, current_user, db)
+
+
+@fe_router.post("/bookings/{booking_id}/complete-handover")
+async def complete_handover(booking_id: UUID, current_user: FEUser, db: DBSession):
+    await _current_fe(db, current_user)
+    raise HTTPException(
+        status.HTTP_403_FORBIDDEN,
+        {"error": "WAREHOUSE_RECEIPT_REQUIRED", "message": "Warehouse/Admin must receive inventory before completion."},
+    )
+
+
+@ops_router.post("/bookings/{booking_id}/process-payout")
+async def process_payout(booking_id: UUID, body: PayoutDecisionRequest, current_admin: AdminFinance, db: DBSession):
     booking = await _load_booking(db, booking_id)
-    if booking.assigned_fe_id != fe.id:
-        raise HTTPException(403, {"error": "NOT_YOUR_BOOKING"})
     try:
-        direct_service.assert_payout_allowed(booking)
+        direct_service.assert_payout_process_allowed(booking)
     except direct_service.DirectAcquisitionError as err:
         _raise(err)
+    now = datetime.now(timezone.utc)
+    booking.payout_processed_by_admin_id = current_admin.admin_id
+    booking.payout_initiated_at = booking.payout_initiated_at or now
+    if not body.success:
+        booking.status = "payout_failed"
+        booking.payout_status = "failed"
+        booking.payout_failure_reason = body.failure_reason or "Finance marked payout as failed."
+        await db.commit()
+        return await _booking_dict(db, booking)
     existing = (await db.execute(
         select(SellerAccountLedgerEntry).where(SellerAccountLedgerEntry.booking_id == booking.id)
     )).scalar_one_or_none()
-    now = datetime.now(timezone.utc)
+    reference_id = body.reference_id or f"DIRECT-{booking.booking_code}"
     if existing is None:
         db.add(SellerAccountLedgerEntry(
             seller_account_id=booking.seller_account_id,
             booking_id=booking.id,
             amount_inr=booking.final_total_payout_inr or 0,
             status="posted",
-            reference_id=f"DIRECT-{booking.booking_code}",
+            reference_id=reference_id,
             posted_at=now,
         ))
     else:
         existing.status = "posted"
+        existing.reference_id = existing.reference_id or reference_id
         existing.posted_at = existing.posted_at or now
     booking.status = "payout_completed"
-    booking.payout_initiated_at = booking.payout_initiated_at or now
+    booking.payout_status = "posted"
+    booking.payout_reference_id = reference_id
     booking.payout_completed_at = booking.payout_completed_at or now
     await db.commit()
     return await _booking_dict(db, booking)
 
 
-@fe_router.post("/bookings/{booking_id}/complete-handover")
-async def complete_handover(booking_id: UUID, current_user: FEUser, db: DBSession):
-    fe = await _current_fe(db, current_user)
+@ops_router.post("/bookings/{booking_id}/warehouse-receive")
+async def warehouse_receive(booking_id: UUID, body: WarehouseReceiveRequest, current_admin: AdminL2, db: DBSession):
     booking = await _load_booking(db, booking_id)
-    if booking.assigned_fe_id != fe.id:
-        raise HTTPException(403, {"error": "NOT_YOUR_BOOKING"})
     try:
-        direct_service.assert_handover_allowed(booking)
+        direct_service.assert_warehouse_receive_allowed(booking)
     except direct_service.DirectAcquisitionError as err:
         _raise(err)
     now = datetime.now(timezone.utc)
-    booking.handover_completed_at = now
-    booking.warehouse_inbound_id = booking.warehouse_inbound_id or f"WIN-{booking.booking_code}"
+    receipt_code = body.receipt_code or f"WIN-{booking.booking_code}"
+    booking.handover_completed_at = booking.handover_completed_at or now
+    booking.warehouse_inbound_id = booking.warehouse_inbound_id or receipt_code
+    booking.warehouse_received_at = now
+    booking.warehouse_received_by_admin_id = current_admin.admin_id
+    booking.warehouse_receipt_code = receipt_code
+    booking.warehouse_receipt_notes = body.notes
     booking.status = "booking_completed"
     booking.completed_at = now
     for item in booking.items:
         if item.item_status in {"qc_passed", "qc_revised"}:
             item.item_status = "warehouse_inbound"
+            item.warehouse_status = "received"
+            item.warehouse_notes = body.notes
+            item.custody_seal_code = item.custody_seal_code or f"SEAL-{booking.booking_code}-{str(item.id)[:8]}"
     await db.commit()
     return await _booking_dict(db, booking)
 
@@ -763,6 +983,8 @@ async def approve_price(approval_id: UUID, body: ApprovalDecisionRequest, curren
     approval = await db.get(PriceOverrideApproval, approval_id)
     if approval is None:
         raise HTTPException(404, {"error": "APPROVAL_NOT_FOUND"})
+    if approval.status != "pending":
+        raise HTTPException(409, {"error": "APPROVAL_ALREADY_RESOLVED"})
     item = await db.get(AcquisitionItem, approval.acquisition_item_id)
     if item is None:
         raise HTTPException(404, {"error": "ITEM_NOT_FOUND"})
@@ -783,6 +1005,8 @@ async def reject_price(approval_id: UUID, body: ApprovalDecisionRequest, current
     approval = await db.get(PriceOverrideApproval, approval_id)
     if approval is None:
         raise HTTPException(404, {"error": "APPROVAL_NOT_FOUND"})
+    if approval.status != "pending":
+        raise HTTPException(409, {"error": "APPROVAL_ALREADY_RESOLVED"})
     item = await db.get(AcquisitionItem, approval.acquisition_item_id)
     if item is None:
         raise HTTPException(404, {"error": "ITEM_NOT_FOUND"})

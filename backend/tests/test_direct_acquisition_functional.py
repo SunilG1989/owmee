@@ -87,7 +87,12 @@ def _item(**overrides):
         approval_status="not_required",
         qc_status="pending",
         qc_answers={},
+        qc_evidence_manifest={},
         qc_notes=None,
+        reject_evidence_photos=[],
+        custody_seal_code=None,
+        warehouse_status="pending",
+        warehouse_notes=None,
         item_status="pending_qc",
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
@@ -121,18 +126,40 @@ def _booking(**overrides):
         assigned_fe_id=fe_id,
         assignment_method="ops_manual",
         seller_otp_hash=service.hash_otp("123456"),
+        arrival_otp_expires_at=now + timedelta(hours=3),
+        arrival_otp_attempts=0,
+        final_acceptance_otp_hash=service.hash_otp("654321"),
+        final_acceptance_otp_expires_at=now + timedelta(hours=3),
+        final_acceptance_otp_attempts=0,
         seller_phone_verified=True,
         seller_ownership_declaration=True,
         serviceable_area=True,
         item_count=len(items),
         estimated_total_offer_inr=sum(i.owmee_suggested_offer_inr for i in items),
         final_total_payout_inr=None,
+        fe_started_at=None,
+        fe_arrived_at=None,
+        fe_start_location={},
+        fe_arrival_location={},
+        seller_verified_location={},
+        seller_final_acceptance_location={},
         verified_at=now,
         seller_final_accepted_at=None,
+        payout_ready_at=None,
+        payout_ready_by_fe_id=None,
+        payout_status="not_started",
+        payout_reference_id=None,
+        payout_processed_by_admin_id=None,
+        payout_failure_reason=None,
         payout_initiated_at=None,
         payout_completed_at=None,
         handover_completed_at=None,
         warehouse_inbound_id=None,
+        warehouse_received_at=None,
+        warehouse_received_by_admin_id=None,
+        warehouse_receipt_code=None,
+        warehouse_receipt_notes=None,
+        risk_flags=[],
         completed_at=None,
         created_at=now,
         updated_at=now,
@@ -168,10 +195,12 @@ def test_direct_acquisition_routes_are_registered_and_no_off_platform_routes():
         "/v1/direct-sell/pickup-slots",
         "/v1/direct-sell/bookings",
         "/v1/direct-sell/bookings/{booking_id}",
+        "/v1/direct-sell/bookings/{booking_id}/verification-codes",
         "/v1/direct-sell/bookings/{booking_id}/cancel",
         "/v1/fe/bookings",
         "/v1/fe/bookings/{booking_id}",
         "/v1/fe/bookings/{booking_id}/start",
+        "/v1/fe/bookings/{booking_id}/arrive",
         "/v1/fe/bookings/{booking_id}/verify-seller-otp",
         "/v1/fe/bookings/{booking_id}/items/{item_id}/photos",
         "/v1/fe/bookings/{booking_id}/items/{item_id}/photos/request",
@@ -179,10 +208,13 @@ def test_direct_acquisition_routes_are_registered_and_no_off_platform_routes():
         "/v1/fe/bookings/{booking_id}/items/{item_id}/revise-offer",
         "/v1/fe/bookings/{booking_id}/items/{item_id}/reject",
         "/v1/fe/bookings/{booking_id}/seller-final-acceptance",
+        "/v1/fe/bookings/{booking_id}/request-payout",
         "/v1/fe/bookings/{booking_id}/trigger-payout",
         "/v1/fe/bookings/{booking_id}/complete-handover",
         "/v1/ops/bookings",
         "/v1/ops/bookings/{booking_id}/assign-fe",
+        "/v1/ops/bookings/{booking_id}/process-payout",
+        "/v1/ops/bookings/{booking_id}/warehouse-receive",
         "/v1/ops/price-approvals",
         "/v1/ops/price-approvals/{approval_id}/approve",
         "/v1/ops/price-approvals/{approval_id}/reject",
@@ -305,7 +337,7 @@ async def test_seller_final_acceptance_sets_final_total_after_all_items_resolved
 
     out = await router.seller_final_acceptance(
         booking.id,
-        SellerFinalAcceptanceRequest(accepted=True, method="otp", otp="123456"),
+        SellerFinalAcceptanceRequest(accepted=True, method="otp", otp="654321"),
         SimpleNamespace(user_id=uuid4()),
         db,
     )
@@ -317,7 +349,7 @@ async def test_seller_final_acceptance_sets_final_total_after_all_items_resolved
 
 
 @pytest.mark.asyncio
-async def test_trigger_payout_posts_single_seller_ledger_entry(monkeypatch):
+async def test_fe_request_payout_only_moves_booking_to_finance_queue(monkeypatch):
     fe_id = uuid4()
     item = _item(item_status="qc_passed", fe_final_offer_inr=100)
     booking = _booking(
@@ -329,33 +361,83 @@ async def test_trigger_payout_posts_single_seller_ledger_entry(monkeypatch):
     )
     await _patch_current_fe(monkeypatch, fe_id)
     _patch_booking_loader(monkeypatch, booking)
+    db = _DB()
+
+    out = await router.request_payout(booking.id, SimpleNamespace(user_id=uuid4()), db)
+
+    assert db.committed is True
+    assert len(db.added) == 0
+    assert booking.status == "payout_ready"
+    assert booking.payout_status == "ready_for_finance"
+    assert out["status"] == "payout_ready"
+
+
+@pytest.mark.asyncio
+async def test_finance_process_payout_posts_single_seller_ledger_entry(monkeypatch):
+    item = _item(item_status="qc_passed", fe_final_offer_inr=100)
+    booking = _booking(
+        status="payout_ready",
+        items=[item],
+        final_total_payout_inr=100,
+        seller_final_accepted_at=datetime.now(timezone.utc),
+        payout_ready_at=datetime.now(timezone.utc),
+    )
+    _patch_booking_loader(monkeypatch, booking)
     db = _DB(execute_values=[None])
 
-    out = await router.trigger_payout(booking.id, SimpleNamespace(user_id=uuid4()), db)
+    out = await router.process_payout(
+        booking.id,
+        router.PayoutDecisionRequest(success=True),
+        SimpleNamespace(admin_id=uuid4()),
+        db,
+    )
 
     assert db.committed is True
     assert len(db.added) == 1
     assert db.added[0].amount_inr == 100
     assert db.added[0].reference_id == "DIRECT-OD-123456"
     assert booking.status == "payout_completed"
+    assert booking.payout_status == "posted"
     assert out["status"] == "payout_completed"
 
 
 @pytest.mark.asyncio
-async def test_complete_handover_moves_only_payable_items_to_warehouse(monkeypatch):
+async def test_fe_cannot_complete_handover(monkeypatch):
     fe_id = uuid4()
     payable = _item(item_status="qc_passed", fe_final_offer_inr=100)
-    rejected = _item(item_status="rejected")
     booking = _booking(
         status="payout_completed",
         assigned_fe_id=fe_id,
-        items=[payable, rejected],
+        items=[payable],
         payout_completed_at=datetime.now(timezone.utc),
     )
     await _patch_current_fe(monkeypatch, fe_id)
     _patch_booking_loader(monkeypatch, booking)
 
-    out = await router.complete_handover(booking.id, SimpleNamespace(user_id=uuid4()), _DB())
+    with pytest.raises(HTTPException) as exc:
+        await router.complete_handover(booking.id, SimpleNamespace(user_id=uuid4()), _DB())
+
+    assert exc.value.status_code == 403
+    assert exc.value.detail["error"] == "WAREHOUSE_RECEIPT_REQUIRED"
+
+
+@pytest.mark.asyncio
+async def test_warehouse_receive_moves_only_payable_items_to_warehouse(monkeypatch):
+    payable = _item(item_status="qc_passed", fe_final_offer_inr=100)
+    rejected = _item(item_status="rejected")
+    booking = _booking(
+        status="payout_completed",
+        items=[payable, rejected],
+        payout_completed_at=datetime.now(timezone.utc),
+    )
+    _patch_booking_loader(monkeypatch, booking)
+
+    out = await router.warehouse_receive(
+        booking.id,
+        router.WarehouseReceiveRequest(),
+        SimpleNamespace(admin_id=uuid4()),
+        _DB(),
+    )
 
     assert booking.status == "booking_completed"
     assert booking.warehouse_inbound_id == "WIN-OD-123456"

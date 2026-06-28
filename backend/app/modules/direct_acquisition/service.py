@@ -8,6 +8,7 @@ from typing import Iterable
 
 
 SUPPORTED_DIRECT_CATEGORIES = {"toys", "books"}
+OTP_MAX_ATTEMPTS = 5
 
 BOOKING_TERMINAL_STATUSES = {
     "seller_cancelled_before_visit",
@@ -43,6 +44,13 @@ def hash_otp(otp: str) -> str:
 
 def verify_otp(raw_otp: str, otp_hash: str) -> bool:
     return hash_otp(raw_otp.strip()) == otp_hash
+
+
+def otp_expires_at(slot_end: datetime, *, now: datetime | None = None) -> datetime:
+    """Visit codes are generated ahead of pickup, so keep them valid through the visit window."""
+    base = slot_end if slot_end.tzinfo else slot_end.replace(tzinfo=timezone.utc)
+    floor = (now or datetime.now(timezone.utc)) + timedelta(minutes=30)
+    return max(base + timedelta(hours=6), floor)
 
 
 def compute_change_percent(base_offer_inr: int, requested_offer_inr: int) -> Decimal:
@@ -115,6 +123,15 @@ def assert_seller_verified(booking) -> None:
         raise DirectAcquisitionError("SELLER_NOT_VERIFIED", "Verify seller OTP/QR before QC or payout.")
 
 
+def assert_otp_attempt_allowed(*, attempts: int, expires_at: datetime | None, purpose: str) -> None:
+    if attempts >= OTP_MAX_ATTEMPTS:
+        raise DirectAcquisitionError("OTP_ATTEMPTS_EXCEEDED", f"{purpose} OTP has too many failed attempts.")
+    if expires_at:
+        expiry = expires_at if expires_at.tzinfo else expires_at.replace(tzinfo=timezone.utc)
+        if expiry < datetime.now(timezone.utc):
+            raise DirectAcquisitionError("OTP_EXPIRED", f"{purpose} OTP has expired.")
+
+
 def assert_item_can_be_qced(booking, item) -> None:
     assert_seller_verified(booking)
     if getattr(item, "item_status", None) in {"rejected", "acquired", "warehouse_inbound"}:
@@ -122,6 +139,11 @@ def assert_item_can_be_qced(booking, item) -> None:
 
 
 def assert_final_acceptance_allowed(booking) -> None:
+    if getattr(booking, "status", None) != "pickup_qc_in_progress":
+        raise DirectAcquisitionError(
+            "FINAL_ACCEPTANCE_NOT_READY",
+            "Seller final acceptance is allowed only after FE QC is complete.",
+        )
     items = list(getattr(booking, "items", []) or [])
     unresolved = [
         i for i in items
@@ -141,8 +163,30 @@ def assert_final_acceptance_allowed(booking) -> None:
     ]
     if pending:
         raise DirectAcquisitionError("PRICE_APPROVAL_PENDING", "Resolve all required price approvals before seller acceptance.")
-    if any(not getattr(i, "pickup_photos", None) for i in payable_items):
-        raise DirectAcquisitionError("PICKUP_PHOTOS_REQUIRED", "Pickup evidence photos are required before seller acceptance.")
+    for item in payable_items:
+        assert_required_pickup_evidence(item)
+
+
+def assert_required_pickup_evidence(item) -> None:
+    photos = list(getattr(item, "pickup_photos", []) or [])
+    required = list(getattr(item, "required_pickup_photos", []) or [])
+    min_photos = max(1, len(required))
+    if len(photos) < min_photos:
+        raise DirectAcquisitionError(
+            "PICKUP_PHOTOS_REQUIRED",
+            f"Pickup evidence photos are required before QC. Need at least {min_photos}.",
+        )
+
+
+def assert_reject_evidence(evidence_photos: Iterable[str], item=None) -> None:
+    combined = list(evidence_photos or [])
+    if item is not None:
+        combined.extend(list(getattr(item, "pickup_photos", []) or []))
+    if not combined:
+        raise DirectAcquisitionError(
+            "EVIDENCE_PHOTO_REQUIRED",
+            "Rejected items require pickup evidence photos.",
+        )
 
 
 def assert_price_revision_evidence(evidence_photos: Iterable[str]) -> None:
@@ -161,20 +205,40 @@ def final_payout_total(items: Iterable) -> int:
     return total
 
 
-def assert_payout_allowed(booking) -> None:
-    if getattr(booking, "status", None) != "seller_final_acceptance":
-        raise DirectAcquisitionError("SELLER_FINAL_ACCEPTANCE_REQUIRED", "Seller final acceptance is required before payout.")
+def _assert_positive_final_payout(booking) -> None:
     if not getattr(booking, "seller_final_accepted_at", None):
         raise DirectAcquisitionError("SELLER_FINAL_ACCEPTANCE_REQUIRED", "Seller final acceptance timestamp is missing.")
     if int(getattr(booking, "final_total_payout_inr", 0) or 0) <= 0:
         raise DirectAcquisitionError("INVALID_PAYOUT_AMOUNT", "Final payout must be greater than zero.")
 
 
-def assert_handover_allowed(booking) -> None:
+def assert_payout_request_allowed(booking) -> None:
+    if getattr(booking, "status", None) != "seller_final_acceptance":
+        raise DirectAcquisitionError("SELLER_FINAL_ACCEPTANCE_REQUIRED", "Seller final acceptance is required before payout.")
+    _assert_positive_final_payout(booking)
+
+
+def assert_payout_process_allowed(booking) -> None:
+    if getattr(booking, "status", None) != "payout_ready":
+        raise DirectAcquisitionError("PAYOUT_NOT_READY", "FE must submit payout-ready before Finance can process payout.")
+    if not getattr(booking, "payout_ready_at", None):
+        raise DirectAcquisitionError("PAYOUT_NOT_READY", "Payout-ready timestamp is missing.")
+    _assert_positive_final_payout(booking)
+
+
+def assert_payout_allowed(booking) -> None:
+    assert_payout_process_allowed(booking)
+
+
+def assert_warehouse_receive_allowed(booking) -> None:
     if getattr(booking, "status", None) != "payout_completed":
         raise DirectAcquisitionError("PAYOUT_NOT_COMPLETED", "Complete seller payout ledger before handover.")
     if not getattr(booking, "payout_completed_at", None):
         raise DirectAcquisitionError("PAYOUT_NOT_COMPLETED", "Payout completion timestamp is missing.")
+
+
+def assert_handover_allowed(booking) -> None:
+    assert_warehouse_receive_allowed(booking)
 
 
 def default_offer_valid_until(now: datetime | None = None) -> datetime:

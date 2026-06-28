@@ -39,6 +39,7 @@ function directBucket(b: DirectAcquisitionBooking): Tab {
     'seller_verified',
     'pickup_qc_in_progress',
     'seller_final_acceptance',
+    'payout_ready',
     'payout_completed',
   ].includes(String(b.status))) return 'active';
   if (['assigned_to_fe', 'fe_en_route'].includes(String(b.status))) return 'scheduled';

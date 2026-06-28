@@ -3,7 +3,7 @@
  *
  * This is intentionally separate from the legacy Concierge capture screen:
  * Direct acquisition is a controlled transaction with seller OTP, item QC,
- * seller final payout acceptance, ledger payout, and handover gates.
+ * seller final payout acceptance, Finance payout, and Warehouse/Admin gates.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -163,7 +163,7 @@ export default function FeDirectBookingDetailScreen({
   }
 
   const address = booking.pickup_address || {};
-  const sellerVerified = ['seller_verified', 'pickup_qc_in_progress', 'seller_final_acceptance', 'payout_completed'].includes(booking.status);
+  const sellerVerified = ['seller_verified', 'pickup_qc_in_progress', 'seller_final_acceptance', 'payout_ready', 'payout_completed'].includes(booking.status);
 
   return (
     <SafeAreaView style={s.root} edges={['top']}>
@@ -202,9 +202,20 @@ export default function FeDirectBookingDetailScreen({
 
           {booking.status === 'assigned_to_fe' ? (
             <Button
-              label="Start visit"
+              label="Start route"
               onPress={() => run('start', () => FE.startDirectBooking(booking.id))}
               loading={busy === 'start'}
+              disabled={!!busy}
+              fullWidth
+              style={s.actionGap}
+            />
+          ) : null}
+
+          {booking.status === 'fe_en_route' ? (
+            <Button
+              label="Mark arrived"
+              onPress={() => run('arrive', () => FE.arriveDirectBooking(booking.id))}
+              loading={busy === 'arrive'}
               disabled={!!busy}
               fullWidth
               style={s.actionGap}
@@ -271,23 +282,19 @@ export default function FeDirectBookingDetailScreen({
             ) : null}
             {booking.status === 'seller_final_acceptance' ? (
               <Button
-                label="Credit seller account"
-                onPress={() => run('payout', () => FE.triggerDirectPayout(booking.id))}
+                label="Send to Finance for payout"
+                onPress={() => run('payout', () => FE.requestDirectPayout(booking.id))}
                 disabled={!!busy}
                 loading={busy === 'payout'}
                 fullWidth
                 style={s.topGap}
               />
             ) : null}
+            {booking.status === 'payout_ready' ? (
+              <Text style={s.bodyText}>Finance is reviewing this payout. Keep the item secured until warehouse receives it.</Text>
+            ) : null}
             {booking.status === 'payout_completed' ? (
-              <Button
-                label="Complete handover"
-                onPress={() => run('handover', () => FE.completeDirectHandover(booking.id))}
-                disabled={!!busy}
-                loading={busy === 'handover'}
-                fullWidth
-                style={s.topGap}
-              />
+              <Text style={s.bodyText}>Payout is complete. Warehouse/Admin must scan and receive the item before it can move to listing approval.</Text>
             ) : null}
           </View>
         </ScrollView>
@@ -299,11 +306,13 @@ export default function FeDirectBookingDetailScreen({
 function Workflow({ booking }: { booking: DirectAcquisitionBooking }) {
   const steps = [
     { key: 'assigned', label: 'Assigned', done: !!booking.assigned_fe_id },
-    { key: 'verified', label: 'Seller verified', done: ['seller_verified', 'pickup_qc_in_progress', 'seller_final_acceptance', 'payout_completed', 'booking_completed'].includes(booking.status) },
+    { key: 'enroute', label: 'En route', done: ['fe_en_route', 'fe_arrived', 'seller_verified', 'pickup_qc_in_progress', 'seller_final_acceptance', 'payout_ready', 'payout_completed', 'booking_completed'].includes(booking.status) },
+    { key: 'arrived', label: 'Arrived', done: ['fe_arrived', 'seller_verified', 'pickup_qc_in_progress', 'seller_final_acceptance', 'payout_ready', 'payout_completed', 'booking_completed'].includes(booking.status) },
+    { key: 'verified', label: 'Seller verified', done: ['seller_verified', 'pickup_qc_in_progress', 'seller_final_acceptance', 'payout_ready', 'payout_completed', 'booking_completed'].includes(booking.status) },
     { key: 'qc', label: 'Item QC', done: booking.items.some(isPayable) },
     { key: 'final', label: 'Seller accepts payout', done: !!booking.final_total_payout_inr },
-    { key: 'payout', label: 'Ledger payout', done: ['payout_completed', 'booking_completed'].includes(booking.status) },
-    { key: 'handover', label: 'Handover', done: booking.status === 'booking_completed' },
+    { key: 'payout', label: 'Finance payout', done: ['payout_completed', 'booking_completed'].includes(booking.status) },
+    { key: 'warehouse', label: 'Warehouse receive', done: booking.status === 'booking_completed' },
   ];
   return (
     <View style={s.workflow}>
@@ -335,6 +344,7 @@ function DirectItemCard({
   const [revision, setRevision] = useState('');
   const [reason, setReason] = useState('');
   const itemBusy = busy?.endsWith(item.id);
+  const hasPickupEvidence = item.pickup_photos.length >= Math.max(1, item.required_pickup_photos.length);
   const locked = !sellerVerified || ['rejected', 'warehouse_inbound', 'admin_approved'].includes(item.item_status);
   const needsApproval = item.approval_required && item.approval_status !== 'approved';
 
@@ -380,7 +390,7 @@ function DirectItemCard({
       <View style={s.statusRow}>
         <Text style={s.statusChip}>{statusLabel(item.item_status)}</Text>
         {needsApproval ? <Text style={s.warningChip}>approval pending</Text> : null}
-        {item.pickup_photos.length === 0 ? <Text style={s.warningChip}>photo needed</Text> : null}
+        {!hasPickupEvidence ? <Text style={s.warningChip}>photo needed</Text> : null}
       </View>
 
       {item.blocked_item_warnings.length > 0 ? (
@@ -408,9 +418,10 @@ function DirectItemCard({
             () => FE.directItemQc(booking.id, item.id, {
               qc_answers: { matched_seller_photos: true, no_blocked_issue: true },
               qc_notes: 'FE accepted item after physical QC.',
+              pickup_photos: item.pickup_photos,
             }),
           )}
-          disabled={!!busy || locked}
+          disabled={!!busy || locked || !hasPickupEvidence}
           loading={busy === `qc-${item.id}`}
           style={s.flex}
         />
@@ -423,9 +434,10 @@ function DirectItemCard({
             () => FE.rejectDirectItem(booking.id, item.id, {
               reason_code: 'fe_qc_rejected',
               notes: 'Rejected during FE QC.',
+              evidence_photos: item.pickup_photos,
             }),
           )}
-          disabled={!!busy || locked}
+          disabled={!!busy || locked || !hasPickupEvidence}
           loading={busy === `reject-${item.id}`}
           style={s.flex}
         />
@@ -462,7 +474,7 @@ function DirectItemCard({
               evidence_photos: item.pickup_photos,
             }),
           )}
-          disabled={!!busy || locked || !Number(revision)}
+          disabled={!!busy || locked || !Number(revision) || !hasPickupEvidence}
           loading={itemBusy && busy?.startsWith('revise-')}
           fullWidth
         />
