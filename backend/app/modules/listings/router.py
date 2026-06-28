@@ -689,6 +689,42 @@ async def _seller_inventory_transactions_by_listing(
     return by_listing
 
 
+async def _expire_stale_seller_payment_holds(db: DBSession, seller_id: UUID) -> int:
+    """Repair seller inventory before rendering dashboard/listing states.
+
+    The background payment-timeout worker is the primary path. This read-path
+    guard is intentionally narrow and idempotent: it only touches this seller's
+    expired payment_pending holds and uses no notifications, so stale rows
+    cannot leave inventory hidden if a worker tick was missed or a legacy
+    payment attempt has no explicit expires_at.
+    """
+    from app.modules.offers.service import expire_due_unpaid_transactions
+
+    try:
+        expired = await expire_due_unpaid_transactions(
+            db,
+            limit=200,
+            seller_id=seller_id,
+            notify=False,
+        )
+        if expired:
+            await db.flush()
+            logger.info(
+                "seller_inventory.stale_payment_holds_released",
+                seller_id=str(seller_id),
+                count=expired,
+            )
+        return expired
+    except Exception as exc:
+        await db.rollback()
+        logger.exception(
+            "seller_inventory.stale_payment_holds_release_failed",
+            seller_id=str(seller_id),
+            error=str(exc),
+        )
+        return 0
+
+
 def _fmt_my(listing: Listing, active_transaction: Transaction | None = None) -> dict:
     """My listings — all statuses including drafts."""
     card_images = _card_image_urls(listing)
@@ -850,6 +886,8 @@ async def search_listings(
 
 @router.get("/me")
 async def seller_dashboard(current_user: VerifiedUser, db: DBSession):
+    await _expire_stale_seller_payment_holds(db, current_user.user_id)
+
     listings_result = await db.execute(
         select(Listing).options(selectinload(Listing.category)).where(Listing.seller_id == current_user.user_id)
         .order_by(Listing.created_at.desc())
@@ -932,6 +970,8 @@ async def seller_dashboard(current_user: VerifiedUser, db: DBSession):
 @router.get("/me/listings")
 async def my_listings(current_user: BasicUser, db: DBSession,
                       status_filter: str | None = Query(None)):
+    await _expire_stale_seller_payment_holds(db, current_user.user_id)
+
     query = select(Listing).options(selectinload(Listing.category)).where(Listing.seller_id == current_user.user_id)
     if status_filter:
         query = query.where(Listing.status == status_filter)

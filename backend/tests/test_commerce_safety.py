@@ -341,3 +341,44 @@ async def test_payment_timeout_sweep_releases_abandoned_order(db):
     assert reservation.status == "cancelled"
     assert offer.status == "cancelled"
     assert payment_attempt.status == "expired"
+
+
+@pytest.mark.asyncio
+async def test_payment_timeout_sweep_releases_legacy_missing_expiry_order(db):
+    _buyer, _seller, listing, offer, reservation, txn, payment_attempt = await _seed_unpaid_txn(db)
+    stale_at = datetime.now(timezone.utc) - timedelta(hours=25)
+    txn.created_at = stale_at
+    payment_attempt.created_at = stale_at
+    payment_attempt.status = "created"
+    payment_attempt.expires_at = None
+    await db.flush()
+
+    expired = await expire_due_unpaid_transactions(db, limit=10)
+    await db.flush()
+
+    assert expired == 1
+    assert txn.status == "cancelled"
+    assert txn.cancelled_reason == "payment_timeout"
+    assert listing.status == "active"
+    assert reservation.status == "cancelled"
+    assert offer.status == "cancelled"
+    assert payment_attempt.status == "expired"
+
+
+@pytest.mark.asyncio
+async def test_payment_timeout_sweep_keeps_fresh_high_value_missing_expiry_order(db):
+    _buyer, _seller, listing, offer, reservation, txn, payment_attempt = await _seed_unpaid_txn(db)
+    txn.created_at = datetime.now(timezone.utc) - timedelta(hours=1)
+    payment_attempt.status = "created"
+    payment_attempt.expires_at = None
+    await db.flush()
+
+    expired = await expire_due_unpaid_transactions(db, limit=10)
+    await db.flush()
+
+    assert expired == 0
+    assert txn.status == "payment_pending"
+    assert listing.status == "reserved"
+    assert reservation.status == "active"
+    assert offer.status == "accepted"
+    assert payment_attempt.status == "created"

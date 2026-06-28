@@ -472,7 +472,7 @@ async def test_checkout_authorized_after_window_expires_unpaid_order(monkeypatch
     monkeypatch.setattr(offer_service, "_notify", noop_notify)
 
     result = await offer_service.process_checkout_payment_success(
-        _DB(txn, payment_attempt, payment_attempt, [payment_attempt], reservation, offer, listing),
+        _DB(txn, payment_attempt, [payment_attempt], [payment_attempt], reservation, offer, listing),
         transaction_id=txn.id,
         buyer_id=txn.buyer_id,
         razorpay_order_id="order_123",
@@ -530,7 +530,7 @@ async def test_expire_unpaid_transaction_releases_inventory_after_window(monkeyp
     monkeypatch.setattr(offer_service, "_notify", noop_notify)
 
     out = await offer_service.expire_unpaid_transaction(
-        _DB(payment_attempt, [payment_attempt], reservation, offer, listing),
+        _DB([payment_attempt], [payment_attempt], reservation, offer, listing),
         txn,
     )
 
@@ -550,4 +550,58 @@ async def test_expire_unpaid_transaction_keeps_inventory_before_window():
     payment_attempt.expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
 
     with pytest.raises(ValueError, match="PAYMENT_WINDOW_NOT_EXPIRED"):
-        await offer_service.expire_unpaid_transaction(_DB(payment_attempt), txn)
+        await offer_service.expire_unpaid_transaction(_DB([payment_attempt]), txn)
+
+
+@pytest.mark.asyncio
+async def test_expire_unpaid_transaction_uses_created_at_fallback_for_legacy_attempt(monkeypatch):
+    txn = _txn()
+    txn.gross_amount = Decimal("100")
+    txn.created_at = datetime.now(timezone.utc) - timedelta(minutes=31)
+    payment_attempt = _payment_attempt(txn)
+    payment_attempt.expires_at = None
+    reservation = SimpleNamespace(id=txn.reservation_id, offer_id=uuid4(), status="active", cancelled_at=None)
+    offer = SimpleNamespace(id=reservation.offer_id, status="accepted", reject_reason=None, responded_at=None)
+    listing = SimpleNamespace(id=txn.listing_id, status="reserved")
+
+    async def noop_notify(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(offer_service, "_notify", noop_notify)
+
+    out = await offer_service.expire_unpaid_transaction(
+        _DB([payment_attempt], [payment_attempt], reservation, offer, listing),
+        txn,
+    )
+
+    assert out is txn
+    assert txn.status == "cancelled"
+    assert txn.cancelled_reason == "payment_timeout"
+    assert payment_attempt.status == "expired"
+    assert listing.status == "active"
+
+
+@pytest.mark.asyncio
+async def test_expire_unpaid_transaction_keeps_fresh_legacy_attempt_pending():
+    txn = _txn()
+    txn.gross_amount = Decimal("100")
+    txn.created_at = datetime.now(timezone.utc) - timedelta(minutes=5)
+    payment_attempt = _payment_attempt(txn)
+    payment_attempt.expires_at = None
+
+    with pytest.raises(ValueError, match="PAYMENT_WINDOW_NOT_EXPIRED"):
+        await offer_service.expire_unpaid_transaction(_DB([payment_attempt]), txn)
+
+
+@pytest.mark.asyncio
+async def test_expire_unpaid_transaction_does_not_release_paid_pending_attempt():
+    txn = _txn()
+    txn.gross_amount = Decimal("100")
+    txn.created_at = datetime.now(timezone.utc) - timedelta(hours=2)
+    payment_attempt = _payment_attempt(txn)
+    payment_attempt.expires_at = datetime.now(timezone.utc) - timedelta(hours=1)
+    payment_attempt.status = "paid"
+    payment_attempt.paid_at = datetime.now(timezone.utc) - timedelta(hours=1)
+
+    with pytest.raises(ValueError, match="PAYMENT_WINDOW_NOT_EXPIRED"):
+        await offer_service.expire_unpaid_transaction(_DB([payment_attempt]), txn)

@@ -120,6 +120,63 @@ def _payment_link_idempotency_key(transaction_id: UUID) -> str:
     return hashlib.sha256(f"txn:{transaction_id}:payment-link-fallback:v1".encode()).hexdigest()[:64]
 
 
+def _as_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _payment_window_deadline(
+    txn: Transaction,
+    attempts: list[PaymentLink],
+) -> datetime | None:
+    """Return the latest safe deadline for an unpaid checkout hold.
+
+    Modern rows store PaymentLink.expires_at. Some legacy/test rows predate
+    that field, so fall back to the transaction creation time plus Owmee's
+    amount-based payment window. Never synthesize a deadline when a provider
+    attempt is already paid; that state needs capture/reconciliation, not an
+    inventory release.
+    """
+    if any(
+        getattr(a, "status", None) == "paid" or getattr(a, "paid_at", None)
+        for a in attempts
+    ):
+        return None
+
+    txn_created_at = _as_utc(getattr(txn, "created_at", None))
+    deadlines: list[datetime] = []
+    for attempt in attempts:
+        expires_at = _as_utc(getattr(attempt, "expires_at", None))
+        if expires_at is not None:
+            deadlines.append(expires_at)
+            continue
+
+        basis_candidates = [
+            value for value in (
+                txn_created_at,
+                _as_utc(getattr(attempt, "created_at", None)),
+            )
+            if value is not None
+        ]
+        if not basis_candidates:
+            continue
+        amount = Decimal(str(getattr(attempt, "amount", None) or txn.gross_amount or 0))
+        deadlines.append(
+            max(basis_candidates) + timedelta(minutes=_payment_link_expiry_minutes(amount))
+        )
+
+    if deadlines:
+        return max(deadlines)
+
+    if not txn_created_at:
+        return None
+    amount = Decimal(str(txn.gross_amount or 0))
+    return txn_created_at + timedelta(minutes=_payment_link_expiry_minutes(amount))
+
+
 # ── Notification helpers ────────────────────────────────────────────────────────
 
 async def _prefs(db: AsyncSession, user_id: UUID) -> NotificationPreference | None:
@@ -1160,30 +1217,72 @@ async def cancel_unpaid_transaction(
     return await _release_unpaid_transaction(db, txn, reason=reason, notify=True)
 
 
-async def expire_unpaid_transaction(db: AsyncSession, txn: Transaction) -> Transaction:
+async def expire_unpaid_transaction(
+    db: AsyncSession,
+    txn: Transaction,
+    *,
+    notify: bool = True,
+) -> Transaction:
     if txn.status != "payment_pending":
         raise ValueError(f"INVALID_STATUS:{txn.status}")
-    latest_attempt = (await db.execute(
+    attempts = (await db.execute(
         select(PaymentLink)
         .where(PaymentLink.transaction_id == txn.id)
         .order_by(PaymentLink.created_at.desc())
-    )).scalars().first()
-    if latest_attempt and latest_attempt.expires_at and latest_attempt.expires_at > datetime.now(timezone.utc):
+    )).scalars().all()
+    deadline = _payment_window_deadline(txn, attempts)
+    if not deadline or deadline > datetime.now(timezone.utc):
         raise ValueError("PAYMENT_WINDOW_NOT_EXPIRED")
-    return await _release_unpaid_transaction(db, txn, reason="payment_timeout", notify=True)
+    return await _release_unpaid_transaction(
+        db,
+        txn,
+        reason="payment_timeout",
+        notify=notify,
+    )
 
 
-async def expire_due_unpaid_transactions(db: AsyncSession, *, limit: int = 100) -> int:
+async def expire_due_unpaid_transactions(
+    db: AsyncSession,
+    *,
+    limit: int = 100,
+    seller_id: UUID | None = None,
+    listing_ids: list[UUID] | None = None,
+    notify: bool = True,
+) -> int:
     now = datetime.now(timezone.utc)
+    missing_expiry_30m_cutoff = now - timedelta(minutes=30)
+    missing_expiry_24h_cutoff = now - timedelta(minutes=1440)
+    filters = [
+        Transaction.status == "payment_pending",
+        or_(
+            PaymentLink.expires_at <= now,
+            and_(
+                or_(PaymentLink.id.is_(None), PaymentLink.expires_at.is_(None)),
+                Transaction.gross_amount < Decimal("5000"),
+                Transaction.created_at <= missing_expiry_30m_cutoff,
+            ),
+            and_(
+                or_(PaymentLink.id.is_(None), PaymentLink.expires_at.is_(None)),
+                Transaction.gross_amount >= Decimal("5000"),
+                Transaction.created_at <= missing_expiry_24h_cutoff,
+            ),
+        ),
+    ]
+    if seller_id is not None:
+        filters.append(Transaction.seller_id == seller_id)
+    if listing_ids is not None:
+        if not listing_ids:
+            return 0
+        filters.append(Transaction.listing_id.in_(listing_ids))
+
     candidates = (await db.execute(
         select(Transaction)
-        .join(PaymentLink, PaymentLink.transaction_id == Transaction.id)
-        .where(
-            Transaction.status == "payment_pending",
-            PaymentLink.expires_at.is_not(None),
-            PaymentLink.expires_at <= now,
+        .outerjoin(PaymentLink, PaymentLink.transaction_id == Transaction.id)
+        .where(*filters)
+        .order_by(
+            PaymentLink.expires_at.asc().nullslast(),
+            Transaction.created_at.asc(),
         )
-        .order_by(PaymentLink.expires_at.asc())
         .limit(limit)
     )).scalars().all()
 
@@ -1194,7 +1293,7 @@ async def expire_due_unpaid_transactions(db: AsyncSession, *, limit: int = 100) 
             continue
         seen.add(txn.id)
         try:
-            await expire_unpaid_transaction(db, txn)
+            await expire_unpaid_transaction(db, txn, notify=notify)
             expired += 1
         except ValueError as exc:
             if str(exc) != "PAYMENT_WINDOW_NOT_EXPIRED":

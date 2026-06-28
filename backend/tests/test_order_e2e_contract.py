@@ -16,6 +16,7 @@ from fastapi import HTTPException
 
 from app.main import create_app
 from app.modules.listings.router import (
+    _expire_stale_seller_payment_holds,
     _seller_inventory_from_transaction,
     _seller_inventory_transactions_by_listing,
 )
@@ -195,6 +196,65 @@ async def test_seller_inventory_transaction_lookup_uses_latest_transaction_per_l
     out = await _seller_inventory_transactions_by_listing(db, seller_id, [listing_id])
 
     assert out[listing_id] is latest
+
+
+@pytest.mark.asyncio
+async def test_seller_inventory_lazy_repair_scopes_to_seller_and_flushes(monkeypatch):
+    seller_id = uuid4()
+    calls = {}
+
+    class _RepairDB:
+        flushed = False
+        rolled_back = False
+
+        async def flush(self):
+            self.flushed = True
+
+        async def rollback(self):
+            self.rolled_back = True
+
+    async def fake_expire(db, **kwargs):
+        calls.update(kwargs)
+        return 1
+
+    monkeypatch.setattr(offer_service, "expire_due_unpaid_transactions", fake_expire)
+
+    db = _RepairDB()
+    expired = await _expire_stale_seller_payment_holds(db, seller_id)
+
+    assert expired == 1
+    assert db.flushed is True
+    assert db.rolled_back is False
+    assert calls["seller_id"] == seller_id
+    assert calls["notify"] is False
+    assert calls["limit"] == 200
+
+
+@pytest.mark.asyncio
+async def test_seller_inventory_lazy_repair_rolls_back_on_failure(monkeypatch):
+    seller_id = uuid4()
+
+    class _RepairDB:
+        flushed = False
+        rolled_back = False
+
+        async def flush(self):
+            self.flushed = True
+
+        async def rollback(self):
+            self.rolled_back = True
+
+    async def fake_expire(*_args, **_kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(offer_service, "expire_due_unpaid_transactions", fake_expire)
+
+    db = _RepairDB()
+    expired = await _expire_stale_seller_payment_holds(db, seller_id)
+
+    assert expired == 0
+    assert db.flushed is False
+    assert db.rolled_back is True
 
 
 def _address(user_id, role: str, name: str = "Test User") -> dict:
