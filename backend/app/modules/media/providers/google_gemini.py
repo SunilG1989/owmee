@@ -418,7 +418,7 @@ class GoogleGeminiBackgroundCleanupProvider:
                 int(height * 0.8),
             ))
             crop.thumbnail((72, 72))
-            pixels = list(crop.getdata())
+            pixels = list(crop.get_flattened_data())
         except Exception:
             return _DEFAULT_STYLE
 
