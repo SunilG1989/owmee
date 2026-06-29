@@ -4,9 +4,9 @@ Admin seed script — Epic 6
 POST /v1/admin/seed    — create first admin user (dev only)
 GET  /v1/admin/users   — list admin users (dev only)
 """
+import bcrypt
 import structlog
 from fastapi import APIRouter, HTTPException
-from passlib.context import CryptContext
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
@@ -17,14 +17,9 @@ from app.modules.admin.models import AdminUser
 logger = structlog.get_logger()
 router = APIRouter()
 
-# Must match the verifier used by the login paths (admin_web.router and
-# admin.auth_router). The old unsalted sha256 produced hashes that bcrypt
-# could not verify — a seeded admin literally could not log in.
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 
 def _hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 
 class CreateAdminRequest(BaseModel):

@@ -21,11 +21,11 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import UUID
 
+import bcrypt
 import structlog
 from fastapi import APIRouter, Cookie, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from passlib.context import CryptContext
 from sqlalchemy import and_, select, text
 
 from app.core.dependencies import DBSession
@@ -45,7 +45,6 @@ from app.modules.transactions.logistics_state import (
 logger = structlog.get_logger()
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Cookie name we set on successful login. HttpOnly so JS can't read it.
 COOKIE = "owmee_admin"
@@ -96,7 +95,7 @@ async def _verify_admin(db, email: str, password: str) -> AdminUserModel | None:
     admin = res.scalar_one_or_none()
     if not admin or not admin.is_active:
         return None
-    if not pwd_context.verify(password, admin.password_hash):
+    if not bcrypt.checkpw(password.encode(), admin.password_hash.encode()):
         return None
     return admin
 
