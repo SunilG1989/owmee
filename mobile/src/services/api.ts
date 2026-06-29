@@ -370,6 +370,12 @@ export interface Transaction {
   pickup_readiness_deadline?: string | null;
   seller_responded_at?: string | null;
   pickup_ready_at?: string | null;
+  cancelled_at?: string | null;
+  cancelled_reason?: string | null;
+  refund_status?: 'none' | 'requested' | 'processing' | 'completed' | 'failed' | string;
+  refund_amount?: string | null;
+  refund_reason?: string | null;
+  refund_completed_at?: string | null;
   seller_pickup_address?: {
     full_name?: string | null;
     phone_number?: string | null;
@@ -1026,6 +1032,12 @@ export const Orders = {
     }),
   cancelUnpaidTransaction: (transactionId: string, reason = 'buyer_cancelled_payment') =>
     api.post(`/v1/transactions/${transactionId}/payment/cancel`, { reason }).then((res) => {
+      clearApiCaches(['/v1/transactions', '/v1/offers', `/v1/transactions/${transactionId}`, `/v1/transactions/${transactionId}/tracking`]);
+      clearListingCaches();
+      return res;
+    }),
+  cancelPaidBeforePickup: (transactionId: string, reason = 'buyer_cancelled_before_pickup') =>
+    api.post(`/v1/transactions/${transactionId}/cancel`, { reason }).then((res) => {
       clearApiCaches(['/v1/transactions', '/v1/offers', `/v1/transactions/${transactionId}`, `/v1/transactions/${transactionId}/tracking`]);
       clearListingCaches();
       return res;

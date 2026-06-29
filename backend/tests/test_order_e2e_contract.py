@@ -51,6 +51,11 @@ class _Result:
     def scalars(self):
         return self
 
+    def first(self):
+        if isinstance(self.value, list):
+            return self.value[0] if self.value else None
+        return self.value
+
     def all(self):
         if isinstance(self.value, list):
             return self.value
@@ -71,6 +76,9 @@ class _DB:
         if self.execute_values:
             return _Result(self.execute_values.pop(0))
         return _Result(self.get_value)
+
+    async def flush(self):
+        return None
 
     async def commit(self):
         self.committed = True
@@ -284,6 +292,7 @@ def _txn(**overrides):
     base = {
         "id": uuid4(),
         "listing_id": uuid4(),
+        "reservation_id": uuid4(),
         "buyer_id": buyer_id,
         "seller_id": seller_id,
         "status": PAYMENT_CAPTURED,
@@ -322,7 +331,10 @@ def _txn(**overrides):
         "refund_status": "none",
         "refund_amount": None,
         "refund_reason": None,
+        "refund_initiated_at": None,
+        "refund_initiated_by": None,
         "refund_completed_at": None,
+        "razorpay_refund_id": None,
         "return_status": "none",
         "return_reason": None,
         "return_decision_note": None,
@@ -341,6 +353,7 @@ def test_order_routes_are_registered_and_no_direct_handoff_routes_return():
         "/v1/transactions/{transaction_id}/payment/confirm",
         "/v1/transactions/{transaction_id}/payment/failure",
         "/v1/transactions/{transaction_id}/payment/cancel",
+        "/v1/transactions/{transaction_id}/cancel",
         "/v1/transactions/{transaction_id}/payment-link",
         "/v1/admin/logistics/seller-readiness-queue",
         "/v1/admin/logistics/transactions/{transaction_id}/expire-seller-readiness",
@@ -365,6 +378,8 @@ def test_order_notification_events_stay_transaction_bucket_only():
         "seller_unavailable_refund",
         "seller_timeout_refund",
         "buyer_payment_not_completed",
+        "buyer_cancelled_refund",
+        "buyer_cancelled_before_pickup",
         "pickup_assigned",
         "pickup_completed",
         "item_at_hub",
@@ -869,6 +884,101 @@ async def test_admin_pickup_assignment_requires_confirmed_seller_readiness():
 
     assert exc.value.status_code == 400
     assert exc.value.detail["error"] == "SELLER_NOT_READY"
+
+
+@pytest.mark.asyncio
+async def test_admin_pickup_assignment_blocks_unready_fe(monkeypatch):
+    txn = _txn(seller_readiness_status="confirmed")
+    fe_id = uuid4()
+    fe = SimpleNamespace(
+        active=False,
+        current_shift="off",
+        onboarding_status="candidate",
+        verification_status="pending",
+        training_status="not_started",
+        device_status="not_bound",
+        daily_capacity=4,
+        service_zones=[],
+        category_certifications=[],
+    )
+
+    async def fail_if_notified(*_args, **_kwargs):
+        raise AssertionError("unready FE assignment must not notify")
+
+    monkeypatch.setattr(offer_service, "_notify", fail_if_notified)
+
+    with pytest.raises(HTTPException) as exc:
+        await logistics_router.admin_assign_pickup(
+            txn.id,
+            logistics_router.AssignPickupRequest(fe_user_id=fe_id),
+            _DB(get_value=txn, execute_values=["toys", fe]),
+        )
+
+    assert exc.value.status_code == 400
+    assert exc.value.detail["error"] == "FE_INACTIVE"
+    assert txn.pickup_fe_id is None
+
+
+@pytest.mark.asyncio
+async def test_paid_buyer_cancel_before_pickup_refunds_and_releases_inventory(monkeypatch):
+    txn = _txn(
+        status=PAYMENT_CAPTURED,
+        seller_readiness_status="confirmed",
+        refund_status="none",
+    )
+    payment_attempt = SimpleNamespace(
+        transaction_id=txn.id,
+        razorpay_payment_id="pay_paid",
+        paid_at=datetime.now(timezone.utc),
+        created_at=datetime.now(timezone.utc),
+    )
+    reservation = SimpleNamespace(id=txn.reservation_id, offer_id=uuid4(), status="active", cancelled_at=None)
+    offer = SimpleNamespace(id=reservation.offer_id, status="accepted", reject_reason=None, responded_at=None)
+    listing = SimpleNamespace(id=txn.listing_id, status="reserved")
+    notified = []
+
+    async def fake_notify(_db, user_id, event_type, *_args, **_kwargs):
+        notified.append((user_id, event_type))
+
+    class _RefundAdapter:
+        async def refund(self, **_kwargs):
+            return SimpleNamespace(success=True, razorpay_refund_id="rfnd_buyer_cancel", status="processed")
+
+    from app.modules.transactions import refund_service
+
+    monkeypatch.setattr(offer_service, "_notify", fake_notify)
+    monkeypatch.setattr(refund_service, "get_payment_adapter", lambda: _RefundAdapter())
+
+    out = await offer_service.cancel_paid_pre_pickup_transaction(
+        _DB(execute_values=[txn, payment_attempt, reservation, offer, listing]),
+        txn.id,
+        txn.buyer_id,
+        reason="changed_mind",
+    )
+
+    assert out is txn
+    assert txn.status == "cancelled"
+    assert txn.cancelled_reason == "changed_mind"
+    assert txn.refund_status == "completed"
+    assert txn.razorpay_refund_id == "rfnd_buyer_cancel"
+    assert reservation.status == "cancelled"
+    assert offer.status == "cancelled"
+    assert listing.status == "active"
+    assert (txn.buyer_id, "buyer_cancelled_refund") in notified
+    assert (txn.seller_id, "buyer_cancelled_before_pickup") in notified
+
+
+@pytest.mark.asyncio
+async def test_paid_buyer_cancel_rejects_after_pickup_assignment():
+    txn = _txn(status=PAYMENT_CAPTURED, pickup_fe_id=uuid4())
+
+    with pytest.raises(ValueError, match="PICKUP_ALREADY_ASSIGNED"):
+        await offer_service.cancel_paid_pre_pickup_transaction(
+            _DB(execute_values=[txn]),
+            txn.id,
+            txn.buyer_id,
+            reason="changed_mind",
+        )
 
 
 @pytest.mark.asyncio

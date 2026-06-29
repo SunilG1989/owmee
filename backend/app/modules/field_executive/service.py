@@ -175,6 +175,25 @@ async def get_fe_by_user_id(
     return res.scalar_one_or_none()
 
 
+async def assert_fe_user_ready_for_assignment(
+    db: AsyncSession,
+    user_id: UUID,
+    *,
+    required_categories: set[str] | None = None,
+) -> FieldExecutive:
+    """Resolve a user id to an FE profile and enforce assignment readiness.
+
+    Admin endpoints should use this rather than checking ``users.role``. The
+    FE profile is the operational source of truth for active status, training,
+    verification, device approval, capacity, zones, and category coverage.
+    """
+    fe = await get_fe_by_user_id(db, user_id)
+    if not fe:
+        raise FEOnboardingError("FE_PROFILE_NOT_FOUND", "FE profile was not found.")
+    assert_fe_ready_for_assignment(fe, required_categories=required_categories)
+    return fe
+
+
 async def is_active_fe(db: AsyncSession, user_id: UUID) -> bool:
     fe = await get_fe_by_user_id(db, user_id)
     return bool(fe and fe.active)

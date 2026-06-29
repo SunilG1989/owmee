@@ -36,7 +36,8 @@ from app.modules.offers.models import (
 )
 from app.modules.offers.service import (
     accept_offer, add_to_wishlist, buyer_confirm_deal, cancel_unpaid_transaction,
-    confirm_seller_readiness, create_or_get_payment_link_fallback,
+    cancel_paid_pre_pickup_transaction, confirm_seller_readiness,
+    create_or_get_payment_link_fallback,
     decline_seller_readiness,
     counter_offer, delivery_fee_for, make_offer,
     notify_price_drop, process_checkout_payment_success,
@@ -134,6 +135,13 @@ class CancelUnpaidTransactionRequest(BaseModel):
     )
 
 
+class CancelPaidTransactionRequest(BaseModel):
+    reason: str = Field(
+        default="buyer_cancelled_before_pickup",
+        pattern="^(buyer_cancelled_before_pickup|changed_mind|duplicate_order|found_alternative|other)$",
+    )
+
+
 # ── Formatters ─────────────────────────────────────────────────────────────────
 
 def _fmt_offer(o: Offer) -> dict:
@@ -178,6 +186,13 @@ def _fmt_txn(t: Transaction) -> dict:
         "buyer_confirmed_at": t.buyer_confirmed_at.isoformat() if t.buyer_confirmed_at else None,
         "completed_at": t.completed_at.isoformat() if t.completed_at else None,
         "payout_flagged_at": t.payout_flagged_at.isoformat() if t.payout_flagged_at else None,
+        "payout_released_at": t.payout_released_at.isoformat() if t.payout_released_at else None,
+        "cancelled_at": t.cancelled_at.isoformat() if t.cancelled_at else None,
+        "cancelled_reason": t.cancelled_reason,
+        "refund_status": t.refund_status,
+        "refund_amount": str(t.refund_amount) if t.refund_amount else None,
+        "refund_reason": t.refund_reason,
+        "refund_completed_at": t.refund_completed_at.isoformat() if t.refund_completed_at else None,
         "created_at": t.created_at.isoformat() if t.created_at else None,
     }
 
@@ -561,6 +576,33 @@ async def cancel_unpaid_transaction_endpoint(
         "transaction": _fmt_txn(txn),
         "status": txn.status,
         "message": "Order cancelled. The item is available again.",
+    }
+
+
+@router.post("/transactions/{transaction_id}/cancel")
+async def cancel_paid_pre_pickup_transaction_endpoint(
+    transaction_id: UUID,
+    body: CancelPaidTransactionRequest,
+    current_user: BasicUser,
+    db: DBSession,
+):
+    try:
+        txn = await cancel_paid_pre_pickup_transaction(
+            db,
+            transaction_id,
+            current_user.user_id,
+            reason=body.reason,
+        )
+        await db.commit()
+    except ValueError as e:
+        code = str(e).split(":")[0]
+        status_code = 409 if code == "PICKUP_ALREADY_ASSIGNED" else 400
+        raise HTTPException(status_code=status_code, detail={"error": code})
+    return {
+        "transaction": _fmt_txn(txn),
+        "status": txn.status,
+        "refund_status": txn.refund_status,
+        "message": "Order cancelled. Owmee has started the refund.",
     }
 
 

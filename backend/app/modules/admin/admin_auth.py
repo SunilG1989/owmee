@@ -110,6 +110,7 @@ async def require_admin(
 # Roles allowed to approve / reject KYC. SUPER_ADMIN is included so
 # super-admins can step in for an L2 reviewer when needed.
 _L2_ROLES = {"L2_REVIEWER", "SUPER_ADMIN"}
+_MONEY_ROLES = {"FINANCE_OPS", "FINANCE", "L2_REVIEWER", "SUPER_ADMIN"}
 
 
 async def require_l2_reviewer(
@@ -123,5 +124,22 @@ async def require_l2_reviewer(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"error": "L2_ROLE_REQUIRED",
                     "message": "L2 reviewer or super-admin role required."},
+        )
+    return admin
+
+
+async def require_money_admin(
+    db: DBSession,
+    authorization: str | None = Header(default=None),
+) -> CurrentAdmin:
+    """Finance/L2/super-admin gate for irreversible money-moving actions."""
+    admin = await _resolve_admin(authorization, db)
+    if admin.role not in _MONEY_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "MONEY_ROLE_REQUIRED",
+                "message": "Finance, L2 reviewer, or super-admin role required.",
+            },
         )
     return admin

@@ -226,6 +226,44 @@ class Settings(BaseSettings):
                 "which is a login bypass."
             )
 
+        # ── Payments: live launch must not run with incomplete PA wiring ──────
+        pa_provider = (self.pa_provider or "").strip().lower()
+        if self.strict_provider_startup_validation and pa_provider in {"razorpay", "razor-pay"}:
+            missing_pa = [
+                name
+                for name, value in {
+                    "PA_KEY_ID": self.pa_key_id,
+                    "PA_KEY_SECRET": self.pa_key_secret,
+                    "PA_WEBHOOK_SECRET": self.pa_webhook_secret,
+                }.items()
+                if self._missing_required_secret(value)
+            ]
+            if missing_pa:
+                raise ValueError(
+                    "Razorpay strict provider startup validation requires real values for "
+                    + ", ".join(missing_pa)
+                    + " — payment capture/refund/webhook handling is not launch-safe without them."
+                )
+
+        # ── Storage: listing publish depends on direct upload and public display
+        if self.strict_provider_startup_validation:
+            missing_r2 = [
+                name
+                for name, value in {
+                    "R2_ENDPOINT": self.r2_endpoint,
+                    "R2_ACCESS_KEY": self.r2_access_key,
+                    "R2_SECRET_KEY": self.r2_secret_key,
+                    "R2_PUBLIC_URL": self.r2_public_url,
+                }.items()
+                if self._missing_required_secret(value)
+            ]
+            if missing_r2:
+                raise ValueError(
+                    "Strict provider startup validation requires production R2 values for "
+                    + ", ".join(missing_r2)
+                    + " — listings cannot reliably upload or display photos without them."
+                )
+
         # ── Fraud: no mock auto-allow in prod while enforcement is enabled ────
         fraud_provider = (self.fraud_provider or "").strip().lower()
         if (
@@ -238,6 +276,51 @@ class Settings(BaseSettings):
                 "when FRAUD_ENFORCEMENT_ENABLED is true — a mock provider silently "
                 "bypasses every fraud step-up/block decision."
             )
+        if (
+            self.strict_provider_startup_validation
+            and self.fraud_enforcement_enabled
+            and fraud_provider not in {"", "mock", "dev", "log"}
+        ):
+            missing_fraud = [
+                name
+                for name, value in {
+                    "FRAUD_API_BASE_URL": self.fraud_api_base_url,
+                    "FRAUD_API_KEY": self.fraud_api_key,
+                }.items()
+                if self._missing_required_secret(value)
+            ]
+            if missing_fraud:
+                raise ValueError(
+                    "Strict provider startup validation requires fraud provider values for "
+                    + ", ".join(missing_fraud)
+                    + " — risk enforcement cannot run without them."
+                )
+
+        kyc_partner = (self.kyc_partner or "").strip().lower()
+        if self.strict_provider_startup_validation and kyc_partner not in {"", "mock", "dev", "log"}:
+            missing_kyc = [
+                name
+                for name, value in {
+                    "KYC_PARTNER_API_KEY": self.kyc_partner_api_key,
+                    "KYC_PARTNER_BASE_URL": self.kyc_partner_base_url,
+                    "KYC_WEBHOOK_SECRET": self.kyc_webhook_secret,
+                }.items()
+                if self._missing_required_secret(value)
+            ]
+            if missing_kyc:
+                raise ValueError(
+                    "Strict provider startup validation requires KYC provider values for "
+                    + ", ".join(missing_kyc)
+                    + " — seller payout and dispute escalation gates are not launch-safe without them."
+                )
+
+        push_provider = (self.push_provider or "").strip().lower()
+        if self.strict_provider_startup_validation and push_provider == "fcm":
+            if self._missing_required_secret(self.fcm_server_key):
+                raise ValueError(
+                    "Strict provider startup validation requires FCM_SERVER_KEY "
+                    "— seller/FE transactional alerts cannot be delivered without push wiring."
+                )
 
         return self
 

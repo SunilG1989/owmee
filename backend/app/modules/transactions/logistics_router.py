@@ -31,8 +31,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy import and_, select, text
 
 from app.core.dependencies import BasicUser, CurrentUser, DBSession, VerifiedUser, require_basic
-from app.modules.identity_auth.models import User
-from app.modules.listings.models import Listing
+from app.modules.admin.audit_log_router import log_admin_action
+from app.modules.admin.admin_auth import require_admin, require_money_admin
+from app.modules.field_executive import service as fe_service
+from app.modules.listings.models import Category, Listing
 from app.modules.offers.models import PaymentLink, Transaction
 from app.modules.transactions.address_snapshots import snapshot_summary
 from app.modules.transactions.logistics_state import (
@@ -47,11 +49,6 @@ router = APIRouter(tags=["logistics"])
 
 
 # ── Auth helpers ──────────────────────────────────────────────────────────────
-
-# Admin JWT verification — see app/modules/admin/admin_auth.py.
-# Earlier this was a permissive `return None` stub.
-from app.modules.admin.admin_auth import require_admin  # noqa: F401
-
 
 async def require_fe(current_user: BasicUser) -> CurrentUser:
     if current_user.role != "fe":
@@ -117,6 +114,80 @@ def _with_address_payload(d: dict, *, prefix: str, snapshot: dict | None) -> dic
     return d
 
 
+async def _required_category_slugs_for_transaction(db: DBSession, txn: Transaction) -> set[str] | None:
+    result = await db.execute(
+        select(Category.slug)
+        .join(Listing, Listing.category_id == Category.id)
+        .where(Listing.id == txn.listing_id)
+    )
+    slug = result.scalar_one_or_none()
+    return {slug} if slug else None
+
+
+async def _assert_fe_ready_for_transaction(
+    db: DBSession,
+    *,
+    fe_user_id: UUID,
+    txn: Transaction,
+) -> None:
+    try:
+        await fe_service.assert_fe_user_ready_for_assignment(
+            db,
+            fe_user_id,
+            required_categories=await _required_category_slugs_for_transaction(db, txn),
+        )
+    except fe_service.FEOnboardingError as exc:
+        raise HTTPException(
+            http_status.HTTP_400_BAD_REQUEST,
+            {"error": exc.code, "message": exc.message},
+        )
+
+
+def _admin_id(admin: object) -> UUID | None:
+    value = getattr(admin, "admin_id", None)
+    return value if isinstance(value, UUID) else None
+
+
+def _txn_audit_state(txn: Transaction) -> dict:
+    return {
+        "status": txn.status,
+        "seller_readiness_status": txn.seller_readiness_status,
+        "pickup_fe_id": str(txn.pickup_fe_id) if txn.pickup_fe_id else None,
+        "delivery_mode": txn.delivery_mode,
+        "delivery_fe_id": str(txn.delivery_fe_id) if txn.delivery_fe_id else None,
+        "courier_name": txn.courier_name,
+        "courier_booking_id": txn.courier_booking_id,
+        "refund_status": txn.refund_status,
+        "return_status": txn.return_status,
+        "routed_at": txn.routed_at.isoformat() if txn.routed_at else None,
+        "delivered_at": txn.delivered_at.isoformat() if txn.delivered_at else None,
+    }
+
+
+async def _audit_admin_transaction_action(
+    db: DBSession,
+    *,
+    admin: object,
+    action: str,
+    txn: Transaction,
+    before_state: dict,
+    reviewer_notes: str | None = None,
+) -> None:
+    admin_id = _admin_id(admin)
+    if not admin_id:
+        return
+    await log_admin_action(
+        db,
+        admin_id=admin_id,
+        action=action,
+        entity_type="transaction",
+        entity_id=str(txn.id),
+        before_state=before_state,
+        after_state=_txn_audit_state(txn),
+        reviewer_notes=reviewer_notes,
+    )
+
+
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
 class AssignPickupRequest(BaseModel):
@@ -168,19 +239,30 @@ async def admin_seller_readiness_queue(db: DBSession):
 
 @router.post(
     "/v1/admin/logistics/transactions/{transaction_id}/expire-seller-readiness",
-    dependencies=[Depends(require_admin)],
 )
-async def admin_expire_seller_readiness(transaction_id: UUID, db: DBSession):
+async def admin_expire_seller_readiness(
+    transaction_id: UUID,
+    db: DBSession,
+    admin: object = Depends(require_admin),
+):
     """Ops action for seller non-response after the readiness deadline."""
     from app.modules.offers.service import expire_seller_readiness
 
     txn = await db.get(Transaction, transaction_id)
     if not txn:
         raise HTTPException(404, {"error": "NOT_FOUND"})
+    before = _txn_audit_state(txn)
     try:
         await expire_seller_readiness(db, txn)
     except ValueError as e:
         raise HTTPException(400, {"error": str(e).split(":")[0]})
+    await _audit_admin_transaction_action(
+        db,
+        admin=admin,
+        action="transaction.expire_seller_readiness",
+        txn=txn,
+        before_state=before,
+    )
     await db.commit()
     return _fmt_logistics(txn)
 
@@ -204,9 +286,13 @@ async def admin_pickup_queue(db: DBSession):
 
 @router.post(
     "/v1/admin/logistics/transactions/{transaction_id}/assign-pickup",
-    dependencies=[Depends(require_admin)],
 )
-async def admin_assign_pickup(transaction_id: UUID, body: AssignPickupRequest, db: DBSession):
+async def admin_assign_pickup(
+    transaction_id: UUID,
+    body: AssignPickupRequest,
+    db: DBSession,
+    admin: object = Depends(require_admin),
+):
     txn = await db.get(Transaction, transaction_id)
     if not txn:
         raise HTTPException(404, {"error": "NOT_FOUND"})
@@ -217,12 +303,8 @@ async def admin_assign_pickup(transaction_id: UUID, body: AssignPickupRequest, d
     if not txn.seller_pickup_address_snapshot or not txn.buyer_delivery_address_snapshot:
         raise HTTPException(400, {"error": "ADDRESS_SNAPSHOT_MISSING"})
 
-    fe = await db.get(User, body.fe_user_id)
-    if not fe:
-        raise HTTPException(400, {"error": "FE_NOT_FOUND"})
-    # role check is informational — admins can over-assign in unusual ops cases
-    if fe.tier != "fe" and getattr(fe, "role", None) != "fe":
-        logger.warning("logistics.assign_pickup.user_not_fe", user_id=str(body.fe_user_id))
+    before = _txn_audit_state(txn)
+    await _assert_fe_ready_for_transaction(db, fe_user_id=body.fe_user_id, txn=txn)
 
     txn.pickup_fe_id = body.fe_user_id
     from app.modules.offers.service import _notify
@@ -230,6 +312,14 @@ async def admin_assign_pickup(transaction_id: UUID, body: AssignPickupRequest, d
         "Owmee pickup assigned",
         "A field executive has been assigned for your confirmed order.",
         "transaction", str(txn.id))
+    await _audit_admin_transaction_action(
+        db,
+        admin=admin,
+        action="transaction.assign_pickup_fe",
+        txn=txn,
+        before_state=before,
+        reviewer_notes=f"fe_user_id={body.fe_user_id}",
+    )
     await db.commit()
     return _fmt_logistics(txn)
 
@@ -368,10 +458,12 @@ async def admin_refund_queue(db: DBSession):
 
 @router.post(
     "/v1/admin/logistics/transactions/{transaction_id}/refund",
-    dependencies=[Depends(require_admin)],
 )
 async def admin_initiate_refund(
-    transaction_id: UUID, body: _InitiateRefundRequest, db: DBSession,
+    transaction_id: UUID,
+    body: _InitiateRefundRequest,
+    db: DBSession,
+    admin: object = Depends(require_money_admin),
 ):
     from app.modules.transactions.refund_service import (
         initiate_refund, INITIATED_BY_ADMIN,
@@ -379,10 +471,19 @@ async def admin_initiate_refund(
     txn = await db.get(Transaction, transaction_id)
     if not txn:
         raise HTTPException(404, {"error": "NOT_FOUND"})
+    before = _txn_audit_state(txn)
     try:
         await initiate_refund(db, txn, reason=body.reason, initiated_by=INITIATED_BY_ADMIN)
     except ValueError as e:
         raise HTTPException(400, {"error": str(e)})
+    await _audit_admin_transaction_action(
+        db,
+        admin=admin,
+        action="transaction.initiate_refund",
+        txn=txn,
+        before_state=before,
+        reviewer_notes=body.reason,
+    )
     await db.commit()
     return _fmt_logistics(txn)
 
@@ -543,19 +644,29 @@ async def admin_returns_queue(db: DBSession):
 
 @router.post(
     "/v1/admin/logistics/returns/{transaction_id}/approve",
-    dependencies=[Depends(require_admin)],
 )
 async def admin_approve_return(
-    transaction_id: UUID, body: _AdminReturnDecisionRequest, db: DBSession,
+    transaction_id: UUID,
+    body: _AdminReturnDecisionRequest,
+    db: DBSession,
+    admin: object = Depends(require_money_admin),
 ):
     txn = await db.get(Transaction, transaction_id)
     if not txn:
         raise HTTPException(404, {"error": "NOT_FOUND"})
+    before = _txn_audit_state(txn)
     try:
-        # admin_id is unknown at this stub-auth layer — pass the seller_id
-        # as a placeholder so the audit trail isn't NULL. Real admin id
-        # plumbs in when require_admin is wired to admin_users.
-        await return_service.admin_approve_return(db, txn, admin_id=txn.seller_id, note=body.note)
+        await return_service.admin_approve_return(
+            db, txn, admin_id=_admin_id(admin) or txn.seller_id, note=body.note,
+        )
+        await _audit_admin_transaction_action(
+            db,
+            admin=admin,
+            action="transaction.approve_return",
+            txn=txn,
+            before_state=before,
+            reviewer_notes=body.note,
+        )
         await db.commit()
     except ValueError as e:
         raise HTTPException(400, {"error": str(e)})
@@ -564,16 +675,29 @@ async def admin_approve_return(
 
 @router.post(
     "/v1/admin/logistics/returns/{transaction_id}/reject",
-    dependencies=[Depends(require_admin)],
 )
 async def admin_reject_return(
-    transaction_id: UUID, body: _AdminReturnDecisionRequest, db: DBSession,
+    transaction_id: UUID,
+    body: _AdminReturnDecisionRequest,
+    db: DBSession,
+    admin: object = Depends(require_money_admin),
 ):
     txn = await db.get(Transaction, transaction_id)
     if not txn:
         raise HTTPException(404, {"error": "NOT_FOUND"})
+    before = _txn_audit_state(txn)
     try:
-        await return_service.admin_reject_return(db, txn, admin_id=txn.seller_id, note=body.note)
+        await return_service.admin_reject_return(
+            db, txn, admin_id=_admin_id(admin) or txn.seller_id, note=body.note,
+        )
+        await _audit_admin_transaction_action(
+            db,
+            admin=admin,
+            action="transaction.reject_return",
+            txn=txn,
+            before_state=before,
+            reviewer_notes=body.note,
+        )
         await db.commit()
     except ValueError as e:
         raise HTTPException(400, {"error": str(e)})
@@ -582,17 +706,29 @@ async def admin_reject_return(
 
 @router.post(
     "/v1/admin/logistics/returns/{transaction_id}/assign-pickup",
-    dependencies=[Depends(require_admin)],
 )
 async def admin_assign_return_pickup(
-    transaction_id: UUID, body: _AdminAssignReturnPickupRequest, db: DBSession,
+    transaction_id: UUID,
+    body: _AdminAssignReturnPickupRequest,
+    db: DBSession,
+    admin: object = Depends(require_admin),
 ):
     txn = await db.get(Transaction, transaction_id)
     if not txn:
         raise HTTPException(404, {"error": "NOT_FOUND"})
+    before = _txn_audit_state(txn)
+    await _assert_fe_ready_for_transaction(db, fe_user_id=body.fe_user_id, txn=txn)
     try:
         await return_service.admin_assign_return_pickup(
-            db, txn, admin_id=txn.seller_id, fe_user_id=body.fe_user_id,
+            db, txn, admin_id=_admin_id(admin) or txn.seller_id, fe_user_id=body.fe_user_id,
+        )
+        await _audit_admin_transaction_action(
+            db,
+            admin=admin,
+            action="transaction.assign_return_pickup_fe",
+            txn=txn,
+            before_state=before,
+            reviewer_notes=f"fe_user_id={body.fe_user_id}",
         )
         await db.commit()
     except ValueError as e:
@@ -650,19 +786,20 @@ async def admin_hub_queue(db: DBSession):
 
 @router.post(
     "/v1/admin/logistics/transactions/{transaction_id}/route-to-fe-delivery",
-    dependencies=[Depends(require_admin)],
 )
 async def admin_route_to_fe_delivery(
-    transaction_id: UUID, body: RouteToFeDeliveryRequest, db: DBSession,
+    transaction_id: UUID,
+    body: RouteToFeDeliveryRequest,
+    db: DBSession,
+    admin: object = Depends(require_admin),
 ):
     txn = await db.get(Transaction, transaction_id)
     if not txn:
         raise HTTPException(404, {"error": "NOT_FOUND"})
     assert_legal_transition(txn.status, DELIVERY_IN_PROGRESS)
 
-    fe = await db.get(User, body.fe_user_id)
-    if not fe:
-        raise HTTPException(400, {"error": "FE_NOT_FOUND"})
+    before = _txn_audit_state(txn)
+    await _assert_fe_ready_for_transaction(db, fe_user_id=body.fe_user_id, txn=txn)
 
     now = datetime.now(timezone.utc)
     txn.delivery_mode = "fe"
@@ -679,6 +816,14 @@ async def admin_route_to_fe_delivery(
         "Delivery in progress",
         "Your item is on the way to the buyer.",
         "transaction", str(txn.id))
+    await _audit_admin_transaction_action(
+        db,
+        admin=admin,
+        action="transaction.route_fe_delivery",
+        txn=txn,
+        before_state=before,
+        reviewer_notes=f"fe_user_id={body.fe_user_id}",
+    )
     await db.commit()
     logger.info(
         "logistics.routed_fe_delivery",
@@ -689,15 +834,18 @@ async def admin_route_to_fe_delivery(
 
 @router.post(
     "/v1/admin/logistics/transactions/{transaction_id}/route-to-courier",
-    dependencies=[Depends(require_admin)],
 )
 async def admin_route_to_courier(
-    transaction_id: UUID, body: RouteToCourierRequest, db: DBSession,
+    transaction_id: UUID,
+    body: RouteToCourierRequest,
+    db: DBSession,
+    admin: object = Depends(require_admin),
 ):
     txn = await db.get(Transaction, transaction_id)
     if not txn:
         raise HTTPException(404, {"error": "NOT_FOUND"})
     assert_legal_transition(txn.status, DELIVERY_IN_PROGRESS)
+    before = _txn_audit_state(txn)
 
     name = body.courier_name.lower()
     if name not in KNOWN_COURIERS:
@@ -720,16 +868,26 @@ async def admin_route_to_courier(
         "Delivery in progress",
         "Your item has been handed to the courier for buyer delivery.",
         "transaction", str(txn.id))
+    await _audit_admin_transaction_action(
+        db,
+        admin=admin,
+        action="transaction.route_courier",
+        txn=txn,
+        before_state=before,
+        reviewer_notes=f"courier={body.courier_name}; booking_id={body.booking_id}",
+    )
     await db.commit()
     return _fmt_logistics(txn)
 
 
 @router.post(
     "/v1/admin/logistics/transactions/{transaction_id}/courier-status",
-    dependencies=[Depends(require_admin)],
 )
 async def admin_courier_status(
-    transaction_id: UUID, body: CourierStatusRequest, db: DBSession,
+    transaction_id: UUID,
+    body: CourierStatusRequest,
+    db: DBSession,
+    admin: object = Depends(require_admin),
 ):
     """Pre-Shiprocket integration: admin manually progresses courier status.
     Only meaningful when delivery_mode='courier'. The 'delivered' status
@@ -740,6 +898,7 @@ async def admin_courier_status(
         raise HTTPException(404, {"error": "NOT_FOUND"})
     if txn.delivery_mode != "courier":
         raise HTTPException(400, {"error": "NOT_A_COURIER_TXN"})
+    before = _txn_audit_state(txn)
 
     if body.new_status == "delivered":
         assert_legal_transition(txn.status, DELIVERED)
@@ -762,6 +921,14 @@ async def admin_courier_status(
         courier_name=txn.courier_name,
         new_status=body.new_status,
         note=body.note,
+    )
+    await _audit_admin_transaction_action(
+        db,
+        admin=admin,
+        action="transaction.courier_status",
+        txn=txn,
+        before_state=before,
+        reviewer_notes=f"{body.new_status}: {body.note or ''}".strip(),
     )
     await db.commit()
     return _fmt_logistics(txn)

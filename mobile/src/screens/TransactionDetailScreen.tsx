@@ -121,6 +121,7 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
   const isPaymentPending = status === 'payment_pending';
   const sellerReadinessStatus = txn.seller_readiness_status || tracking.seller_readiness_status;
   const sellerNeedsReadiness = isSeller && status === 'payment_captured' && sellerReadinessStatus === 'pending';
+  const buyerCanCancelPaidBeforePickup = isBuyer && status === 'payment_captured' && sellerReadinessStatus === 'pending';
   const isDelivered = status === 'delivered';
   const isCompleted = status === 'completed';
   const isDisputed = status === 'disputed';
@@ -181,6 +182,36 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
           style: 'destructive',
           onPress: () => {
             cancelUnpaidOrder(reason).catch(() => {});
+          },
+        },
+      ],
+    );
+  };
+
+  const cancelPaidPrePickupOrder = async (reason = 'buyer_cancelled_before_pickup') => {
+    setActing(true);
+    try {
+      await Orders.cancelPaidBeforePickup(transactionId, reason);
+      Alert.alert('Refund started', 'Owmee has cancelled this order and started the refund.');
+      await reload();
+    } catch (e) {
+      Alert.alert('Could not cancel order', parseApiError(e, 'This order may already be moving to pickup. Please contact support.'));
+    } finally {
+      setActing(false);
+    }
+  };
+
+  const confirmCancelPaidPrePickupOrder = () => {
+    Alert.alert(
+      'Cancel this order?',
+      'You can cancel before pickup is arranged. Owmee will release the item and start the refund to your original payment method.',
+      [
+        { text: 'Keep order', style: 'cancel' },
+        {
+          text: 'Cancel & refund',
+          style: 'destructive',
+          onPress: () => {
+            cancelPaidPrePickupOrder().catch(() => {});
           },
         },
       ],
@@ -453,6 +484,23 @@ export default function TransactionDetailScreen({ navigation, route }: RootScree
               size="lg"
               disabled={acting}
               onPress={() => confirmCancelUnpaidOrder()}
+              fullWidth
+            />
+          </View>
+        )}
+
+        {buyerCanCancelPaidBeforePickup && (
+          <View style={s.paymentBox}>
+            <Text style={s.paymentTitle}>Need to cancel?</Text>
+            <Text style={s.paymentHint}>
+              Pickup has not been arranged yet. If you cancel now, Owmee will release the item and start your refund.
+            </Text>
+            <Button
+              label="Cancel order & start refund"
+              variant="secondary"
+              size="lg"
+              disabled={acting}
+              onPress={confirmCancelPaidPrePickupOrder}
               fullWidth
             />
           </View>

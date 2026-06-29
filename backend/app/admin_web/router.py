@@ -32,8 +32,10 @@ from app.core.dependencies import DBSession
 from app.core.rate_limit import ADMIN_LOGIN_PER_IP, limit_by_ip
 from app.core.settings import settings
 from app.modules.admin.models import AdminUser as AdminUserModel
+from app.modules.admin.audit_log_router import log_admin_action
+from app.modules.field_executive import service as fe_service
 from app.modules.identity_auth.models import User
-from app.modules.listings.models import Listing
+from app.modules.listings.models import Category, Listing
 from app.modules.offers.models import Transaction
 from app.modules.transactions.logistics_state import (
     AT_HUB, DELIVERED, DELIVERY_IN_PROGRESS, PAYMENT_CAPTURED,
@@ -135,6 +137,64 @@ def require_admin_cookie_roles(*allowed: str):
 
 
 require_admin_money_role = require_admin_cookie_roles(*ADMIN_MONEY_ROLES)
+
+
+async def _required_category_slugs_for_transaction(db: DBSession, txn: Transaction) -> set[str] | None:
+    result = await db.execute(
+        select(Category.slug)
+        .join(Listing, Listing.category_id == Category.id)
+        .where(Listing.id == txn.listing_id)
+    )
+    slug = result.scalar_one_or_none()
+    return {slug} if slug else None
+
+
+async def _assert_fe_ready_for_transaction(db: DBSession, fe_user_id: UUID, txn: Transaction) -> None:
+    try:
+        await fe_service.assert_fe_user_ready_for_assignment(
+            db,
+            fe_user_id,
+            required_categories=await _required_category_slugs_for_transaction(db, txn),
+        )
+    except fe_service.FEOnboardingError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{exc.code}:{exc.message}")
+
+
+def _txn_audit_state(txn: Transaction) -> dict:
+    return {
+        "status": txn.status,
+        "seller_readiness_status": txn.seller_readiness_status,
+        "pickup_fe_id": str(txn.pickup_fe_id) if txn.pickup_fe_id else None,
+        "delivery_mode": txn.delivery_mode,
+        "delivery_fe_id": str(txn.delivery_fe_id) if txn.delivery_fe_id else None,
+        "courier_name": txn.courier_name,
+        "courier_booking_id": txn.courier_booking_id,
+        "refund_status": txn.refund_status,
+        "return_status": txn.return_status,
+        "routed_at": txn.routed_at.isoformat() if txn.routed_at else None,
+        "delivered_at": txn.delivered_at.isoformat() if txn.delivered_at else None,
+    }
+
+
+async def _audit_transaction_action(
+    db: DBSession,
+    *,
+    admin: AdminUserModel,
+    action: str,
+    txn: Transaction,
+    before_state: dict,
+    reviewer_notes: str | None = None,
+) -> None:
+    await log_admin_action(
+        db,
+        admin_id=admin.id,
+        action=action,
+        entity_type="transaction",
+        entity_id=str(txn.id),
+        before_state=before_state,
+        after_state=_txn_audit_state(txn),
+        reviewer_notes=reviewer_notes,
+    )
 
 
 def _redirect_to_login() -> RedirectResponse:
@@ -261,12 +321,23 @@ async def pickups_assign(
         raise HTTPException(400, "seller_not_ready")
     if not txn.seller_pickup_address_snapshot or not txn.buyer_delivery_address_snapshot:
         raise HTTPException(400, "address_snapshot_missing")
-    txn.pickup_fe_id = UUID(fe_user_id)
+    fe_uuid = UUID(fe_user_id)
+    before = _txn_audit_state(txn)
+    await _assert_fe_ready_for_transaction(db, fe_uuid, txn)
+    txn.pickup_fe_id = fe_uuid
     from app.modules.offers.service import _notify
     await _notify(db, txn.seller_id, "pickup_assigned",
         "Owmee pickup assigned",
         "A field executive has been assigned for your confirmed order.",
         "transaction", str(txn.id))
+    await _audit_transaction_action(
+        db,
+        admin=admin,
+        action="transaction.assign_pickup_fe",
+        txn=txn,
+        before_state=before,
+        reviewer_notes=f"fe_user_id={fe_user_id}",
+    )
     await db.commit()
     logger.info("admin.assign_pickup", transaction_id=str(transaction_id),
                 fe_user_id=fe_user_id, admin_id=str(admin.id))
@@ -311,9 +382,12 @@ async def hub_route_fe(
     if not txn:
         raise HTTPException(404)
     assert_legal_transition(txn.status, DELIVERY_IN_PROGRESS)
+    fe_uuid = UUID(fe_user_id)
+    before = _txn_audit_state(txn)
+    await _assert_fe_ready_for_transaction(db, fe_uuid, txn)
     now = datetime.now(timezone.utc)
     txn.delivery_mode = "fe"
-    txn.delivery_fe_id = UUID(fe_user_id)
+    txn.delivery_fe_id = fe_uuid
     txn.buyer_acknowledgment_code = "".join(secrets.choice("0123456789") for _ in range(6))
     txn.routed_at = now
     txn.status = DELIVERY_IN_PROGRESS
@@ -326,6 +400,14 @@ async def hub_route_fe(
         "Delivery in progress",
         "Your item is on the way to the buyer.",
         "transaction", str(txn.id))
+    await _audit_transaction_action(
+        db,
+        admin=admin,
+        action="transaction.route_fe_delivery",
+        txn=txn,
+        before_state=before,
+        reviewer_notes=f"fe_user_id={fe_user_id}",
+    )
     await db.commit()
     logger.info("admin.route_fe", transaction_id=str(transaction_id),
                 fe_user_id=fe_user_id, admin_id=str(admin.id))
@@ -344,6 +426,7 @@ async def hub_route_courier(
     if not txn:
         raise HTTPException(404)
     assert_legal_transition(txn.status, DELIVERY_IN_PROGRESS)
+    before = _txn_audit_state(txn)
     now = datetime.now(timezone.utc)
     txn.delivery_mode = "courier"
     txn.courier_name = courier_name
@@ -356,6 +439,14 @@ async def hub_route_courier(
         "Courier delivery started",
         "Your item has been handed to the courier. Tracking is available in the order.",
         "transaction", str(txn.id))
+    await _audit_transaction_action(
+        db,
+        admin=admin,
+        action="transaction.route_courier",
+        txn=txn,
+        before_state=before,
+        reviewer_notes=f"courier={courier_name}; booking_id={booking_id}",
+    )
     await db.commit()
     logger.info("admin.route_courier", transaction_id=str(transaction_id),
                 courier_name=courier_name, admin_id=str(admin.id))
@@ -421,12 +512,13 @@ async def returns_decision(
     transaction_id: UUID, db: DBSession,
     decision: str = Form(...),  # 'approve' | 'reject'
     note: str = Form(""),
-    admin: AdminUserModel = Depends(require_admin_cookie),
+    admin: AdminUserModel = Depends(require_admin_money_role),
 ):
     from app.modules.transactions import return_service
     txn = await db.get(Transaction, transaction_id)
     if not txn:
         raise HTTPException(404)
+    before = _txn_audit_state(txn)
     try:
         if decision == "approve":
             await return_service.admin_approve_return(db, txn, admin_id=admin.id, note=note)
@@ -434,6 +526,14 @@ async def returns_decision(
             await return_service.admin_reject_return(db, txn, admin_id=admin.id, note=note)
         else:
             raise HTTPException(400, "bad_decision")
+        await _audit_transaction_action(
+            db,
+            admin=admin,
+            action=f"transaction.{decision}_return",
+            txn=txn,
+            before_state=before,
+            reviewer_notes=note,
+        )
         await db.commit()
     except ValueError as e:
         logger.warning("admin.return_decision_failed",
@@ -453,9 +553,20 @@ async def returns_assign_pickup(
     txn = await db.get(Transaction, transaction_id)
     if not txn:
         raise HTTPException(404)
+    fe_uuid = UUID(fe_user_id)
+    before = _txn_audit_state(txn)
+    await _assert_fe_ready_for_transaction(db, fe_uuid, txn)
     try:
         await return_service.admin_assign_return_pickup(
-            db, txn, admin_id=admin.id, fe_user_id=UUID(fe_user_id),
+            db, txn, admin_id=admin.id, fe_user_id=fe_uuid,
+        )
+        await _audit_transaction_action(
+            db,
+            admin=admin,
+            action="transaction.assign_return_pickup_fe",
+            txn=txn,
+            before_state=before,
+            reviewer_notes=f"fe_user_id={fe_user_id}",
         )
         await db.commit()
     except ValueError as e:
@@ -525,12 +636,22 @@ async def disputes_resolve(
     txn = await db.get(Transaction, dispute.transaction_id)
     if amount is not None and txn is not None and amount > Decimal(str(txn.gross_amount or 0)):
         raise HTTPException(400, "refund_exceeds_gross")
+    before = _txn_audit_state(txn) if txn else {}
 
     await apply_dispute_resolution(
         db, dispute=dispute, txn=txn, resolution=resolution,
         resolution_note=resolution_note or "", refund_amount=amount,
         initiated_by=INITIATED_BY_ADMIN,
     )
+    if txn:
+        await _audit_transaction_action(
+            db,
+            admin=admin,
+            action="transaction.resolve_dispute",
+            txn=txn,
+            before_state=before,
+            reviewer_notes=f"{resolution}: {resolution_note or ''}".strip(),
+        )
     await db.commit()
     logger.info("admin.dispute_resolved", dispute_id=str(dispute_id),
                 resolution=resolution, admin_id=str(admin.id))
@@ -540,7 +661,7 @@ async def disputes_resolve(
 @router.get("/admin/refunds", response_class=HTMLResponse)
 async def refunds_page(
     request: Request, db: DBSession,
-    admin: AdminUserModel = Depends(require_admin_cookie),
+    admin: AdminUserModel = Depends(require_admin_money_role),
 ):
     rows = (await db.execute(
         select(Transaction, Listing.title)
@@ -557,7 +678,7 @@ async def refunds_page(
 async def txn_initiate_refund(
     transaction_id: UUID, db: DBSession,
     reason: str = Form(...),
-    admin: AdminUserModel = Depends(require_admin_cookie),
+    admin: AdminUserModel = Depends(require_admin_money_role),
 ):
     from app.modules.transactions.refund_service import (
         initiate_refund, INITIATED_BY_ADMIN,
@@ -565,8 +686,17 @@ async def txn_initiate_refund(
     txn = await db.get(Transaction, transaction_id)
     if not txn:
         raise HTTPException(404)
+    before = _txn_audit_state(txn)
     try:
         await initiate_refund(db, txn, reason=reason, initiated_by=INITIATED_BY_ADMIN)
+        await _audit_transaction_action(
+            db,
+            admin=admin,
+            action="transaction.initiate_refund",
+            txn=txn,
+            before_state=before,
+            reviewer_notes=reason,
+        )
         await db.commit()
     except ValueError as e:
         # Re-render the detail page with an error banner instead of a 500.
@@ -587,6 +717,7 @@ async def txn_courier_status(
     txn = await db.get(Transaction, transaction_id)
     if not txn or txn.delivery_mode != "courier":
         raise HTTPException(400)
+    before = _txn_audit_state(txn)
     if new_status == "delivered":
         assert_legal_transition(txn.status, DELIVERED)
         txn.status = DELIVERED
@@ -603,6 +734,14 @@ async def txn_courier_status(
             "transaction", str(txn.id))
     logger.info("admin.courier_status", transaction_id=str(transaction_id),
                 new_status=new_status, note=note, admin_id=str(admin.id))
+    await _audit_transaction_action(
+        db,
+        admin=admin,
+        action="transaction.courier_status",
+        txn=txn,
+        before_state=before,
+        reviewer_notes=f"{new_status}: {note or ''}".strip(),
+    )
     await db.commit()
     return RedirectResponse(url=f"/admin/txn/{transaction_id}", status_code=status.HTTP_303_SEE_OTHER)
 

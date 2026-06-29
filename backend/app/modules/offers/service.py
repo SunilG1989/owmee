@@ -1217,6 +1217,83 @@ async def cancel_unpaid_transaction(
     return await _release_unpaid_transaction(db, txn, reason=reason, notify=True)
 
 
+async def cancel_paid_pre_pickup_transaction(
+    db: AsyncSession,
+    transaction_id: UUID,
+    buyer_id: UUID,
+    *,
+    reason: str = "buyer_cancelled_before_pickup",
+) -> Transaction:
+    """Buyer cancellation after capture, before Owmee assigns pickup.
+
+    Once a pickup FE is assigned, the item may already be moving through an
+    ops/custody workflow; buyer cancellation then belongs to support/returns.
+    Before assignment, we can safely start a refund and release the listing.
+    """
+    txn = (await db.execute(
+        select(Transaction).where(Transaction.id == transaction_id).with_for_update()
+    )).scalar_one_or_none()
+    if not txn or txn.buyer_id != buyer_id:
+        raise ValueError("TRANSACTION_NOT_FOUND")
+    if txn.status == "cancelled":
+        return txn
+    if txn.status != "payment_captured":
+        raise ValueError(f"INVALID_STATUS:{txn.status}")
+    if txn.pickup_fe_id:
+        raise ValueError("PICKUP_ALREADY_ASSIGNED")
+
+    from app.modules.transactions.refund_service import INITIATED_BY_BUYER, initiate_refund
+
+    try:
+        await initiate_refund(
+            db,
+            txn,
+            reason=f"Buyer cancelled before pickup: {reason}"[:200],
+            initiated_by=INITIATED_BY_BUYER,
+        )
+    except ValueError as ref_err:
+        if str(ref_err) != "ALREADY_REFUNDED":
+            raise
+
+    now = datetime.now(timezone.utc)
+    txn.status = "cancelled"
+    txn.cancelled_at = now
+    txn.cancelled_reason = reason[:100]
+    txn.seller_response_deadline = None
+    txn.seller_readiness_reason = "buyer_cancelled"
+
+    reservation = (await db.execute(
+        select(Reservation).where(Reservation.id == txn.reservation_id)
+    )).scalar_one_or_none()
+    if reservation:
+        reservation.status = "cancelled"
+        reservation.cancelled_at = now
+        offer = (await db.execute(select(Offer).where(Offer.id == reservation.offer_id))).scalar_one_or_none()
+        if offer and offer.status == "accepted":
+            offer.status = "cancelled"
+            offer.reject_reason = reason[:100]
+            offer.responded_at = now
+
+    listing = (await db.execute(select(Listing).where(Listing.id == txn.listing_id))).scalar_one_or_none()
+    if listing and listing.status == "reserved":
+        listing.status = "active"
+
+    await _notify(
+        db, txn.buyer_id, "buyer_cancelled_refund",
+        "Order cancelled — refund started",
+        "Owmee has cancelled the order and started your refund.",
+        "transaction", str(txn.id),
+    )
+    await _notify(
+        db, txn.seller_id, "buyer_cancelled_before_pickup",
+        "Item is available again",
+        "The buyer cancelled before pickup, so Owmee released the item for other buyers.",
+        "transaction", str(txn.id),
+    )
+    logger.info("payment.paid_order_cancelled_before_pickup", transaction_id=str(txn.id), reason=reason)
+    return txn
+
+
 async def expire_unpaid_transaction(
     db: AsyncSession,
     txn: Transaction,

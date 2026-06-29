@@ -40,6 +40,8 @@ BUCKET_MAP = {
     "seller_readiness_declined": "transactions",
     "seller_readiness_expired": "transactions",
     "buyer_payment_not_completed": "transactions",
+    "buyer_cancelled_refund": "transactions",
+    "buyer_cancelled_before_pickup": "transactions",
     "pickup_assigned":       "transactions",
     "pickup_completed":      "transactions",
     "item_at_hub":           "transactions",
@@ -88,6 +90,9 @@ async def push(
     Always creates in-app notification. Attempts FCM if token exists and env=production.
     Returns True if FCM push was sent, False if in-app only.
     """
+    if not persist_in_app and not settings.is_production:
+        return False
+
     from app.db.session import AsyncSessionLocal
     from app.modules.offers.models import NotificationEvent, NotificationPreference
     from sqlalchemy import select

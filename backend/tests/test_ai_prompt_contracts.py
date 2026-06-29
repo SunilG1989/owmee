@@ -1,4 +1,5 @@
 import inspect
+import warnings
 from types import SimpleNamespace
 
 import pytest
@@ -55,7 +56,14 @@ def test_fast_vision_schema_excludes_slow_enrichment_fields():
 
 
 def test_fast_vision_config_uses_low_media_resolution_and_small_output():
-    from google.genai import types
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=r"'_UnionGenericAlias' is deprecated.*",
+            category=DeprecationWarning,
+            module=r"google\.genai\.types",
+        )
+        from google.genai import types
 
     media_resolution = gemini_client._low_media_resolution(types)
     config = types.GenerateContentConfig(
