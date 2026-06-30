@@ -28,7 +28,7 @@ import {
   type DirectAcquisitionItem,
   type DirectLocationPayload,
 } from '../../services/api';
-import { Button, IconButton } from '../../components/ui';
+import { Button, IconButton, ScreenHeader } from '../../components/ui';
 import type { RootScreen } from '../../navigation/types';
 import { C, R, S, Shadow, T, formatPrice } from '../../utils/tokens';
 import { parseApiError } from '../../utils/errors';
@@ -214,14 +214,13 @@ export default function FeDirectBookingDetailScreen({
 
   return (
     <SafeAreaView style={s.root} edges={['top']}>
-      <View style={s.header}>
-        <IconButton icon="←" onPress={() => navigation.goBack()} a11y="Back" size="sm" />
-        <View style={s.headerText}>
-          <Text style={s.h1}>Direct pickup</Text>
-          <Text style={s.subtitle}>{booking.booking_code}</Text>
-        </View>
-        <IconButton icon="⌕" onPress={load} a11y="Refresh booking" size="sm" variant="outlined" />
-      </View>
+      <ScreenHeader
+        title="Direct pickup"
+        subtitle={booking.booking_code}
+        onBack={() => navigation.goBack()}
+        tone="canvas"
+        right={<IconButton icon="refresh" onPress={load} a11y="Refresh booking" size="sm" variant="outlined" />}
+      />
 
       <KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={s.scrollPad} showsVerticalScrollIndicator={false}>

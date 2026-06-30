@@ -312,6 +312,10 @@ async def admin_assign_pickup(
         "Owmee pickup assigned",
         "A field executive has been assigned for your confirmed order.",
         "transaction", str(txn.id))
+    await _notify(db, body.fe_user_id, "fe_pickup_assigned",
+        "Pickup assigned",
+        "A paid order is ready for pickup. Open FE tasks for address and inspection checklist.",
+        "transaction", str(txn.id))
     await _audit_admin_transaction_action(
         db,
         admin=admin,
@@ -722,6 +726,11 @@ async def admin_assign_return_pickup(
         await return_service.admin_assign_return_pickup(
             db, txn, admin_id=_admin_id(admin) or txn.seller_id, fe_user_id=body.fe_user_id,
         )
+        from app.modules.offers.service import _notify
+        await _notify(db, body.fe_user_id, "fe_return_pickup_assigned",
+            "Return pickup assigned",
+            "A buyer return is ready for pickup. Open FE tasks for address and checklist.",
+            "transaction", str(txn.id))
         await _audit_admin_transaction_action(
             db,
             admin=admin,
@@ -815,6 +824,10 @@ async def admin_route_to_fe_delivery(
     await _notify(db, txn.seller_id, "delivery_in_progress",
         "Delivery in progress",
         "Your item is on the way to the buyer.",
+        "transaction", str(txn.id))
+    await _notify(db, body.fe_user_id, "fe_delivery_assigned",
+        "Delivery assigned",
+        "An inspected Owmee order is ready for buyer delivery. Open FE tasks for address and handover code flow.",
         "transaction", str(txn.id))
     await _audit_admin_transaction_action(
         db,

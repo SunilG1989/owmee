@@ -19,10 +19,10 @@ from typing import Any, Optional
 import structlog
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.admin_dependencies import AdminAny
+from app.core.admin_dependencies import AdminAny, AdminSuper
 from app.core.dependencies import DBSession
 
 logger = structlog.get_logger(__name__)
@@ -89,9 +89,84 @@ class AuditLogResponse(BaseModel):
     items: list[AuditLogItem]
 
 
+class SuperAdminActionItem(BaseModel):
+    id: str
+    audit_log_id: str
+    admin_user_id: str
+    admin_email: Optional[str] = None
+    action: str
+    entity_type: Optional[str] = None
+    entity_id: Optional[str] = None
+    full_state_snapshot: Optional[dict] = None
+    mfa_verified: bool
+    created_at: str
+
+
+class SuperAdminActionResponse(BaseModel):
+    total: int
+    items: list[SuperAdminActionItem]
+
+
 # ── Router ───────────────────────────────────────────────────────────────────
 
 router = APIRouter(tags=["admin-audit-log"])
+
+
+HIGH_RISK_ACTION_PREFIXES = (
+    "admin_user.",
+    "transaction.initiate_refund",
+    "transaction.approve_return",
+    "transaction.reject_return",
+    "transaction.assign_return_pickup_fe",
+    "transaction.route_fe_delivery",
+    "transaction.route_courier",
+    "dispute.",
+    "direct.",
+    "kyc.",
+)
+
+
+def _audit_filters(
+    AdminAuditLog,
+    AdminUser,
+    *,
+    action: Optional[str],
+    entity_type: Optional[str],
+    entity_id: Optional[str],
+    admin_uid: uuid.UUID | None,
+    q: Optional[str],
+    created_from: Optional[datetime],
+    created_to: Optional[datetime],
+    high_risk_only: bool,
+):
+    filters = []
+    if action:
+        filters.append(AdminAuditLog.action == action)
+    if entity_type:
+        filters.append(AdminAuditLog.entity_type == entity_type)
+    if entity_id:
+        filters.append(AdminAuditLog.entity_id == entity_id)
+    if admin_uid:
+        filters.append(AdminAuditLog.admin_user_id == admin_uid)
+    if created_from:
+        filters.append(AdminAuditLog.created_at >= created_from)
+    if created_to:
+        filters.append(AdminAuditLog.created_at <= created_to)
+    if q:
+        pattern = f"%{q.strip()}%"
+        filters.append(or_(
+            AdminAuditLog.action.ilike(pattern),
+            AdminAuditLog.entity_type.ilike(pattern),
+            AdminAuditLog.entity_id.ilike(pattern),
+            AdminAuditLog.reviewer_notes.ilike(pattern),
+            AdminUser.email.ilike(pattern),
+        ))
+    if high_risk_only:
+        filters.append(or_(*[
+            AdminAuditLog.action.ilike(f"{prefix}%")
+            for prefix in HIGH_RISK_ACTION_PREFIXES
+        ]))
+    return filters
 
 
 @router.get("/", response_model=AuditLogResponse)
@@ -102,39 +177,51 @@ async def list_audit_log(
     entity_type: Optional[str] = Query(None),
     entity_id: Optional[str] = Query(None),
     admin_id: Optional[str] = Query(None, description="Filter by admin user id"),
+    search: Optional[str] = Query(None, alias="q", min_length=2, max_length=100),
+    created_from: Optional[datetime] = Query(None),
+    created_to: Optional[datetime] = Query(None),
+    high_risk_only: bool = Query(False),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ):
     from app.modules.admin.models import AdminAuditLog, AdminUser
 
-    q = select(AdminAuditLog, AdminUser.email).outerjoin(
+    query = select(AdminAuditLog, AdminUser.email).outerjoin(
         AdminUser, AdminUser.id == AdminAuditLog.admin_user_id
     )
 
-    if action:
-        q = q.where(AdminAuditLog.action == action)
-    if entity_type:
-        q = q.where(AdminAuditLog.entity_type == entity_type)
-    if entity_id:
-        q = q.where(AdminAuditLog.entity_id == entity_id)
+    admin_uid = None
     if admin_id:
         try:
             admin_uid = uuid.UUID(admin_id)
         except ValueError:
             raise HTTPException(status_code=400, detail={
                 "error": "INVALID_ADMIN_ID", "message": "admin_id must be a UUID"})
-        q = q.where(AdminAuditLog.admin_user_id == admin_uid)
+    filters = _audit_filters(
+        AdminAuditLog,
+        AdminUser,
+        action=action,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        admin_uid=admin_uid,
+        q=search,
+        created_from=created_from,
+        created_to=created_to,
+        high_risk_only=high_risk_only,
+    )
+    if filters:
+        query = query.where(*filters)
 
     # Total count with same filters
-    count_q = select(func.count(AdminAuditLog.id))
-    if action: count_q = count_q.where(AdminAuditLog.action == action)
-    if entity_type: count_q = count_q.where(AdminAuditLog.entity_type == entity_type)
-    if entity_id: count_q = count_q.where(AdminAuditLog.entity_id == entity_id)
-    if admin_id: count_q = count_q.where(AdminAuditLog.admin_user_id == admin_uid)
+    count_q = select(func.count(AdminAuditLog.id)).outerjoin(
+        AdminUser, AdminUser.id == AdminAuditLog.admin_user_id
+    )
+    if filters:
+        count_q = count_q.where(*filters)
     total = (await db.execute(count_q)).scalar_one()
 
-    q = q.order_by(AdminAuditLog.created_at.desc()).limit(limit).offset(offset)
-    res = await db.execute(q)
+    query = query.order_by(AdminAuditLog.created_at.desc()).limit(limit).offset(offset)
+    res = await db.execute(query)
     rows = list(res.all())
 
     items = []
@@ -169,6 +256,48 @@ async def list_known_actions(_: AdminAny, db: DBSession):
         .limit(100)
     )
     return {"actions": [{"action": a, "count": c} for a, c in res.all()]}
+
+
+@router.get("/super-actions", response_model=SuperAdminActionResponse)
+async def list_super_admin_actions(
+    _: AdminSuper,
+    db: DBSession,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+):
+    """Break-glass ledger for super-admin mutations.
+
+    Kept separate from the normal audit stream so regular admins cannot browse
+    sensitive before/after snapshots for role and password-reset events.
+    """
+    from app.modules.admin.models import AdminUser, SuperAdminAction
+
+    total = (await db.execute(select(func.count(SuperAdminAction.id)))).scalar_one()
+    res = await db.execute(
+        select(SuperAdminAction, AdminUser.email)
+        .outerjoin(AdminUser, AdminUser.id == SuperAdminAction.admin_user_id)
+        .order_by(SuperAdminAction.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    return SuperAdminActionResponse(
+        total=int(total or 0),
+        items=[
+            SuperAdminActionItem(
+                id=str(row.id),
+                audit_log_id=str(row.audit_log_id),
+                admin_user_id=str(row.admin_user_id),
+                admin_email=email,
+                action=row.action,
+                entity_type=row.entity_type,
+                entity_id=row.entity_id,
+                full_state_snapshot=row.full_state_snapshot or {},
+                mfa_verified=bool(row.mfa_verified),
+                created_at=row.created_at.isoformat(),
+            )
+            for row, email in res.all()
+        ],
+    )
 
 
 # Dev endpoint — writes a test audit log entry (QA uses this)

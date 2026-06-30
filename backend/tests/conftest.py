@@ -9,6 +9,7 @@ from pathlib import Path
 # need valid-looking values, but backend E2E tests connect to Postgres. Default
 # to the repo's Docker Compose database on localhost so `pytest backend/tests`
 # works on a fresh local dev stack; CI can still override these explicitly.
+BACKEND_ROOT = Path(__file__).resolve().parent.parent
 _DEFAULT_TEST_DATABASE_URL = "postgresql+asyncpg://owmee:owmee_dev_password@localhost:5432/owmee_test"
 _DEFAULT_TEST_SYNC_DATABASE_URL = "postgresql://owmee:owmee_dev_password@localhost:5432/owmee_test"
 os.environ.setdefault("DATABASE_URL", os.environ.get("OWMEE_TEST_DATABASE_URL", _DEFAULT_TEST_DATABASE_URL))
@@ -27,9 +28,10 @@ os.environ.setdefault("R2_ENDPOINT", "https://example.r2.cloudflarestorage.com")
 os.environ.setdefault("R2_ACCESS_KEY", "test")
 os.environ.setdefault("R2_SECRET_KEY", "test")
 os.environ.setdefault("SECRET_KEY", "test-secret-not-for-prod")
+os.environ.setdefault("JWT_PRIVATE_KEY_PATH", str(BACKEND_ROOT / "keys/private.pem"))
+os.environ.setdefault("JWT_PUBLIC_KEY_PATH", str(BACKEND_ROOT / "keys/public.pem"))
 
 # Make the backend root importable as `app.*`
-BACKEND_ROOT = Path(__file__).resolve().parent.parent
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 

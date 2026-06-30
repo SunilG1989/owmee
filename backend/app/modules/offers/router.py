@@ -953,6 +953,8 @@ async def get_notifications(current_user: BasicUser, db: DBSession,
         {"id": str(n.id), "type": n.event_type, "bucket": n.notification_bucket,
          "title": n.title, "body": n.body, "entity_type": n.entity_type,
          "entity_id": n.entity_id, "is_read": n.is_read,
+         "push_status": getattr(n, "push_status", None),
+         "push_provider": getattr(n, "push_provider", None),
          "created_at": n.created_at.isoformat()}
         for n in result.scalars().all()
     ]}

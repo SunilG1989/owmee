@@ -11,15 +11,15 @@
  *   <BackButton onPress={() => nav.goBack()} variant="onDark" />
  */
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View, ViewStyle } from 'react-native';
-import { C, MIN_TAP, R, Shadow } from '../../utils/tokens';
+import { StyleProp, ViewStyle } from 'react-native';
+import IconButton from './IconButton';
 
 export type BackButtonVariant = 'default' | 'floating' | 'onDark';
 
 interface Props {
   onPress: () => void;
   variant?: BackButtonVariant;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   a11y?: string;
 }
 
@@ -29,71 +29,20 @@ export default function BackButton({
   style,
   a11y = 'Back',
 }: Props) {
-  const v = variantStyles[variant];
+  const mapped = variant === 'floating'
+    ? { variant: 'floating' as const, size: 'overlay' as const }
+    : variant === 'onDark'
+      ? { variant: 'onDark' as const, size: 'md' as const }
+      : { variant: 'outlined' as const, size: 'md' as const };
+
   return (
-    <TouchableOpacity
+    <IconButton
+      icon="←"
       onPress={onPress}
-      activeOpacity={0.7}
-      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-      accessibilityRole="button"
-      accessibilityLabel={a11y}
-      style={[styles.base, v.container, style]}
-    >
-      <View style={styles.glyphWrap}>
-        {/* Chevron drawn with two lines so it survives any font swap */}
-        <View style={[styles.chevTop, { backgroundColor: v.fg }]} />
-        <View style={[styles.chevBot, { backgroundColor: v.fg }]} />
-      </View>
-    </TouchableOpacity>
+      a11y={a11y}
+      variant={mapped.variant}
+      size={mapped.size}
+      style={style}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  base: {
-    width: MIN_TAP,
-    height: MIN_TAP,
-    borderRadius: R.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  glyphWrap: { width: 14, height: 14, alignItems: 'center', justifyContent: 'center' },
-  chevTop: {
-    position: 'absolute',
-    width: 12,
-    height: 2,
-    borderRadius: 1,
-    transform: [{ translateX: -2 }, { translateY: -3 }, { rotate: '-45deg' }],
-  },
-  chevBot: {
-    position: 'absolute',
-    width: 12,
-    height: 2,
-    borderRadius: 1,
-    transform: [{ translateX: -2 }, { translateY: 3 }, { rotate: '45deg' }],
-  },
-});
-
-const variantStyles: Record<BackButtonVariant, { container: ViewStyle; fg: string }> = {
-  default: {
-    container: {
-      backgroundColor: C.surface,
-      borderWidth: 1,
-      borderColor: C.ctaPrimaryBorder,
-      ...Shadow.subtle,
-    },
-    fg: C.ctaPrimary,
-  },
-  floating: {
-    container: {
-      backgroundColor: 'rgba(255, 253, 248, 0.94)',
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: 'rgba(207, 227, 222, 0.92)',
-      ...Shadow.card,
-    },
-    fg: C.petrolDeep,
-  },
-  onDark: {
-    container: { backgroundColor: 'transparent' },
-    fg: C.bone,
-  },
-};

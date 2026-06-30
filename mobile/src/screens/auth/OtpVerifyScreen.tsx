@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TextInput, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { C, T, S, R } from '../../utils/tokens';
-import { Button, IconButton } from '../../components/ui';
+import { Button, ScreenHeader } from '../../components/ui';
 import type { AuthScreen } from '../../navigation/types';
 import { Auth } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
@@ -77,9 +77,7 @@ export default function OtpVerifyScreen({ navigation, route }: AuthScreen<'OtpVe
 
   return (
     <SafeAreaView style={s.safe}>
-      <View style={s.backWrap}>
-        <IconButton icon="←" onPress={() => navigation.goBack()} a11y="Back" size="sm" />
-      </View>
+      <ScreenHeader onBack={() => navigation.goBack()} tone="canvas" />
       <View style={s.body}>
         <Text style={s.title}>Enter OTP</Text>
         <Text style={s.sub}>Sent to {phone}</Text>
@@ -88,6 +86,9 @@ export default function OtpVerifyScreen({ navigation, route }: AuthScreen<'OtpVe
           placeholder="000000"
           placeholderTextColor={C.text4}
           keyboardType="number-pad"
+          textContentType="oneTimeCode"
+          autoComplete="sms-otp"
+          importantForAutofill="yes"
           maxLength={6}
           value={code}
           onChangeText={setCode}
@@ -116,7 +117,6 @@ export default function OtpVerifyScreen({ navigation, route }: AuthScreen<'OtpVe
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bone },
-  backWrap: { paddingHorizontal: S.lg, paddingVertical: S.sm },
   body: { flex: 1, paddingHorizontal: S.xxl, paddingTop: S.xxxl + S.sm },
   title: {
     fontSize: T.size.xxl - 2,

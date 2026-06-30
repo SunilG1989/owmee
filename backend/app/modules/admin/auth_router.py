@@ -27,7 +27,7 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.admin_dependencies import AdminUser
+from app.core.admin_dependencies import ADMIN_ROLES, AdminUser
 from app.core.jwt import _private_key
 from jose import jwt
 from app.core.settings import settings
@@ -320,6 +320,14 @@ async def admin_bootstrap(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"error": "BOOTSTRAP_DISABLED",
                     "message": "Bootstrap is not available in production."},
+        )
+    if body.role not in ADMIN_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": "INVALID_ADMIN_ROLE",
+                "message": f"role must be one of: {sorted(ADMIN_ROLES)}",
+            },
         )
 
     # If already exists, log in (idempotent for QA runs)

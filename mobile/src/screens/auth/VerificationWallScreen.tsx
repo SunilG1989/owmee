@@ -14,7 +14,7 @@ import {
 import { ShieldCheck } from 'lucide-react-native';
 
 import { C, T, S, R, Shadow } from '../../utils/tokens';
-import { Button, IconButton } from '../../components/ui';
+import { Button, ScreenHeader } from '../../components/ui';
 import type { RootScreen } from '../../navigation/types';
 
 type Intent = 'buy' | 'sell' | 'publish' | undefined;
@@ -63,9 +63,7 @@ export default function VerificationWallScreen({
 
   return (
     <SafeAreaView style={st.root}>
-      <View style={st.headerRow}>
-        <IconButton icon="✕" onPress={close} a11y="Close" size="sm" />
-      </View>
+      <ScreenHeader onBack={close} backKind="close" tone="canvas" />
 
       <ScrollView
         contentContainerStyle={st.scroll}
@@ -130,12 +128,6 @@ function Bullet({ text }: { text: string }) {
 const st = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bone },
 
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    paddingHorizontal: S.lg,
-    paddingTop: S.sm,
-  },
   scroll: { padding: S.xxxl, paddingBottom: S.xxl },
 
   shield: {

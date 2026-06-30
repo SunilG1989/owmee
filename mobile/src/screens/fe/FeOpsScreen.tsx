@@ -21,7 +21,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { launchCamera } from 'react-native-image-picker';
 
 import { FE, type FePickup } from '../../services/api';
-import { Button, Chip, IconButton } from '../../components/ui';
+import { Button, Chip, ScreenHeader } from '../../components/ui';
 import { C, R, S, T } from '../../utils/tokens';
 import type { RootScreen } from '../../navigation/types';
 
@@ -72,10 +72,7 @@ export default function FeOpsScreen({ navigation }: RootScreen<'FeOps'>) {
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
-      <View style={s.header}>
-        <IconButton icon="←" onPress={() => navigation.goBack()} a11y="Back" size="sm" />
-        <Text style={s.title}>My ops</Text>
-      </View>
+      <ScreenHeader title="My ops" onBack={() => navigation.goBack()} tone="canvas" />
 
       <View style={s.tabs}>
         <Chip

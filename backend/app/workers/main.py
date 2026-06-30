@@ -19,6 +19,7 @@ from app.core.settings import settings
 from app.modules.ai_assistant.draft_analysis_jobs import run_ai_draft_analysis_worker
 from app.modules.media.hero_cleanup_jobs import run_hero_cleanup_worker
 from app.modules.offers.payment_timeout_jobs import run_payment_timeout_sweeper
+from app.modules.transactions.ops_alert_jobs import run_transaction_ops_alert_sweeper
 
 logger = structlog.get_logger()
 
@@ -34,6 +35,7 @@ async def main():
             run_hero_cleanup_worker(),
             run_ai_draft_analysis_worker(),
             run_payment_timeout_sweeper(),
+            run_transaction_ops_alert_sweeper(),
         )
         return
 
@@ -138,12 +140,19 @@ async def main():
     media_cleanup_task = asyncio.create_task(run_hero_cleanup_worker())
     ai_draft_task = asyncio.create_task(run_ai_draft_analysis_worker())
     payment_timeout_task = asyncio.create_task(run_payment_timeout_sweeper())
+    transaction_ops_alert_task = asyncio.create_task(run_transaction_ops_alert_sweeper())
     try:
         await worker.run()
     finally:
-        for task in (media_cleanup_task, ai_draft_task, payment_timeout_task):
+        for task in (media_cleanup_task, ai_draft_task, payment_timeout_task, transaction_ops_alert_task):
             task.cancel()
-        await asyncio.gather(media_cleanup_task, ai_draft_task, payment_timeout_task, return_exceptions=True)
+        await asyncio.gather(
+            media_cleanup_task,
+            ai_draft_task,
+            payment_timeout_task,
+            transaction_ops_alert_task,
+            return_exceptions=True,
+        )
 
 
 if __name__ == "__main__":

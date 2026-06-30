@@ -965,6 +965,35 @@ async def _fe_user_id_for_fe(db, fe_id: UUID) -> Optional[UUID]:
     return getattr(fe, "user_id", None)
 
 
+async def _notify_fe_lifecycle(
+    db,
+    fe: FieldExecutive,
+    event_type: str,
+    title: str,
+    body: str,
+) -> None:
+    if not getattr(fe, "user_id", None):
+        return
+    try:
+        from app.modules.offers.service import _notify
+        await _notify(
+            db,
+            fe.user_id,
+            event_type,
+            title,
+            body,
+            "field_executive",
+            str(fe.id),
+        )
+    except Exception as exc:  # pragma: no cover - lifecycle state must not fail on push.
+        logger.warning(
+            "fe.lifecycle_notification.failed",
+            fe_id=str(fe.id),
+            event_type=event_type,
+            error=str(exc),
+        )
+
+
 # ── Concierge Phase 2 seller-facing endpoints (master spec section 5) ────
 
 
@@ -1995,6 +2024,13 @@ async def admin_create_fe(
         )
         if body.admin_notes:
             fe.admin_notes = body.admin_notes
+        await _notify_fe_lifecycle(
+            db,
+            fe,
+            "fe_onboarding_created",
+            "Owmee FE onboarding started",
+            "Your field executive profile has been created. Complete verification, training, and device setup to go active.",
+        )
     except fe_service.FEOnboardingError as e:
         raise HTTPException(status_code=400, detail={"error": e.code, "message": e.message})
     await db.commit()
@@ -2046,6 +2082,18 @@ async def admin_update_fe_verification(
     fe = await _load_fe_by_id(db, fe_id)
     try:
         fe_service.set_verification_status(fe, body.status, note=body.note)
+        title = {
+            "approved": "FE verification approved",
+            "rejected": "FE verification rejected",
+            "resubmission_required": "FE verification needs update",
+        }.get(body.status, "FE verification updated")
+        await _notify_fe_lifecycle(
+            db,
+            fe,
+            "fe_verification_updated",
+            title,
+            f"Verification status is now {body.status.replace('_', ' ')}.",
+        )
     except fe_service.FEOnboardingError as e:
         raise HTTPException(status_code=400, detail={"error": e.code, "message": e.message})
     await db.commit()
@@ -2063,6 +2111,13 @@ async def admin_update_fe_training(
     fe = await _load_fe_by_id(db, fe_id)
     try:
         fe_service.set_training_status(fe, body.status, note=body.note)
+        await _notify_fe_lifecycle(
+            db,
+            fe,
+            "fe_training_updated",
+            "FE training updated",
+            f"Training status is now {body.status.replace('_', ' ')}.",
+        )
     except fe_service.FEOnboardingError as e:
         raise HTTPException(status_code=400, detail={"error": e.code, "message": e.message})
     await db.commit()
@@ -2080,6 +2135,13 @@ async def admin_decide_fe_device(
     fe = await _load_fe_by_id(db, fe_id)
     try:
         fe_service.approve_device(fe, approved=body.approved, note=body.note)
+        await _notify_fe_lifecycle(
+            db,
+            fe,
+            "fe_device_updated",
+            "FE device approved" if body.approved else "FE device blocked",
+            "Your FE device status has been updated by Owmee Ops.",
+        )
     except fe_service.FEOnboardingError as e:
         raise HTTPException(status_code=400, detail={"error": e.code, "message": e.message})
     await db.commit()
@@ -2092,6 +2154,13 @@ async def admin_activate_fe(fe_id: UUID, current_admin: AdminL2, db: DBSession):
     fe = await _load_fe_by_id(db, fe_id)
     try:
         fe_service.activate_fe(fe)
+        await _notify_fe_lifecycle(
+            db,
+            fe,
+            "fe_activated",
+            "You are active on Owmee",
+            "You can now receive pickup, delivery, and seller visit tasks.",
+        )
     except fe_service.FEOnboardingError as e:
         raise HTTPException(status_code=409, detail={"error": e.code, "message": e.message})
     await db.commit()
@@ -2104,6 +2173,13 @@ async def admin_suspend_fe(fe_id: UUID, body: FEActionRequest, current_admin: Ad
     fe = await _load_fe_by_id(db, fe_id)
     try:
         fe_service.suspend_fe(fe, body.reason or "")
+        await _notify_fe_lifecycle(
+            db,
+            fe,
+            "fe_suspended",
+            "FE account suspended",
+            "Owmee Ops has paused your FE account. Contact Ops before taking new tasks.",
+        )
     except fe_service.FEOnboardingError as e:
         raise HTTPException(status_code=400, detail={"error": e.code, "message": e.message})
     await db.commit()
@@ -2115,6 +2191,13 @@ async def admin_suspend_fe(fe_id: UUID, body: FEActionRequest, current_admin: Ad
 async def admin_deactivate_fe(fe_id: UUID, body: FEActionRequest, current_admin: AdminL2, db: DBSession):
     fe = await _load_fe_by_id(db, fe_id)
     fe_service.deactivate_fe(fe, reason=body.reason)
+    await _notify_fe_lifecycle(
+        db,
+        fe,
+        "fe_deactivated",
+        "FE account deactivated",
+        "Your Owmee FE account has been deactivated by Ops.",
+    )
     await db.commit()
     await db.refresh(fe)
     return _fe_to_response(fe)

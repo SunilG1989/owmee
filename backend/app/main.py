@@ -80,6 +80,7 @@ def create_app() -> FastAPI:
     # ── Sprint 4 / Pass 4 Batch 2: snapshot + audit log + analytics ───────
     from app.modules.transactions.snapshot import router as tx_snapshot_router
     from app.modules.admin.audit_log_router import router as admin_audit_log_router
+    from app.modules.admin.ops_control import router as admin_ops_control_router
     from app.modules.analytics import (
         client_router as analytics_client_router,
         admin_router as analytics_admin_router,
@@ -134,6 +135,7 @@ def create_app() -> FastAPI:
     # ── Sprint 4 / Pass 4 Batch 2 admin mounts ────────────────────────────
     app.include_router(tx_snapshot_router, prefix="/v1/admin/transactions", tags=["admin-transaction-snapshot"])
     app.include_router(admin_audit_log_router, prefix="/v1/admin/audit-log", tags=["admin-audit-log"])
+    app.include_router(admin_ops_control_router, prefix="/v1/admin/ops-control", tags=["admin-ops-control"])
     app.include_router(analytics_admin_router, prefix="/v1/admin/analytics", tags=["admin-analytics"])
     # ── Sprint 4 / Pass 4 Batch 2 client mount ────────────────────────────
     app.include_router(analytics_client_router, prefix="/v1/analytics", tags=["analytics-client"])

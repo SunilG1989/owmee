@@ -337,8 +337,30 @@ export const AdminAuditLog = {
   list: (params: Record<string, string | number> = {}) =>
     req('GET', `/v1/admin/audit-log/${qs(params)}`),
   actions: () => req('GET', '/v1/admin/audit-log/actions'),
+  superActions: (params: Record<string, string | number> = {}) =>
+    req('GET', `/v1/admin/audit-log/super-actions${qs(params)}`),
   devLog: (body: { action: string; entity_type?: string; entity_id?: string; reviewer_notes?: string }) =>
     req('POST', '/v1/admin/audit-log/dev/log', body),
+};
+
+// ── Ops control tower / admin governance ───────────────────────────────────
+
+export const AdminOpsControl = {
+  summary: () =>
+    req('GET', '/v1/admin/ops-control/summary'),
+  providerHealth: () =>
+    req('GET', '/v1/admin/ops-control/provider-health'),
+  roles: () =>
+    req('GET', '/v1/admin/ops-control/roles'),
+  admins: () =>
+    req('GET', '/v1/admin/ops-control/admins'),
+  updateAdmin: (
+    adminId: string,
+    body: { reason: string; name?: string; role?: string; is_active?: boolean },
+  ) =>
+    req('PATCH', `/v1/admin/ops-control/admins/${adminId}`, body),
+  resetPassword: (adminId: string, reason: string) =>
+    req('POST', `/v1/admin/ops-control/admins/${adminId}/reset-password`, { reason }),
 };
 
 // ── Pass 4g: Analytics ──────────────────────────────────────────────────────

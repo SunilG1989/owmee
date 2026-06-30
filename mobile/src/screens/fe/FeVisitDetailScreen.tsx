@@ -19,7 +19,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { FE, type FEVisit } from '../../services/api';
-import { Button, IconButton } from '../../components/ui';
+import { Button, IconButton, ScreenHeader } from '../../components/ui';
 import { C, S, R, T, Shadow } from '../../utils/tokens';
 import type { RootScreen } from '../../navigation/types';
 
@@ -132,18 +132,18 @@ export default function FeVisitDetailScreen({ route, navigation }: RootScreen<'F
 
   return (
     <SafeAreaView style={st.root} edges={['top']}>
-      <View style={st.header}>
-        <IconButton icon="←" onPress={() => navigation.goBack()} a11y="Back" size="sm" />
-        <Text style={st.h1}>Visit details</Text>
-        {/* Concierge Phase 5 — Report issue corner */}
-        <IconButton
+      <ScreenHeader
+        title="Visit details"
+        onBack={() => navigation.goBack()}
+        tone="canvas"
+        right={<IconButton
           icon="⚠"
           onPress={() => navigation.navigate('ReportIssue', { visitId: visit.id })}
           a11y="Report issue"
           variant="danger"
           size="sm"
-        />
-      </View>
+        />}
+      />
 
       <ScrollView contentContainerStyle={st.scrollPad}>
         <View style={st.card}>

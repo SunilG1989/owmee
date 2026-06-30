@@ -11,12 +11,13 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 from uuid import UUID
 
 import structlog
 
 from app.core.settings import settings
-from app.modules.notifications.push_adapter import get_push_adapter
+from app.modules.notifications.push_adapter import PushDeliveryResult, get_push_adapter
 
 logger = structlog.get_logger()
 
@@ -43,15 +44,21 @@ BUCKET_MAP = {
     "buyer_cancelled_refund": "transactions",
     "buyer_cancelled_before_pickup": "transactions",
     "pickup_assigned":       "transactions",
+    "fe_pickup_assigned":    "transactions",
+    "fe_return_pickup_assigned": "transactions",
     "pickup_completed":      "transactions",
     "item_at_hub":           "transactions",
     "pickup_rejected_refund": "transactions",
     "out_for_delivery":      "transactions",
+    "fe_delivery_assigned":  "transactions",
+    "fe_visit_assigned":     "transactions",
     "delivery_in_progress":  "transactions",
     "delivered_confirm_receipt": "transactions",
     "delivered_awaiting_confirmation": "transactions",
     "deal_confirmed":        "transactions",
     "deal_confirmed_buyer":  "transactions",
+    "refund_completed":      "transactions",
+    "refund_completed_seller": "transactions",
     "payout_eligible":       "transactions",
     "payout_processing_started": "transactions",
     "payout_verification_required": "transactions",
@@ -65,6 +72,18 @@ BUCKET_MAP = {
     "concierge_specialist_starting": "transactions",  # N4
     "concierge_specialist_arriving": "transactions",  # N5
     "concierge_specialist_at_door": "transactions",  # N6
+    "concierge_visit_cancelled_fe": "transactions",
+    "direct_fe_task_assigned": "transactions",
+    "direct_payout_posted": "transactions",
+    "direct_payout_failed": "transactions",
+    "direct_payout_retry": "transactions",
+    "fe_onboarding_created": "transactions",
+    "fe_verification_updated": "transactions",
+    "fe_training_updated": "transactions",
+    "fe_device_updated": "transactions",
+    "fe_activated": "transactions",
+    "fe_suspended": "transactions",
+    "fe_deactivated": "transactions",
     # ── Concierge Phase 4 — passive timeline ─────────────────────
     "concierge_item_sold":         "transactions",
     "concierge_pickup_scheduled":  "transactions",
@@ -84,6 +103,7 @@ async def push(
     entity_type: str | None = None,
     entity_id: str | None = None,
     persist_in_app: bool = True,
+    idempotency_key: str | None = None,
 ) -> bool:
     """
     Send a push notification to a user.
@@ -96,8 +116,10 @@ async def push(
     from app.db.session import AsyncSessionLocal
     from app.modules.offers.models import NotificationEvent, NotificationPreference
     from sqlalchemy import select
+    from sqlalchemy.exc import IntegrityError
 
     bucket = BUCKET_MAP.get(event_type, "transactions")
+    notification_id: UUID | None = None
 
     async with AsyncSessionLocal() as db:
         # Check user preferences
@@ -113,17 +135,38 @@ async def push(
                 return False
 
         if persist_in_app:
+            if idempotency_key:
+                existing_result = await db.execute(
+                    select(NotificationEvent).where(NotificationEvent.idempotency_key == idempotency_key)
+                )
+                existing = existing_result.scalar_one_or_none()
+                if existing:
+                    return existing.push_status == "sent"
             n = NotificationEvent(
                 user_id=user_id,
                 event_type=event_type,
                 notification_bucket=bucket,
+                idempotency_key=idempotency_key,
                 title=title,
                 body=body,
                 entity_type=entity_type,
                 entity_id=str(entity_id) if entity_id else None,
+                push_status="pending" if settings.is_production else "in_app_only",
             )
-            db.add(n)
-            await db.commit()
+            try:
+                db.add(n)
+                await db.flush()
+                notification_id = n.id
+                await db.commit()
+            except IntegrityError:
+                await db.rollback()
+                if idempotency_key:
+                    existing_result = await db.execute(
+                        select(NotificationEvent).where(NotificationEvent.idempotency_key == idempotency_key)
+                    )
+                    existing = existing_result.scalar_one_or_none()
+                    return bool(existing and existing.push_status == "sent")
+                raise
             logger.info("notification.created", user_id=str(user_id), event_type=event_type)
 
     # Attempt push in production. In-app notification is already persisted, so
@@ -131,16 +174,19 @@ async def push(
     if not settings.is_production:
         return False
 
-    return await _send_push(user_id, title, body, event_type, data or {})
+    result = await _send_push_delivery(user_id, title, body, event_type, data or {})
+    if notification_id:
+        await _mark_notification_push_result(notification_id, result)
+    return result.success
 
 
-async def _send_push(
+async def _send_push_delivery(
     user_id: UUID,
     title: str,
     body: str,
     event_type: str,
     data: dict,
-) -> bool:
+) -> PushDeliveryResult:
     """Send push through the configured provider adapter."""
     from app.db.session import AsyncSessionLocal
     from app.modules.identity_auth.models import User
@@ -150,23 +196,120 @@ async def _send_push(
         result = await db.execute(select(User).where(User.id == user_id))
         user = result.scalar_one_or_none()
         if not user or not user.fcm_token:
-            return False
+            return PushDeliveryResult(
+                success=False,
+                provider=(settings.push_provider or "fcm"),
+                error="NO_FCM_TOKEN",
+            )
         push_token = user.fcm_token
 
     try:
         result = await get_push_adapter().send(push_token, title, body, event_type, data)
         if result.success:
             logger.info("push.sent", user_id=str(user_id), event_type=event_type, provider=result.provider)
-            return True
+            return result
         if result.invalid_token:
             logger.warning("push.token_invalid", user_id=str(user_id), provider=result.provider)
             await _clear_fcm_token(user_id)
-            return False
+            return result
         logger.error("push.error", provider=result.provider, error=result.error)
-        return False
+        return result
     except Exception as e:
         logger.error("push.exception", error=str(e), user_id=str(user_id))
+        return PushDeliveryResult(
+            success=False,
+            provider=(settings.push_provider or "fcm"),
+            error=str(e),
+        )
+
+
+async def _send_push(
+    user_id: UUID,
+    title: str,
+    body: str,
+    event_type: str,
+    data: dict,
+) -> bool:
+    """Compatibility wrapper for tests/callers that only need a boolean."""
+    return (await _send_push_delivery(user_id, title, body, event_type, data)).success
+
+
+async def _mark_notification_push_result(
+    notification_id: UUID,
+    result: PushDeliveryResult,
+) -> None:
+    from app.db.session import AsyncSessionLocal
+    from app.modules.offers.models import NotificationEvent
+    from sqlalchemy import select
+
+    now = datetime.now(timezone.utc)
+    if result.success:
+        status = "sent"
+    elif result.invalid_token:
+        status = "token_invalid"
+    elif result.error == "NO_FCM_TOKEN":
+        status = "skipped_no_token"
+    else:
+        status = "failed"
+
+    async with AsyncSessionLocal() as db:
+        row = (await db.execute(
+            select(NotificationEvent).where(NotificationEvent.id == notification_id)
+        )).scalar_one_or_none()
+        if not row:
+            return
+        row.push_status = status
+        row.push_provider = result.provider
+        row.push_attempted_at = now
+        row.push_sent_at = now if result.success else None
+        row.push_error = None if result.success else (result.error or "")[:300]
+        await db.commit()
+
+
+async def dispatch_existing_notification_push(
+    notification_id: UUID,
+    user_id: UUID,
+    event_type: str,
+    title: str,
+    body: str,
+    data: dict | None = None,
+) -> bool:
+    """Send push for a NotificationEvent created in another transaction.
+
+    Transaction flows create their in-app row inside the same DB transaction as
+    the order state change. This helper waits briefly until that row is
+    committed before attempting FCM, so a rolled-back order mutation does not
+    produce a misleading push.
+    """
+    if not settings.is_production:
         return False
+
+    from app.db.session import AsyncSessionLocal
+    from app.modules.offers.models import NotificationEvent
+    from sqlalchemy import select
+
+    row_found = False
+    for _ in range(20):
+        async with AsyncSessionLocal() as db:
+            row = (await db.execute(
+                select(NotificationEvent.id).where(NotificationEvent.id == notification_id)
+            )).scalar_one_or_none()
+            if row:
+                row_found = True
+                break
+        await asyncio.sleep(0.25)
+
+    if not row_found:
+        logger.warning(
+            "push.skipped_uncommitted_notification",
+            notification_id=str(notification_id),
+            event_type=event_type,
+        )
+        return False
+
+    result = await _send_push_delivery(user_id, title, body, event_type, data or {})
+    await _mark_notification_push_result(notification_id, result)
+    return result.success
 
 
 async def _clear_fcm_token(user_id: UUID):

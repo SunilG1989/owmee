@@ -1,7 +1,7 @@
 import uuid
 from sqlalchemy import (
     Column, DateTime, ForeignKey, Index, Integer, Numeric, String, Boolean,
-    Text, text,
+    Text, UniqueConstraint, text,
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
@@ -268,6 +268,7 @@ class Wishlist(Base):
 class NotificationEvent(Base):
     __tablename__ = "notification_events"
     __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uq_notification_events_idempotency_key"),
         # Notifications list: WHERE user_id=? ORDER BY created_at DESC LIMIT 50.
         Index("ix_notif_user_created", "user_id", "created_at"),
         # Unread badge count: WHERE user_id=? AND is_read=false.
@@ -279,10 +280,16 @@ class NotificationEvent(Base):
     event_type = Column(String(60), nullable=False)
     # Buckets: transaction | promotion. Legacy rows may still contain "message".
     notification_bucket = Column(String(20), nullable=False, default="transaction")
+    idempotency_key = Column(String(160), nullable=True)
     title = Column(String(100), nullable=False)
     body = Column(String(300), nullable=False)
     entity_type = Column(String(30))
     entity_id = Column(String(100))
+    push_status = Column(String(24), nullable=False, default="not_attempted")
+    push_provider = Column(String(24), nullable=True)
+    push_attempted_at = Column(DateTime(timezone=True), nullable=True)
+    push_sent_at = Column(DateTime(timezone=True), nullable=True)
+    push_error = Column(String(300), nullable=True)
     is_read = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
 

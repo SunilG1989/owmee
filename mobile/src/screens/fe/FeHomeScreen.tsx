@@ -174,7 +174,7 @@ export default function FeHomeScreen({ navigation }: RootScreen<'FeHome'>) {
             variant="outlined"
           />
           <IconButton
-            icon="⌕"
+            icon="history"
             onPress={() => navigation.navigate('FeVisitHistory')}
             a11y="Visit history"
             variant="outlined"

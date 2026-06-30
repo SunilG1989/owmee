@@ -12,12 +12,13 @@
  *     outlined   white surface + hairline border — used on light cards
  *                where ghost would feel ambiguous
  *     floating   compact frosted surface for image/header overlays
+ *     onDark     transparent icon on dark/brand surfaces
  *     danger     red — destructive ("remove", "block")
  *
  *   sizes
  *     sm  36px — table-row / dense toolbar
  *     md  48px (MIN_TAP) — default
- *     overlay 42px — visible image/header overlay with >=48px hit target
+ *     overlay 44px — visible image/header overlay with >=48px hit target
  *     lg  56px — rare prominent actions
  *
  * sm gets a hitSlop of 6 on each side so the effective tap area still
@@ -31,9 +32,11 @@ import {
   AlertTriangle,
   ChevronLeft,
   Heart,
+  History,
   MoreVertical,
   Package,
   Plus,
+  RefreshCw,
   Search,
   Share2,
   X,
@@ -41,7 +44,7 @@ import {
 } from 'lucide-react-native';
 import { C, MIN_TAP, Shadow, T } from '../../utils/tokens';
 
-export type IconButtonVariant = 'solid' | 'ghost' | 'outlined' | 'floating' | 'danger';
+export type IconButtonVariant = 'solid' | 'ghost' | 'outlined' | 'floating' | 'danger' | 'onDark';
 export type IconButtonSize = 'sm' | 'md' | 'overlay' | 'lg';
 
 interface Props {
@@ -74,7 +77,7 @@ export default function IconButton({
   const compactHitSlop = size === 'sm'
     ? { top: 6, bottom: 6, left: 6, right: 6 }
     : size === 'overlay'
-      ? { top: 5, bottom: 5, left: 5, right: 5 }
+      ? { top: 4, bottom: 4, left: 4, right: 4 }
       : undefined;
   return (
     <TouchableOpacity
@@ -121,7 +124,7 @@ export default function IconButton({
 const SIZES: Record<IconButtonSize, { dim: number; glyph: number }> = {
   sm:      { dim: 36,      glyph: 18 },
   md:      { dim: MIN_TAP, glyph: 21 },
-  overlay: { dim: 42,      glyph: 21 },
+  overlay: { dim: 44,      glyph: 21 },
   lg:      { dim: 56,      glyph: 24 },
 };
 
@@ -131,13 +134,14 @@ const VARIANTS: Record<IconButtonVariant, { container: ViewStyle; iconColor: str
   outlined: { container: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.ctaPrimaryBorder }, iconColor: C.ctaPrimary },
   floating: {
     container: {
-      backgroundColor: 'rgba(255, 253, 248, 0.94)',
+      backgroundColor: 'rgba(255, 253, 248, 0.96)',
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: 'rgba(207, 227, 222, 0.92)',
       ...Shadow.card,
     },
     iconColor: C.petrolDeep,
   },
+  onDark:   { container: { backgroundColor: 'transparent' }, iconColor: C.white },
   danger:   { container: { backgroundColor: C.red }, iconColor: C.white },
 };
 
@@ -159,6 +163,10 @@ function iconForGlyph(icon: string): LucideIcon | null {
       return Plus;
     case '⌕':
       return Search;
+    case 'refresh':
+      return RefreshCw;
+    case 'history':
+      return History;
     case '📦':
       return Package;
     case '⚠':

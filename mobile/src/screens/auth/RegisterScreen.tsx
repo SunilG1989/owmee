@@ -20,7 +20,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { C, T, S, R, Shadow } from '../../utils/tokens';
-import { Button, IconButton } from '../../components/ui';
+import { Button, ScreenHeader } from '../../components/ui';
 import { Auth } from '../../services/api';
 import { parseApiError } from '../../utils/errors';
 
@@ -61,9 +61,7 @@ export default function RegisterScreen({ navigation }: any) {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={s.flex}
       >
-        <View style={s.backWrap}>
-          <IconButton icon="←" onPress={handleBack} a11y="Back" size="sm" />
-        </View>
+        <ScreenHeader onBack={handleBack} tone="canvas" />
 
         <View style={s.body}>
           <Text style={s.title}>Enter your mobile number</Text>
@@ -90,6 +88,9 @@ export default function RegisterScreen({ navigation }: any) {
               placeholder="98765 43210"
               placeholderTextColor={C.text4}
               keyboardType="phone-pad"
+              textContentType="telephoneNumber"
+              autoComplete="tel"
+              importantForAutofill="yes"
               maxLength={10}
               value={phone}
               onChangeText={setPhone}
@@ -134,7 +135,6 @@ export default function RegisterScreen({ navigation }: any) {
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bone },
   flex: { flex: 1 },
-  backWrap: { paddingHorizontal: S.lg, paddingVertical: S.sm },
   body: { flex: 1, paddingHorizontal: S.xl, paddingTop: S.md },
 
   title: {

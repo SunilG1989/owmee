@@ -45,9 +45,6 @@
 	<string>Owmee needs permission to save photos to your library.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Owmee may use the microphone if you record video for a listing.</string>
-	<!-- Used for in-app contact actions -->
-	<key>NSContactsUsageDescription</key>
-	<string>Owmee may access contacts to help you share listings with friends.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>
@@ -57,8 +54,6 @@
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>

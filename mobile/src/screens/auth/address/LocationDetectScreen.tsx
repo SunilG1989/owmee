@@ -20,7 +20,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LocateFixed, MapPin } from 'lucide-react-native';
 
-import { BackButton, Button } from '../../../components/ui';
+import { Button, ScreenHeader } from '../../../components/ui';
 import { C, R, S, Shadow, T } from '../../../utils/tokens';
 import type { RootScreen } from '../../../navigation/types';
 import {
@@ -81,9 +81,7 @@ export default function LocationDetectScreen({
 
   return (
     <SafeAreaView style={s.safe}>
-      <View style={s.headerRow}>
-        {showBack ? <BackButton onPress={() => navigation.goBack()} /> : null}
-      </View>
+      {showBack ? <ScreenHeader onBack={() => navigation.goBack()} tone="canvas" /> : null}
 
       <View style={s.body}>
         <View style={s.iconOrb}>
@@ -129,12 +127,6 @@ export default function LocationDetectScreen({
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bone },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: S.sm,
-    paddingTop: S.xs,
-  },
   body: {
     flex: 1,
     alignItems: 'center',

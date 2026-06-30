@@ -50,7 +50,7 @@ import {
 } from 'lucide-react-native';
 
 import { C, T, S, R, Shadow } from '../../../utils/tokens';
-import { Button, IconButton } from '../../../components/ui';
+import { Button, ScreenHeader } from '../../../components/ui';
 import { AIListing } from '../../../services/api';
 import { parseApiError } from '../../../utils/errors';
 import type { RootScreen } from '../../../navigation/types';
@@ -189,12 +189,7 @@ export default function AIListingCameraScreen({ navigation }: RootScreen<'AIList
 
   return (
     <SafeAreaView style={st.root}>
-      {/* Header — real close button that exits the flow */}
-      <View style={st.header}>
-        <IconButton icon="✕" onPress={exitFlow} a11y="Exit" size="sm" />
-        <Text style={st.headerTitle}>Add clear photos</Text>
-        <View style={st.headerSpacer} />
-      </View>
+      <ScreenHeader title="Add clear photos" onBack={exitFlow} backKind="close" tone="canvas" />
 
       {/* Body */}
       {hero ? (

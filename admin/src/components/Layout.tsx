@@ -19,6 +19,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               Owmee <span className="text-ink3 font-normal">OPS6</span>
             </div>
             <nav className="flex gap-1 flex-wrap">
+              <Tab to="/">Control tower</Tab>
+              <Tab to="/provider-health">Provider health</Tab>
               <Tab to="/dispatch">Dispatch</Tab>
               <Tab to="/direct-acquisitions">Direct acquisitions</Tab>
               <Tab to="/fes">Field executives</Tab>
@@ -26,6 +28,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               <Tab to="/stuck-workflows">Stuck workflows</Tab>
               <Tab to="/fe-earnings">FE earnings</Tab>
               <Tab to="/audit-log">Audit log</Tab>
+              <Tab to="/admin-users">Admin users</Tab>
               <Tab to="/analytics">Analytics</Tab>
             </nav>
           </div>
@@ -53,6 +56,7 @@ function Tab({ to, children }: { to: string; children: React.ReactNode }) {
   return (
     <NavLink
       to={to}
+      end={to === '/'}
       className={({ isActive }) =>
         `px-3 py-2 rounded-md text-sm font-medium transition ${
           isActive

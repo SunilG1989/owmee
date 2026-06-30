@@ -16,7 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { FE, type FEVisit } from '../../services/api';
-import { IconButton } from '../../components/ui';
+import { ScreenHeader } from '../../components/ui';
 import { C, S, R, T, Shadow } from '../../utils/tokens';
 import type { RootScreen } from '../../navigation/types';
 
@@ -58,11 +58,7 @@ export default function FeVisitHistoryScreen({ navigation }: RootScreen<'FeVisit
 
   return (
     <SafeAreaView style={st.root} edges={['top']}>
-      <View style={st.header}>
-        <IconButton icon="←" onPress={() => navigation.goBack()} a11y="Back" size="sm" />
-        <Text style={st.h1}>Visit history</Text>
-        <View style={st.headerSpacer} />
-      </View>
+      <ScreenHeader title="Visit history" onBack={() => navigation.goBack()} tone="canvas" />
 
       {loading ? (
         <View style={st.center}><ActivityIndicator color={C.petrol} /></View>

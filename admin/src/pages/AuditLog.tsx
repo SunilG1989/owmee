@@ -23,7 +23,16 @@ export default function AuditLogPage() {
   const [items, setItems] = useState<LogItem[]>([]);
   const [total, setTotal] = useState(0);
   const [actions, setActions] = useState<{ action: string; count: number }[]>([]);
-  const [filter, setFilter] = useState({ action: '', entity_type: '' });
+  const [filter, setFilter] = useState({
+    action: '',
+    entity_type: '',
+    entity_id: '',
+    admin_id: '',
+    q: '',
+    created_from: '',
+    created_to: '',
+    high_risk_only: false,
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -34,6 +43,12 @@ export default function AuditLogPage() {
       const params: Record<string, string | number> = { limit: 50 };
       if (filter.action) params.action = filter.action;
       if (filter.entity_type) params.entity_type = filter.entity_type;
+      if (filter.entity_id) params.entity_id = filter.entity_id;
+      if (filter.admin_id) params.admin_id = filter.admin_id;
+      if (filter.q.trim().length >= 2) params.q = filter.q.trim();
+      if (filter.created_from) params.created_from = new Date(filter.created_from).toISOString();
+      if (filter.created_to) params.created_to = new Date(filter.created_to).toISOString();
+      if (filter.high_risk_only) params.high_risk_only = 'true';
       const r: any = await AdminAuditLog.list(params);
       setItems(r.items || []);
       setTotal(r.total || 0);
@@ -62,7 +77,16 @@ export default function AuditLogPage() {
         Append-only record of every admin action. Showing {items.length} of {total} total.
       </p>
 
-      <div style={{ marginBottom: 16, display: 'flex', gap: 12, alignItems: 'center' }}>
+      <div style={{ marginBottom: 16, display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', alignItems: 'end' }}>
+        <label>
+          Search:{' '}
+          <input
+            value={filter.q}
+            onChange={(e) => setFilter({ ...filter, q: e.target.value })}
+            placeholder="email, note, action"
+            style={{ padding: 6, border: '1px solid #ddd', borderRadius: 4, width: '100%' }}
+          />
+        </label>
         <label>
           Action:{' '}
           <select
@@ -79,13 +103,57 @@ export default function AuditLogPage() {
           </select>
         </label>
         <label>
-          Entity:{' '}
+          Entity type:{' '}
           <input
             value={filter.entity_type}
             onChange={(e) => setFilter({ ...filter, entity_type: e.target.value })}
             placeholder="e.g., listing"
-            style={{ padding: 6, border: '1px solid #ddd', borderRadius: 4 }}
+            style={{ padding: 6, border: '1px solid #ddd', borderRadius: 4, width: '100%' }}
           />
+        </label>
+        <label>
+          Entity ID:{' '}
+          <input
+            value={filter.entity_id}
+            onChange={(e) => setFilter({ ...filter, entity_id: e.target.value })}
+            placeholder="transaction/listing id"
+            style={{ padding: 6, border: '1px solid #ddd', borderRadius: 4, width: '100%' }}
+          />
+        </label>
+        <label>
+          Admin ID:{' '}
+          <input
+            value={filter.admin_id}
+            onChange={(e) => setFilter({ ...filter, admin_id: e.target.value })}
+            placeholder="admin UUID"
+            style={{ padding: 6, border: '1px solid #ddd', borderRadius: 4, width: '100%' }}
+          />
+        </label>
+        <label>
+          From:{' '}
+          <input
+            type="datetime-local"
+            value={filter.created_from}
+            onChange={(e) => setFilter({ ...filter, created_from: e.target.value })}
+            style={{ padding: 6, border: '1px solid #ddd', borderRadius: 4, width: '100%' }}
+          />
+        </label>
+        <label>
+          To:{' '}
+          <input
+            type="datetime-local"
+            value={filter.created_to}
+            onChange={(e) => setFilter({ ...filter, created_to: e.target.value })}
+            style={{ padding: 6, border: '1px solid #ddd', borderRadius: 4, width: '100%' }}
+          />
+        </label>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', paddingBottom: 6 }}>
+          <input
+            type="checkbox"
+            checked={filter.high_risk_only}
+            onChange={(e) => setFilter({ ...filter, high_risk_only: e.target.checked })}
+          />
+          High-risk only
         </label>
         <button onClick={load} style={{ padding: '6px 14px' }}>Refresh</button>
       </div>

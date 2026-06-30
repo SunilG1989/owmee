@@ -19,21 +19,87 @@ logger = structlog.get_logger()
 async def act_notify_fe_assigned(visit_id: str, fe_user_id: str) -> None:
     """
     Push notification to the FE's device telling them a new visit is assigned.
-    For MVP this just logs; real FCM integration is Phase 3+.
     """
+    from app.db.session import AsyncSessionLocal
+    from app.modules.field_executive.models import FEVisit, FieldExecutive
+    from app.modules.notifications.service import push
+    from sqlalchemy import select
+
+    try:
+        target_user_id = UUID(fe_user_id) if fe_user_id else None
+    except ValueError:
+        target_user_id = None
+    fe_code = None
+    async with AsyncSessionLocal() as db:
+        visit = (await db.execute(
+            select(FEVisit).where(FEVisit.id == UUID(visit_id))
+        )).scalar_one_or_none()
+        if visit and not target_user_id and visit.fe_id:
+            fe = (await db.execute(
+                select(FieldExecutive).where(FieldExecutive.id == visit.fe_id)
+            )).scalar_one_or_none()
+            if fe:
+                target_user_id = fe.user_id
+                fe_code = fe.fe_code
+
+    if target_user_id:
+        await push(
+            target_user_id,
+            "fe_visit_assigned",
+            title="Visit assigned",
+            body="A seller visit is ready in your FE tasks.",
+            data={"visit_id": visit_id, "fe_code": fe_code or ""},
+            entity_type="fe_visit",
+            entity_id=visit_id,
+            idempotency_key=f"fe_visit_assigned:{visit_id}:{target_user_id}",
+        )
     logger.info(
         "fe_visit.notify.assigned",
         visit_id=visit_id,
-        fe_user_id=fe_user_id,
+        fe_user_id=str(target_user_id) if target_user_id else fe_user_id,
     )
 
 
 @activity.defn(name="fe_visit.surface_stuck_visit")
 async def act_surface_stuck_visit(visit_id: str, reason: str) -> None:
     """
-    Surface a stuck visit to the admin ops queue. Real implementation writes
-    to a `stuck_workflow_alerts` table; MVP just logs.
+    Surface a stuck visit to the admin ops queue.
     """
+    from app.db.session import AsyncSessionLocal
+    from app.modules.field_executive.models import FEVisit, FieldExecutive
+    from app.modules.stuck_workflow import report_stuck
+    from sqlalchemy import select
+
+    async with AsyncSessionLocal() as db:
+        visit = (await db.execute(
+            select(FEVisit).where(FEVisit.id == UUID(visit_id))
+        )).scalar_one_or_none()
+        fe_code = None
+        fe_user_id = None
+        if visit and visit.fe_id:
+            fe = (await db.execute(
+                select(FieldExecutive).where(FieldExecutive.id == visit.fe_id)
+            )).scalar_one_or_none()
+            if fe:
+                fe_code = fe.fe_code
+                fe_user_id = str(fe.user_id)
+        await report_stuck(
+            db,
+            workflow_type="fe_visit",
+            workflow_id=f"fe-visit-{visit_id}",
+            entity_type="fe_visit",
+            entity_id=visit_id,
+            reason=reason,
+            severity="critical" if reason == "visit_in_progress_too_long" else "warning",
+            description="FE visit needs admin intervention.",
+            metadata_json={
+                "visit_id": visit_id,
+                "fe_code": fe_code,
+                "fe_user_id": fe_user_id,
+                "status": getattr(visit, "status", None),
+            },
+        )
+        await db.commit()
     logger.warning(
         "fe_visit.stuck",
         visit_id=visit_id,

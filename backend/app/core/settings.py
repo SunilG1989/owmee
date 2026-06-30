@@ -72,6 +72,10 @@ class Settings(BaseSettings):
     ai_draft_fast_min_category_confidence: float = 0.55
     payment_timeout_sweeper_interval_seconds: int = 60
     payment_timeout_sweeper_batch_size: int = 100
+    transaction_ops_alert_sweeper_interval_seconds: int = 120
+    transaction_pickup_assignment_sla_minutes: int = 30
+    transaction_hub_dispatch_sla_minutes: int = 120
+    transaction_delivery_sla_minutes: int = 240
 
     # ── Temporal ───────────────────────────────────────────────────────────
     temporal_host: str = "localhost:7233"
@@ -184,8 +188,8 @@ class Settings(BaseSettings):
         if len(self.secret_key.strip()) < 32 or "change_me" in self.secret_key.lower():
             raise ValueError("SECRET_KEY must be a production secret with at least 32 characters.")
 
-        has_private_key = bool(self.jwt_private_key.strip()) or Path(self.jwt_private_key_path).exists()
-        has_public_key = bool(self.jwt_public_key.strip()) or Path(self.jwt_public_key_path).exists()
+        has_private_key = bool(self.jwt_private_key.strip()) or self._non_empty_file(self.jwt_private_key_path)
+        has_public_key = bool(self.jwt_public_key.strip()) or self._non_empty_file(self.jwt_public_key_path)
         if not has_private_key or not has_public_key:
             raise ValueError("Production requires JWT_PRIVATE_KEY and JWT_PUBLIC_KEY, or mounted key files.")
 
@@ -328,6 +332,13 @@ class Settings(BaseSettings):
     def _missing_required_secret(value: str | None) -> bool:
         raw = str(value or "").strip()
         return not raw or raw.startswith("REPLACE_WITH_")
+
+    @staticmethod
+    def _non_empty_file(path: str | None) -> bool:
+        if not path:
+            return False
+        key_path = Path(path)
+        return key_path.exists() and key_path.is_file() and key_path.stat().st_size > 0
 
     # ── Rate limiting ──────────────────────────────────────────────────────
     otp_rate_limit_per_hour: int = 3

@@ -28,3 +28,23 @@ def test_push_can_skip_duplicate_in_app_persistence():
 
     assert "persist_in_app" in signature.parameters
     assert signature.parameters["persist_in_app"].default is True
+    assert "idempotency_key" in signature.parameters
+
+
+def test_core_ops_notification_events_are_transaction_bucket():
+    for event in {
+        "fe_pickup_assigned",
+        "fe_return_pickup_assigned",
+        "fe_delivery_assigned",
+        "fe_visit_assigned",
+        "refund_completed",
+        "refund_completed_seller",
+        "fe_onboarding_created",
+        "fe_verification_updated",
+        "fe_training_updated",
+        "fe_device_updated",
+        "fe_activated",
+        "fe_suspended",
+        "fe_deactivated",
+    }:
+        assert BUCKET_MAP[event] == "transactions"

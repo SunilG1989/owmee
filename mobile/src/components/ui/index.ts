@@ -10,6 +10,7 @@ export { default as Button } from './Button';
 export type { ButtonVariant, ButtonSize } from './Button';
 export { default as IconButton } from './IconButton';
 export type { IconButtonVariant, IconButtonSize } from './IconButton';
+export { default as ScreenHeader } from './ScreenHeader';
 export { default as Card } from './Card';
 export type { CardVariant } from './Card';
 export { default as Chip } from './Chip';

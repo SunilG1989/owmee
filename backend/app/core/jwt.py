@@ -66,14 +66,16 @@ def _generate_dev_keypair(private_path: Path, public_path: Path) -> None:
 def _ensure_key_files() -> None:
     private_path = Path(settings.jwt_private_key_path)
     public_path = Path(settings.jwt_public_key_path)
-    if private_path.exists() and public_path.exists():
+    private_exists = private_path.exists() and private_path.stat().st_size > 0
+    public_exists = public_path.exists() and public_path.stat().st_size > 0
+    if private_exists and public_exists:
         return
     if settings.is_production:
         raise RuntimeError(
             "JWT signing keys are missing. Set JWT_PRIVATE_KEY/JWT_PUBLIC_KEY "
             "or mount files at JWT_PRIVATE_KEY_PATH/JWT_PUBLIC_KEY_PATH."
         )
-    if private_path.exists() and not public_path.exists():
+    if private_exists and not public_exists:
         public_path.parent.mkdir(parents=True, exist_ok=True)
         _write_public_key(private_path, public_path)
         return
@@ -88,7 +90,13 @@ def _load_key(path: str, inline_key: str, label: str) -> str:
         _ensure_key_files()
     if not key_path.exists():
         raise RuntimeError(f"JWT {label} key is missing at {path}")
-    return key_path.read_text()
+    value = key_path.read_text()
+    if not value.strip():
+        _ensure_key_files()
+        value = key_path.read_text()
+    if not value.strip():
+        raise RuntimeError(f"JWT {label} key is empty at {path}")
+    return value
 
 
 def _private_key() -> str:

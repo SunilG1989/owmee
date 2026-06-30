@@ -11,7 +11,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { C, R, S, T, Shadow } from '../../utils/tokens';
-import { Button, IconButton } from '../../components/ui';
+import { Button, ScreenHeader } from '../../components/ui';
 import { KYC } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { parseApiError } from '../../utils/errors';
@@ -147,11 +147,7 @@ export default function KycFlowScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
-      <View style={s.top}>
-        <IconButton icon="←" onPress={() => navigation.goBack()} a11y="Back" size="sm" />
-        <Text style={s.topT}>Verify identity</Text>
-        <View style={s.topSpacer} />
-      </View>
+      <ScreenHeader title="Verify identity" onBack={() => navigation.goBack()} tone="canvas" />
 
       <View style={s.progress}>
         {STEPS.map((l, i) => (

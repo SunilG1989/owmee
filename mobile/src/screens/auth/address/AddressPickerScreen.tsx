@@ -25,7 +25,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 
 import { Addresses, type UserAddress } from '../../../services/api';
-import { BackButton, Button, EmptyState, ErrorState } from '../../../components/ui';
+import {
+  Button, EmptyState, ErrorState, ScreenHeader,
+} from '../../../components/ui';
 import { C, R, S, Shadow, T } from '../../../utils/tokens';
 import type { RootScreen } from '../../../navigation/types';
 import { cacheAddressLocation } from '../../../utils/addressLocation';
@@ -110,10 +112,7 @@ export default function AddressPickerScreen({
   };
 
   const renderHeader = () => (
-    <View style={s.headerRow}>
-      <BackButton onPress={() => navigation.goBack()} />
-      <Text style={s.headerTitle}>Choose an address</Text>
-    </View>
+    <ScreenHeader title="Choose an address" onBack={() => navigation.goBack()} tone="canvas" />
   );
 
   if (loading) {
@@ -266,19 +265,6 @@ function AddressCard({
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bone },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: S.sm,
-    paddingTop: S.xs,
-    paddingBottom: S.xs,
-    gap: S.xs,
-  },
-  headerTitle: {
-    fontSize: T.size.lg + 1,
-    fontWeight: T.weight.bold,
-    color: C.text,
-  },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   listBody: {
     paddingHorizontal: S.lg,

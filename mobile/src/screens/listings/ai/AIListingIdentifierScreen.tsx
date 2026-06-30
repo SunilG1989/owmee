@@ -34,7 +34,7 @@ import { launchCamera } from 'react-native-image-picker';
 
 import { C, T, S, R, Shadow, formatPrice } from '../../../utils/tokens';
 import { AIListing } from '../../../services/api';
-import { BackButton, Button } from '../../../components/ui';
+import { Button, ScreenHeader } from '../../../components/ui';
 import { parseApiError } from '../../../utils/errors';
 import type { RootScreen } from '../../../navigation/types';
 
@@ -280,11 +280,11 @@ export default function AIListingIdentifierScreen({
   // Capture / manual entry view
   return (
     <SafeAreaView style={st.root}>
-      <View style={st.header}>
-        <BackButton onPress={() => navigation.goBack()} />
-        <Text style={st.headerTitle}>{isSmartphone ? 'Capture IMEI' : 'Capture serial number'}</Text>
-        <View style={st.headerSpacer} />
-      </View>
+      <ScreenHeader
+        title={isSmartphone ? 'Capture IMEI' : 'Capture serial number'}
+        onBack={() => navigation.goBack()}
+        tone="surface"
+      />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}

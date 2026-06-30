@@ -36,6 +36,11 @@ from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.admin_dependencies import (
+    ADMIN_ROLES,
+    FINANCE_ADMIN_ROLES,
+    L2_ADMIN_ROLES,
+)
 from app.core.dependencies import DBSession
 from app.core.jwt import decode_token
 from app.modules.admin.models import AdminUser as AdminUserModel
@@ -82,6 +87,9 @@ async def _resolve_admin(authorization: str | None, db: AsyncSession) -> Current
     session_id = payload.get("session_id", "")
     if not admin_id_str or not role:
         raise _INVALID
+    if role not in ADMIN_ROLES:
+        logger.warning("admin_auth.unknown_role", role=role, admin_id=admin_id_str)
+        raise _INVALID
 
     try:
         admin_id = UUID(admin_id_str)
@@ -109,8 +117,8 @@ async def require_admin(
 
 # Roles allowed to approve / reject KYC. SUPER_ADMIN is included so
 # super-admins can step in for an L2 reviewer when needed.
-_L2_ROLES = {"L2_REVIEWER", "SUPER_ADMIN"}
-_MONEY_ROLES = {"FINANCE_OPS", "FINANCE", "L2_REVIEWER", "SUPER_ADMIN"}
+_L2_ROLES = set(L2_ADMIN_ROLES) | {"SUPER_ADMIN"}
+_MONEY_ROLES = set(FINANCE_ADMIN_ROLES) | {"L2_REVIEWER", "SUPER_ADMIN"}
 
 
 async def require_l2_reviewer(

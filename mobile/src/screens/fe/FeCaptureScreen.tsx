@@ -29,7 +29,7 @@ import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 
 import { FE, Listings, FEVisits } from '../../services/api';
 import { C, S, R, T, Shadow } from '../../utils/tokens';
-import { Button, IconButton } from '../../components/ui';
+import { Button, ScreenHeader } from '../../components/ui';
 import type { RootScreen } from '../../navigation/types';
 import {
   APPLIANCE_ACCESSORY_OPTIONS,
@@ -517,11 +517,7 @@ export default function FeCaptureScreen({ route, navigation }: RootScreen<'FeCap
 
   return (
     <SafeAreaView style={st.root} edges={['top']}>
-      <View style={st.header}>
-        <IconButton icon="←" onPress={() => navigation.goBack()} a11y="Back" size="sm" />
-        <Text style={st.h1}>Capture listing</Text>
-        <View style={st.headerSpacer} />
-      </View>
+      <ScreenHeader title="Capture listing" onBack={() => navigation.goBack()} tone="canvas" />
 
       <KeyboardAvoidingView
         style={st.flex}

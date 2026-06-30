@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { C, T, S, R } from '../../utils/tokens';
-import { Button, IconButton } from '../../components/ui';
+import { Button, ScreenHeader } from '../../components/ui';
 import { Auth } from '../../services/api';
 
 export default function OtpPhoneScreen({ navigation }: any) {
@@ -26,9 +26,7 @@ export default function OtpPhoneScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={s.safe}>
-      <View style={s.backWrap}>
-        <IconButton icon="←" onPress={() => navigation.goBack()} a11y="Back" size="sm" />
-      </View>
+      <ScreenHeader onBack={() => navigation.goBack()} tone="canvas" />
       <View style={s.body}>
         <Text style={s.title}>Enter your mobile number</Text>
         <Text style={s.sub}>We'll send a 6-digit OTP to verify</Text>
@@ -42,6 +40,9 @@ export default function OtpPhoneScreen({ navigation }: any) {
             placeholder="98XXXXXXXX"
             placeholderTextColor={C.text4}
             keyboardType="phone-pad"
+            textContentType="telephoneNumber"
+            autoComplete="tel"
+            importantForAutofill="yes"
             maxLength={10}
             value={phone}
             onChangeText={setPhone}
@@ -69,7 +70,6 @@ export default function OtpPhoneScreen({ navigation }: any) {
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bone },
-  backWrap: { paddingHorizontal: S.lg, paddingVertical: S.sm },
   body: { flex: 1, paddingHorizontal: S.xxl, paddingTop: S.xxxl + S.sm },
   title: {
     fontSize: T.size.xxl - 2,

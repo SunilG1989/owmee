@@ -24,14 +24,14 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   Addresses,
   type CreateAddressRequest,
   type UserAddress,
 } from '../../../services/api';
-import { BackButton, Button } from '../../../components/ui';
+import { Button, ScreenHeader } from '../../../components/ui';
 import { parseApiError } from '../../../utils/errors';
 import { useAuthStore } from '../../../store/authStore';
 import { C, R, S, T } from '../../../utils/tokens';
@@ -50,6 +50,7 @@ export default function AddressDetailsScreen({
   route,
 }: RootScreen<'AddressDetails'>) {
   const { lat, lng, source, reverse, returnTo, edit } = route.params;
+  const insets = useSafeAreaInsets();
   const accountPhone = useAuthStore((s) => s.phone);
   // Edit mode: pre-fill every field from the existing address row instead
   // of from reverse-geocoding. Save → PATCH instead of POST.
@@ -171,10 +172,11 @@ export default function AddressDetailsScreen({
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
-      <View style={s.headerRow}>
-        <BackButton onPress={handleBack} />
-        <Text style={s.headerTitle}>{isEdit ? 'Edit address' : 'Add your address'}</Text>
-      </View>
+      <ScreenHeader
+        title={isEdit ? 'Edit address' : 'Add your address'}
+        onBack={handleBack}
+        tone="canvas"
+      />
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -330,7 +332,7 @@ export default function AddressDetailsScreen({
         </ScrollView>
       </KeyboardAvoidingView>
 
-      <View style={s.bottomBar}>
+      <View style={[s.bottomBar, { paddingBottom: Math.max(insets.bottom, S.md) }]}>
         <Button
           label="Save address"
           onPress={handleSave}
@@ -386,21 +388,6 @@ function Field({
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bone },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: S.sm,
-    paddingTop: S.xs,
-    paddingBottom: S.xs,
-    gap: S.xs,
-    backgroundColor: C.bone,
-  },
-  headerTitle: {
-    fontSize: T.size.lg + 1,
-    fontWeight: T.weight.bold,
-    color: C.text,
-    flex: 1,
-  },
   scrollBody: {
     paddingHorizontal: S.lg,
     paddingTop: S.md,
@@ -495,7 +482,7 @@ const s = StyleSheet.create({
   },
   bottomBar: {
     paddingHorizontal: S.lg,
-    paddingVertical: S.md,
+    paddingTop: S.md,
     backgroundColor: C.bone,
     borderTopWidth: 1,
     borderTopColor: C.border,

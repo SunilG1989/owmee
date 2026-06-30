@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
+from app.core.admin_dependencies import ADMIN_ROLES
 from app.core.dependencies import DBSession
 from app.core.settings import settings
 from app.modules.admin.models import AdminUser
@@ -25,7 +26,7 @@ def _hash_password(password: str) -> str:
 class CreateAdminRequest(BaseModel):
     email: str = Field(..., min_length=5, max_length=254)
     name: str = Field(..., min_length=2, max_length=200)
-    role: str = Field(..., pattern="^(L1_AGENT|L2_REVIEWER|FINANCE_OPS|RISK_ANALYST|SUPER_ADMIN)$")
+    role: str = Field(...)
     password: str = Field(..., min_length=8, max_length=100)
 
 
@@ -33,6 +34,11 @@ class CreateAdminRequest(BaseModel):
 async def seed_admin_user(body: CreateAdminRequest, db: DBSession):
     if settings.env == "production":
         raise HTTPException(status_code=404)
+    if body.role not in ADMIN_ROLES:
+        raise HTTPException(status_code=400, detail={
+            "error": "INVALID_ADMIN_ROLE",
+            "message": f"role must be one of: {sorted(ADMIN_ROLES)}",
+        })
 
     email = body.email.lower()  # login looks up by lowercased email
     result = await db.execute(select(AdminUser).where(AdminUser.email == email))

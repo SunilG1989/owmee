@@ -11,6 +11,9 @@ import FeAssistedListings from './pages/FeAssistedListings';
 import AuditLogPage from './pages/AuditLog';
 import AnalyticsPage from './pages/Analytics';
 import DirectAcquisitionQueue from './pages/DirectAcquisitionQueue';
+import ControlTower from './pages/ControlTower';
+import ProviderHealthPage from './pages/ProviderHealth';
+import AdminUsersPage from './pages/AdminUsers';
 
 export default function App() {
   const { session, loading } = useAuth();
@@ -35,7 +38,9 @@ export default function App() {
   return (
     <Layout>
       <Routes>
-        <Route path="/" element={<Navigate to="/dispatch" replace />} />
+        <Route path="/" element={<ControlTower />} />
+        <Route path="/provider-health" element={<ProviderHealthPage />} />
+        <Route path="/admin-users" element={<AdminUsersPage />} />
         <Route path="/dispatch" element={<DispatchQueue />} />
         <Route path="/direct-acquisitions" element={<DirectAcquisitionQueue />} />
         <Route path="/dispatch/:visitId" element={<VisitDetail />} />
@@ -46,7 +51,7 @@ export default function App() {
         <Route path="/fe-earnings" element={<FeEarningsPage />} />
         <Route path="/audit-log" element={<AuditLogPage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
-        <Route path="*" element={<Navigate to="/dispatch" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>
   );

@@ -381,15 +381,20 @@ def test_order_notification_events_stay_transaction_bucket_only():
         "buyer_cancelled_refund",
         "buyer_cancelled_before_pickup",
         "pickup_assigned",
+        "fe_pickup_assigned",
+        "fe_return_pickup_assigned",
         "pickup_completed",
         "item_at_hub",
         "pickup_rejected_refund",
         "payout_processing_started",
         "payout_verification_required",
         "out_for_delivery",
+        "fe_delivery_assigned",
         "delivery_in_progress",
         "delivered_confirm_receipt",
         "delivered_awaiting_confirmation",
+        "refund_completed",
+        "refund_completed_seller",
     }
 
     assert all(BUCKET_MAP[event] == "transactions" for event in required_events)
@@ -920,6 +925,77 @@ async def test_admin_pickup_assignment_blocks_unready_fe(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_admin_pickup_assignment_notifies_seller_and_fe(monkeypatch):
+    txn = _txn(seller_readiness_status="confirmed")
+    fe_id = uuid4()
+    fe = SimpleNamespace(
+        active=True,
+        current_shift="morning",
+        onboarding_status="active",
+        verification_status="approved",
+        training_status="certified",
+        device_status="approved",
+        daily_capacity=4,
+        service_zones=["560038"],
+        category_certifications=["*"],
+    )
+    notified = []
+
+    async def fake_notify(_db, user_id, event_type, *_args, **_kwargs):
+        notified.append((user_id, event_type))
+
+    monkeypatch.setattr(offer_service, "_notify", fake_notify)
+
+    out = await logistics_router.admin_assign_pickup(
+        txn.id,
+        logistics_router.AssignPickupRequest(fe_user_id=fe_id),
+        _DB(get_value=txn, execute_values=["toys", fe]),
+    )
+
+    assert out["pickup_fe_id"] == str(fe_id)
+    assert txn.pickup_fe_id == fe_id
+    assert (txn.seller_id, "pickup_assigned") in notified
+    assert (fe_id, "fe_pickup_assigned") in notified
+
+
+@pytest.mark.asyncio
+async def test_fe_delivery_assignment_notifies_buyer_seller_and_fe(monkeypatch):
+    txn = _txn(status=AT_HUB, at_hub_at=datetime.now(timezone.utc) - timedelta(minutes=10))
+    fe_id = uuid4()
+    fe = SimpleNamespace(
+        active=True,
+        current_shift="afternoon",
+        onboarding_status="active",
+        verification_status="approved",
+        training_status="certified",
+        device_status="approved",
+        daily_capacity=4,
+        service_zones=["560038"],
+        category_certifications=["*"],
+    )
+    notified = []
+
+    async def fake_notify(_db, user_id, event_type, *_args, **_kwargs):
+        notified.append((user_id, event_type))
+
+    monkeypatch.setattr(offer_service, "_notify", fake_notify)
+
+    out = await logistics_router.admin_route_to_fe_delivery(
+        txn.id,
+        logistics_router.RouteToFeDeliveryRequest(fe_user_id=fe_id),
+        _DB(get_value=txn, execute_values=["toys", fe]),
+        admin=SimpleNamespace(admin_id=None),
+    )
+
+    assert out["delivery_fe_id"] == str(fe_id)
+    assert txn.status == DELIVERY_IN_PROGRESS
+    assert txn.buyer_acknowledgment_code
+    assert (txn.buyer_id, "out_for_delivery") in notified
+    assert (txn.seller_id, "delivery_in_progress") in notified
+    assert (fe_id, "fe_delivery_assigned") in notified
+
+
+@pytest.mark.asyncio
 async def test_paid_buyer_cancel_before_pickup_refunds_and_releases_inventory(monkeypatch):
     txn = _txn(
         status=PAYMENT_CAPTURED,
@@ -979,6 +1055,60 @@ async def test_paid_buyer_cancel_rejects_after_pickup_assignment():
             txn.buyer_id,
             reason="changed_mind",
         )
+
+
+@pytest.mark.asyncio
+async def test_refund_completion_notifies_buyer_and_seller(monkeypatch):
+    from app.modules.transactions import refund_service
+
+    txn = _txn(refund_status="processing", razorpay_refund_id="rfnd_123")
+    notified = []
+
+    async def fake_notify(_db, user_id, event_type, *_args, **_kwargs):
+        notified.append((user_id, event_type))
+
+    monkeypatch.setattr(offer_service, "_notify", fake_notify)
+
+    out = await refund_service.mark_refund_completed(_DB(execute_values=[txn]), "rfnd_123")
+
+    assert out is txn
+    assert txn.refund_status == "completed"
+    assert txn.refund_completed_at is not None
+    assert (txn.buyer_id, "refund_completed") in notified
+    assert (txn.seller_id, "refund_completed_seller") in notified
+
+
+def test_transaction_ops_alert_specs_cover_stuck_order_states():
+    from app.modules.transactions.ops_alert_jobs import (
+        DELIVERY_TOO_LONG,
+        HUB_NOT_DISPATCHED,
+        PICKUP_NOT_ASSIGNED,
+        REFUND_FAILED,
+        SELLER_READINESS_TIMEOUT,
+        _active_alert_specs,
+    )
+
+    now = datetime.now(timezone.utc)
+
+    seller_silent = _txn(
+        status=PAYMENT_CAPTURED,
+        seller_readiness_status="pending",
+        seller_response_deadline=now - timedelta(minutes=1),
+    )
+    pickup_unassigned = _txn(
+        status=PAYMENT_CAPTURED,
+        seller_readiness_status="confirmed",
+        pickup_ready_at=now - timedelta(hours=2),
+    )
+    hub_stale = _txn(status=AT_HUB, at_hub_at=now - timedelta(hours=3))
+    delivery_stale = _txn(status=DELIVERY_IN_PROGRESS, routed_at=now - timedelta(hours=5))
+    refund_failed = _txn(refund_status="failed")
+
+    assert SELLER_READINESS_TIMEOUT in _active_alert_specs(seller_silent, now=now)
+    assert PICKUP_NOT_ASSIGNED in _active_alert_specs(pickup_unassigned, now=now)
+    assert HUB_NOT_DISPATCHED in _active_alert_specs(hub_stale, now=now)
+    assert DELIVERY_TOO_LONG in _active_alert_specs(delivery_stale, now=now)
+    assert REFUND_FAILED in _active_alert_specs(refund_failed, now=now)
 
 
 @pytest.mark.asyncio

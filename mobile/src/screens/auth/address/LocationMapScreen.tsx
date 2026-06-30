@@ -2,9 +2,9 @@
  * LocationMapScreen — precise address pinning.
  *
  * Production intent:
- * - Use Google Maps when an Android Maps SDK key is present.
- * - Never mount the native map when the key is missing, because Google Maps
- *   hard-crashes Android if the manifest key is absent/invalidly configured.
+ * - Android uses Google Maps only when the Maps SDK key is present.
+ * - iOS uses the native Apple map provider by default. That keeps address
+ *   capture reliable even if an iOS Google key is missing or restricted.
  * - Reverse-geocode only after the pin settles to protect performance and
  *   reduce provider noise.
  */
@@ -20,11 +20,11 @@ import {
   View,
 } from 'react-native';
 import MapView, { Circle, PROVIDER_GOOGLE, Region } from 'react-native-maps';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LocateFixed, MapPin } from 'lucide-react-native';
 
 import { Addresses, Geo, type PhotonReverseResponse, type UserAddress } from '../../../services/api';
-import { BackButton, Button } from '../../../components/ui';
+import { Button, ScreenHeader } from '../../../components/ui';
 import { C, R, S, Shadow, T } from '../../../utils/tokens';
 import type { RootScreen } from '../../../navigation/types';
 import { cacheAddressLocation } from '../../../utils/addressLocation';
@@ -40,9 +40,10 @@ const REVERSE_DEBOUNCE_MS = 650;
 const MIN_REVERSE_DISTANCE_M = 20;
 const SMALL_STEP = 0.00045;
 
-const googleMapsEnabled =
-  Platform.OS !== 'android' ||
+const nativeMapEnabled =
+  Platform.OS === 'ios' ||
   Boolean(NativeModules.MapsConfig?.googleMapsEnabled);
+const mapProvider = Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined;
 
 type Point = { lat: number; lng: number };
 type GpsPoint = Point & { accuracy?: number };
@@ -52,6 +53,7 @@ export default function LocationMapScreen({
   route,
 }: RootScreen<'LocationMap'>) {
   const { initialLat, initialLng, source, gpsAccuracy, reviewAddress } = route.params;
+  const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inFlightRef = useRef(0);
@@ -233,17 +235,18 @@ export default function LocationMapScreen({
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
-      <View style={s.headerRow}>
-        <BackButton onPress={handleBack} />
-        <Text style={s.headerTitle}>{reviewAddress ? 'Confirm address location' : 'Set precise location'}</Text>
-      </View>
+      <ScreenHeader
+        title={reviewAddress ? 'Confirm address location' : 'Set precise location'}
+        onBack={handleBack}
+        tone="canvas"
+      />
 
       <View style={s.body}>
-        {googleMapsEnabled ? (
+        {nativeMapEnabled ? (
           <View style={s.mapWrap}>
             <MapView
               ref={mapRef}
-              provider={PROVIDER_GOOGLE}
+              {...(mapProvider ? { provider: mapProvider } : {})}
               style={StyleSheet.absoluteFill}
               initialRegion={toRegion(center)}
               onRegionChangeComplete={onRegionChangeComplete}
@@ -295,7 +298,7 @@ export default function LocationMapScreen({
           />
         )}
 
-        <View style={s.sheet}>
+        <View style={[s.sheet, { paddingBottom: Math.max(insets.bottom, S.lg) }]}>
           <View style={s.sheetHead}>
             <Text style={s.sheetEyebrow}>
               {reviewAddress
@@ -377,9 +380,9 @@ function FallbackMap({
         <View style={s.gridC} />
         <CenterPin compact />
       </View>
-      <Text style={s.fallbackTitle}>Google Maps is not enabled in this build</Text>
+      <Text style={s.fallbackTitle}>Maps are not enabled in this build</Text>
       <Text style={s.fallbackBody}>
-        Add GOOGLE_MAPS_API_KEY to the Android build to show the live map. This fallback keeps the app usable without crashing.
+        Add the native maps key for this build to show the live map. This fallback keeps address capture usable without crashing.
       </Text>
       <Text style={s.coordText}>
         {center.lat.toFixed(5)}, {center.lng.toFixed(5)}

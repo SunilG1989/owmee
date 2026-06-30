@@ -460,7 +460,7 @@ export default function RootNavigator() {
   const [onboardingSeen, setOnboardingSeen] = useState<boolean | null>(null);
   // Small display floor prevents a blink on fast starts without making
   // the launch feel artificially held.
-  const [splashMinElapsed, setSplashMinElapsed] = useState(false);
+  const [splashMinElapsed, setSplashMinElapsed] = useState(Platform.OS === 'ios');
 
   useEffect(() => {
     const t = setTimeout(() => setSplashMinElapsed(true), SPLASH_MIN_MS);

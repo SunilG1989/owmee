@@ -147,5 +147,24 @@ async def mark_refund_completed(
         return txn
     txn.refund_status = REFUND_STATUS_COMPLETED
     txn.refund_completed_at = datetime.now(timezone.utc)
+    from app.modules.offers.service import _notify
+    await _notify(
+        db,
+        txn.buyer_id,
+        "refund_completed",
+        "Refund completed",
+        "Your Owmee refund has been completed.",
+        "transaction",
+        str(txn.id),
+    )
+    await _notify(
+        db,
+        txn.seller_id,
+        "refund_completed_seller",
+        "Buyer refund completed",
+        "Owmee has completed the buyer refund for this order.",
+        "transaction",
+        str(txn.id),
+    )
     logger.info("refund.completed", transaction_id=str(txn.id))
     return txn

@@ -24,7 +24,8 @@ from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.notifications.service import push as push_notify
+from app.core.settings import settings
+from app.modules.notifications.service import dispatch_existing_notification_push
 from app.modules.risk.engine import check_offer_spam, adjust_trust_score, check_listing_risk
 from app.modules.offers.models import (
     NotificationEvent, NotificationPreference, Offer, PaymentLink,
@@ -195,6 +196,7 @@ async def _notify(
     entity_type: str,
     entity_id: str,
     bucket: str = "transaction",
+    idempotency_key: str | None = None,
 ) -> None:
     """
     Create in-app notification, respecting user preferences.
@@ -206,36 +208,64 @@ async def _notify(
             if bucket == "promotion" and not prefs.promotions_enabled:
                 return
 
+    idempotency_key = idempotency_key or _notification_idempotency_key(
+        user_id=user_id,
+        event_type=event_type,
+        entity_type=entity_type,
+        entity_id=entity_id,
+    )
+    notification_id: UUID | None = None
+
     # Use savepoint so notification failure never rolls back the main transaction
     try:
         async with db.begin_nested():
+            existing = (await db.execute(
+                select(NotificationEvent).where(NotificationEvent.idempotency_key == idempotency_key)
+            )).scalar_one_or_none()
+            if existing:
+                return
             n = NotificationEvent(
                 user_id=user_id,
                 event_type=event_type,
                 notification_bucket=bucket,
+                idempotency_key=idempotency_key,
                 title=title,
                 body=body,
                 entity_type=entity_type,
                 entity_id=str(entity_id),
+                push_status="pending" if settings.is_production else "in_app_only",
             )
             db.add(n)
+            await db.flush()
+            notification_id = n.id
     except Exception as e:
         logger.warning("notification.failed", error=str(e), event_type=event_type)
 
     # Best-effort FCM push (never blocks main transaction)
     try:
         import asyncio
-        asyncio.create_task(push_notify(
-            user_id,
-            event_type,
-            title,
-            body,
-            entity_type=entity_type,
-            entity_id=str(entity_id) if entity_id else None,
-            persist_in_app=False,
-        ))
+        if notification_id:
+            asyncio.create_task(dispatch_existing_notification_push(
+                notification_id,
+                user_id,
+                event_type,
+                title,
+                body,
+                data={"entity_type": entity_type, "entity_id": str(entity_id) if entity_id else ""},
+            ))
     except Exception:
         pass
+
+
+def _notification_idempotency_key(
+    *,
+    user_id: UUID,
+    event_type: str,
+    entity_type: str,
+    entity_id: str,
+) -> str:
+    raw = f"{user_id}:{event_type}:{entity_type}:{entity_id}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:64]
 
 
 # ── Offer logic ─────────────────────────────────────────────────────────────────

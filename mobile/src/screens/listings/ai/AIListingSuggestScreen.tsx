@@ -39,7 +39,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { C, T, S, R, Shadow, formatPrice, O } from '../../../utils/tokens';
 import { AIListing } from '../../../services/api';
-import { BackButton, Button } from '../../../components/ui';
+import { Button, ScreenHeader } from '../../../components/ui';
 import type { AIDraftPriceRefreshRequest, AIDraftResponse } from '../../../services/api';
 import { parseApiError } from '../../../utils/errors';
 import type { RootScreen } from '../../../navigation/types';
@@ -2159,15 +2159,12 @@ export default function AIListingSuggestScreen({
   // ── Main scroll ─────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={st.root}>
-      {/* Header */}
-      <View style={st.header}>
-        <BackButton onPress={() => navigation.goBack()} style={st.headerBackButton} />
-        <View style={st.headerTextWrap}>
-          <Text style={st.headerTitle}>Review listing</Text>
-          <Text style={st.headerHelper}>Complete pending details, then preview as buyer</Text>
-        </View>
-        <View style={st.headerSpacer} />
-      </View>
+      <ScreenHeader
+        title="Review listing"
+        subtitle="Complete pending details, then preview as buyer"
+        onBack={() => navigation.goBack()}
+        tone="canvas"
+      />
 
       <ScrollView style={st.flex} contentContainerStyle={st.scrollPad}>
         {/* Compact listing snapshot — the four facts sellers check first */}
