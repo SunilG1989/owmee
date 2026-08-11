@@ -1143,6 +1143,23 @@ def _mark_hero_cleanup_deferred(detected: AIDetected, *, selected_index: int) ->
     return detected.model_copy(update={"image_set_quality": image_quality})
 
 
+def _hero_reordered_first(detected: AIDetected) -> AIDetected:
+    """Call after move_hero_first(): the hero photo now lives at index 0 of
+    the stored photo_urls, so the persisted hero_image_index (and the hero
+    cleanup selected_index) must say 0 too. Persisting the pre-reorder index
+    makes the client preselect the wrong photo and publish reorder again —
+    the listing ships with the wrong hero."""
+    image_quality = dict(detected.image_set_quality or {})
+    cleanup = image_quality.get("hero_image_cleanup")
+    if isinstance(cleanup, dict) and cleanup.get("selected_index") not in (None, 0):
+        cleanup = dict(cleanup)
+        cleanup["selected_index"] = 0
+        image_quality["hero_image_cleanup"] = cleanup
+    return detected.model_copy(
+        update={"hero_image_index": 0, "image_set_quality": image_quality}
+    )
+
+
 async def _clean_hero_and_mark_detected(
     *,
     detected: AIDetected,
@@ -2981,6 +2998,7 @@ async def draft_from_images(
 
     stored_photo_urls = list(photo_urls)
     photo_urls = move_hero_first(photo_urls, hero_index)
+    detected = _hero_reordered_first(detected)
 
     # Note: ai_failed:* flags are NOT a hard reject. The seller can still
     # complete the listing manually. The mobile UI uses this flag to show

@@ -418,7 +418,12 @@ class GoogleGeminiBackgroundCleanupProvider:
                 int(height * 0.8),
             ))
             crop.thumbnail((72, 72))
-            pixels = list(crop.get_flattened_data())
+            # get_flattened_data() does not exist on the pinned Pillow 11.0.0
+            # (getdata() is not deprecated there); calling it unconditionally
+            # raised AttributeError into the except below, silently disabling
+            # this whole heuristic. Prefer the new API when present.
+            flattened = getattr(crop, "get_flattened_data", None)
+            pixels = list(flattened()) if flattened else list(crop.getdata())
         except Exception:
             return _DEFAULT_STYLE
 

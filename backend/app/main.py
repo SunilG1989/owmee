@@ -66,7 +66,6 @@ def create_app() -> FastAPI:
     from app.modules.kyc.router import router as kyc_router
     from app.modules.listings.router import router as listings_router
     from app.modules.offers.router import router as offers_router
-    from app.modules.transactions.shipped import router as shipped_router
     from app.modules.compliance.router import router as compliance_router
     from app.modules.admin.kyc_queue import router as admin_kyc_router
     from app.modules.admin.listings_queue import router as admin_listings_router
@@ -121,7 +120,12 @@ def create_app() -> FastAPI:
     app.include_router(kyc_router, prefix="/v1/kyc", tags=["kyc"])
     app.include_router(listings_router, prefix="/v1/listings", tags=["listings"])
     app.include_router(offers_router, prefix="/v1", tags=["offers"])
-    app.include_router(shipped_router, prefix="/v1", tags=["shipped"])
+    # NOTE: the legacy seller-managed "shipped" flow router
+    # (app.modules.transactions.shipped) is deliberately NOT mounted.
+    # It bypasses the canonical seller-readiness/FE logistics state machine
+    # (seller-managed shipping is a rejected product decision) and its
+    # pickup/delivery confirm endpoints had no operator authorization.
+    # payout_service still imports compute_tds/seller_payout_verified from it.
     app.include_router(compliance_router, prefix="/v1", tags=["compliance"])
     app.include_router(reports_router, prefix="/v1", tags=["reports-disputes"])
     app.include_router(seed_router, prefix="/v1", tags=["admin-seed"])

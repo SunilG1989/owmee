@@ -45,6 +45,9 @@ class _Result:
     def scalar_one_or_none(self):
         return self.value
 
+    def scalar_one(self):
+        return self.value
+
     def scalar(self):
         return self.value
 
@@ -491,7 +494,7 @@ async def test_payment_capture_opens_seller_readiness_only_when_address_exists(m
     monkeypatch.setattr(offer_service, "_notify", fake_notify)
     monkeypatch.setattr(offer_service, "_prefill_missing_transaction_snapshots", no_op_prefill)
 
-    db = _DB(execute_values=[pl, txn, listing, "smartphones"])
+    db = _DB(execute_values=[("pl_row", txn.id), txn, pl, listing, "smartphones"])
     out = await offer_service.process_payment_paid(db, "link_1", "pay_1", {"ok": True})
 
     assert out is txn
@@ -545,7 +548,7 @@ async def test_payment_capture_without_buyer_address_holds_ops_flow(monkeypatch)
     monkeypatch.setattr(offer_service, "_notify", fake_notify)
     monkeypatch.setattr(offer_service, "_prefill_missing_transaction_snapshots", no_op_prefill)
 
-    db = _DB(execute_values=[pl, txn, listing, "smartphones"])
+    db = _DB(execute_values=[("pl_row", txn.id), txn, pl, listing, "smartphones"])
     out = await offer_service.process_payment_paid(db, "link_1", "pay_1", {"ok": True})
 
     assert out is txn
@@ -701,6 +704,52 @@ async def test_pickup_completion_starts_verified_seller_payout_processing(monkey
     assert txn.net_payout == Decimal("9000")
     assert (txn.seller_id, "pickup_completed") in notified
     assert (txn.seller_id, "payout_processing_started") in notified
+
+
+@pytest.mark.asyncio
+async def test_fe_transaction_evidence_presign_scopes_key_to_transaction(monkeypatch):
+    """FE order evidence must be transaction-scoped: the old client reused the
+    fe-visits image endpoint with a transaction id, which 404s, so pickup
+    evidence silently failed and photo-gated delivery completion was
+    impossible."""
+    from app.core import storage as core_storage
+
+    fe_id = uuid4()
+    txn = _txn(status=PAYMENT_CAPTURED, pickup_fe_id=fe_id)
+    signed = {}
+
+    def fake_presign(r2_key, *, content_type, expires_in):
+        signed["r2_key"] = r2_key
+        signed["content_type"] = content_type
+        return f"https://r2.test/{r2_key}?sig=1"
+
+    monkeypatch.setattr(core_storage, "generate_presigned_upload_url", fake_presign)
+
+    out = await logistics_router.fe_request_transaction_evidence_upload(
+        txn.id,
+        logistics_router._EvidenceUploadRequest(content_type="image/jpeg"),
+        SimpleNamespace(user_id=fe_id, role="fe"),
+        _DB(get_value=txn),
+    )
+
+    assert out["r2_key"].startswith(f"fe-evidence/{txn.id}/")
+    assert out["upload_url"] == f"https://r2.test/{out['r2_key']}?sig=1"
+    assert signed["content_type"] == "image/jpeg"
+
+
+@pytest.mark.asyncio
+async def test_fe_transaction_evidence_presign_rejects_unassigned_fe():
+    txn = _txn(status=PAYMENT_CAPTURED, pickup_fe_id=uuid4())
+
+    with pytest.raises(HTTPException) as exc:
+        await logistics_router.fe_request_transaction_evidence_upload(
+            txn.id,
+            logistics_router._EvidenceUploadRequest(content_type="image/jpeg"),
+            SimpleNamespace(user_id=uuid4(), role="fe"),
+            _DB(get_value=txn),
+        )
+
+    assert exc.value.status_code == 403
 
 
 @pytest.mark.asyncio
@@ -1026,7 +1075,7 @@ async def test_paid_buyer_cancel_before_pickup_refunds_and_releases_inventory(mo
     monkeypatch.setattr(refund_service, "get_payment_adapter", lambda: _RefundAdapter())
 
     out = await offer_service.cancel_paid_pre_pickup_transaction(
-        _DB(execute_values=[txn, payment_attempt, reservation, offer, listing]),
+        _DB(execute_values=[txn, txn, payment_attempt, reservation, offer, listing]),
         txn.id,
         txn.buyer_id,
         reason="changed_mind",

@@ -5,16 +5,19 @@ for buyer refunds. Triggered from three places:
      paid in good faith and gets refunded immediately.
   2. Admin: ops decides to refund (from the admin web /admin/refunds
      queue, or directly from a transaction detail page).
-  3. Buyer-initiated: pre-delivery cancel (currently a TODO, blocked on
-     dispute flow rebuild — not exposed yet).
+  3. Buyer-initiated: pre-pickup cancel (POST /transactions/{id}/cancel →
+     cancel_paid_pre_pickup_transaction). Once a pickup FE is assigned
+     there is no buyer cancel path until post-delivery returns.
 
 Idempotency
 -----------
-Two layers:
-  - DB-level: refund_status check before initiating (won't double-fire).
-  - Adapter-level: Razorpay accepts an X-Refund-Idempotency header.
-    We pass `f"refund:{txn.id}:v1"` so retries dedupe on the partner
-    side too.
+The authoritative layer is DB-level: `initiate_refund` re-reads the
+transaction row under SELECT ... FOR UPDATE and re-checks refund_status,
+so two concurrent initiators serialize and the loser sees the winner's
+processing/completed state instead of firing a second provider refund.
+An idempotency key (scoped to txn + amount) is still passed to the
+adapter as a best-effort second layer, but the row lock is what actually
+prevents double refunds — do not rely on the provider header.
 """
 from __future__ import annotations
 
@@ -60,6 +63,18 @@ async def initiate_refund(
     completed; raises ValueError("NOT_PAID") if there's no captured
     payment to refund against.
     """
+    # Serialize concurrent initiators (admin retry, FE return completion,
+    # dispute resolution can race): lock the row and re-read refund_status
+    # from the database before deciding to fire the provider call. The lock
+    # is held until the caller commits, so the second initiator blocks here
+    # and then observes the winner's state.
+    txn = (await db.execute(
+        select(Transaction)
+        .where(Transaction.id == txn.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )).scalar_one()
+
     if txn.refund_status == REFUND_STATUS_COMPLETED:
         raise ValueError("ALREADY_REFUNDED")
     if txn.refund_status == REFUND_STATUS_PROCESSING:
@@ -91,10 +106,15 @@ async def initiate_refund(
     await db.flush()
 
     adapter = get_payment_adapter()
-    idempotency_key = hashlib.sha256(f"refund:{txn.id}:v1".encode()).hexdigest()[:64]
+    # Scope the key to the amount as well: a retry after a FAILED attempt
+    # with a different amount must not dedupe onto the original request.
+    amount_paise = int(full_amount * 100)
+    idempotency_key = hashlib.sha256(
+        f"refund:{txn.id}:{amount_paise}:v1".encode()
+    ).hexdigest()[:64]
     result = await adapter.refund(
         razorpay_payment_id=pl.razorpay_payment_id,
-        amount_paise=int(full_amount * 100),
+        amount_paise=amount_paise,
         idempotency_key=idempotency_key,
         notes={"transaction_id": str(txn.id), "reason": reason or "", "by": initiated_by},
     )

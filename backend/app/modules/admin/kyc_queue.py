@@ -30,7 +30,7 @@ class KYCDecisionRequest(BaseModel):
     rejection_reason: str | None = None
 
 
-@router.get("/queue")
+@router.get("/queue", dependencies=[Depends(require_l2_reviewer)])
 async def get_kyc_queue(db: DBSession):
     """Return all KYC verifications in pending_review state."""
     result = await db.execute(
@@ -56,7 +56,7 @@ async def get_kyc_queue(db: DBSession):
     }
 
 
-@router.get("/{user_id}")
+@router.get("/{user_id}", dependencies=[Depends(require_l2_reviewer)])
 async def get_kyc_detail(user_id: str, db: DBSession):
     """Return KYC verification detail for a specific user (masked fields only)."""
     from uuid import UUID

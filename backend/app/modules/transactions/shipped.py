@@ -19,7 +19,7 @@ from decimal import Decimal
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import Column, String, Numeric, Boolean, Text, DateTime, JSON
 from sqlalchemy import select, ForeignKey
@@ -206,7 +206,17 @@ async def initiate_shipment(
     }
 
 
-@router.post("/transactions/{transaction_id}/pickup-confirm")
+def _require_logistics_admin():
+    """Operator-only gate for logistics confirms. These endpoints mutate the
+    order state machine for arbitrary transactions, so a plain VerifiedUser
+    must never reach them (a seller could self-confirm pickup + delivery)."""
+    from app.modules.admin.admin_auth import require_money_admin
+
+    return Depends(require_money_admin)
+
+
+@router.post("/transactions/{transaction_id}/pickup-confirm",
+             dependencies=[_require_logistics_admin()])
 async def confirm_pickup(
     transaction_id: UUID,
     body: InspectionResult,
@@ -269,7 +279,8 @@ async def confirm_pickup(
     }
 
 
-@router.post("/transactions/{transaction_id}/delivery-confirm")
+@router.post("/transactions/{transaction_id}/delivery-confirm",
+             dependencies=[_require_logistics_admin()])
 async def confirm_delivery(
     transaction_id: UUID,
     body: DeliveryConfirmRequest,

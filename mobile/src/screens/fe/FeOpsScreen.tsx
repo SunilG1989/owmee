@@ -202,17 +202,13 @@ function PickupSheet({ item, onClose, onDone }: { item: FePickup; onClose: () =>
 
   const addPhoto = async () => {
     try {
-      // Reuse the fe-visits image upload pipeline. We treat each collection as
-      // a virtual "visit" only for image storage — backend doesn't care.
       const result = await launchCamera({ mediaType: 'photo', quality: 0.8, saveToPhotos: false });
       const uri = result.assets?.[0]?.uri;
       if (!uri) return;
-      const sortOrder = photoKeys.length;
-      const reqRes = await FE.requestVisitImage(item.transaction_id, 'image/jpeg', sortOrder);
+      const reqRes = await FE.requestTransactionEvidence(item.transaction_id, 'image/jpeg');
       const { upload_url, r2_key } = reqRes.data;
       const blob = await (await fetch(uri)).blob();
       await fetch(upload_url, { method: 'PUT', body: blob, headers: { 'Content-Type': 'image/jpeg' } });
-      await FE.confirmVisitImage(item.transaction_id, r2_key, sortOrder);
       setPhotoKeys(prev => [...prev, r2_key]);
     } catch (e) {
       Alert.alert('Photo upload failed', 'Try again. Make sure you\'re online.');
@@ -316,11 +312,10 @@ function DeliverySheet({ item, onClose, onDone }: { item: FePickup; onClose: () 
       const result = await launchCamera({ mediaType: 'photo', quality: 0.8, saveToPhotos: false });
       const uri = result.assets?.[0]?.uri;
       if (!uri) return;
-      const reqRes = await FE.requestVisitImage(item.transaction_id, 'image/jpeg', 0);
+      const reqRes = await FE.requestTransactionEvidence(item.transaction_id, 'image/jpeg');
       const { upload_url, r2_key } = reqRes.data;
       const blob = await (await fetch(uri)).blob();
       await fetch(upload_url, { method: 'PUT', body: blob, headers: { 'Content-Type': 'image/jpeg' } });
-      await FE.confirmVisitImage(item.transaction_id, r2_key, 0);
       setPhotoKey(r2_key);
     } catch {
       Alert.alert('Photo upload failed', 'Try again.');

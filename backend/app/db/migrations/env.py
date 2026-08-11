@@ -58,16 +58,24 @@ def run_migrations_online() -> None:
         connection.exec_driver_sql('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"')
         connection.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS postgis")
         # Alembic creates version_num as VARCHAR(32) by default. Owmee uses
-        # descriptive revision ids, so widen the column before any pending
-        # migration tries to record a longer revision string.
+        # descriptive revision ids (0044_transaction_readiness_snapshots is
+        # 36 chars), so the version table must be wide BEFORE any migration
+        # records a long id. Two cases:
+        #   1. Fresh database: pre-create the table wide, using Alembic's
+        #      canonical DDL — Alembic's own ensure-version-table is
+        #      checkfirst, so it leaves ours in place. Without this, a fresh
+        #      `alembic upgrade head` creates VARCHAR(32), fails at 0044,
+        #      and rolls back the whole run — permanently, on every retry.
+        #   2. Existing database with the narrow column: widen it.
         connection.exec_driver_sql("""
-            DO $$
-            BEGIN
-                IF to_regclass('alembic_version') IS NOT NULL THEN
-                    ALTER TABLE alembic_version
-                    ALTER COLUMN version_num TYPE VARCHAR(255);
-                END IF;
-            END $$;
+            CREATE TABLE IF NOT EXISTS alembic_version (
+                version_num VARCHAR(255) NOT NULL,
+                CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
+            )
+        """)
+        connection.exec_driver_sql("""
+            ALTER TABLE alembic_version
+            ALTER COLUMN version_num TYPE VARCHAR(255)
         """)
         connection.commit()
         context.configure(

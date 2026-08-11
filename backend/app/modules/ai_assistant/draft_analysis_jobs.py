@@ -477,6 +477,7 @@ async def process_ai_draft_analysis(
         )
 
         photo_urls = move_hero_first(photo_urls, hero_index)
+        detected = ai_router._hero_reordered_first(detected)
         await session.execute(
             text("""
                 UPDATE listing_drafts

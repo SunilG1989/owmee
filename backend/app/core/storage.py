@@ -339,6 +339,14 @@ def object_key_for_dispute_evidence(transaction_id: str, filename: str) -> str:
 
 # ── Sprint 4 / Pass 3 ─────────────────────────────────────────────────────────
 
+def object_key_for_fe_transaction_evidence(transaction_id: str) -> str:
+    """Key for FE-captured evidence on an order transaction (pickup
+    inspection photos, delivery handover photos). Order evidence is
+    transaction-scoped — FE *visits* are the concierge listing flow and
+    have their own prefix below."""
+    return f"fe-evidence/{transaction_id}/{uuid4()}.jpg"
+
+
 def object_key_for_fe_visit_image(visit_id: str, size: str = "original") -> str:
     """
     Key for photos captured during a Field Executive visit.

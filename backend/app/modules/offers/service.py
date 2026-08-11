@@ -818,20 +818,37 @@ async def _refund_payment_captured_after_unpaid_release(
 
 
 async def process_payment_paid(db, razorpay_link_id, razorpay_payment_id, webhook_payload):
-    # Lock the PaymentLink row so the (status check → status write)
-    # sequence is atomic. Razorpay delivers `payment.captured` more than
-    # once in normal operation; without the lock two concurrent webhook
-    # deliveries would both see status != "paid", both update the txn,
-    # both fire notifications, both reset confirmation_deadline.
-    result = await db.execute(
-        select(PaymentLink)
+    # Serialize against every other writer of this order. Razorpay delivers
+    # `payment.captured` more than once in normal operation, and the timeout
+    # sweeper / buyer cancel run concurrently against the same transaction:
+    # without locks a capture and a release both pass their status checks and
+    # the last commit wins (captured money on a cancelled order, or a paid
+    # order whose listing was relisted). Locks are taken in the canonical
+    # order shared with the release paths — Transaction first, then
+    # PaymentLink — so the webhook and the sweeper queue behind each other
+    # instead of deadlocking or interleaving.
+    lookup = (await db.execute(
+        select(PaymentLink.id, PaymentLink.transaction_id)
         .where(PaymentLink.razorpay_link_id == razorpay_link_id)
-        .with_for_update()
-    )
-    pl = result.scalar_one_or_none()
-    if not pl:
+    )).first()
+    if not lookup:
         logger.warning("webhook.payment_link_not_found", link_id=razorpay_link_id)
         return None
+    pl_id, pl_transaction_id = lookup
+
+    txn = (await db.execute(
+        select(Transaction)
+        .where(Transaction.id == pl_transaction_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )).scalar_one_or_none()
+
+    pl = (await db.execute(
+        select(PaymentLink)
+        .where(PaymentLink.id == pl_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )).scalar_one()
     if pl.status == "paid":
         return None
 
@@ -841,8 +858,6 @@ async def process_payment_paid(db, razorpay_link_id, razorpay_payment_id, webhoo
     pl.razorpay_payment_id = razorpay_payment_id
     pl.webhook_payload = webhook_payload
 
-    txn_result = await db.execute(select(Transaction).where(Transaction.id == pl.transaction_id))
-    txn = txn_result.scalar_one_or_none()
     if not txn:
         return None
     if txn.status == "payment_pending" and _payment_window_expired_for_capture(pl, webhook_payload):
@@ -1010,14 +1025,31 @@ async def process_payment_failed(
     still late-authorize an earlier failed attempt; process_payment_paid handles
     that by refunding without reviving the released sale.
     """
-    pl = (await db.execute(
-        select(PaymentLink)
+    # Same canonical lock order as process_payment_paid: Transaction first,
+    # then PaymentLink, so a failure webhook cannot interleave with a capture
+    # webhook or the timeout sweeper on the same order.
+    lookup = (await db.execute(
+        select(PaymentLink.id, PaymentLink.transaction_id)
         .where(PaymentLink.razorpay_link_id == razorpay_order_id)
-        .with_for_update()
-    )).scalar_one_or_none()
-    if not pl:
+    )).first()
+    if not lookup:
         logger.warning("payment.failed_unknown_order", order_id=razorpay_order_id)
         return None
+    pl_id, pl_transaction_id = lookup
+
+    txn = (await db.execute(
+        select(Transaction)
+        .where(Transaction.id == pl_transaction_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )).scalar_one_or_none()
+
+    pl = (await db.execute(
+        select(PaymentLink)
+        .where(PaymentLink.id == pl_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )).scalar_one()
     previous_status = pl.status
     if previous_status in {"paid", "cancelled", "expired"}:
         return None
@@ -1028,7 +1060,6 @@ async def process_payment_failed(
     if webhook_payload is not None:
         pl.webhook_payload = webhook_payload
 
-    txn = (await db.execute(select(Transaction).where(Transaction.id == pl.transaction_id))).scalar_one_or_none()
     if not txn:
         return None
     if txn.status == "payment_pending":
@@ -1330,6 +1361,17 @@ async def expire_unpaid_transaction(
     *,
     notify: bool = True,
 ) -> Transaction:
+    # The sweeper hands us candidates from an unlocked scan. Re-read the row
+    # under FOR UPDATE before the status check so we serialize with a capture
+    # webhook landing at the same instant (canonical order: Transaction →
+    # PaymentLink). If the webhook won, the re-read sees payment_captured and
+    # we bail instead of cancelling a paid order.
+    txn = (await db.execute(
+        select(Transaction)
+        .where(Transaction.id == txn.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )).scalar_one()
     if txn.status != "payment_pending":
         raise ValueError(f"INVALID_STATUS:{txn.status}")
     attempts = (await db.execute(
@@ -1426,7 +1468,10 @@ async def _release_unpaid_transaction(
     txn.seller_response_deadline = None
 
     attempts = (await db.execute(
-        select(PaymentLink).where(PaymentLink.transaction_id == txn.id)
+        select(PaymentLink)
+        .where(PaymentLink.transaction_id == txn.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )).scalars().all()
     for attempt in attempts:
         if attempt.status != "paid":
@@ -1449,7 +1494,9 @@ async def _release_unpaid_transaction(
             offer.reject_reason = reason[:100]
             offer.responded_at = now
 
-    listing = (await db.execute(select(Listing).where(Listing.id == txn.listing_id))).scalar_one_or_none()
+    listing = (await db.execute(
+        select(Listing).where(Listing.id == txn.listing_id).with_for_update()
+    )).scalar_one_or_none()
     if listing and listing.status == "reserved":
         listing.status = "active"
 

@@ -517,6 +517,48 @@ class _AdminAssignReturnPickupRequest(BaseModel):
     fe_user_id: UUID
 
 
+@router.post("/v1/fe/transactions/{transaction_id}/evidence/request")
+async def fe_request_transaction_evidence_upload(
+    transaction_id: UUID,
+    body: _EvidenceUploadRequest,
+    current_user: FeUser,
+    db: DBSession,
+):
+    """Presigned-URL request for FE-captured order evidence (pickup
+    inspection photos, delivery handover photo).
+
+    The FE app used to reuse the FE-*visit* image endpoint with a
+    transaction id, which 404s (visits are the concierge listing flow) —
+    so pickup evidence silently failed and delivery completion, which
+    requires a photo, was impossible. This endpoint is the
+    transaction-scoped equivalent: the caller must be the FE assigned to
+    this transaction's pickup, delivery, or return leg. The resulting
+    r2_key goes back in the complete-pickup / complete-delivery body.
+    """
+    from app.core.storage import (
+        generate_presigned_upload_url,
+        object_key_for_fe_transaction_evidence,
+    )
+
+    txn = await db.get(Transaction, transaction_id)
+    if not txn:
+        raise HTTPException(404, {"error": "NOT_FOUND"})
+    assigned_fe_ids = {
+        getattr(txn, "pickup_fe_id", None),
+        getattr(txn, "delivery_fe_id", None),
+        getattr(txn, "return_pickup_fe_id", None),
+    }
+    assigned_fe_ids.discard(None)
+    if current_user.user_id not in assigned_fe_ids:
+        raise HTTPException(403, {"error": "NOT_YOUR_TRANSACTION"})
+
+    r2_key = object_key_for_fe_transaction_evidence(str(transaction_id))
+    upload_url = generate_presigned_upload_url(
+        r2_key, content_type=body.content_type, expires_in=300,
+    )
+    return {"upload_url": upload_url, "r2_key": r2_key, "expires_in_seconds": 300}
+
+
 @router.post("/v1/transactions/{transaction_id}/evidence/request")
 async def buyer_request_evidence_upload(
     transaction_id: UUID,

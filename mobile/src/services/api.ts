@@ -1311,6 +1311,13 @@ export const FE = {
     api.post(`/v1/fe/visits/${visitId}/images/confirm`, { r2_key: r2Key, sort_order: sortOrder }),
 
   // ── Sprint 6c: post-purchase logistics (pickups + deliveries) ──────────
+  // Order evidence photos are transaction-scoped — NOT the fe-visits image
+  // pipeline (that endpoint 404s for a transaction id).
+  requestTransactionEvidence: (txnId: string, contentType: string = 'image/jpeg') =>
+    api.post<{ upload_url: string; r2_key: string; expires_in_seconds: number }>(
+      `/v1/fe/transactions/${txnId}/evidence/request`,
+      { content_type: contentType },
+    ),
   myPickups: () => api.get<{ pickups: FePickup[] }>('/v1/fe/pickups'),
   completePickup: (txnId: string, payload: {
     inspection_passed: boolean;

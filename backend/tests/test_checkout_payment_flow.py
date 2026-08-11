@@ -19,6 +19,9 @@ class _Result:
     def scalar_one_or_none(self):
         return self.value
 
+    def scalar_one(self):
+        return self.value
+
     def scalars(self):
         return self
 
@@ -250,7 +253,7 @@ async def test_payment_failed_releases_inventory(monkeypatch):
     monkeypatch.setattr(offer_service, "_notify", noop_notify)
 
     result = await offer_service.process_payment_failed(
-        _DB(payment_attempt, txn, [payment_attempt], reservation, offer, listing),
+        _DB(("pl_row", txn.id), txn, payment_attempt, [payment_attempt], reservation, offer, listing),
         razorpay_order_id="order_123",
         razorpay_payment_id="pay_failed",
         webhook_payload={
@@ -291,7 +294,7 @@ async def test_duplicate_payment_failed_release_is_idempotent(monkeypatch):
     monkeypatch.setattr(offer_service, "_notify", fake_notify)
 
     result = await offer_service.process_payment_failed(
-        _DB(payment_attempt, txn, [payment_attempt], reservation, offer, listing),
+        _DB(("pl_row", txn.id), txn, payment_attempt, [payment_attempt], reservation, offer, listing),
         razorpay_order_id="order_123",
         razorpay_payment_id="pay_failed_retry",
         webhook_payload={"payload": {"payment": {"entity": {"status": "failed"}}}},
@@ -321,7 +324,7 @@ async def test_payment_failed_after_window_releases_as_failure(monkeypatch):
     monkeypatch.setattr(offer_service, "_notify", noop_notify)
 
     result = await offer_service.process_payment_failed(
-        _DB(payment_attempt, txn, [payment_attempt], reservation, offer, listing),
+        _DB(("pl_row", txn.id), txn, payment_attempt, [payment_attempt], reservation, offer, listing),
         razorpay_order_id="order_123",
         razorpay_payment_id="pay_failed_timeout",
         webhook_payload={"payload": {"payment": {"entity": {"status": "failed"}}}},
@@ -346,7 +349,7 @@ async def test_late_payment_failed_does_not_reopen_cancelled_attempt(monkeypatch
     monkeypatch.setattr(offer_service, "_notify", fail_if_notified)
 
     result = await offer_service.process_payment_failed(
-        _DB(payment_attempt),
+        _DB(("pl_row", txn.id), txn, payment_attempt),
         razorpay_order_id="order_123",
         razorpay_payment_id="pay_failed_late",
         webhook_payload={"payload": {"payment": {"entity": {"status": "failed"}}}},
@@ -379,7 +382,7 @@ async def test_late_capture_after_cancel_does_not_reopen_sale(monkeypatch):
     monkeypatch.setattr(refund_service, "initiate_refund", fake_refund)
 
     result = await offer_service.process_payment_paid(
-        _DB(payment_attempt, txn),
+        _DB(("pl_row", txn.id), txn, payment_attempt),
         "order_123",
         "pay_late",
         {"payload": {"payment": {"entity": {"amount": 12345}}}},
@@ -429,7 +432,11 @@ async def test_capture_after_payment_window_releases_and_refunds(monkeypatch):
     monkeypatch.setattr(refund_service, "get_payment_adapter", lambda: _RefundAdapter())
 
     result = await offer_service.process_payment_paid(
-        _DB(payment_attempt, txn, [payment_attempt], reservation, offer, listing, payment_attempt),
+        _DB(
+            ("pl_row", txn.id), txn, payment_attempt,           # lookup → lock txn → lock pl
+            [payment_attempt], reservation, offer, listing,      # release path
+            txn, payment_attempt,                                # initiate_refund: lock txn → find paid link
+        ),
         "order_123",
         "pay_after_timeout",
         {
@@ -472,7 +479,7 @@ async def test_checkout_authorized_after_window_expires_unpaid_order(monkeypatch
     monkeypatch.setattr(offer_service, "_notify", noop_notify)
 
     result = await offer_service.process_checkout_payment_success(
-        _DB(txn, payment_attempt, [payment_attempt], [payment_attempt], reservation, offer, listing),
+        _DB(txn, payment_attempt, txn, [payment_attempt], [payment_attempt], reservation, offer, listing),
         transaction_id=txn.id,
         buyer_id=txn.buyer_id,
         razorpay_order_id="order_123",
@@ -530,7 +537,7 @@ async def test_expire_unpaid_transaction_releases_inventory_after_window(monkeyp
     monkeypatch.setattr(offer_service, "_notify", noop_notify)
 
     out = await offer_service.expire_unpaid_transaction(
-        _DB([payment_attempt], [payment_attempt], reservation, offer, listing),
+        _DB(txn, [payment_attempt], [payment_attempt], reservation, offer, listing),
         txn,
     )
 
@@ -550,7 +557,7 @@ async def test_expire_unpaid_transaction_keeps_inventory_before_window():
     payment_attempt.expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
 
     with pytest.raises(ValueError, match="PAYMENT_WINDOW_NOT_EXPIRED"):
-        await offer_service.expire_unpaid_transaction(_DB([payment_attempt]), txn)
+        await offer_service.expire_unpaid_transaction(_DB(txn, [payment_attempt]), txn)
 
 
 @pytest.mark.asyncio
@@ -570,7 +577,7 @@ async def test_expire_unpaid_transaction_uses_created_at_fallback_for_legacy_att
     monkeypatch.setattr(offer_service, "_notify", noop_notify)
 
     out = await offer_service.expire_unpaid_transaction(
-        _DB([payment_attempt], [payment_attempt], reservation, offer, listing),
+        _DB(txn, [payment_attempt], [payment_attempt], reservation, offer, listing),
         txn,
     )
 
@@ -590,7 +597,7 @@ async def test_expire_unpaid_transaction_keeps_fresh_legacy_attempt_pending():
     payment_attempt.expires_at = None
 
     with pytest.raises(ValueError, match="PAYMENT_WINDOW_NOT_EXPIRED"):
-        await offer_service.expire_unpaid_transaction(_DB([payment_attempt]), txn)
+        await offer_service.expire_unpaid_transaction(_DB(txn, [payment_attempt]), txn)
 
 
 @pytest.mark.asyncio
@@ -604,4 +611,4 @@ async def test_expire_unpaid_transaction_does_not_release_paid_pending_attempt()
     payment_attempt.paid_at = datetime.now(timezone.utc) - timedelta(hours=1)
 
     with pytest.raises(ValueError, match="PAYMENT_WINDOW_NOT_EXPIRED"):
-        await offer_service.expire_unpaid_transaction(_DB([payment_attempt]), txn)
+        await offer_service.expire_unpaid_transaction(_DB(txn, [payment_attempt]), txn)

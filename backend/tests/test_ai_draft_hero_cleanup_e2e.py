@@ -514,7 +514,10 @@ async def test_draft_from_images_selects_and_promotes_ai_hero_without_inline_cle
     )
 
     assert len(seen_images) == 4
-    assert response.detected.hero_image_index == 2
+    # photo_urls are stored hero-first, so the persisted index must be 0 —
+    # a stale pre-reorder index would make the client preselect the wrong
+    # photo and publish would promote the wrong hero.
+    assert response.detected.hero_image_index == 0
     assert response.photo_url.endswith("_2.jpg.display.webp")
     assert db.insert_params is not None
     saved_urls = db.insert_params["photo_urls"]
@@ -534,7 +537,7 @@ async def test_draft_from_images_selects_and_promotes_ai_hero_without_inline_cle
     cleanup = response.detected.image_set_quality["hero_image_cleanup"]
     assert cleanup["status"] == "queued_after_listing"
     assert cleanup["provider"] == "owmee-media-worker"
-    assert cleanup["selected_index"] == 2
+    assert cleanup["selected_index"] == 0
     assert db.commits == 1
 
 
