@@ -72,6 +72,8 @@ class Settings(BaseSettings):
     ai_draft_fast_min_category_confidence: float = 0.55
     payment_timeout_sweeper_interval_seconds: int = 60
     payment_timeout_sweeper_batch_size: int = 100
+    settlement_sweeper_interval_seconds: int = 300
+    settlement_sweeper_batch_size: int = 100
     transaction_ops_alert_sweeper_interval_seconds: int = 120
     transaction_pickup_assignment_sla_minutes: int = 30
     transaction_hub_dispatch_sla_minutes: int = 120

@@ -167,6 +167,16 @@ async def mark_refund_completed(
         return txn
     txn.refund_status = REFUND_STATUS_COMPLETED
     txn.refund_completed_at = datetime.now(timezone.utc)
+    # If the sale had already settled to the seller's payout balance, claw
+    # it back (netted against future payouts — Meesho-style). No-op when no
+    # sale credit exists yet.
+    from app.modules.settlement.ledger import post_refund_clawback
+    await post_refund_clawback(
+        db,
+        seller_id=txn.seller_id,
+        transaction_id=txn.id,
+        memo="Buyer refund completed",
+    )
     from app.modules.offers.service import _notify
     await _notify(
         db,

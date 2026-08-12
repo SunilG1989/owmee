@@ -1418,6 +1418,40 @@ export const DevTools = {
 
 export const Reputation = { me: () => api.get('/v1/users/me/reputation') };
 
+// ── Seller settlement: balances, ledger, payout history ─────────────────────
+export interface PayoutLedgerEntry {
+  entry_type: 'sale_credit' | 'refund_clawback' | 'adjustment' | 'payout_debit';
+  amount: string;
+  memo: string | null;
+  transaction_id: string | null;
+  created_at: string | null;
+}
+
+export interface SellerPayoutRecord {
+  id: string;
+  amount: string;
+  method: string;
+  utr_reference: string | null;
+  status: string;
+  paid_at: string | null;
+}
+
+export interface MyPayoutsResponse {
+  available_balance: string;
+  reserve_balance: string;
+  payout_account: {
+    account_type: 'upi' | 'bank';
+    masked_display: string;
+    verified: boolean;
+  } | null;
+  ledger: PayoutLedgerEntry[];
+  payouts: SellerPayoutRecord[];
+}
+
+export const Payouts = {
+  me: () => api.get<MyPayoutsResponse>('/v1/me/payouts'),
+};
+
 // ── Sprint 7 / Phase 1: Community ────────────────────────────────────────────
 export const Community = {
   me: () => api.get('/v1/community/me'),

@@ -1752,6 +1752,10 @@ async def buyer_confirm_deal(db, transaction_id, buyer_id):
     txn.buyer_confirmed_at = now
     txn.completed_at = now
 
+    # Buyer-protection window closed → credit the seller's payout balance.
+    from app.modules.settlement.service import settle_completed_transaction
+    await settle_completed_transaction(db, txn, source="buyer_confirm_deal")
+
     # Update trust scores
     import asyncio
     asyncio.create_task(adjust_trust_score(txn.seller_id, "deal_completed", note="buyer_confirmed"))

@@ -308,11 +308,24 @@ async def payout_account_verify(
     Verify bank account (penny-drop) or UPI ID.
     On success, marks user as fully verified if all other steps are complete.
     """
+    if body.account_type == "bank":
+        import re
+
+        if not body.ifsc_code or not re.fullmatch(r"[A-Z]{4}0[A-Z0-9]{6}", body.ifsc_code.upper()):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": "IFSC_REQUIRED",
+                    "message": "A valid IFSC code is required for bank accounts.",
+                },
+            )
+
     act_result = await act_payout_account_verify(
         ActivityPayoutVerifyInput(
             user_id=str(current_user.user_id),
             account_type=body.account_type,
             account_value=body.account_value,
+            ifsc_code=body.ifsc_code.upper() if body.ifsc_code else None,
         )
     )
     if not act_result["success"]:

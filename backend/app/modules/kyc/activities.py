@@ -55,7 +55,8 @@ class ActivityLivenessVerifyInput:
 class ActivityPayoutVerifyInput:
     user_id: str
     account_type: str   # bank | upi
-    account_value: str  # UPI ID or bank account number — only used for verification
+    account_value: str  # UPI ID or bank account number
+    ifsc_code: str | None = None  # required for bank penny-drop
 
 
 @dataclass
@@ -330,12 +331,25 @@ async def act_payout_account_verify(inp: ActivityPayoutVerifyInput) -> dict:
         v = await get_or_create_verification(db, user_id)
 
         result = await adapter.payout_account_verify(
-            inp.account_type, inp.account_value
+            inp.account_type, inp.account_value, ifsc_code=inp.ifsc_code
         )
         if result.success:
             v.payout_account_type = inp.account_type
             v.payout_account_ref = result.account_ref
             v.payout_verified = True
+            # Persist the verified destination itself — the payout rail and
+            # the finance queue need an account on file, not just the
+            # partner's opaque ref.
+            from app.modules.settlement.accounts import record_verified_payout_account
+
+            await record_verified_payout_account(
+                db,
+                user_id=user_id,
+                account_type=inp.account_type,
+                account_value=inp.account_value,
+                ifsc_code=inp.ifsc_code,
+                provider_ref=result.account_ref,
+            )
 
         await record_kyc_event(
             db, v.id, user_id,

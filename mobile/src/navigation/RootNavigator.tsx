@@ -55,6 +55,7 @@ const getKycRequiredForActionScreen = screen(() => require('../screens/KycRequir
 const getMyListingsScreen = screen(() => require('../screens/listings/MyListingsScreen'));
 const getMyFeVisitsScreen = screen(() => require('../screens/profile/MyFeVisitsScreen'));
 const getMyDirectPickupsScreen = screen(() => require('../screens/profile/MyDirectPickupsScreen'));
+const getEarningsScreen = screen(() => require('../screens/profile/EarningsScreen'));
 const getWishlistScreen = screen(() => require('../screens/profile/WishlistScreen'));
 const getTransactionListScreen = screen(() => require('../screens/profile/TransactionListScreen'));
 const getEditProfileScreen = screen(() => require('../screens/profile/EditProfileScreen'));
@@ -570,6 +571,7 @@ export default function RootNavigator() {
           <RootStack.Screen name="MyListings" getComponent={getMyListingsScreen} options={{ animation: 'slide_from_right' }} />
           <RootStack.Screen name="MyFeVisits" getComponent={getMyFeVisitsScreen} options={{ animation: 'slide_from_right' }} />
           <RootStack.Screen name="MyDirectPickups" getComponent={getMyDirectPickupsScreen} options={{ animation: 'slide_from_right' }} />
+          <RootStack.Screen name="Earnings" getComponent={getEarningsScreen} options={{ animation: 'slide_from_right' }} />
           <RootStack.Screen name="SavedItems" getComponent={getWishlistScreen} options={{ animation: 'slide_from_right' }} />
           <RootStack.Screen name="TransactionList" getComponent={getTransactionListScreen} options={{ animation: 'slide_from_right' }} />
           <RootStack.Screen name="EditProfile" getComponent={getEditProfileScreen} options={{ animation: 'slide_from_right' }} />

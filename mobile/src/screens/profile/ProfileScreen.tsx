@@ -77,6 +77,7 @@ export default function ProfileScreen({ navigation }: any) {
     { emoji: '✓', label: 'Direct pickups', route: 'MyDirectPickups' },
     { emoji: '📦', label: 'My listings', route: 'MyListings' },
     { emoji: '✉️', label: 'My offers', route: 'MyOffers' },
+    { emoji: '💰', label: 'Earnings & payouts', route: 'Earnings' },
     { emoji: '📦', label: 'Your FE visits', route: 'MyFeVisits' },
     { emoji: '♡', label: 'Saved items', route: 'SavedItems' },
     { emoji: '📋', label: 'Transaction history', route: 'TransactionList' },

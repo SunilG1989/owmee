@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Payouts — Owmee Admin{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-2">Seller payouts</h1>
+<p class="text-sm text-stone-500 mb-6">
+  Balances become available when the buyer confirms (or the 48h window auto-completes).
+  Make the transfer to the account shown, then record it here with the bank UTR / UPI reference —
+  recording posts the ledger debit, marks the covered orders paid, and notifies the seller.
+</p>
+
+{% if error %}
+<div class="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 mb-4 text-sm">
+  {{ error }}
+</div>
+{% endif %}
+
+<h2 class="text-lg font-semibold mb-3">Due for payout ({{ rows|length }})</h2>
+{% if not rows %}
+<div class="bg-white rounded-lg border border-stone-200 p-8 text-center text-stone-500 mb-8">
+  No sellers with an available balance.
+</div>
+{% else %}
+<div class="bg-white rounded-lg border border-stone-200 overflow-hidden mb-8">
+<table class="w-full text-sm">
+  <thead class="bg-stone-100 text-left text-stone-600">
+    <tr>
+      <th class="px-4 py-2">Seller</th>
+      <th class="px-4 py-2">Phone</th>
+      <th class="px-4 py-2">Payout account</th>
+      <th class="px-4 py-2 text-right">Available</th>
+      <th class="px-4 py-2 text-right">Orders</th>
+      <th class="px-4 py-2">Record payout</th>
+    </tr>
+  </thead>
+  <tbody class="divide-y divide-stone-100">
+    {% for r in rows %}
+    <tr>
+      <td class="px-4 py-2">{{ r.seller_name }}</td>
+      <td class="px-4 py-2">{{ r.seller_phone }}</td>
+      <td class="px-4 py-2">
+        {% if r.account_masked %}
+          <span class="font-mono">{{ r.account_masked }}</span>
+          {% if not r.account_verified %}
+            <span class="ml-1 text-xs text-red-600">unverified</span>
+          {% endif %}
+        {% else %}
+          <span class="text-red-600 text-xs">no payout account</span>
+        {% endif %}
+      </td>
+      <td class="px-4 py-2 text-right font-semibold">₹{{ "{:,.2f}".format(r.balance) }}</td>
+      <td class="px-4 py-2 text-right">{{ r.unpaid_orders }}</td>
+      <td class="px-4 py-2">
+        {% if r.account_masked and r.account_verified %}
+        <form method="post" action="/admin/payouts/{{ r.seller_id }}/release" class="flex gap-2"
+              onsubmit="return confirm('Record ₹{{ '{:,.2f}'.format(r.balance) }} payout to {{ r.account_masked }}? Make the transfer FIRST — this records it as done.');">
+          <input name="utr_reference" required minlength="6" placeholder="UTR / UPI ref"
+                 class="border border-stone-300 rounded px-2 py-1 text-sm w-40" />
+          <button class="bg-amber-700 text-white rounded px-3 py-1 text-sm hover:bg-amber-800">
+            Record
+          </button>
+        </form>
+        {% else %}
+        <span class="text-xs text-stone-400">blocked — needs verified account</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+
+<h2 class="text-lg font-semibold mb-3">Recent payouts</h2>
+{% if not recent %}
+<div class="bg-white rounded-lg border border-stone-200 p-8 text-center text-stone-500">
+  No payouts recorded yet.
+</div>
+{% else %}
+<div class="bg-white rounded-lg border border-stone-200 overflow-hidden">
+<table class="w-full text-sm">
+  <thead class="bg-stone-100 text-left text-stone-600">
+    <tr>
+      <th class="px-4 py-2">When</th>
+      <th class="px-4 py-2">Seller</th>
+      <th class="px-4 py-2 text-right">Amount</th>
+      <th class="px-4 py-2">Method</th>
+      <th class="px-4 py-2">UTR</th>
+      <th class="px-4 py-2">Status</th>
+    </tr>
+  </thead>
+  <tbody class="divide-y divide-stone-100">
+    {% for p in recent %}
+    <tr>
+      <td class="px-4 py-2">{{ p.paid_at.strftime("%d %b %Y %H:%M") if p.paid_at else "—" }}</td>
+      <td class="px-4 py-2 font-mono text-xs">{{ p.seller_id }}</td>
+      <td class="px-4 py-2 text-right font-semibold">₹{{ "{:,.2f}".format(p.amount_inr) }}</td>
+      <td class="px-4 py-2">{{ p.method }}</td>
+      <td class="px-4 py-2 font-mono text-xs">{{ p.utr_reference or "—" }}</td>
+      <td class="px-4 py-2">
+        <span class="text-xs px-2 py-0.5 rounded-full
+          {% if p.status == 'recorded' %}bg-green-100 text-green-700{% else %}bg-red-100 text-red-700{% endif %}">
+          {{ p.status }}
+        </span>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% endblock %}

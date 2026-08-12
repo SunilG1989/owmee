@@ -23,6 +23,7 @@ import app.modules.notifications.models  # noqa
 import app.modules.offers.models  # noqa
 import app.modules.payments.models  # noqa
 import app.modules.risk.models  # noqa
+import app.modules.settlement.models  # noqa
 import app.modules.transactions.models  # noqa
 import app.modules.verification.models  # noqa
 

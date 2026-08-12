@@ -745,6 +745,74 @@ async def txn_courier_status(
     return RedirectResponse(url=f"/admin/txn/{transaction_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
+# ── Seller Payouts (finance) ──────────────────────────────────────────────────
+
+@router.get("/admin/payouts", response_class=HTMLResponse)
+async def payouts_page(
+    request: Request, db: DBSession,
+    admin: AdminUserModel = Depends(require_admin_money_role),
+    error: str | None = None,
+):
+    from app.modules.settlement.payouts import payout_queue
+    from app.modules.settlement.models import SellerPayout
+
+    queue = await payout_queue(db)
+    # Enrich with seller identity for the operator.
+    for row in queue:
+        seller = (await db.execute(
+            select(User).where(User.id == row["seller_id"])
+        )).scalar_one_or_none()
+        row["seller_name"] = getattr(seller, "name", None) or "—"
+        row["seller_phone"] = getattr(seller, "phone_number", None) or "—"
+
+    recent = (await db.execute(
+        select(SellerPayout).order_by(SellerPayout.created_at.desc()).limit(20)
+    )).scalars().all()
+    return templates.TemplateResponse("payouts.html", {
+        "request": request, "admin": admin, "rows": queue,
+        "recent": recent, "error": error,
+    })
+
+
+@router.post("/admin/payouts/{seller_id}/release")
+async def payouts_release(
+    seller_id: UUID, db: DBSession,
+    utr_reference: str = Form(...),
+    admin: AdminUserModel = Depends(require_admin_money_role),
+):
+    from app.modules.settlement.payouts import PayoutError, release_seller_payout
+
+    try:
+        payout = await release_seller_payout(
+            db,
+            seller_id=seller_id,
+            utr_reference=utr_reference,
+            initiated_by=str(admin.id),
+        )
+    except PayoutError as e:
+        return RedirectResponse(
+            url=f"/admin/payouts?error={e}", status_code=status.HTTP_303_SEE_OTHER,
+        )
+    await log_admin_action(
+        db,
+        admin_id=admin.id,
+        action="payout.release",
+        entity_type="seller_payout",
+        entity_id=str(payout.id),
+        after_state={
+            "seller_id": str(seller_id),
+            "amount_inr": str(payout.amount_inr),
+            "utr_reference": payout.utr_reference,
+            "method": payout.method,
+        },
+        reviewer_notes=f"utr={payout.utr_reference}",
+    )
+    await db.commit()
+    logger.info("admin.payout_released", payout_id=str(payout.id),
+                seller_id=str(seller_id), admin_id=str(admin.id))
+    return RedirectResponse(url="/admin/payouts", status_code=status.HTTP_303_SEE_OTHER)
+
+
 # ── Auth-error handler: redirect /admin/* 401s to login, fall through everywhere else ─
 # (mounted at create_app() level alongside the router include)
 #

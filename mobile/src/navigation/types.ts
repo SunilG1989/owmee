@@ -14,6 +14,7 @@ export type RootStackParams = {
   MyListings: undefined;
   MyFeVisits: undefined;
   MyDirectPickups: undefined;
+  Earnings: undefined;
   SavedItems: undefined;
   TransactionList: undefined;
   EditProfile: undefined;

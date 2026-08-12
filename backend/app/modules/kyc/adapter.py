@@ -156,7 +156,7 @@ class _DevKYCAdapter:
         )
 
     async def payout_account_verify(
-        self, account_type: str, account_value: str
+        self, account_type: str, account_value: str, ifsc_code: str | None = None
     ) -> PayoutAccountVerifyResponse:
         return PayoutAccountVerifyResponse(
             success=True,
@@ -290,7 +290,7 @@ class _DigioKYCAdapter:
             return LivenessVerifyResponse(partner_ref="", success=False, error=str(e))
 
     async def payout_account_verify(
-        self, account_type: str, account_value: str
+        self, account_type: str, account_value: str, ifsc_code: str | None = None
     ) -> PayoutAccountVerifyResponse:
         try:
             endpoint = (
@@ -298,10 +298,13 @@ class _DigioKYCAdapter:
                 if account_type == "bank"
                 else "/v2/kyc/upi/verify"
             )
-            resp = await self._client.post(
-                endpoint,
-                json={"account": account_value, "type": account_type},
-            )
+            payload = {"account": account_value, "type": account_type}
+            if account_type == "bank":
+                # Penny-drop cannot resolve an account number without its
+                # IFSC; previously the router accepted ifsc_code and dropped
+                # it, so bank verification could never work against Digio.
+                payload["ifsc"] = ifsc_code or ""
+            resp = await self._client.post(endpoint, json=payload)
             data = resp.json()
             if resp.status_code == 200 and data.get("success"):
                 return PayoutAccountVerifyResponse(

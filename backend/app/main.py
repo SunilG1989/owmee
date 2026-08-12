@@ -67,6 +67,7 @@ def create_app() -> FastAPI:
     from app.modules.listings.router import router as listings_router
     from app.modules.offers.router import router as offers_router
     from app.modules.compliance.router import router as compliance_router
+    from app.modules.settlement.router import router as settlement_router
     from app.modules.admin.kyc_queue import router as admin_kyc_router
     from app.modules.admin.listings_queue import router as admin_listings_router
     from app.modules.admin.reports_disputes import router as reports_router
@@ -127,6 +128,7 @@ def create_app() -> FastAPI:
     # pickup/delivery confirm endpoints had no operator authorization.
     # payout_service still imports compute_tds/seller_payout_verified from it.
     app.include_router(compliance_router, prefix="/v1", tags=["compliance"])
+    app.include_router(settlement_router, prefix="/v1", tags=["settlement"])
     app.include_router(reports_router, prefix="/v1", tags=["reports-disputes"])
     app.include_router(seed_router, prefix="/v1", tags=["admin-seed"])
     # ── Admin ─────────────────────────────────────────────────────────────

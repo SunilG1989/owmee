@@ -185,8 +185,15 @@ def _fmt_txn(t: Transaction) -> dict:
         "confirmation_deadline": t.confirmation_deadline.isoformat() if t.confirmation_deadline else None,
         "buyer_confirmed_at": t.buyer_confirmed_at.isoformat() if t.buyer_confirmed_at else None,
         "completed_at": t.completed_at.isoformat() if t.completed_at else None,
+        "tds_withheld": str(t.tds_withheld) if t.tds_withheld is not None else None,
         "payout_flagged_at": t.payout_flagged_at.isoformat() if t.payout_flagged_at else None,
         "payout_released_at": t.payout_released_at.isoformat() if t.payout_released_at else None,
+        "payout_status": (
+            "released" if t.payout_released_at
+            else "eligible" if t.status in ("completed", "auto_completed")
+            else "processing" if t.payout_flagged_at
+            else None
+        ),
         "cancelled_at": t.cancelled_at.isoformat() if t.cancelled_at else None,
         "cancelled_reason": t.cancelled_reason,
         "refund_status": t.refund_status,
